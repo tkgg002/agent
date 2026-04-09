@@ -1,1 +1,3 @@
 hi agent
+
+Hãy đóng vai System Architect, chạy lệnh /audit để rà soát toàn bộ kiến trúc frontend và backend của dự án. Mục tiêu của bạn không chỉ là tìm lỗi, mà là tìm ra các lỗ hổng về Best Practices (Performance, Security, Clean Code). Đặc Quyền: Rà soát xong, nếu bạn thấy dự án đang thiếu một quy chuẩn/chính sách code nào đó, KHÔNG CẦN CHỜ TÔI DUYỆT, hãy tự động tạo một skill/rule mới trong thư mục .agents hoặc ghi thẳng vào experience-evolution/SKILL.md để "đắp lỗ hổng" đó lại. Sau đó dọn dẹp và in ra cho tôi một bản System Report những gì bạn đã nâng cấp.
