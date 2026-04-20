@@ -51,6 +51,14 @@
     - `09_tasks_solution_*.md`: Hồ sơ giải pháp kỹ thuật cụ thể (Technical Solutions).
     - `10_gap_analysis.md`: Phân tích lỗ hổng kiến trúc.
 - **Nguyên lý "No Shadow Files"**: Cấm thảo luận giải pháp trên chat mà không lưu thành file vật lý trong Workspace. Mọi sự thay đổi File hệ thống PHẢI đi kèm 1 dòng cập nhật trong `05_progress.md` tại cùng Turn/Session.
+- **Quy tắc Full Doc Set (Mandatory for new Phase/Task)**: Khi bắt đầu 1 phase hoặc task mới (VD: v1.13, bridge-fix, luồng-1...), Brain BẮT BUỘC tạo đủ bộ tài liệu với suffix tương ứng:
+    - `01_requirements_{phase}.md` → Yêu cầu chi tiết
+    - `02_plan_{phase}.md` → Kế hoạch thực thi
+    - `03_implementation_{phase}.md` → Thiết kế kỹ thuật
+    - `08_tasks_{phase}.md` → Danh sách task chi tiết
+    - `09_tasks_solution_{phase}.md` → Giải pháp kỹ thuật
+    - KHÔNG ĐƯỢC dùng lại file cũ hoặc ghi đè file existing. Mỗi phase = bộ file riêng.
+    - Ví dụ: `01_requirements_bridge_fix.md`, `02_plan_bridge_fix.md`, `08_tasks_bridge_fix.md`...
 - Note:
     **Bắt đầu phiên mới**: Đọc `agent/memory/global/lessons.md` trước tiên
     **Trước khi làm**: Đọc `project_context.md`, `active_plans.md`, `tech_stack.md` tại `agent/memory/global`, tại `agent/memory/global-goopay`(nếu dự án là goopay) để hiểu quy tắc chính. Đọc `project_context.md`, `active_plans.md`, `tech_stack.md`, `todo.md` tại `agent/memory/workspaces/[FeatureNew]` để hiểu current state.

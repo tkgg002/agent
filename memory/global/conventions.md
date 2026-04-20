@@ -66,3 +66,26 @@ Mọi phản hồi cuối cùng của Agent PHẢI có chữ ký:
     3. Metadata trong progress log và signature đã đúng format chưa?
     4. Mọi quyết định quan trọng đã được ghi vào `04_decisions.md` (nếu có)?
 - **Lý do**: Đảm bảo Brain không bị cuốn vào code mà bỏ quên nhiệm vụ "Chairman" (Quản lý và Lưu trữ tri thức).
+
+## 9. Runtime Verification (Quy tắc Verify trước khi Done) — Added 2026-04-13
+> **Rule**: Build pass ≠ Done. Brain PHẢI verify runtime trước khi báo hoàn thành.
+
+- **Bắt buộc trước khi báo "done"**:
+    1. Build pass ✅
+    2. Migration: auto-migrate trong code startup HOẶC ghi rõ "cần chạy migration X"
+    3. API: handle empty data + missing table gracefully (không crash/500)
+    4. Logic check: so sánh output với TỪNG mong muốn trong plan
+    5. Workspace docs: update 00_context/02_plan nếu có thay đổi code
+    6. Lesson: ghi ngay nếu user yêu cầu
+- **Nếu không thể verify runtime**: Nói thẳng "Chưa verify runtime, cần user test X, Y, Z"
+- **TUYỆT ĐỐI KHÔNG** báo "done" chỉ vì build pass
+
+## 10. Brain Self-Review (Quy tắc Tự kiểm tra Logic) — Added 2026-04-13
+> **Rule**: Sau mỗi block code, Brain PHẢI review logic trước khi tiếp tục.
+
+- **Checklist**:
+    1. Code này có thực sự giải quyết đúng yêu cầu user không?
+    2. Edge case: table rỗng? Data chưa có? API chưa chạy?
+    3. So sánh từng mong muốn trong plan → code đã cover hết chưa?
+    4. Nếu có N mong muốn, phải verify N kết quả — không skip cái nào
+- **Khi user báo lỗi**: ĐIỀU TRA root cause trước, không sửa bề mặt

@@ -539,3 +539,29 @@ Thống nhất sử dụng **TargetTable** làm khóa chính (Primary Index Key)
 - **Negative**: Tăng nhẹ thời gian khởi tạo cache tại bước `ReloadAll` (O(N) với N là số lượng rules), nhưng không đáng kể so với lợi ích khi runtime.
 - **Constraint**: Mọi mapping rule bắt buộc phải có một Registry entry tương ứng, nếu không rule đó sẽ bị bỏ qua và log cảnh báo.
 
+
+---
+
+## ADR-014: _raw_data và Bridge flow — GIM LẠI (Pending Review)
+
+**Date**: 2026-04-14
+**Status**: DEFERRED — chờ review sau khi multi-destination hoàn thành
+
+### Vấn đề
+Với config Airbyte hiện tại (`propagate_columns` + `overwrite`):
+- Airbyte TỰ ĐỘNG thêm column mới khi source thêm field
+- Airbyte tạo typed columns trực tiếp trong destination table
+- Bridge pack typed columns → `_raw_data` JSONB = duplicate data
+- Transform extract `_raw_data` → typed columns = vòng tròn vô nghĩa
+
+### Thực trạng
+- `_raw_data` chỉ có giá trị cho field detection (scan jsonb_object_keys)
+- Nhưng Airbyte `propagate_columns` đã handle field detection tự động
+- `_raw_data` gây phình DB (duplicate mỗi row)
+
+### Các option cần quyết định sau
+1. **Bỏ hẳn `_raw_data`** — dùng Airbyte propagate_columns cho field detection
+2. **Giữ `_raw_data` cho audit** — lưu snapshot JSON gốc để rollback
+3. **Chuyển `_raw_data` sang chế độ incremental** — chỉ lưu khi có field mới, không lưu toàn bộ
+
+### Tạm giữ nguyên, ưu tiên multi-destination trước.

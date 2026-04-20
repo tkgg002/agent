@@ -104,15 +104,94 @@ Output format (BẮT BUỘC):
 - Regression risk: <High/Medium/Low>
 ```
 
+### 6. Document (BẮT BUỘC sau khi fix apply)
+
+Tạo file `03_implementation_<short-name>_fix.md` trong workspace feature liên quan. Format:
+```markdown
+# <Bug short title> Fix
+
+> Date: YYYY-MM-DD
+> Trigger: <error user báo, quote nguyên văn>
+> Status: ✅ RESOLVED | ⚠️ PARTIAL | ❌ BLOCKED
+
+## 1. Symptom
+<error message + nơi xuất hiện + tần suất>
+
+## 2. Timeline / Iteration
+- HH:MM — Phát hiện: <cách discovery>
+- HH:MM — Hypothesis 1: <giả thuyết>. Test: <cách>. Result: confirm/reject.
+- HH:MM — Hypothesis N: ...
+- HH:MM — Root cause identified: <evidence>
+- HH:MM — Fix applied: <file:line diff>
+- HH:MM — Verified: <numbers/EXPLAIN/runtime log>
+
+## 3. Root Cause
+<1 đoạn văn explain >
+
+## 4. Fix
+<files changed + diff summary>
+
+## 5. Verify
+- Command: `<exact command>`
+- Before: <number/state>
+- After: <number/state>
+- Reduction: <%>
+
+## 6. Related lessons
+- Reference `agent/memory/global/lessons.md` entry: <date + title>
+```
+
+APPEND `05_progress.md` với 1 dòng summary timestamp + agent + short description.
+
+### 7. Lesson Capture (BẮT BUỘC nếu có sơ sót)
+
+Nếu trong quá trình debug có 1 trong các sơ sót sau → **MUST** append `agent/memory/global/lessons.md`:
+
+| Sơ sót | Phải ghi lesson |
+|:-------|:----------------|
+| Band-aid fix symptom trước khi hiểu root cause | ✅ |
+| Miss cross-service pattern (fix 1 chỗ, bỏ sót chỗ khác) | ✅ |
+| Báo done mà chưa verify runtime end-to-end | ✅ |
+| Sai chỗ lưu lesson/doc (auto-memory vs workspace) | ✅ |
+| Chôn critical limitation trong doc dài, user miss | ✅ |
+| Upgrade version giả định "mới = stable" → regression | ✅ |
+| Skip property test → semantic bug escape | ✅ |
+| Log spam per-item khi N unbounded | ✅ |
+| Hash function khác cross-store (app vs DB) | ✅ |
+| Service "listening" báo done mà startup log có error | ✅ |
+| Không đọc workspace đủ → hỏi user redundant | ✅ |
+
+Format lesson (Rule 13 - Global Pattern A/B/X/Y):
+```markdown
+## [YYYY-MM-DD] <One-line title>
+- **Trigger**: <context + user quote nếu có>
+- **Root Cause**: <meta-level, why this class of error>
+- **Global Pattern [A does B to X] → Result Y**: <abstract form applicable 3+ projects>
+- **Correct Pattern**: <bullet list 3-5 items>
+- **Anti-pattern**: <what to avoid>
+- **Tags**: #category #keywords
+```
+
 ## Anti-patterns
 
 - ❌ Đoán root cause không có evidence
 - ❌ Fix ngay mà chưa hiểu rõ nguyên nhân
 - ❌ Bỏ qua bước Reproduce
 - ❌ Report không có logs/evidence
+- ❌ Fix xong không ghi documentation trong workspace (Rule 7 violation)
+- ❌ Sơ sót mà không ghi lesson (Rule 13 violation)
+- ❌ Band-aid symptom khi chưa xác định root cause
+- ❌ Ghi lesson vào auto-memory riêng thay vì `agent/memory/global/lessons.md`
+- ❌ Symptom-first fix policy không explicit "band-aid tạm thời, root cause X cần fix sau"
 
 ## Definition of Done
 - [ ] Root cause được xác định với evidence cụ thể (file + line)
 - [ ] Bug được reproduce thành công
 - [ ] Debug Report đã output đầy đủ (Root Cause / Evidence / Category / Fix / Impact)
 - [ ] Severity được đánh giá — nếu Critical → escalate lên Brain ngay
+- [ ] **Fix applied + runtime verified với numerical evidence (before/after)**
+- [ ] **Document file tạo trong workspace (`03_implementation_*_fix.md`)**
+- [ ] **Progress log APPEND (`05_progress.md`)**
+- [ ] **Nếu có sơ sót → lesson APPEND `agent/memory/global/lessons.md`**
+- [ ] **Cross-service pattern search: `rg "<pattern>" --type <lang> -l` → verify fix hết scope**
+- [ ] **Startup log clean post-fix (grep `error|fail|panic|sqlstate|warn` = 0)**
