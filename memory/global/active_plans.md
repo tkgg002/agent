@@ -28,3 +28,8 @@
 - **Done** ✅: Hoàn thành, archived
 - Khi bắt đầu phiên mới: Brain đọc bảng này → load workspace có status Active đầu tiên
 |-----------|---------|--------|-------------|
+
+## 2026-04-27 Updates
+
+- `feature-cms-fe-overhaul`: đã hoàn thành Phase 2 FE Navigation Refactor trong `cdc-cms-web`; bước kế tiếp là refactor data model/API usage của các page sang semantics V2.
+- `feature-cms-fe-overhaul`: đã hoàn thành Phase 8 `worker-schedule` contract refactor; `cms-fe` hiện được chốt theo mô hình 2 luồng, trong đó operator-flow (monitoring / backup / retry / reconcile) phải được giữ lại nhưng làm gọn API surface.

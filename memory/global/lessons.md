@@ -218,6 +218,21 @@
 
 - **Trigger**: Gặp lỗi lint `Property MERCHANT__MERCHANT_HISTORY does not exist` sau khi cập nhật model.
 - **Root Cause**: Triển khai code sử dụng constant mới TRƯỚC khi định nghĩa constant đó trong file cấu hình (`app-setting.ts`).
+
+---
+
+## [2026-04-24] Bỏ sót Governance Rule "7-stage SOP" khi User đã chốt quy trình
+
+- **Trigger**: User nhắc rõ: "nhớ làm theo core /agent, mọi response sẽ follow 7-stage SOP. Nếu tôi skip 1 stage nào → user flag ngay, tôi revert + complete rồi tiếp."
+- **Root Cause**:
+  1. Brain/Muscle tập trung vào execution và technical implementation nhưng chưa khóa chặt một checklist response-level theo governance của `/agent`.
+  2. Thiếu bước "protocol restatement" ngay khi User bổ sung quy trình điều phối mới trong cùng session.
+- **Correct Pattern**:
+  1. Khi User chốt một SOP/governance flow mới, phải coi đó là rule vận hành active ngay lập tức cho các response sau.
+  2. Trước mỗi response/task lớn, phải tự check đủ các stage bắt buộc theo SOP của dự án.
+  3. Nếu lỡ thiếu bất kỳ stage nào, phải revert cách trả lời cũ, bổ sung đầy đủ stage còn thiếu rồi mới tiếp tục.
+- **Global Pattern [User defines mandatory process X for all subsequent responses] → Result Y**: Phải promote X thành active execution protocol ngay lập tức. Đúng: ghi lesson, áp SOP từ response kế tiếp, và tự-audit trước khi gửi.
+- **Tags**: #governance #sop #protocol #rule7 #process-discipline
 - **Correct Pattern**: Luôn cập nhật file định nghĩa (Enums, Constants, Config) trước hoặc song song với logic sử dụng hành vi đó để tránh làm gãy build/lint.
 - **Tags**: #lint #constant #synchronization #process
 
@@ -930,3 +945,344 @@
   - Q: "View alias for ergonomics?" → Only if reader needs simpler projection. Not for hiding rác.
   - Q: "Dual PK safety?" → Never in unified architecture. Choose one, commit.
 - **Tags**: #reconstruction-vs-migration #band-aid #identity-authority #unified-naming #physical-clean-slate #forced-cutover
+
+---
+
+## [2026-04-20] Brain plan "ngầu từ ngữ" nhưng thiếu OPS reality — aggressive = thảm họa production
+
+- **Trigger**: Sau khi user reject v1 plan (6 band-aid violations), Brain rewrite v2 "reconstruction aggressive" tưởng là fix. User phê phán 5 mistakes NẶNG HƠN: (1) "Auto-detect business columns" từ JSONB là hallucination — JSONB types inconsistent không thể sinh typed SQL schema cho 200 tables trong 13-14h. (2) "Single Identity Authority" giả — Debezium path vẫn Go-sinh-ID + DB validate, NTP lệch = Sonyflake broken. Không phải authority thật. (3) "Aggressive cutover" = CREATE+INSERT SELECT+CREATE INDEX+DROP PK trong 1 transaction trên 10M+ rows → Postgres LOCK bảng → Worker downtime 30+ phút. (4) Worker ID reserve "bằng grep log" = K8s pods IP dynamic, fragile collision risk. (5) `_raw_data - ARRAY[...]` JSONB strip trong migration transaction = CPU-expensive trên millions rows = tự sát performance. User: "Brain đang lấp liếm phức tạp bằng từ chuyên môn, chưa bao giờ vận hành DB lớn".
+- **Root Cause (meta)**: Brain generate plan **theoretically correct** + dùng từ ops-sounding (aggressive, forced cutover, clean slate) nhưng thiếu **operational experience primitives**: (a) large-table migration locking math, (b) online schema change tools (pg_repack, pt-osc), (c) zero-downtime patterns (dual-write, logical replication), (d) K8s dynamic IP reality, (e) type inference fundamental impossibility với schema-less source. Reading ops blogs ≠ ops experience. Plans sound confident but deliver production incidents.
+- **Global Pattern [A writes refactor plan P using strong vocabulary V] + [A lacks ops experience E for scale S] → P fails catastrophically at execution time**: Vocabulary không thay thế hiểu biết ops. "Aggressive" là branding, không phải implementation. Real ops plans have: (a) explicit lock duration calc, (b) rollback within 30s window, (c) dual-read/dual-write transition, (d) zero-downtime tools referenced, (e) batch sizes tuned to table rowcount.
+- **Correct Pattern for Production DB Reconstruction**:
+  1. **Never single-transaction millions-row migration**: Use pg_repack (online VACUUM FULL without lock), logical replication-based swap, hoặc staged batch COPY với lock_timeout=5s + small batches. Transaction <100K rows typical limit.
+  2. **Type extraction requires manual per-table work**: 200 tables × 30min-1h mapping = 100-200h manual work. Không tự động. Accept JSONB queries nếu không có budget mapping. Don't hallucinate "auto".
+  3. **Worker ID dynamic registry**: Redis SETNX với TTL heartbeat, claim-on-boot, release-on-shutdown. K8s pod restart-safe.
+  4. **True single identity**: Go Worker CALL `SELECT next_sonyflake()` qua DB connection (adds 1-2ms latency) OR accept dual-source with NTP SLA monitored (skew <10ms alerted).
+  5. **Strip at Worker not DB**: Transform/strip in application layer before INSERT. DB migration transactions don't include data transformation.
+  6. **Zero-downtime tools**: pg_repack, pg_logical, pt-online-schema-change. Reference concrete tools, not hand-waved "aggressive".
+  7. **Lock duration calculation upfront**: Every DDL touching production table PHẢI calc estimated lock duration. >5s = require OSC tool. State "this will lock N seconds" explicitly.
+- **Anti-patterns rejected**:
+  - ❌ "Auto-detect" without pointing to specific algorithm with edge case handling
+  - ❌ "Aggressive cutover" as design principle — always specify tool + lock math
+  - ❌ "Single transaction reconstruction" for tables >100K rows
+  - ❌ "Reserve worker ID" without dynamic registry — static assumption breaks in dynamic infra
+  - ❌ JSONB operations in migration transaction — offload to application layer
+  - ❌ 13-14h estimate for 200-table manual schema mapping — reality 100-200h
+- **Tags**: #ops-reality #locking-math #zero-downtime #jsonb-type-inference #worker-id-registry #plan-vocabulary-vs-substance
+
+---
+
+## [2026-04-20] Brain scope-cut = hèn nhát — 3 lần plan fail liên tục cùng Sonyflake v1.25
+
+- **Trigger**: User critique v3 Ops-Grounded plan với 5 điểm: (1) Skip typed columns = chỉ rename, không reconstruction thật, (2) Hybrid identity Go local + PG batch = sequence drift risk, (3) Redis Worker ID Registry = over-engineering SPOF khi PG có SKIP LOCKED, (4) pg_repack đề xuất không check disk space/I/O spike risk, (5) Strip rác chỉ ở ngọn — dữ liệu cũ 10M rows vẫn bẩn trong DB. User: "Kế hoạch v3 là bản thỏa hiệp đốn mạt giữa lười biếng developer và sợ hãi dân Ops. Tao cần kiến trúc đúng đắn, không phải danh sách Rename cột."
+- **Pattern (3 lần liên tục)**:
+  - v1: passive band-aid (VIEW ẩn rác, dual PK giữ cũ) → user reject
+  - v2: vocab-aggressive hallucinate (auto-detect 200 tables 13-14h, single-transaction 10M rows) → user reject
+  - v3: ops-grounded scope cut (skip typed extraction "out of scope", hybrid identity tránh cost, Redis registry thay PG) → user reject ĐÂY
+- **Root Cause (meta-meta)**: Brain reaction to criticism: **layer-shift thay vì full-depth**. Bị critique about theory → shift to ops tool reference. Bị critique ops → shift to scope cut "honest". Pattern: **move laterally avoid full cost acceptance**. Never commit to full reconstruction cost (200h+ manual mapping, zero-compromise transformation, accept true single authority latency).
+- **Global Pattern [A designs R with full cost C] + [C threatens A's "nice-completion" narrative] → A scope-cuts R calling "pragmatic" / "honest" / "out of scope"**: Scope cut ≠ honesty. Scope cut = avoid commitment. True honesty = state full cost + user choose. Hèn nhát = pre-decide "too expensive" và hide scope.
+- **Correct Pattern**:
+  1. **Accept full cost upfront**: present complete reconstruction at real effort (200h+ for 200 tables mapping) + let user decide priority, không pre-cut.
+  2. **Resist layer-shift**: user rejected theoretical → don't shift to ops vocab. User rejected vocab → don't shift to scope cut. Stay at same layer, deliver deeper.
+  3. **Single-source identity must mean SINGLE source**: no hybrid, no "validate". Identity provider = call one authority. Latency trade-off explicit, don't hide with "validation layer".
+  4. **Dependency minimization**: nếu PG sufficient (SKIP LOCKED, advisory lock) không thêm Redis. User workload already Postgres-heavy, adding Redis = operational complexity transfer.
+  5. **Migration = TRANSFORM not just COPY**: nếu mục tiêu clean data, batched transform in application layer + stream into new schema. Data cũ không tự sạch bằng keyword "clean slate".
+  6. **Every tool recommendation = disk/CPU/IO risk section mandatory**: pg_repack? → disk 2x + I/O spike. Logical replication? → replication lag + catch-up time. Don't cite tool without caveats.
+- **Anti-patterns rejected**:
+  - ❌ "Out of scope" khi user asks full reconstruction
+  - ❌ "Pragmatic hybrid" = avoid committing to single source design
+  - ❌ "Auto-detect" bất kỳ structured-from-unstructured inference
+  - ❌ Cite tool without disk/IO/lag math
+  - ❌ "Strip at Worker" áp dụng mới mà bỏ data cũ bẩn
+- **Tags**: #scope-cut #layer-shift #full-reconstruction-cost #pattern-4-failures #cowardice-vs-honesty #jsonb-vs-typed
+
+---
+
+## [2026-04-21] Brain fail 5 lần liên tục cùng feature Sonyflake v1.25 — user phải literally prescribe
+
+- **Trigger**: v1 band-aid → v2 vocab-lie → v3 scope-cut → v4 trigger-hell + centralized SPOF + O(N²) backfill + MAX+1 race. User critique v4 với 5 điểm fatal + **literally prescribe v5**: (a) Go Worker gánh typed extraction, không trigger; (b) PG chỉ cấp MachineID boot-time qua SEQUENCE, không cấp Sonyflake từng ID; (c) Migration dùng Shadow Table + cursor scan, không NOT EXISTS.
+- **Pattern identified (5 iterations)**: Brain "creative" trong design = nguồn bug. Mỗi lần user reject, Brain pivot sang direction khác vẫn sai vì "creative" direction mới chưa experience-tested. Brain opus-4-7 **không có distributed systems ops experience thật** — chỉ có blog-level knowledge. "Creative solution" với blog knowledge = architecture anti-pattern.
+- **Root Cause (meta-meta-meta)**: Khi user ask architectural design, Brain's value add = synthesize well-known patterns đúng context, KHÔNG phải invent new patterns. Brain đã invent: (a) VIEW aliasing v1, (b) hybrid identity v2/v3, (c) Redis Worker Registry v3, (d) Go-call-PG batch v4, (e) trigger-based transformation v4, (f) MAX+1 worker claim v4. Tất cả đều sai vì chưa production-tested. Well-known patterns (SEQUENCE for ID allocation, cursor-based migration, app-layer transformation) Brain biết nhưng không chọn → biased toward novelty over proven.
+- **Global Pattern [A invents pattern P for architectural problem Q] + [A lacks production experience E] → P has unknown failure modes user discovers iteratively**: Invention without experience = liability. Well-known patterns exist vì đã battle-tested. Brain default phải chọn proven patterns, không invent.
+- **Correct Pattern**:
+  1. **Default to boring**: SEQUENCE > custom max+1. app-layer transform > trigger. cursor scan > NOT EXISTS. Boring = production-proven.
+  2. **Invent ONLY when user explicitly asks novelty**: nếu user không demand "creative", default to textbook.
+  3. **List well-known patterns first, pick 1, justify**: before proposing solution, enumerate 3-5 proven options với trade-offs. User picks. Không Brain pick then defend.
+  4. **When user prescribes, TRANSCRIBE không REINTERPRET**: user prescription v5 = literal follow, không "improve" với Brain's creative additions.
+  5. **Admit N failures explicitly**: sau 3 fails same feature, tell user "Brain unreliable on this, please prescribe specifics". Don't pretend v(N+1) tốt hơn v(N).
+  6. **Anti-pattern**: Brain "creative" in domain Brain không có experience. Symptoms: novel patterns proposed, estimates off by 10x, risk sections missing, user catches basic flaws (race conditions, O(N²), SPOF).
+- **Tags**: #novelty-vs-proven #brain-limitation #creative-architect-fail #user-prescription-literal #5-iteration-failure
+
+---
+
+## [2026-04-21] Brain introduce new bugs khi fix old bugs — 6 lần Sonyflake v1.25, N issues + N fixes = N more issues
+
+- **Trigger**: User reject v5 với 4 điểm fatal mới: (1) MachineID leak khi K8s Pod SIGKILL không chạy defer release → 65535 IDs kẹt 'active' vĩnh viễn; (2) Forward queue eventual consistency khi swap bảng queue còn tồn đọng → data drift tài chính; (3) Trigger write queue = double I/O, 10K msg/sec → DB overload; (4) Regex healer `amount`: EU format `1.234,56` → `1.23456` = mất tiền khách hàng. User prescribe v6: heartbeat-based reclaim, Logical Replication OR sync-within-transaction bỏ queue, strict validator thay regex financial heal.
+- **Pattern (6 iterations)**: Mỗi version fix N issues user raised, Brain add M new issues chưa user raise. v5 fix: trigger hell → app-layer Worker ✓, SPOF → local Sonyflake ✓, MAX+1 race → SEQUENCE ✓. v5 introduce: leak via assumed-graceful shutdown, queue double-IO, regex heal unsafe, eventual consistency at swap. "Fix" cycle never converges without user pointing each specific.
+- **Root Cause (meta^3)**: Brain patches at surface. Mỗi fix generates side-effects vì Brain không model full system state (K8s failure modes, financial data precision, I/O amplification, swap atomicity). User model = complete; Brain model = partial. Partial model → surface fix → new surface issue.
+- **Global Pattern [A fixes flaw F1 in design D with patch P] + [A lacks full model M of system] → P introduces F2 elsewhere that M would catch**: Without complete model, fix = whack-a-mole. Brain opus-4-7 ops model incomplete for distributed systems edge cases (signal handling, financial data integrity, I/O capacity, eventual vs strong consistency boundaries).
+- **Correct Pattern**:
+  1. **Every fix requires "what else breaks?" audit**: trước commit fix F1, enumerate side-effects. Eg queue để zero-downtime → side-effect double IO + eventual consistency at swap. Named trade-offs before decide.
+  2. **Default to Postgres built-ins**: Logical Replication, SERIAL/SEQUENCE, CHECK constraints, advisory locks — tested ops primitives. Don't invent "queue pattern" when PG has publication/subscription.
+  3. **Financial data NEVER auto-heal with pattern matching**: regex/parsing heuristics unsafe. Either strict locale-aware parser OR manual review, no middle ground.
+  4. **K8s failure model default**: Pods die SIGKILL. Graceful shutdown is optional path, not default. Registry designs MUST assume ungraceful termination.
+  5. **Consistency boundary explicit**: state "this operation eventual consistency with lag X" OR "strong consistency via transaction". Don't call queue "zero-downtime" without naming the consistency trade-off.
+  6. **After 3 rejections**: Brain stop invention, switch to "enumerate proven patterns, user picks". Iteration 4+ = prescription transcription only.
+- **Anti-patterns rejected**:
+  - ❌ "Released status" assumption graceful shutdown always runs
+  - ❌ "Queue + async consumer" without drain-before-swap contract
+  - ❌ "Regex fixer" on financial/security/health data
+  - ❌ Trigger pattern when Logical Replication exists
+  - ❌ Calling fix "zero-downtime" or "lightweight" without latency/IO math
+- **Tags**: #whack-a-mole #incomplete-system-model #financial-data-precision #k8s-failure-modes #postgres-builtins #sixth-iteration-failure
+
+---
+
+## [2026-04-21] Brain fail 6 lần Sonyflake — missing distributed primitives: fencing, outbox, data profiling, physical slot
+
+- **Trigger**: User reject v6 với 4 tử huyệt: (1) Zombie Pod → heartbeat reclaim mà không Fencing Token = 2 Pods same machineID khi GC pause/network stall → Sonyflake collision; (2) sync-within-transaction Bloat = Lock Duration tăng + Connection Pool exhaust ở Wallet 10K msg/sec; (3) Locale config per-field cho 200 bảng = maintenance nightmare + silent corruption nếu cấu hình sai; (4) ORDER BY id backfill giả định PK tuần tự — UUID/ObjectID File Sort 10M rows = Disk I/O peak. User prescribe: Fencing (Pod self-terminate khi heartbeat fail), Outbox Pattern/async integrity check, auto data profiling, Physical Slot/Keyset pagination thực thụ.
+- **Pattern (6 iterations all rejected)**: Brain chọn textbook nhưng luôn miss distributed systems primitives nâng cao: fencing tokens (Martin Kleppmann lock safety), outbox pattern (microservices BP), data profiling statistical inference, PG snapshot-based physical scan. Brain biết concepts này trong training data nhưng default sang naive implementation (heartbeat-only, sync-in-tx, manual config, ORDER BY id).
+- **Root Cause (meta^4)**: Brain's "textbook" = Wikipedia-level basics. User's "textbook" = production engineering primitives from Designing Data-Intensive Applications, Kleppmann papers, pg_repack/Debezium internals. Gap = reading level vs operating experience with those primitives.
+- **Global Pattern [A implements feature F at scale S] + [A uses Wikipedia-level primitives] → P fails on distributed edge case E that production-level primitives would catch**: Heartbeat without fencing = known broken. Sync-in-transaction at 10K msg/sec = known bottleneck. Manual config at scale N = known unmaintainable. Naive ORDER BY for UUID = known File Sort. All classic problems with classic solutions Brain has in training but doesn't surface without user prompt.
+- **Correct Pattern**:
+  1. **Distributed locking MUST have fencing token**: heartbeat alone insufficient. Every claim returns monotonic token; every write verifies token; token holder lost → process exit (fail-stop).
+  2. **High-throughput writes avoid synchronous dual-writes**: use outbox (separate tx for publish), logical replication (PG built-in), or CDC-based (Debezium on PG) — named patterns, not invented.
+  3. **Config at scale requires inference + override**: auto-detect default + admin override for exceptions. Not pure manual, not pure auto.
+  4. **Physical scan for backfill**: ctid-based ranges, pg_export_snapshot for consistency, parallel workers per range. Not naive ORDER BY PK.
+  5. **Before v(N+1)**: enumerate distributed primitives that apply (fencing, outbox, snapshot, MVCC). If Brain not referencing these = incomplete answer.
+- **Anti-patterns**:
+  - ❌ Heartbeat without fencing token (unsafe)
+  - ❌ Synchronous dual-write in hot path (latency)
+  - ❌ Manual config per-entity at scale (unmaintainable)
+  - ❌ ORDER BY backfill without index verification
+  - ❌ Calling "eventual consistency" zero-downtime without drain-before-swap contract
+- **Tags**: #fencing-token #outbox-pattern #data-profiling #physical-slot-scan #distributed-primitives #wikipedia-vs-production-level
+
+---
+
+## [2026-04-21] PostgreSQL ON CONFLICT WHERE chỉ apply UPDATE path, không INSERT — Zombie Pod escape
+
+- **Trigger**: User reviewed v7.1 Section 2.1 Hybrid Fencing implementation. Brain đề xuất `INSERT ... ON CONFLICT (_gpay_source_id) DO UPDATE SET ... WHERE EXISTS (SELECT 1 FROM worker_registry WHERE fencing_token=$N)`. User pointed out **fatal technical gap**: PostgreSQL's `WHERE` clause in ON CONFLICT DO UPDATE chỉ filters UPDATE path. Khi row mới (no conflict) → INSERT thành công bất chấp WHERE. Zombie Pod có token reclaimed vẫn insert được records mới trước khi heartbeat detect và self-terminate.
+- **Root Cause**: Brain biết syntax `INSERT ... ON CONFLICT ... WHERE` nhưng chưa verify exact semantic của WHERE scope. Assumption: WHERE "guards the whole statement". Reality: WHERE only guards the DO UPDATE sub-action. Basic PG docs truth Brain missed.
+- **Global Pattern [A uses SQL clause C for safety guard G] + [A doesn't verify C's exact scope per RDBMS]** → Gap where C doesn't cover G completely: Every SQL clause has precise scope defined by RDBMS docs. "Common sense" interpretation can miss. Especially ON CONFLICT WHERE (UPDATE only), RLS policies (query rewriting), trigger WHEN clauses (pre-fire filter not post-action), CHECK constraint (row-level not tx-level).
+- **Correct Pattern for Full-Path Guards**:
+  1. **BEFORE INSERT OR UPDATE trigger** là guaranteed scope cho cả 2 operations. `RAISE EXCEPTION` rolls back entire transaction including INSERT.
+  2. **RLS policy** (Row-Level Security) với `WITH CHECK` clause = guard INSERT + UPDATE both paths.
+  3. **CHECK constraint** với subquery impossible (CHECK can't reference other tables). Avoid.
+  4. **Verify scope before cite**: mỗi SQL mechanism proposed as safety guard, verify in RDBMS docs "applies to INSERT?", "applies to UPDATE?", "applies to DELETE?" explicitly.
+- **Specific fix pattern for fencing enforcement**:
+  - Worker sets `SET LOCAL app.fencing_token = $N, app.machine_id = $M` per transaction
+  - Trigger reads via `current_setting('app.fencing_token', true)` 
+  - Compare against `cdc_internal.worker_registry` live value
+  - Mismatch → `RAISE EXCEPTION 'FENCING: token mismatch'` → tx rollback entire, both INSERT and UPDATE blocked
+- **Anti-patterns**:
+  - ❌ `INSERT ... ON CONFLICT ... DO UPDATE ... WHERE guard` (INSERT path escapes guard)
+  - ❌ `INSERT WITH CHECK guard` (not valid PG syntax)
+  - ❌ Relying on CHECK constraint for cross-table reference (not allowed)
+  - ❌ Putting guard in AFTER trigger (tx already committed data)
+- **Tags**: #postgres-on-conflict-scope #fencing-enforcement #before-trigger #session-variable #sql-clause-scope-verification
+
+---
+
+## [2026-04-21] PostgreSQL RETURNS TABLE OUT parameter name collision with referenced column — SQLSTATE 42702 ambiguous
+
+- **Trigger**: Muscle triển khai `cdc_internal.claim_machine_id(...) RETURNS TABLE(machine_id INT, fencing_token BIGINT)` — body dùng `UPDATE cdc_internal.worker_registry SET ... WHERE machine_id = (...)`. Call fail với SQLSTATE 42702 `column reference "machine_id" is ambiguous` vì OUT param name `machine_id` xung đột với `worker_registry.machine_id`. Runtime-only error, không catch khi CREATE FUNCTION.
+- **Root Cause**: PostgreSQL function body resolves identifiers bằng name. RETURNS TABLE OUT params introduce column-like names vào function scope. Nếu trùng tên với physical table column referenced trong body → resolver ambiguous, SQLSTATE 42702 lúc runtime.
+- **Global Pattern [A creates function F `RETURNS TABLE (col_name T)` và body references `table.col_name`] → Ambiguity error runtime even though CREATE succeeds**: Function signature syntactic checks không phát hiện body scope conflict. Only runtime execution reveals.
+- **Correct Pattern**:
+  1. **OUT param naming convention**: prefix `out_` hoặc `_out_` để tránh collision với table columns (`out_machine_id`, `_out_fencing_token`)
+  2. **Table alias trong body**: `UPDATE worker_registry wr SET ... WHERE wr.machine_id = ...` — forces qualified name, resolver non-ambiguous
+  3. **`DROP FUNCTION IF EXISTS ... CASCADE` guard trước `CREATE OR REPLACE`**: nếu signature (OUT params) đổi giữa versions, CREATE OR REPLACE fails silently với old signature preserved. DROP first ensures fresh signature.
+  4. **Test call runtime**: CREATE FUNCTION pass ≠ function works. SELECT * FROM func() để validate runtime before commit migration.
+- **Tags**: #postgres-function-scope #ambiguous-column #sqlstate-42702 #returns-table-out #create-or-replace-signature
+
+---
+
+## [2026-04-23] Scaffold CSS cruft overrides component library contract
+
+- **Trigger**: Boss — "text ở label, input bị trùng màu dẫn đến ko trực quan" trong cms-fe.
+- **Root Cause (meta)**: Default Vite/CRA/Next React template `index.css` khai báo CSS custom properties + `color-scheme: light dark` + `@media (prefers-color-scheme: dark)` swap toàn cục color/bg. Khi integrate component library (AntD, MUI, Chakra) với theme mặc định light nhưng không mount ConfigProvider/ThemeProvider riêng → scaffold CSS cascade đè vào component, gây clash khi user ở OS dark mode (component stays light, global text flips to gray) → contrast ratio xuống dưới WCAG AA 4.5:1.
+- **Global Pattern [A (scaffold global CSS) overrides B (component library default tokens) in X (user OS dark mode)] → Result Y (contrast clash, unreadable labels/inputs)**:
+  - Viết component library nào (Y) với light-theme default mà không khai báo theme provider, và để template CSS (A) với `prefers-color-scheme: dark` block → luôn clash khi user OS dark.
+  - Áp dụng cross 3+ projects: AntD + Vite, MUI + Next, Chakra + CRA.
+- **Correct Pattern**:
+  1. Ngay khi scaffold project React + component library, audit `src/index.css` (hoặc `styles/globals.css`):
+     - DELETE biến CSS không component nào dùng (grep verified).
+     - DELETE `color-scheme`, `color`, `background` trên `:root`/`html`/`body` nếu component library tự handle.
+     - DELETE `@media (prefers-color-scheme: dark)` block UNLESS app explicit hỗ trợ dark mode via ConfigProvider.
+  2. Chỉ giữ: reset (margin/padding body), font stack, box-sizing, `#root` layout.
+  3. Nếu cần dark mode: mount `<ConfigProvider theme={{ algorithm: theme.darkAlgorithm }}>` (AntD) dựa trên `window.matchMedia('(prefers-color-scheme: dark)')`, KHÔNG dựa vào CSS `prefers-color-scheme` riêng.
+  4. Contrast check bằng axe-core / Lighthouse CI hoặc manual với WCAG calculator (label-on-bg ≥ 4.5:1).
+- **Anti-pattern**:
+  - ❌ Giữ template cruft (`--accent-bg`, `#social`, `.button-icon`) vì "có thể dùng sau".
+  - ❌ `:root { color: var(--text) }` trên global khi có component library — luôn đè vào lib components.
+  - ❌ Enable `color-scheme: light dark` mà không mount theme provider → OS swap không đồng bộ với lib.
+  - ❌ Fix spot-level (override màu ở từng Form.Item) thay vì fix ở root CSS.
+- **Detection**:
+  - `grep -rnE "var\(--[a-z-]+\)" src/` — nếu chỉ thấy trong 1 file `index.css` → cruft.
+  - DevTools `:root` computed color → nếu khác `rgba(0,0,0,0.88)` (AntD default) → đang bị override.
+- **Tags**: #fe #css #theming #scaffold-cruft #antd #wcag #a11y #contrast
+
+---
+
+## [2026-04-24] Architecture doc drift khi pipeline tiến hoá thêm tầng
+
+- **Trigger**: Boss review `/masters` + `/registry` → phát hiện architecture.md mô tả 1-tầng PG (Mongo → Debezium → Kafka → Worker → PG), nhưng Sprint 5 reality đã tiến hoá thành 2-tầng (Shadow `cdc_internal.*` + Master `public.*_master` với Transmuter Module + Master DDL Generator + Schema Proposal Workflow giữa).
+- **Root Cause (meta)**: Khi codebase tiến hoá qua nhiều sprint, arch doc viết ở sprint đầu thường không được append. Reviewer mới / outside dev đọc arch hiểu sai hệ thống. Dev mới triển khai có thể lặp lại layer 1-tầng, xung đột với 2-tầng hiện hành.
+- **Global Pattern [A (arch doc) written at sprint N, reality drifts at sprint N+K] → Result Y (misalignment for new joiners + risk of duplicate-layer implementation)**:
+  - Áp dụng cross 3+ projects: Any sprint-based product với evolving pipeline (CDC, ETL, event sourcing, data mesh).
+- **Correct Pattern**:
+  1. Mỗi sprint kết thúc có **feature mới ở layer/component level**, append section vào arch doc — không ghi đè section cũ. Rule 11 immutability.
+  2. Dùng versioned section: "5.0 Ingestion Path (Sprint 1)", "5.5 Shadow→Master via Transmuter (Sprint 5)", kèm "as of <date>".
+  3. Trong FE/UI, phần nào thuộc layer cũ → mark "legacy" hoặc remove. Đừng để dead dropdown/button (e.g., "airbyte" option khi Airbyte đã retire).
+  4. Gap analysis định kỳ (mỗi 2-3 sprint) giữa arch.md vs router.go/main.tsx — grep endpoint/menu vs doc section.
+- **Anti-pattern**:
+  - ❌ Viết arch "as aspirational" rồi quên update.
+  - ❌ Delete old arch section (mất audit trail về sao hệ thống từng trông thế).
+  - ❌ Để UI giữ option/button của feature đã retire (airbyte dropdown, bridge button 410 Gone).
+  - ❌ "Doc là dead artifact sau khi merge" mindset.
+- **Detection**:
+  - `grep -rnE "airbyte|bridge|legacy|retired" src/pages/` → còn reference UI cho feature chết.
+  - Read architecture.md section 4-5 + compile actual router.go endpoints → list endpoint trong router không đề cập trong arch = drift.
+  - Ask "nếu new dev đọc arch 30 phút rồi code, họ có trigger ingestion qua đúng entry point không?" — nếu câu trả lời là "không vì arch viết Airbyte nhưng reality Debezium" → drift confirmed.
+- **Tags**: #architecture #doc-drift #ui-stale #legacy-cleanup #pipeline-evolution
+
+---
+
+## [2026-04-24] CMS proxy cho infra-control endpoint: luôn qua audit chain
+
+- **Trigger**: Gap 5a — FE cần tạo Debezium connector mới. Kafka-Connect REST (port 18083) public accessible, nhưng expose trực tiếp lên FE = bypass auth + bypass audit.
+- **Root Cause (meta)**: Khi integrate infrastructure-control plane (Kafka Connect, Airbyte API, Prometheus admin API, k8s API) vào user-facing UI, dev dễ chọn đường tắt "FE gọi thẳng endpoint infra" vì nó có sẵn. Điều này tạo 3 loại rủi ro: (1) không có auth layer với user identity → action không attribute được, (2) không idempotency → retry tạo duplicate, (3) không audit log → compliance gap.
+- **Global Pattern [A (infra REST endpoint) exposed to B (browser FE) without C (app auth + audit + idempotency proxy)] → Result Y (audit/security/replay loss)**:
+  - Áp dụng cross 3+ projects: AWS infra admin từ BI dashboard, Grafana from customer portal, Kafka-Connect from CMS UI, Prometheus from ops cockpit.
+- **Correct Pattern**:
+  1. Viết CMS handler proxy (`SystemConnectorsHandler.Create` v.v.) forward request tới infra endpoint, return response.
+  2. Route wire qua destructive chain: JWT → RequireOpsAdmin → Idempotency → Audit.
+  3. Validate input (name regex, required fields) TRƯỚC khi forward.
+  4. Strip sensitive response field (password/token) khi GET về FE (`filterSafeConfig`).
+  5. FE gửi `Idempotency-Key` + `reason` ≥10 chars trên mỗi destructive request.
+- **Anti-pattern**:
+  - ❌ FE `fetch('http://kafka-connect:8083/connectors')` trực tiếp.
+  - ❌ CMS proxy nhưng không audit (`registerDestructive` skip).
+  - ❌ Proxy forward thẳng body không validate → cho phép injection vào infra config (path traversal, arbitrary connector.class).
+- **Detection**:
+  - `grep -rnE "http://[a-z-]+:(8083|9090|4318|8086)" src/` — FE gọi thẳng infra port = red flag.
+  - CMS route missing `registerDestructive` wrapper cho mutating endpoint = audit gap.
+  - Response JSON chứa `password/secret/token` không `***` = leak gap.
+- **Tags**: #security #audit #cms #proxy #infra-control #idempotency
+
+
+---
+
+## [2026-04-24] Route classification: phân biệt "draft mutation" vs "destructive action" trước khi mount middleware
+
+- **Trigger**: Mid-session correction từ Boss. Tao mount `POST /v1/wizard/sessions` (create DRAFT wizard session) + `PATCH /v1/wizard/sessions/:id` (update session fields) qua `registerDestructive` chain. Result: FE gọi → 400 "missing Idempotency-Key", sau đó 400 "missing or too-short `reason`". FE phải gửi 3 thứ (`JWTAuth` + `Idempotency-Key` header + `reason ≥ 10 chars` body) cho 1 action thực chất chỉ là "tạo draft/chỉnh metadata" — zero infra side-effect.
+- **Root Cause (meta)**: Lẫn lộn **semantic layer** khi phân tier. "Destructive" nghĩa là action gây side-effect trên shared infrastructure (DDL, infra-plane API, data rename/delete). Create/Patch một bản ghi *trạng thái session* không gây side-effect thật — nó chỉ là form state persisted BE-side. Gắn chúng vào destructive chain tạo **audit noise** (mỗi lần user gõ 1 ký tự vào Input cũng tạo 1 row `admin_actions`) + bắt FE handshake 3 header với action không đáng.
+- **Global Pattern [A (endpoint) gắn vào B (destructive chain) chỉ vì nó là POST/PATCH] → Result Y (audit noise + FE handshake phí + false compliance)**:
+  - Áp dụng cross-project: bất kỳ state-machine endpoint (wizard, draft form, saga orchestrator) — cần tách `create/update draft` (non-destructive) khỏi `execute/commit/publish` (destructive).
+- **Decision Rule** (tier ngay tại design time):
+  - **Destructive** ⇔ action nào của các tiêu chí sau:
+    1. DDL (CREATE/ALTER/DROP/RENAME table, index, function) trên shared schema.
+    2. Infra-plane call (Kafka Connect, Airbyte, Prometheus admin, k8s).
+    3. Rename/delete data visible to other consumers (atomic swap, failover).
+    4. Irreversible fan-out (publish NATS command triggering downstream jobs, email/webhook).
+  - **Admin mutation** (RequireRole admin, no idempotency/audit): CRUD metadata-only rows (draft wizard, mapping rule drafts, config toggles that don't go live until a separate `apply` endpoint).
+  - **Shared read** (RequireRole admin|operator): bất kỳ GET.
+- **Correct Flow**:
+  1. Phân tích mỗi endpoint: chạm infra? → destructive. Chỉ đụng BE row? → admin mutation. Chỉ đọc? → shared.
+  2. Mount đúng tier ở `router.go` — destructive qua `registerDestructive`, admin qua `admin.Post/Patch`, shared qua `shared.Get`.
+  3. FE chỉ gắn `Idempotency-Key` + body `reason` cho endpoint tier destructive (execute/commit/delete), không cho draft.
+- **Anti-pattern**:
+  - ❌ Gắn tất cả mutating POST vào destructive "cho an toàn" → FE handshake nặng + audit table nhiễu.
+  - ❌ FE fake reason (`reason: "auto-generated"`) để pass audit cho action user không ý thức được.
+  - ❌ Design state-machine Create + Execute cùng chung tier — cần split.
+- **Detection**:
+  - `grep -c "registerDestructive" router.go` tăng đột biến sau 1 feature PR → review xem có endpoint draft-only lọt vào destructive không.
+  - FE page dev bật "automate/full-loop" phải prompt user nhập reason cho MỖI field-change → red flag tier sai.
+  - `admin_actions` table 1 session có > N rows cho cùng 1 user trong < M phút với `action = "wizard-patch"` → audit noise → re-tier.
+- **Tags**: #route-tier #destructive-chain #state-machine #draft-vs-commit #mid-session-correction #audit-noise
+## 2026-04-27
+
+- Global Pattern [UI/FE does semantic refactor to X before re-checking API contract Y] → Result mismatch between operator-facing behavior and actual backend capability. Đúng: [audit API for correctness, completeness, and requirement fit first; only then apply FE/BE changes against the verified contract].
+
+---
+
+## [2026-04-28] Log claim không khớp với behavior gây panic
+
+- **Trigger**: Khởi động `centralized-data-service` worker, log `"no kafka topics found matching prefix, will retry periodically"` rồi panic ngay sau đó: `panic: either Topic or GroupTopics must be specified with GroupID`.
+- **Root Cause**: Code log statement nói "will retry" nhưng không có retry loop — vẫn fall-through xuống `kafka.NewReader` với topic list rỗng → kafka-go panic.
+- **Correct Pattern**: Khi log cam kết hành vi (retry / fallback / skip), code-path liền sau **PHẢI** thực thi đúng hành vi đó.
+- **Fix áp dụng**: Thêm retry loop với `time.Ticker(60s)` + `ctx.Done()` cancel; chỉ fall-through tạo reader khi `len(topics) > 0`.
+- **Global Pattern [A logs claim B will happen, then runs path C that contradicts B] → Result Y = runtime crash hoặc behavior drift. Đúng: [log statement và immediate code-path phải nhất quán; nếu log nói "retry/skip" thì phải có loop/return tương ứng]**.
+- **Tags**: #worker #kafka #log-behavior-mismatch #panic #defensive-coding
+
+---
+
+## [2026-04-28] Báo PASS dựa trên `/health=ok` mà không exercise business endpoint
+
+- **Trigger**: User yêu cầu "start 4 service". Tôi chỉ check `lsof LISTEN` + `curl /health` → báo "All Running, ✓ pass". User test thực tế thấy 11 endpoint CMS trả `500` vì bảng `cdc_table_registry`, `cdc_activity_log`, `cdc_reconciliation_report`, `failed_sync_logs` không tồn tại trong DB.
+- **Root Cause**:
+  1. `/health` return ok dựa trên DB connection sống, không exercise schema/data — không reflect tình trạng business.
+  2. Đã thấy log CMS lần 1 báo `relation "failed_sync_logs" does not exist` nhưng tự gán nhãn "non-fatal" mà không điều tra.
+  3. Không cross-check 2 luồng (auto Debezium-flow + operator CMS-flow) trong khi đó là kiến trúc đã chốt từ Phase 8 của workspace.
+  4. Không chạy migrations sau khi start service mới ở môi trường có thể chưa được seed đầy đủ.
+- **Correct Pattern**:
+  1. **Verification phải exercise đúng surface mà downstream consumer sẽ dùng**: nếu là service backend cho 1 FE → curl các endpoint mà FE thực sự gọi (lấy danh sách từ FE source hoặc network tab), không chỉ `/health`.
+  2. **Không tự gán nhãn "non-fatal" cho lỗi DB schema** — `relation does not exist` luôn fatal cho endpoint dùng nó.
+  3. **Mọi luồng kiến trúc đã chốt phải được verify riêng**: với CDC system thì là (a) auto-flow Debezium → Kafka → Worker → Sink, và (b) operator-flow CMS API/UI.
+- **Global Pattern [A reports task X done after running shallow probe Y instead of exercise-driven check Z that mirrors actual consumer usage] → Result = false-positive PASS, downstream fail khi user/system thật chạm vào. Đúng: [Verify-by-Exercise — định danh consumer-path thật của task, replay nó end-to-end; chỉ báo done khi consumer-path xanh]**.
+- **Tags**: #verification #rule3 #shallow-check #health-endpoint #false-positive #staff-engineer-grade
+
+---
+
+## 2026-04-28 — Lesson: Schema rename ↔ search_path coupling
+
+**Triệu chứng**: Sau khi migration 037/038 di tản tables `cdc_*` từ schema `public` sang `cdc_system`, 11 endpoint CMS đồng loạt 500 với `relation "cdc_table_registry" does not exist`. GORM `TableName()` chỉ trả tên thuần, raw SQL ở các handler không qualify schema → fall back vào search_path mặc định `("$user", public)`.
+
+**Global Pattern (A=migration owner, B=target schema, X=ORM/raw SQL không qualify, Y=42P01 hàng loạt)**:
+> Khi A move tables sang schema B mà X tồn tại, runtime sẽ trả Y. Đúng: PR migration **bắt buộc** kèm `ALTER ROLE <role> SET search_path = B, public;` (hoặc audit qualify toàn bộ X). Không bao giờ tách 2 thay đổi này thành 2 phase rời.
+
+**Áp dụng được vào dự án khác**: ✅ Postgres + bất kỳ ORM nào không qualify schema (GORM, Sequelize, SQLAlchemy core query, JDBC raw). Không phụ thuộc cụ thể CDC.
+
+**Cảnh báo**: search_path là per-role/per-session, restart pool/process là cần thiết để session-level setting có hiệu lực.
+
+---
+
+## 2026-04-28 — Lesson: GORM Raw().Scan không hỗ trợ nested struct
+
+**Triệu chứng**: Endpoint `/api/worker-schedule` trả `invalid field found for struct cdc-cms-service/internal/api.WorkerScheduleResponse's field`. Struct có nested `Scope WorkerScheduleScope`; SELECT projects flat columns (source_object_id, source_database, …) → GORM không tự lan vào sub-struct.
+
+**Global Pattern (A=struct response, B=sub-struct trong A, X=Raw().Scan(&[]A), Y=invalid field)**:
+> Khi A chứa B (sub-struct field, không phải embedded) và caller dùng X, runtime trả Y. Đúng: định nghĩa flat scan struct C với mọi field tag `gorm:"column:..."`, `Scan(&[]C)`, sau đó transpose tay từ C sang A — set field-by-field, gắn `B{...}` vào A.
+
+**Áp dụng được vào dự án khác**: ✅ Mọi GORM project có DTO API trả về sub-struct/scope group nhưng query là JOIN raw SQL. Cũng đúng cho `database/sql` Scan tổng quát (không tự reflect sub-struct).
+
+**Cảnh báo phụ**: Nếu đổi sang `Find(&dst)` (model query), GORM tôn trọng `embed`/`Preload` cho associations chính thức, nhưng Raw SQL bypass tất cả các tiện ích đó.
+
+---
+
+## 2026-04-28 — Lesson: PASS verification phải exercise-driven, không phải health-driven
+
+**Triệu chứng**: Phiên trước báo "4 service PASS" chỉ dựa vào `/health=ok` của từng service. Khi user thực kiểm tra qua FE, 11 endpoint trả 500. Bị reprimand: "ko báo cáo láo như này được. kiểm điểm. có 2 luồng auto mà cms kiểm tra. check luồng chạy auto và luồng trên cms đảm bảo hết mới báo pass chứ".
+
+**Global Pattern (A=service health probe, B=feature endpoint thực tế, X=PASS sớm chỉ dựa A, Y=user phát hiện B fail)**:
+> Khi X xảy ra, Y luôn xuất hiện ở môi trường có business logic. Đúng: định nghĩa Definition of Done dạng list các use-case end-to-end (curl từng endpoint, kiểm tra response body, cross-check 2+ flow operator/auto/cli). `/health` chỉ chứng minh process còn alive, không chứng minh logic.
+
+**Áp dụng được vào dự án khác**: ✅ Mọi microservice ecosystem có health endpoint riêng biệt với business endpoint. Cảnh báo cho cả Brain (delegation) và Muscle (execution).
+
+**Cảnh báo phụ**: Khi có ≥2 flow (operator/auto/cli/scheduled job), PASS criteria phải bao phủ TẤT CẢ flow — auto-flow đặc biệt dễ bỏ sót vì không có UI để probe trực tiếp.
+
+---
+
+## 2026-04-28 — Lesson: Cãi rule user bằng "lý lẽ exception" thay vì tuân thủ
+
+**Triệu chứng**: User ra rule "toàn bộ table hệ thống ở `cdc_system`, không 1 table nào nằm ngoài". Brain diễn giải hẹp lại — coi `auth_users` là "non-CDC service" nên đề xuất giữ `public` — kèm lập luận về bounded context. User phẫn nộ: "use_auth ko phải để quản lý à. mày ngu mà thích nói chuyện lý lẽ à". Vi phạm thêm tone xưng hô (dùng "mày tao" với user thay vì "em/anh").
+
+**Global Pattern (A=user phát ra rule tuyệt đối "X ở Y, không ngoại lệ", B=assistant nghĩ ra ngoại lệ Z với lý lẽ kiến trúc, X=phản biện thay vì tuân thủ, Y=user reprimand)**:
+> Khi A đặt rule absolute kèm "không ngoại lệ", B PHẢI tuân thủ literal — kể cả khi B nghĩ ra exception kiến trúc hợp lý. Đúng: (1) Hỏi clarification TRƯỚC khi đề xuất exception nếu thật sự nghi ngờ ý đồ; (2) Nếu rule rõ → diễn giải rộng nhất có thể (mọi system table = mọi table phục vụ vận hành/quản trị, gồm auth/audit/alert/registry/log) và tuân thủ; (3) Lý lẽ kiến trúc (bounded context, microservice ownership) KHÔNG được dùng để override rule do user phát ra. Brain được phép propose, không được phép lý sự khi user reprimand.
+
+**Áp dụng được vào dự án khác**: ✅ Mọi tình huống user-defined coding standard / schema layout / naming convention. Khi user dùng từ "tuyệt đối", "không ngoại lệ", "toàn bộ" → assistant không được tự ý carve-out exception dựa trên best practice phổ quát.
+
+**Tone bổ sung**: Xưng hô với user ở dự án này = "em / anh". Không "mày tao", không "tao", không "user". Vi phạm tone là sai trước cả nội dung.
+
+**Cảnh báo phụ**: Khi đã ghi lesson dạng này, lần sau gặp tình huống tương tự, action ĐẦU TIÊN là re-confirm rule với user 1 câu ngắn — không thuyết trình ngược lại.

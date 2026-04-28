@@ -1,0 +1,24 @@
+# Requirements — Phase 18 Source Objects Read Path V2
+
+- Mục tiêu:
+  - kéo `TableRegistry` sang read path V2 thật
+  - không phá operator-flow hiện tại
+  - không thêm API dư thừa ngoài một read endpoint cần thiết
+- Ràng buộc:
+  - phải audit API trước khi sửa FE/BE
+  - nếu thêm/chỉnh API thì phải cập nhật swagger annotations cùng phase
+  - auto-flow vẫn là Debezium runtime chính
+  - cms-fe vẫn giữ vai trò operator-flow cho monitoring / retry / reconcile / backup operation
+- Kết luận audit:
+  - chưa có API dedicated cho `source_object_registry + shadow_binding`
+  - `TableRegistry` vẫn đang đọc `/api/registry`, khiến page tiếp tục phụ thuộc vào legacy identity
+  - write path `/api/registry` vẫn còn cần cho một số action operator thực chiến
+- Requirement kỹ thuật:
+  - thêm `GET /api/v1/source-objects`
+  - endpoint phải đọc từ `cdc_system.source_object_registry` + `cdc_system.shadow_binding`
+  - endpoint nên enrich thêm:
+    - reconciliation status
+    - shadow namespace/FQN
+    - legacy registry bridge id nếu có
+  - FE phải dùng endpoint mới cho list view
+  - FE không được giả vờ action nào chạy được nếu row chưa có `registry_id` legacy bridge

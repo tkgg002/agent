@@ -1,0 +1,22 @@
+# Context
+
+- Task: Thiết kế `schema design v2` cho `cdc-system/centralized-data-service` để xử lý bài toán multi-source, multi-shadow, multi-master, multi-system.
+- Trigger:
+  - Hệ thống hiện tại đang "đổ đống" shadow/master/system vào cùng một cụm Postgres và nhiều flow đang định danh bằng `target_table`.
+  - User yêu cầu giữ được cấu trúc cha `connection -> database/schema/collection -> table`, chọn riêng nơi chứa cho từng bảng ở từng layer.
+- Scope repo:
+  - `/Users/trainguyen/Documents/work/cdc-system/centralized-data-service`
+  - Tập trung vào `migrations/`, `internal/model/`, `internal/repository/`, `internal/service/`, `internal/handler/`, `config/`, `pkgs/database/`
+- Hiện trạng kỹ thuật đã xác minh:
+  - `internal/model/table_registry.go`: registry hiện gộp source + target + runtime state vào một bảng `cdc_table_registry`.
+  - `internal/model/mapping_rule.go`: mapping định danh chủ yếu bằng `source_table`.
+  - `internal/service/registry_service.go`: cache `target_table -> registry`, `source_table -> registry`, `target_table -> mapping_rules`.
+  - `internal/handler/event_handler.go`: ingest lookup bằng `source_table`, sau đó ghi vào `target_table`.
+  - `internal/service/master_ddl_generator.go`: hardcode tạo master vào `public.<master_name>`.
+  - `internal/service/transmuter.go`: hardcode đọc từ `cdc_internal.<shadow>` và ghi vào `public.<master>`.
+  - `config/config.go` + `pkgs/database/postgres.go`: runtime hiện chỉ có một DB pool chính và một read replica Postgres; chưa có multi-connection manager.
+- Mục tiêu của V2:
+  - Tách control plane (`system`) khỏi data plane (`shadow`, `master`).
+  - Chuẩn hóa identity của source object và destination object theo engine.
+  - Hỗ trợ route riêng cho từng table/collection sang nhiều shadow/master destination khác nhau.
+  - Cho phép preserve namespace cha thay vì "mọi thứ là target_table".

@@ -92,3 +92,70 @@ cdc_recon_backfill_progress{table="refund_requests"} 100
   - Lines 153-158: PK now hard-coded `_id`
   - Lines 163-199: cursor-based loop
   - Lines 264-300: `fetchNullBatch` now takes `after` param, issues ORDER BY / WHERE > ? query
+
+---
+
+## Section 3: Structural Finding — Legacy Backfill vs Airbyte Race (APPENDED 2026-04-17)
+
+### Observation (runtime, 3 ngày sau Section 2 claim)
+
+Trạng thái PG hiện tại — contradict Section 2's "100% coverage":
+```
+refund_requests: total=3425, with_ts=3424, missing=1
+export_jobs:     total=117,  with_ts=16,   missing=101
+```
+
+recon_runs cho thấy backfill runs đã THÀNH CÔNG lúc `2026-04-17 08:01:13`:
+```
+export_jobs     | tier=4 | status=success | docs_scanned=101 | heal_actions=101
+refund_requests | tier=4 | status=success | docs_scanned=1712 | heal_actions=1712
+```
+
+**Nhưng** metadata của 101 rows hiện đang null:
+```
+_created_at = 2026-04-15 (rows tồn tại từ trước)
+_updated_at = 2026-04-20 02:19:33  ← GHI ĐÈ 3 ngày SAU recon success
+_synced_at  = 2026-04-20 02:19:33
+```
+
+### Root cause
+
+**Race condition structural giữa backfill và Airbyte CDC sync:**
+
+1. Backfill UPDATE `_source_ts` = ts_ms (succeeded, verified recon_runs).
+2. Airbyte sync-next cycle (3 ngày sau) chạy UPSERT full-row replace trên cùng PK (`_id`).
+3. Airbyte không biết về column `_source_ts` (do public schema Airbyte-managed, thêm _source_ts offline) → UPSERT set lại `_source_ts = NULL` qua `EXCLUDED._source_ts`.
+4. OCC guard trong UPSERT của bản thân backfill dùng `WHERE _source_ts IS NULL` đã không bảo vệ được khỏi Airbyte vì Airbyte có quyền write đầy đủ và không qua backfill path.
+
+### Tại sao KHÔNG re-trigger
+
+- Re-trigger → reach 117/117 tạm thời → Airbyte sync cycle tiếp theo lại reset về NULL.
+- Đây là cosmetic fix, không giải quyết root cause.
+- Violates Rule 6 "Simplicity First" — spin wheels không productive.
+
+### Alignment với architecture v7.2 (Sonyflake Unified)
+
+Architecture v7.2 Section 2 đã quy định rõ:
+> "Airbyte legacy public schema — **để tự bơi**, không touch.
+>  cdc_internal (Debezium + Go SinkWorker) là pháo đài mới, nơi `_source_ts` được bảo vệ
+>  bởi Fencing Trigger BEFORE INSERT OR UPDATE + OCC guard."
+
+Nghĩa là: `_source_ts` trên legacy public schema sẽ LUÔN race với Airbyte. Đây là **by design** của parallel-system approach. Backfill legacy là lãng phí effort.
+
+**Canonical place cho `_source_ts` integrity** = `cdc_internal.*` (đã delivered Phase 0 + Phase 1).
+
+### Decision options for user
+
+- **Option A (recommended)**: Chấp nhận legacy `_source_ts` không bền vững. Xóa button Backfill khỏi FE khi cdc_internal đầy đủ production-ready. Tập trung migrate consumers sang query cdc_internal thay vì public.
+- **Option B**: Thêm PG trigger `BEFORE UPDATE ON <table> FOR EACH ROW: IF NEW._source_ts IS NULL AND OLD._source_ts IS NOT NULL THEN NEW._source_ts := OLD._source_ts` trên tất cả Airbyte-managed legacy tables để preserve. Violates "để tự bơi" policy nhưng giữ button functional.
+- **Option C**: Config Airbyte exclude column `_source_ts` khỏi replace-set. Cần check Airbyte normalization SQL template; có thể không khả thi với custom column ngoài Airbyte sync schema.
+
+### Status
+
+- Task "Backfill Button" — **logically delivered + build verified**.
+- Runtime coverage fluctuates due to structural race với Airbyte.
+- **Awaiting user decision** giữa 3 option trên.
+
+### Re-trigger NOT executed this session
+
+Brain/Muscle conclude re-triggering = cosmetic. Honest report chọn over "lái" con số 117/117 tạm thời. User được quyền decide strategy trước khi tốn thêm cycle.
