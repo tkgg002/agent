@@ -747,3 +747,12 @@ caseExpr.WriteString("ELSE ?::int END")
 - Server.go: 4 RegisterSync mới (reuse `shadowAutomator`/`db`/`natsClient` đã khởi tạo). Build + `go test ./internal/app/commands/... ./internal/api/...` PASS.
 - Smoke 4 endpoint live (CMS d4 :8083): cdc_jobs 4 row distinct idempotency_key, type/status đầy đủ. Errors propagate đúng qua bus → API: schedule.toggle 404 (not_found), registry.register/bulk 500 (constraint violation pre-existing — bus + handler chạy đúng).
 - Task #181 → completed. PENDING commit.
+
+## 2026-05-06 17:30 ICT — Đợt 5 P3 (#182): 4 handler last-batch → bus ✓
+- **master.toggle-active** — `ToggleMasterActiveCommand` sync (UPDATE master_binding flip is_active). Errors: `ErrMasterBindingNotFound` (404) / `ErrMasterRequiresApproved` (409 — CHECK `v2_master_active_requires_approved` trap).
+- **worker-schedule.create** — `CreateWorkerScheduleCommand` sync (INSERT WorkerSchedule). Type tag `worker-schedule.*` namespaced né Đợt 4 `schedule.*` clash trên CommandBus registry; ResultBody trả `{id, created}` cho post-bus getResponseByID giữ shape.
+- **schema-proposal.reject** — `RejectSchemaProposalCommand` sync với CAS guard `WHERE id=? AND status='pending'`. RowsAffected=0 → `ErrSchemaProposalNotPendingOrNotFound` → 409, replay-safe.
+- **mapping.batch-update-status** — API loop dùng `UpdateMappingRuleCommand` (Đợt 1) per-rule; Idempotency-Key suffix `:rule:<id>` né UNIQUE collision khi N rule chia 1 request key (mở rộng pattern `:<role>:<key>` từ Đợt 3/4).
+- Server.go: ctor `NewSchemaProposalHandler(db, bus, logger)` + 3 RegisterSync mới (master.toggle-active, worker-schedule.create, schema-proposal.reject). Build + `go test ./internal/app/commands/... ./internal/api/...` PASS.
+- Smoke 4 endpoint live (CMS d5 :8083): master.toggle-active 404 (pre-bus resolveByName), worker-schedule.create 201 ID 12 (cdc_jobs success), schema-proposal.reject 409 (cdc_jobs failed, errors.Is mapping đúng), mapping batch 202 updated:0 (loop empty). cdc_jobs 2 row distinct idempotency_key.
+- Task #182 → completed. cms commit `4589c55`. PENDING agent commit.
