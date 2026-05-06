@@ -756,3 +756,11 @@ caseExpr.WriteString("ELSE ?::int END")
 - Server.go: ctor `NewSchemaProposalHandler(db, bus, logger)` + 3 RegisterSync mới (master.toggle-active, worker-schedule.create, schema-proposal.reject). Build + `go test ./internal/app/commands/... ./internal/api/...` PASS.
 - Smoke 4 endpoint live (CMS d5 :8083): master.toggle-active 404 (pre-bus resolveByName), worker-schedule.create 201 ID 12 (cdc_jobs success), schema-proposal.reject 409 (cdc_jobs failed, errors.Is mapping đúng), mapping batch 202 updated:0 (loop empty). cdc_jobs 2 row distinct idempotency_key.
 - Task #182 → completed. cms commit `4589c55`. PENDING agent commit.
+
+## 2026-05-06 17:50 ICT — Đợt 6 P3 (#183): schema-proposal.approve → bus ✓
+- **schema-proposal.approve** — `ApproveSchemaProposalCommand` sync. To nhất P3 (tx multi-step: ALTER TABLE shadow/master + INSERT cdc_mapping_rules + UPDATE schema_proposal). API thin: parse + Reason ≥10 + bus.Execute + errors.Is mapping. Failure-mark UPDATE giữ trong handler (out-of-tx) → atomic close-loop.
+- 5 sentinel: NotFound (404), NotPending (409), InvalidDataType (400), InvalidIdent (400), ApplyFailed (500 wraps tx err qua errors.Join). Regex `propTypeRe`/`propColumnRe` duplicated sang commands package (pattern Đợt 4); api package xoá 2 var dead code, giữ `propIdentRe` cho mapping_preview_handler.
+- Server.go: 1 RegisterSync mới (schema-proposal.approve). Build + `go test ./internal/app/commands/... ./internal/api/...` PASS.
+- Smoke 3 case (CMS d6 :8083): non-existent ID 9999999 → 404, pending shadow proposal id=1 (orders/smoke_d6_col TEXT) → 200 (ALTER `shadow_goopay_source.orders` applied, schema_proposal.status='approved', applied_at NOT NULL), replay → 409 not_pending. cdc_jobs 3 row distinct idempotency_key, error_message đúng sentinel name (1 success + 2 failed).
+- Task #183 → completed. cms commit `f562b96`. PENDING agent commit.
+- **P3 destructive migration coverage update**: 21 handler / 21 endpoint đã qua bus (5 đợt × 4 + Đợt 6 × 1). Còn lại system_connectors.Create/Delete (HTTP→Kafka Connect REST, không phải DB destructive) — design riêng nếu Boss cần audit.
