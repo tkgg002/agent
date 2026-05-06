@@ -2300,3 +2300,46 @@ Khi codebase X có convention "test framework Y is excluded by design" và task 
 **Trade-off**: Repository / DB-orchestrator coverage không thể vượt ~25% mà không có Y. Phải document explicitly trong workspace 07_status.md để stakeholder thấy: "T17 file-level DoD met; coverage gap blocked by sqlmock decision — needs RFC".
 
 **Tags**: #testing #go #sqlmock-free #project-convention #pure-fn #httptest #otel-trace-test #global-pattern
+
+---
+## Lesson — Repository adapter layer ≠ unit test target
+**Date**: 2026-05-07 (T17 P7 close-out — feature-cdc-system-refactor workspace, architect ruling Q3=accept partial DoD)
+
+### Context
+DoD upstream cho test uplift task có "all repo files unit-tested via sqlmock" — nhưng repo file là adapter qua GORM (hoặc bất kỳ ORM nào abstract clause builder + transaction semantic). sqlmock = hard-coded expected SQL strings + reply rows; mock KHÔNG validate clause builder output, type marshaling, transaction lifecycle, DB-side defaults / triggers / constraint violation. Tests pass, prod break.
+
+### Global Pattern
+Khi codebase có adapter layer A (repository / DAL) wrapping framework B (GORM / sqlx / Ent) over data store C (Postgres / Mongo):
+1. **A KHÔNG phải unit test target qua mock library M (sqlmock / mockery).** Tests qua M chỉ validate "A gọi M.Exec đúng SQL string em đoán" — false-positive khi B khác version sinh SQL khác.
+2. **A là integration test target qua real C bằng testcontainers** (or equivalent ephemeral data-store). Mỗi test boot a fresh schema + run actual A.Method → verify rows / state side-effects.
+3. **Service layer S sử dụng A**: S unit test qua interface stub (S nhận `repository.X` interface, test inject fake implementing interface). S không cần biết A's SQL — chỉ cần A trả ra đúng object shape.
+
+### Đúng (architecture-aligned)
+1. Repo unit tests SKIP, document deferred to integration phase trong workspace 07_status.md.
+2. Service layer test qua interface mock (handcrafted struct hoặc go-mock generated).
+3. Integration phase: testcontainers spin C → run A → assert rows. Cover 100% A (insert/update/delete/select) trong 1 lane.
+4. Coverage threshold split: file-level DoD per S file ≥1 test = OK; combined % cap với reason "A layer deferred to integration".
+
+### Sai (sqlmock anti-pattern)
+1. Test `repo.Create(user)` qua sqlmock với expected SQL `^INSERT INTO users \(name,email\) VALUES \(\$1,\$2\)` — drift khi thêm column / GORM upgrade.
+2. Test transaction `repo.Begin().Commit()` qua sqlmock — mock KHÔNG enforce isolation level / deadlock retry / DB-side trigger fire.
+3. Mock DB-side default (e.g. `created_at TIMESTAMP DEFAULT NOW()`) — mock luôn trả `NULL`, prod trả timestamp → S logic break ở edge case "is created_at zero?".
+4. Pretend coverage % thấy đẹp trong report nhưng false sense of safety.
+
+### Counter-pattern (khi sqlmock chấp nhận được)
+- Adapter layer wraps **non-DB resource** (e.g. external HTTP API) — sqlmock-equivalent like `httptest.NewServer` đúng (real protocol, just stubbed endpoint).
+- Một SPECIFIC SQL string là contract pinned (e.g. raw SQL trigger fire, không qua ORM) — pin qua sqlmock OK nhưng phải kèm integration test backup.
+- Pre-commit lint validation "no inline SQL in handler/service" — sqlmock có thể detect drift thread-local.
+
+### File minh chứng (T17 P7 close-out)
+- Architect ruling Q3 (2026-05-07): repo unit tests deferred. T17 P7 file-level DoD 12/13 = 92% accepted as final.
+- 6 repo file deferred: `internal/repository/{mapping_rule_repo,pending_field_repo,registry_repo,schema_log_repo,source_repo,wizard_repo}.go`.
+- Workspace 07_status.md close-out section (2026-05-07 02:42 ICT) document deferred + proposed T18 backlog item (testcontainers integration suite).
+
+**Áp dụng đa-dự án**: Bất kỳ codebase với ORM adapter layer. Pattern variables: A=Repository/DAL/DAO, B=ORM framework (GORM/Ent/sqlx/sqlc), C=data store (Postgres/MySQL/Mongo), M=mock library (sqlmock/mockery). Đúng cho cả Go, Java (JPA/Hibernate), TS (TypeORM/Prisma), Python (SQLAlchemy).
+
+**Trade-off**:
+- Integration tests chậm hơn unit (testcontainers spin ~5–15s overhead per suite). Bù: 1 lane validate end-to-end semantic.
+- CI cần Docker. Nếu CI runner không có Docker → fall back: unit test S (stub interface) + manual integration phase trên dev/staging.
+
+**Tags**: #testing #repository-pattern #orm #gorm #sqlmock-anti-pattern #testcontainers #integration-test #adapter-layer #global-pattern
