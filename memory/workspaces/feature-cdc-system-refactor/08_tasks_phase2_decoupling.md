@@ -315,3 +315,90 @@ P1 (interface skeleton)
 - Worker chưa có infrastructure subscribe wildcard `cdc.evt.*.completed` → STOP + escalate.
 - `cdc_system.cdc_jobs` migration race với worker → STOP + apply migration on cdc_dw TRƯỚC.
 - FE break vì response 202 + job_id thay vì 200 + result → STOP + escalate (FE đã handle pending từ Lesson 2026-04-29).
+
+---
+
+## Backlog — opened 2026-05-07 (Phase 2 v2 close 100% gap)
+
+> **Context**: Sau audit `03_implementation_phase2_decoupling.md`, P3 còn 90% (G-A) và P4 còn ~50% (G-B/C/D). 2 task dưới đây mở để close drift toàn bộ.
+
+### Task #18 — V2SyncCommand wire + 3 file db.Raw migrate
+
+**Mục tiêu**: Đóng G-A + G-B trong `03_implementation_phase2_decoupling.md`.
+
+**Scope**:
+1. **G-A**: Wrap 3 inline `h.v2sync.SyncFromLegacy(...)` ở `registry_handler.go:147,263,321` qua `V2SyncCommand` → `commandBus.Dispatch(...)`. Worker subscribe `cdc.cmd.v2-sync` (đã exist từ T3.7) phải nhận + xử lý đúng. Emit `cdc.evt.v2-sync.completed`.
+2. **G-B**: Migrate 10 hit `db.Raw` qua `app/queries/` + `infra/persistence/`:
+   - `reconciliation_handler.go:180` (count query) → `GetReconReportTotalsQuery`.
+   - `reconciliation_handler.go:518` (scope) → `GetSourceScopeQuery`.
+   - `reconciliation_handler.go:701-702` (NULL count) → `GetSourceTsCoverageQuery`.
+   - `source_object_actions_handler.go:59,532,550,553,559` (sample preview + raw_data count) → `GetShadowSamplePreviewQuery` + `GetShadowRawDataCoverageQuery`.
+   - `registry_handler.go:490` (table_exists) → `CheckPhysicalTableExistsQuery`.
+
+**DoD**:
+- `grep -rn "SyncFromLegacy" internal/api/ internal/app/` = 0.
+- `grep -rn "db\.Raw\|db\.Exec" internal/api/ internal/app/` = 0.
+- 3 endpoint smoke V2 sync (Register / Update / BulkRegister) trả 202 + job_id; worker log `cdc.evt.v2-sync.completed` xuất hiện.
+- 4-5 endpoint smoke read (recon report, scope, sync coverage, shadow preview, table exists) PASS.
+- Build + test PASS.
+
+**Effort**: ~1.5d.
+**BlockedBy**: none (BE up, worker up, bus pattern đã verify).
+
+---
+
+### Task #19 — Service layer drainage + repository legacy migrate
+
+**Mục tiêu**: Đóng G-C + G-D trong `03_implementation_phase2_decoupling.md`.
+
+**Scope**:
+
+**G-C — `internal/service/` 22 file logic phải drain**:
+
+| File | Migrate target | Loại |
+|---|---|---|
+| `master_swap.go` | `app/commands/master_swap.go` (logic) + `domain/master/swap.go` (state machine) | Move + split |
+| `provisioning_orchestrator.go` | `domain/master/provisioning/orchestrator.go` | Move |
+| `provisioning_state_machine.go` | `domain/master/provisioning/state_machine.go` | Move |
+| `source_object_v2_sync.go` | `app/commands/v2_sync.go` (sync với Task #18) | Move |
+| `shadow_automator.go` | `app/commands/shadow_automate.go` | Move |
+| `system_health_collector.go` | `app/queries/system_health/collector.go` + `infra/persistence/health_repo_gorm.go` | Split |
+| `system_health_compute.go` | `domain/health/compute.go` (pure-fn) | Move |
+| `system_health_alerts.go` | `app/commands/health_alert.go` | Move |
+| `system_health_queries.go` | `infra/persistence/health_query_repo.go` | Move |
+| `activity_logger.go` | `infra/persistence/activity_log_writer.go` | Move |
+| `alert_manager.go` | merge vào `app/commands/{ack_alert,silence_alert}.go` đã có | Refactor |
+| `stuck_job_reaper.go` | `infra/messaging/stuck_job_reaper.go` (background daemon) | Move |
+| `prom_client.go` | `infra/http/prom_client.go` | Move |
+| `approval_service.go` | `app/commands/{approve_master,reject_master,approve_schema_proposal,reject_schema_proposal}.go` đã có → consolidate | Refactor |
+| `reconciliation_service.go` | no-op (Airbyte retired per plan v2 §R3) → DELETE | Remove |
+| `health/probes/deps.go` | giữ tại `internal/service/health/probes/` (đã clean per T17 P7) HOẶC move sang `infra/health/probes/` | TBD |
+
+**G-D — `internal/repository/` 6 file legacy**:
+
+| Legacy file | Action |
+|---|---|
+| `mapping_rule_repo.go` | DELETE (đã có `infra/persistence/mapping_rule_repo_gorm.go`); migrate caller import |
+| `registry_repo.go` | merge với `infra/persistence/source_object_read_repo_gorm.go` + tạo write counterpart |
+| `source_repo.go` | merge tương tự `registry_repo.go` |
+| `wizard_repo.go` | move sang `infra/persistence/wizard_repo_gorm.go` |
+| `pending_field_repo.go` | move sang `infra/persistence/pending_field_repo_gorm.go` |
+| `schema_log_repo.go` | move sang `infra/persistence/schema_log_repo_gorm.go` |
+
+**DoD**:
+- `find internal/service -type f -name "*.go" -not -name "*_test.go"` = 0 (folder may keep `health/probes/` if Boss decides).
+- `find internal/repository -type f -name "*.go"` = 0.
+- All caller import path updated; build + test PASS.
+- 8 endpoint smoke + 3 action smoke PASS (regression check).
+- Test coverage `infra/persistence/` ≥ 50%.
+
+**Effort**: ~2d.
+**BlockedBy**: Task #18 (vì `source_object_v2_sync.go` migrate phụ thuộc `V2SyncCommand` đã wire).
+
+---
+
+### Sau Task #18 + #19
+
+- Phase 2 v2 plan-vs-code drift = 0.
+- Workspace `feature-cdc-system-refactor` flip status `07_status.md` từ "All P done (file-level)" → "All P done (drift = 0, fully closed)".
+- Đóng workspace, chuyển Phase 3 hoặc next focus theo Boss chỉ định.
