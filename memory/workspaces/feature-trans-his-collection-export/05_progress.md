@@ -13,3 +13,5 @@
 | 2026-04-10T12:10Z | Muscle | claude-opus-4-6 | **Phase 3.1 - Fix filter patterns**: User cung cấp reference code từ service gốc. Sửa 5 filter trong `buildFilter`. Build pass. |
 | 2026-04-10T12:25Z | Muscle | claude-opus-4-6 | **Phase 3.2 - Fix transformRow mapping bugs**: Fix 5 bugs từ actual DB record. Build pass. |
 | 2026-04-10T12:35Z | Muscle | claude-opus-4-6 | **Phase 3.3 - Port đầy đủ transType + sysTrans logic**: Bị User chỉnh vì làm hời hợt - chưa port 2 logic quan trọng từ reference code. Đã thêm: (1) `params.transType` override default `$in`, (2) $or bypass logic cho REFUND_CASHIN khi `sysTrans === "true"` (tách branch REFUND_CASHIN khỏi sysTrans + giữ sysTrans cho các type khác). Import lodash cho `_.cloneDeep`. Build pass. |
+
+| 2026-05-05T13:25Z | Muscle | gemini-3-flash | **Fix Export & Probe**: Cập nhật mapping fallback cho REFUND_CASHIN (lấy từ bankTransferData). Sửa file yaml probe port 1122 -> 3030 (metrics) để fix lỗi connection refused trên testing. Build pass. |

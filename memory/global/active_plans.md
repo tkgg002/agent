@@ -14,10 +14,12 @@
 | feature-merchant-export-activation-info | Bổ sung thông tin kích hoạt Merchant Export | ✅ Done | 2026-03-12 |
 | feature-id-expired-notification-log-export | Tạo IDExpiredNotificationLogExport type | ✅ Done | 2026-02-27 |
 | feature-fee-configuration | Cấu hình phí dịch vụ (Fee Configuration) | ⏸ Paused | 2026-03-03 |
-| feature-cdc-integration | CDC Integration (Hybrid Debezium + Airbyte) | 🟡 Active | 2026-04-06 |
+| feature-cdc-integration | CDC Integration (Debezium-only sau commit 8ef7d71 remove airbyte) — Phase F (F1+F3) Done 2026-05-04 | ✅ Done | 2026-05-04 |
+| feature-system-refactor-2026-05 | System Refactor 2026-05 — bucket B1+B2 (hygiene + tooling), 4 service local smoke | 🟡 Active | 2026-05-04 |
 | feature-export-driver-search | Driver Info & Approximate Search in Exports | ✅ Done | 2026-03-24 |
 | upgrade-agent-infrastructure | Nâng cấp hạ tầng Agent v1.10.0 (Brain/Muscle) | ✅ Done | 2026-04-06 |
 | feature-trans-his-collection-export | Export TransHis Collection | 🟡 Active | 2026-04-09 |
+| feature-multi-pg-isolation-e2e | Tách 4 PG containers (auth/cdc/dest/source) + E2E auto-pipeline | 🟡 Active | 2026-04-28 |
 
 
 ---

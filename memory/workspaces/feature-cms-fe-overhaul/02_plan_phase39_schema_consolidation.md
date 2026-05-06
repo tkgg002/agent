@@ -80,18 +80,58 @@ make migrate-bootstrap-local
 
 (File `bootstrap_cdc_system_v2_local.sql` không đụng `auth_users` → giữ nguyên.)
 
-## Step 7 — Apply code patches
+## Step 7 — Apply code patches (6 file Go theo Option A)
 
-3 file Go đổi schema qualify:
+### 7a — Schema-qualify (3 file)
 - `cdc-system/cdc-auth-service/internal/model/user.go:17` — `TableName() = "cdc_auth_service.auth_users"`
 - `cdc-system/cdc-cms-service/internal/model/alert.go:37` — `TableName() = "cdc_system.cdc_alerts"`
 - `cdc-system/cdc-cms-service/internal/middleware/audit.go:166` — Raw SQL `INSERT INTO cdc_system.admin_actions`
 
-Build verify:
+### 7b — Binding-aware refactor (3 file) — NEW Option A
+- `cdc-system/cdc-cms-service/internal/service/shadow_automator.go`:
+  1. Đổi signature `EnsureShadowTable(ctx, reg *model.TableRegistry, shadowSchema string)` — caller bắt buộc truyền schema
+  2. **XÓA HẲN** hàm `ensureSonyflakeFunction()` — function đã ở `cdc_system.*` qua migration, không cần inline bootstrap
+  3. `createShadowDDL`: bỏ block `CREATE SCHEMA IF NOT EXISTS cdc_internal`. Tạo table trong `<shadowSchema>.<target>` (caller đảm bảo schema đã tồn tại — bootstrap V2 hoặc DDL upstream tạo `shadow_<src>`)
+  4. `attachSonyflakeTrigger`: gọi `SELECT cdc_system.ensure_shadow_sonyflake_trigger(?, ?)` với 2 arg (schema, table)
+- `cdc-system/cdc-cms-service/internal/api/registry_handler.go:113` (caller): resolve `shadowSchema` trước khi gọi
+  - Pragma fallback: `shadowSchema := "shadow_" + normalizeIdent(reg.SourceDB)` (`-` → `_`, lowercase)
+  - Hoặc lookup từ `cdc_system.shadow_binding` nếu có binding cho target_table
+- `cdc-system/cdc-cms-service/internal/api/mapping_preview_handler.go`:
+  - Trước SELECT shadow rows, lookup binding: `SELECT shadow_schema FROM cdc_system.shadow_binding WHERE shadow_table = ? AND is_active=true LIMIT 1`
+  - Substitue schema động vào Raw SQL: `FROM "<schema>"."<table>"`
+  - Nếu lookup miss → return 404 `binding_not_found`
+- `cdc-system/cdc-cms-service/internal/api/schema_proposal_handler.go`:
+  - Trong block `case "shadow"` (line ~133), lookup tương tự theo `row.TableName`
+  - `ALTER TABLE "<schema>"."<table>" ADD COLUMN`
+
+### 7c — Build verify
 ```bash
 cd cdc-system/cdc-auth-service && go build ./...
 cd cdc-system/cdc-cms-service && go build ./...
 cd cdc-system/centralized-data-service && go build ./...
+```
+
+### 7d — Final grep audit (Architect condition #3)
+```bash
+grep -rnE 'cdc_internal' /Users/trainguyen/Documents/work/cdc-system \
+  --include='*.go' --include='*.sql' \
+  | grep -v _test.go \
+  | grep -v migrations/018 \
+  | grep -v migrations/019 \
+  | grep -v migrations/020 \
+  | grep -v migrations/021 \
+  | grep -v migrations/022 \
+  | grep -v migrations/023 \
+  | grep -v migrations/024 \
+  | grep -v migrations/025 \
+  | grep -v migrations/026 \
+  | grep -v migrations/027 \
+  | grep -v migrations/028 \
+  | grep -v migrations/035 \
+  | grep -v migrations/036 \
+  | grep -v migrations/037 \
+  | grep -v migrations/038
+# Expected: 0 lines (chỉ còn migration cũ giữ làm history; mọi code Go runtime sạch)
 ```
 
 ## Step 8 — Restart services

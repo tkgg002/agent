@@ -89,3 +89,15 @@ Mọi phản hồi cuối cùng của Agent PHẢI có chữ ký:
     3. So sánh từng mong muốn trong plan → code đã cover hết chưa?
     4. Nếu có N mong muốn, phải verify N kết quả — không skip cái nào
 - **Khi user báo lỗi**: ĐIỀU TRA root cause trước, không sửa bề mặt
+
+## 11. CDC Schema Coexistence (V1 + V2) — Added 2026-05-04
+> **Rule**: Hệ thống CDC chấp nhận coexistence cả 2 schema chuẩn (V1 và V2) trên cùng pipeline. Code KHÔNG được hardcode 1 chuẩn duy nhất.
+
+- **V1 (legacy)**: shadow table dùng `id TEXT` làm primary key, các cột meta CDC đầy đủ (`_raw_data`, `_synced_at`, `_version`, `_hash`, `_deleted`, `_created_at`, `_updated_at`, `_source`).
+- **V2 (current)**: shadow table dùng `_gpay_id BIGINT` làm primary key (auto-generated từ ingest pipeline), bổ sung `_gpay_source_id` để truy vết source object.
+- **PK Detection**: Transmuter và bất kỳ component nào đọc shadow table PHẢI dynamic detect PK qua `information_schema.columns` (xem `internal/service/transmuter.go::resolveShadowPK` line 222) — KHÔNG hardcode `_gpay_id` hoặc `id`.
+- **Why**: Migration từ V1 → V2 không thể atomic vì các bảng V1 đang serve traffic. Coexistence cho phép migrate từng bảng theo tốc độ riêng mà không stall pipeline.
+- **Trade-off**: Code phức tạp hơn (1 thêm hop SQL để detect PK lần đầu, cache trong runtime); đổi lại pipeline không bị block bởi heterogeneous schema.
+- **Khi viết shadow table mới**: Mặc định V2 (tham khảo `internal/service/schema_manager.go::createShadowTable`). KHÔNG tạo thêm bảng V1 mới.
+- **Khi viết transmute / read shadow**: PHẢI dùng `resolveShadowPK(schema, table)` rồi build query động — không assume PK column name.
+- **Reference**: Xem `agent/memory/workspaces/feature-cdc-integration/report_final_analysis_20260502.md` cho diagnosis gốc và `09_tasks_solution_track_e_unified_20260504.md` cho decision log.

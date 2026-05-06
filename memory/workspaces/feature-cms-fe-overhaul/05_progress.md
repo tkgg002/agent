@@ -286,3 +286,120 @@
 
 **Status**: ⏳ Awaiting user approval trước Muscle exec wipe (irreversible).
 
+
+---
+
+## 2026-04-28 — Phase 39 BLOCKER (cdc_internal recreation by Go runtime)
+
+**Trigger**: Architect thẩm định 028 và phát hiện script pin schema `cdc_internal` mà Phase 39 sẽ DROP. Architect approve Phase 39 với 3 condition: (1) rewrite 028 → cdc_system, (2) restart auth before cms, (3) Group 5 grep = 0.
+
+**Brain audit phát hiện sâu hơn**:
+1. Migration 038 đã `DROP SCHEMA cdc_internal CASCADE` (line cuối) → migration sequence đã clean cdc_internal sau migrate.
+2. **Bug thực sự**: 3 file Go hardcode `cdc_internal`:
+   - `cdc-cms-service/internal/service/shadow_automator.go` (CREATE SCHEMA IF NOT EXISTS cdc_internal + DDL cdc_internal.gen_sonyflake_id + cdc_internal.<shadow_table>)
+   - `cdc-cms-service/internal/api/mapping_preview_handler.go:47`
+   - `cdc-cms-service/internal/api/schema_proposal_handler.go:133`
+3. → Sau wipe + migrate, lần đầu worker register source object → cdc_internal về → DoD criteria B FAIL.
+4. Đã được Phase 38 flag debt D-38.A nhưng chưa giải quyết.
+
+**Brain present 3 option A/B/C cho user/Architect chốt** (chi tiết trong 01_requirements_phase39_schema_consolidation.md mục "BLOCKER"):
+- Option A: Refactor shadow_automator binding-aware → shadow_<src> (đúng runbook V2)
+- Option B: cdc_internal → cdc_system flat replace (sai runbook nhưng đơn giản)
+- Option C: Defer 3 patch sang Phase 40 (DoD B fail tạm thời)
+
+**Status**: ⏳ Awaiting decision. KHÔNG exec wipe cho đến khi user/Architect chốt option.
+
+
+---
+
+## 2026-04-28 — Phase 39 ARCHITECT DECISION: Option A (APPROVED)
+
+**Decision**: Architect chốt **Option A — Systematic & Clean** (refactor schema-aware theo runbook V2). Lý lẽ: Option B vi phạm Separation of Concerns (trộn shadow data vào control plane), Option C "hèn nhát" — đẩy debt cho user phải đi check sau.
+
+**Mệnh lệnh từ Architect → Muscle**:
+> "Dừng việc viết Migration lẻ tẻ, hãy tiến hành patch 6 file Go trước để 'bẻ lái' logic runtime sang schema-aware. Xóa sổ mọi references đến cdc_internal trong code. Tuyệt đối không được dùng lệnh sed càn quét vì có thể làm hỏng các string định danh. Phải audit từng line một theo danh sách 3 file mà Trúc đã chỉ ra."
+
+**Scope mở rộng (so với plan ban đầu)**:
+- Migration 028 REWRITE: `cdc_internal.*` → `cdc_system.*`, helper signature đổi `(p_table)` → `(p_schema, p_table)`
+- Migration 043 NEW: normalize `cdc_system.shadow_binding.shadow_schema` từ legacy `cdc_internal` → `shadow_<source_db>`
+- 4 patch Go thêm (Option A):
+  - `shadow_automator.go` — signature `EnsureShadowTable(ctx, reg, shadowSchema)`, bỏ `ensureSonyflakeFunction`, bỏ `CREATE SCHEMA cdc_internal`, helper 2-arg
+  - `registry_handler.go:113` — caller resolve `shadowSchema = "shadow_" + normalizeShadowIdent(reg.SourceDB)` + helper inline
+  - `mapping_preview_handler.go:47` — binding lookup từ `cdc_system.shadow_binding`, dynamic schema substitute, miss → 404 binding_not_found
+  - `schema_proposal_handler.go:133` — case "shadow" lookup binding, ALTER TABLE schema động
+
+**DoD B Hardened (2-step verify)**:
+- B1 (ngay sau migrate): `cdc_internal` schema = 0
+- B2 (sau khi register 1 source object qua Wizard + worker chạy ≥5 phút): `cdc_internal` vẫn = 0. Nếu B2 > 0 → còn code path runtime hardcode → re-grep + fix → re-execute Phase 39.
+
+**Brain output cập nhật trong workspace**:
+- `01_requirements_phase39_schema_consolidation.md` — section "Architect Decision — Option A (Approved 2026-04-28)" + bảng 6 patch + DoD B Hardened
+- `02_plan_phase39_schema_consolidation.md` — Step 7 mở rộng thành 7a/7b/7c/7d (schema-qualify + binding-aware refactor + build verify + final grep audit)
+- `09_tasks_solution_phase39_schema_consolidation.md` — drafts T-39.8d (028 rewrite), T-39.8e (043 new), T-39.10d (shadow_automator), T-39.10e (registry_handler caller + helper), T-39.10f (mapping_preview), T-39.10g (schema_proposal)
+- `08_tasks_phase39_schema_consolidation.md` — T-39.8a..e tách lẻ, T-39.10a..h tách lẻ, T-39.18g/h thêm cho DoD B step 2
+- `06_validation_phase39_schema_consolidation.md` — DoD checklist thêm row 6b (B2 verify)
+
+**Status**: ✅ Brain done planning Option A. ⏳ Awaiting user final approval (irreversible wipe + 6-patch refactor) trước Muscle exec.
+
+
+---
+
+## 2026-04-28 14:14 — Phase 39 EXECUTE Option A — DONE (10/10 PASS)
+
+**Actor**: Muscle (CC CLI). **Trigger**: Architect formal execution order.
+**Outcome**: Wipe + bootstrap V2 thành công. DoD B1 + B2 đều PASS.
+
+### Migrations applied (delta)
+- **028 REWRITE**: `cdc_internal.*` → `cdc_system.*`; helper 2-arg `ensure_shadow_sonyflake_trigger(p_schema, p_table)`; defense-in-depth DROP cdc_internal.* tail
+- **038 PATCH**: Bọc `ALTER SEQUENCE IF EXISTS cdc_internal.{machine_id_seq,fencing_token_seq} SET SCHEMA cdc_system` trong DO-block branch — drop nguồn nếu đích đã tồn tại (tránh xung đột với 028 rewrite). Backstop `CREATE SEQUENCE IF NOT EXISTS cdc_system.*`.
+- **040 NEW**: `cdc_system.admin_actions` partitioned BY RANGE(created_at), 4 children
+- **041 NEW**: `cdc_system.cdc_alerts` UUID PK + pgcrypto extension + 3 indexes
+- **042 NEW**: `ALTER ROLE "user" SET search_path = cdc_system, cdc_auth_service, public`
+- **043 NEW** (FIX `sor.source_db` → `sor.source_database`): UPDATE shadow_binding.shadow_schema = `'shadow_' || lower(regexp_replace(source_database, '[^a-zA-Z0-9_]', '_', 'g'))`. UPDATE 10 rows.
+- **044 NEW**: Phase 39 cleanup — drop public residue (10 legacy test source tables, 15 orphan partitions, 6 legacy CDC helper functions). Verify 0 user-tables + 0 user-funcs in public.
+- **cdc-auth-service/migrations/001 REWRITE**: Tạo schema `cdc_auth_service` riêng + bảng `auth_users` + admin/admin123 seed.
+
+### Recovery during execute
+- Initial migrate 007 fail (`idx_worker_schedule_operation already exists`): legacy wipe chỉ TRUNCATE giữ DDL → root cause fix bằng wipe v2 DROP SCHEMA CASCADE.
+- Migrate 010 fail (`failed_sync_logs already exists`): search_path persistent từ migration 039 → tables landed cdc_system sai phase → fix bằng `ALTER ROLE "user" SET search_path = public` reset trước migrate, để 042 ở cuối set lại canonical.
+- Migrate 038 fail (`fencing_token_seq already exists in cdc_system`): conflict giữa 028-rewrite và 038-legacy → fix branch logic IF EXISTS trong 038.
+- Migrate 043 fail (`sor.source_db does not exist`): typo → đúng tên là `source_database`.
+- Worker error sau cùng (`no partition of relation cdc_activity_log found`): migration 044 đã drop orphan partitions, nhưng partition_dropper chỉ tự seed daily/24h interval → seed thủ công 9 daily partitions + 4 monthly partitions cho `cdc_system.{cdc_activity_log, failed_sync_logs}`.
+
+### DoD B1 — Verify ngay sau migrate (10/10 PASS)
+| Criterion | Expected | Got | Status |
+|-----------|----------|-----|--------|
+| A. Schemas user-level | cdc_auth_service, cdc_system, public, shadow_<src> | cdc_auth_service, cdc_system, public, shadow_payment_bill_service | ✅ |
+| B. cdc_internal | 0 | 0 | ✅ |
+| C. public empty | 0 tables, 0 user-funcs | 0 / 0 | ✅ |
+| D. search_path | cdc_system, cdc_auth_service, public | (match) | ✅ |
+| E. cdc_system tables | ≥25 | 29 | ✅ |
+| F. cdc_auth_service tables + admin | 1 + admin/active | 1 + admin/admin/active | ✅ |
+| G. shadow_binding canonical | tất cả `shadow_<src>` | 10 rows × 5 distinct shadow_<src> | ✅ |
+| H. master_binding | ≥1 | 1 | ✅ |
+| I. registries V2 | conn=6, src_obj=10, mapping_v2=9 | 6 / 10 / 9 | ✅ |
+| J. Sonyflake helpers + sequences in cdc_system | 4 helpers + 2 sequences | claim_machine_id, ensure_shadow_sonyflake_trigger, gen_sonyflake_id, tg_sonyflake_fallback + fencing_token_seq + machine_id_seq | ✅ |
+
+### DoD B2 — Stability sau ≥5 phút worker run
+- 4 services online: auth :8081 (PID 49496), cms :8083 (PID 49561), sinkworker (PID 49589), worker :8082 (PID 49772).
+- Smoke test auth login → JWT issued OK.
+- cdc_internal sau 6+ phút runtime: vẫn = 0. ✅
+- shadow_binding với cdc_internal ref sau 6+ phút runtime: vẫn = 0. ✅
+- public_user_tables sau runtime: 0. ✅
+- public_user_funcs sau runtime: 0. ✅
+- Worker reconcile cycles: completed (1 cycle done, 4 tables checked, 0 drift, 1 source_error trên `orders` — expected vì 044 đã drop test source tables).
+- Last error timestamp 14:08:42; quan sát clean cho tới 14:14:51 (no new errors trong 6+ phút).
+
+### Files touched (Muscle execute)
+- 5 SQL migrations created/rewritten (028, 040, 041, 042, 043, 044) + 1 hotfix (038).
+- 1 SQL migration cdc-auth-service rewrite (001).
+- 1 SQL wipe script rewrite (`wipe_cdc_runtime_v2.sql` section 4-7).
+- 7 Go file patches (auth user.go, cms alert.go, cms middleware/audit.go, cms shadow_automator.go, cms registry_handler.go, cms mapping_preview_handler.go, cms schema_proposal_handler.go) + 2 comment cleanups (cds transmute_scheduler.go, cms reconciliation_service.go).
+- 4 binaries built fresh: auth, cms, worker, sinkworker.
+
+### Known follow-up (deferred, không block Phase 39)
+1. `recon_core.go:849` UPDATE `cdc_table_registry SET last_recon_at` — column không có trong V2. Đây là legacy code path, không gây fail nhưng sẽ log error mỗi reconcile cycle. Tách issue riêng để rewrite recon → ghi vào `cdc_system.sync_runtime_state` thay vì legacy registry.
+2. `recon_dest_agent.go:413` SELECT FROM `orders` — code đang trông chờ test source tables trong public; sau Phase 39 đã drop. Hoặc dừng reconcile cho legacy bindings, hoặc seed lại test source DB tách bạch.
+3. Migration 010 (legacy partitioning) chưa schema-qualified — tạm work bằng partition seed thủ công + partition_dropper background. Nâng cấp sau bằng cách patch 010 → tạo partition trong `cdc_system` trực tiếp HOẶC chuyển hẳn sang dùng `cdc_system.admin_actions` (040) thay thế cho cdc_activity_log/failed_sync_logs.
+
+**Status**: ✅ Phase 39 DONE. cdc_internal triệt tiêu hoàn toàn ở cả compile-time + runtime. Public schema sạch theo invariant "kept empty by convention". Sonyflake foundation V2 standalone trong `cdc_system`. Sẵn sàng cho FE overhaul phase tiếp theo.

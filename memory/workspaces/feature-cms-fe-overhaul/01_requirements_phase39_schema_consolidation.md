@@ -68,6 +68,43 @@
 | 11 | Worker `discoverTopics` loop healthy không panic | `tail /tmp/cdc-worker.log` |
 | 12 | `go build ./...` PASS cả 4 service | shell |
 
+## ✅ Architect Decision — Option A (Approved 2026-04-28)
+
+**Lý do chọn**: Option B vi phạm Separation of Concerns (trộn shadow data vào control plane). Option C đẩy debt → user phải đi check lại sau. Option A là con đường duy nhất tuân Runbook V2.
+
+**Scope mở rộng** (so với version trước):
+- shadow_automator + mapping_preview_handler + schema_proposal_handler → binding-aware (`ShadowBinding.shadow_schema = shadow_<source_db>`)
+- shadow_automator drop helper `ensure_shadow_sonyflake_trigger(p_table TEXT)` — thay bằng version 2-arg `(p_schema TEXT, p_table TEXT)` để target schema động
+- Sonyflake function ở `cdc_system.gen_sonyflake_id()` — dùng chung global, không recreate trong shadow schema
+
+**Migration mới (so với version trước)**:
+- Migration 028 REWRITE → tạo function trong `cdc_system`, helper signature `(p_schema, p_table)`
+- Migration 043 NEW → normalize legacy `cdc_system.shadow_binding.shadow_schema = 'cdc_internal'` → `shadow_<source_db>` per source_object linkage
+- Wipe script: thêm `DROP SCHEMA shadow_*` loop (đã có) + `DROP SCHEMA cdc_internal CASCADE` (đã có)
+
+**Code patches Go (6 file)**:
+| # | File | Hành vi |
+|---|---|---|
+| 1 | `cdc-auth-service/internal/model/user.go:17` | `TableName() = "cdc_auth_service.auth_users"` |
+| 2 | `cdc-cms-service/internal/model/alert.go:37` | `TableName() = "cdc_system.cdc_alerts"` |
+| 3 | `cdc-cms-service/internal/middleware/audit.go:166` | Raw SQL `INSERT INTO cdc_system.admin_actions` |
+| 4 | `cdc-cms-service/internal/service/shadow_automator.go` | Refactor: nhận `shadowSchema string` từ caller; xóa block CREATE SCHEMA cdc_internal; xóa function bootstrap inline (function đã ở `cdc_system` qua migration); attachTrigger dùng `cdc_system.ensure_shadow_sonyflake_trigger(p_schema, p_table)` |
+| 5 | `cdc-cms-service/internal/api/mapping_preview_handler.go` | Lookup `shadow_schema` từ `cdc_system.shadow_binding` theo `req.ShadowTable` (1 query) trước khi build SELECT |
+| 6 | `cdc-cms-service/internal/api/schema_proposal_handler.go` | Tương tự — lookup `shadow_schema` cho `row.TableName` (TableLayer="shadow") |
+
+**Caller upstream của EnsureShadowTable** (`cdc-cms-service/internal/api/registry_handler.go:113`): phải resolve `shadowSchema` từ binding LOOKUP trước khi gọi. Pragma: `shadow_<source_db_normalized>` (lower_snake_case, dấu `-` → `_`).
+
+**Đã ghi nhận debt giải quyết**: D-38.A từ Phase 38.
+
+## DoD Criteria B Hardened (2-step verify)
+
+| Step | Khi nào | Verify | Expected |
+|---|---|---|---|
+| B1 | Ngay sau migrate | `SELECT count(*) FROM pg_namespace WHERE nspname='cdc_internal'` | `0` |
+| B2 | **Sau worker chạy ≥5 phút + register 1 source object qua Wizard** | Same query | `0` (KHÔNG được tự về) |
+
+Nếu B1 = 0 nhưng B2 > 0 → có code path nào còn hardcode `cdc_internal` em chưa thấy → re-grep + fix → re-execute Phase 39.
+
 ## Risks
 
 | Risk | Mitigation |

@@ -6,14 +6,24 @@
 - `migrations/040_admin_actions_in_cdc_system.sql` — NEW (xem 09_tasks_solution T-39.8a)
 - `migrations/041_cdc_alerts_in_cdc_system.sql` — NEW (xem 09 T-39.8b)
 - `migrations/042_search_path_with_auth.sql` — NEW (xem 09 T-39.8c)
+- `migrations/043_normalize_shadow_binding_schema.sql` — NEW Option A (xem 09 T-39.8e)
+
+### 1b) Migration rewrite (centralized-data-service) — Option A
+- `migrations/028_sonyflake_fallback_fn.sql` — REWRITE: `cdc_internal.*` → `cdc_system.*`, helper 2-arg `(p_schema, p_table)` (xem 09 T-39.8d)
 
 ### 2) Migration rewrite (cdc-auth-service)
 - `migrations/001_auth_users.sql` — REWRITE: `CREATE SCHEMA cdc_auth_service` + table trong schema mới (xem 09 T-39.9)
 
-### 3) Code patches (Go)
-- `cdc-auth-service/internal/model/user.go:17` — `TableName()` qualify `cdc_auth_service.auth_users`
-- `cdc-cms-service/internal/model/alert.go:37` — `TableName()` qualify `cdc_system.cdc_alerts`
-- `cdc-cms-service/internal/middleware/audit.go:166` — `INSERT INTO cdc_system.admin_actions`
+### 3) Code patches (Go) — schema-qualify (3 file)
+- `cdc-auth-service/internal/model/user.go:17` — `TableName()` qualify `cdc_auth_service.auth_users` (T-39.10a)
+- `cdc-cms-service/internal/model/alert.go:37` — `TableName()` qualify `cdc_system.cdc_alerts` (T-39.10b)
+- `cdc-cms-service/internal/middleware/audit.go:166` — `INSERT INTO cdc_system.admin_actions` (T-39.10c)
+
+### 3b) Code patches (Go) — binding-aware refactor (4 file) — Option A
+- `cdc-cms-service/internal/service/shadow_automator.go` — signature `EnsureShadowTable(ctx, reg, shadowSchema)`, bỏ `ensureSonyflakeFunction`, bỏ `CREATE SCHEMA cdc_internal`, helper 2-arg (T-39.10d)
+- `cdc-cms-service/internal/api/registry_handler.go:113` — caller resolve `shadowSchema = "shadow_" + normalizeShadowIdent(entry.SourceDB)` + thêm helper `normalizeShadowIdent` (T-39.10e)
+- `cdc-cms-service/internal/api/mapping_preview_handler.go:47` — binding lookup từ `cdc_system.shadow_binding`, dynamic schema, miss → 404 binding_not_found (T-39.10f)
+- `cdc-cms-service/internal/api/schema_proposal_handler.go:131` — case "shadow" lookup binding, ALTER TABLE schema động (T-39.10g)
 
 ### 4) Wipe script
 - `centralized-data-service/deployments/sql/wipe_cdc_runtime_v2.sql` — replace public residue section bằng `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` + dynamic shadow_*/dw_* drop loop (xem 09 T-39.11)

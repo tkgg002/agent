@@ -11,7 +11,8 @@
 | 3 | admin_actions in cdc_system | `\d+ cdc_system.admin_actions` | partitioned + 4 partitions | ⏳ |
 | 4 | cdc_alerts in cdc_system | `\dt cdc_system.cdc_alerts` | exist | ⏳ |
 | 5 | auth_users in cdc_auth_service | `SELECT username,role FROM cdc_auth_service.auth_users;` | `admin\|admin` row | ⏳ |
-| 6 | cdc_internal gone | `SELECT count(*) FROM pg_namespace WHERE nspname='cdc_internal';` | `0` | ⏳ |
+| 6 | cdc_internal gone (B1 — ngay sau migrate) | `SELECT count(*) FROM pg_namespace WHERE nspname='cdc_internal';` | `0` | ⏳ |
+| 6b | cdc_internal stays gone (B2 — sau wizard register + worker ≥5min) | same query | `0` | ⏳ |
 | 7 | search_path | `SHOW search_path;` | `cdc_system, cdc_auth_service, public` | ⏳ |
 | 8 | Login admin | `curl -X POST :8081/api/auth/login {username,password}` | 200 + JWT | ⏳ |
 | 9 | 11 CMS endpoints | bash loop verify | 11/11 = 200 | ⏳ |

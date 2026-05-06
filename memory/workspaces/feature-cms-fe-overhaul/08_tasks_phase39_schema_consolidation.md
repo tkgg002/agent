@@ -9,9 +9,20 @@
 | T-39.5 | User approve toàn bộ scope (irreversible wipe) | User | ⏳ |
 | T-39.6 | Stop 4 services (auth/cms/worker/transmute) | Muscle | ⏳ |
 | T-39.7 | Backup `pg_dump` schema-only + cdc_system + auth_users ra /tmp | Muscle | ⏳ |
-| T-39.8 | Apply migration 040/041/042 vào `centralized-data-service/migrations/` | Muscle | ⏳ |
+| T-39.8a | Apply migration `040_admin_actions_in_cdc_system.sql` | Muscle | ⏳ |
+| T-39.8b | Apply migration `041_cdc_alerts_in_cdc_system.sql` | Muscle | ⏳ |
+| T-39.8c | Apply migration `042_search_path_with_auth.sql` | Muscle | ⏳ |
+| T-39.8d | REWRITE migration `028_sonyflake_fallback_fn.sql` (cdc_internal → cdc_system + 2-arg helper) | Muscle | ⏳ |
+| T-39.8e | NEW migration `043_normalize_shadow_binding_schema.sql` | Muscle | ⏳ |
 | T-39.9 | Rewrite `cdc-auth-service/migrations/001_auth_users.sql` | Muscle | ⏳ |
-| T-39.10 | Apply 3 code patches Go | Muscle | ⏳ |
+| T-39.10a | Patch `cdc-auth-service/internal/model/user.go:17` qualify schema | Muscle | ⏳ |
+| T-39.10b | Patch `cdc-cms-service/internal/model/alert.go:37` qualify schema | Muscle | ⏳ |
+| T-39.10c | Patch `cdc-cms-service/internal/middleware/audit.go:166` raw SQL qualify | Muscle | ⏳ |
+| T-39.10d | Refactor `shadow_automator.go` — schema-aware (Option A) | Muscle | ⏳ |
+| T-39.10e | Patch caller `registry_handler.go:113` resolve `shadowSchema` + helper `normalizeShadowIdent` | Muscle | ⏳ |
+| T-39.10f | Patch `mapping_preview_handler.go` — binding lookup + dynamic schema | Muscle | ⏳ |
+| T-39.10g | Patch `schema_proposal_handler.go` shadow case — binding lookup | Muscle | ⏳ |
+| T-39.10h | Final grep audit `cdc_internal` runtime code = 0 lines | Muscle | ⏳ |
 | T-39.11 | Update `wipe_cdc_runtime_v2.sql` | Muscle | ⏳ |
 | T-39.12 | Run wipe script | Muscle | ⏳ |
 | T-39.13 | Run `make migrate` (centralized-data-service) | Muscle | ⏳ |
@@ -25,6 +36,8 @@
 | T-39.18d | Verify Group 4 — 11 operator endpoints (Phase 38 baseline) | Muscle | ⏳ |
 | T-39.18e | Verify Group 5 — `grep` audit: 0 raw SQL chưa qualify cho `auth_users\|admin_actions\|cdc_alerts` | Muscle | ⏳ |
 | T-39.18f | Auto-flow probe: connector RUNNING + ≥4 topics + worker log clean | Muscle | ⏳ |
+| T-39.18g | DoD B Step 2 — register 1 source object qua Wizard, đợi worker ≥5min, recheck `cdc_internal` schema = 0 | Muscle | ⏳ |
+| T-39.18h | Verify shadow ingest đáp về `shadow_<src>` schema (đếm rows ≥1 sau 5min) | Muscle | ⏳ |
 | T-39.19 | Document file orphan `cdc-cms-service/migrations/{003,004,005,013}.sql` để xoá | Brain | ⏳ |
 | T-39.20 | Append `05_progress.md` Phase 39 closure + lesson nếu có | Brain | ⏳ |
 
@@ -32,12 +45,14 @@
 
 | Requirement | Task(s) |
 |---|---|
-| Move admin_actions vào cdc_system | T-39.8 (migration 040) + T-39.10 (audit.go patch) |
-| Move cdc_alerts vào cdc_system | T-39.8 (migration 041) + T-39.10 (alert.go patch) |
-| Schema cdc_auth_service + auth_users | T-39.9 + T-39.10 (user.go patch) |
+| Move admin_actions vào cdc_system | T-39.8a + T-39.10c (audit.go) |
+| Move cdc_alerts vào cdc_system | T-39.8b + T-39.10b (alert.go) |
+| Schema cdc_auth_service + auth_users | T-39.9 + T-39.10a (user.go) |
 | Drop public residue | T-39.11 + T-39.12 (wipe script) |
-| Drop cdc_internal | T-39.12 (wipe script) |
-| search_path bao gồm cdc_auth_service | T-39.8 (migration 042) |
+| Drop cdc_internal (DDL + runtime) | T-39.8d (migration 028 rewrite) + T-39.10d/e/f/g (4 patch Go) + T-39.12 (wipe) |
+| Normalize shadow_binding.shadow_schema | T-39.8e (migration 043) |
+| search_path bao gồm cdc_auth_service | T-39.8c (migration 042) |
+| DoD B 2-step verify (cdc_internal stays gone after wizard run) | T-39.18g + T-39.18h |
 | Build pass 4 service | T-39.16 |
 | Auth endpoints (3) | T-39.18a |
 | Alert endpoints (5) + background writer | T-39.18b |

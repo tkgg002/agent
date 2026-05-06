@@ -1286,3 +1286,933 @@
 **Tone bổ sung**: Xưng hô với user ở dự án này = "em / anh". Không "mày tao", không "tao", không "user". Vi phạm tone là sai trước cả nội dung.
 
 **Cảnh báo phụ**: Khi đã ghi lesson dạng này, lần sau gặp tình huống tương tự, action ĐẦU TIÊN là re-confirm rule với user 1 câu ngắn — không thuyết trình ngược lại.
+
+---
+
+## 2026-04-29 — Lesson: Fire-and-forget command leaks status; cần companion completion event
+
+**Triệu chứng**: Track D Hardening — `TransmuteScheduler` set `last_status='running'` trên `cdc_system.transmute_schedule` rồi publish NATS `cdc.cmd.transmute`. Handler chạy xong KHÔNG bao giờ UPDATE lại row. Hậu quả: mọi schedule sau tick đầu vĩnh viễn `running` — operator/dashboard không phân biệt được job đang chạy vs. job đã chết. Architect phán: handler KHÔNG được tự UPDATE schedule (coupling hai concern). Phải tách: handler publish `cdc.evt.transmute.completed`, NEW `JobMonitor` subscribe → UPDATE.
+
+**Global Pattern (A=publisher set state='running' rồi publish `cmd.X`, B=handler chạy `cmd.X`, X=loop chỉ closed khi có companion `evt.X.completed`, Y=B coupling lên state-table A's nếu skip event-split)**:
+> Khi A xuất command B với pre-state 'running', luôn cần `evt.X.completed` event do B emit + monitor M (separate concern) consume → UPDATE final state. M idempotent qua `WHERE state='running'` guard. Đúng: 3-actor (publisher A → handler B → monitor M), `cmd.X` ↔ `evt.X.completed` đối xứng. Sai: B trực tiếp UPDATE table của A (cross-domain write), HOẶC publisher A "fire-and-forget" rồi mong handler tự về close (handler không có context schedule_id).
+
+**Áp dụng được vào dự án khác**: ✅ Cron-driven jobs (DB schedule + worker), saga orchestration, RPC retry/dedup, K8s Job watchdog (Job spec + Pod status reconciler), GitHub Actions `workflow_run` sync, audit-log write-after-action, payment status (gateway callback), email send tracking.
+
+**Implementation checklist** khi gặp pattern này:
+1. Command payload phải mang `correlation_key` (schedule_id, saga_id, job_id) — handler echo về trong event.
+2. Event subject convention: `cmd.X` → `evt.X.completed`. Schema: `{correlation_key, status, stats(json), error, completed_at}`.
+3. Monitor UPDATE phải idempotent: `WHERE state='running'` (hoặc version guard) — duplicate event = no-op.
+4. Monitor subscription wired tách rời handler (separate registration ở boot) để 2 concern evolve độc lập.
+5. Best-effort publish (log warn nếu fail) — monitor sẽ retry tự nhiên ở tick kế (state vẫn 'running' → tick mới phát lại).
+
+---
+
+## 2026-04-29 — Lesson: Two flavours of model↔DB schema drift
+
+**Bối cảnh**: Track D Hardening sweep phát hiện bug 42703 trong `dlq_state_machine.poll` (`column "next_retry_at" does not exist`) → preemptive sweep 15 model files vs `information_schema.columns` lại lộ thêm 6 cột drift trên 2 bảng khác. Phân tích cho thấy có 2 chủng drift khác cơ chế.
+
+**Global Pattern (A=migration script, B=model struct với `column:X` tag/annotation, X=schema target, Y=runtime SQLSTATE 42703)**:
+
+> **Drift loại 1 — "Migration sai schema target"**: A ALTER TABLE ở schema `X1` nhưng same-name table cũng tồn tại ở schema `X2` (do migration parallel earlier). A hardcode `X1` → `X2.table` silent lệch khỏi B. Phát nổ Y khi code path query `X2.table.col` mà chưa có. Vd: 010 dựng `cdc_system.failed_sync_logs`, 012 ALTER `public.failed_sync_logs`, 037 drop `public.*` legacy → cdc_system copy thiếu 2 cột.
+>
+> **Drift loại 2 — "Model thêm field, quên migration"**: B thêm field mới với tag (PR feature mới) mà PR đó không kèm A. Bảng DB không có cột. Hiện tại không nổ vì callsite dùng explicit column list (`SELECT a,b,c` / `UPDATE SET ...`); time-bomb chờ developer khác viết `Find(&FullStruct)` hoặc autoMigrate fail-stop. Vd: 6 cột trên `cdc_mapping_rules.rule_type` + `cdc_table_registry.{source_url,sync_status,last_recon_at,recon_drift,last_bridge_at}` — không migration nào tạo, tag struct đã có từ lâu.
+
+**Đúng (cả 2 loại)**:
+1. Mọi PR thêm field model = kèm migration `ADD COLUMN IF NOT EXISTS` cùng commit (loại 2).
+2. Migration ALTER TABLE phải iterate tenant/namespace owners — KHÔNG hardcode 1 schema khi codebase đang transition (loại 1).
+3. Boot-time guard: query `information_schema.columns` ↔ struct reflection lúc startup, fail-loud nếu mismatch (catch cả 2).
+4. CI lint: parse gorm/SQLAlchemy/TypeORM tags từ AST, diff với DB schema dump → block merge nếu drift.
+5. Migration ALTER nên dùng `pg_namespace`/`pg_class` lookup, KHÔNG hardcode `public.X` khi có khả năng table được move sang namespace khác.
+
+**Sai**:
+- Hardcode `ALTER TABLE public.X` rồi migration sau move qua schema mới mà không patch bù (drift loại 1).
+- Add field vào struct rồi assume "auto-migrate sẽ lo" — production thường tắt autoMigrate, hoặc autoMigrate chỉ chạy 1 lần ở seed; subsequent deploy không catch (drift loại 2).
+- Tin "test pass" — test dùng cùng explicit column list nên ẩn cùng drift production sẽ ẩn.
+
+**Áp dụng**: GORM/SQLAlchemy/TypeORM/Hibernate, multi-tenancy schema-per-tenant, namespace migrations (public→tenant), brownfield codebase mở rộng dần model, sharded DB DDL fan-out, partitioned table copies parallel với non-partitioned legacy.
+
+**Detection script (one-liner template)**:
+```bash
+# Loại 2 — model thêm cột không có migration:
+for model in internal/model/*.go; do
+  table=$(grep "TableName.*return" $model | sed -E 's/.*"(.+)".*/\1/')
+  cols_model=$(grep -oE 'column:[a-z_]+' $model | sort -u)
+  cols_db=$(psql -tAc "SELECT column_name FROM information_schema.columns WHERE table_schema='${table%.*}' AND table_name='${table#*.}' ORDER BY 1")
+  diff <(echo "$cols_model") <(echo "$cols_db") || echo "DRIFT: $table"
+done
+```
+
+---
+
+## 2026-04-29 — Lesson: Phase mới ≠ Workspace mới
+
+**Bối cảnh**: User yêu cầu thêm feature "Source Provisioning Mode" cho CDC service. Em tự ý tạo workspace mới `feature-source-provisioning-mode/` ngang hàng với `feature-cdc-integration/`. User chỉnh: *"mày tạo workspace mới. vậy cái cdc cũ nó ko giữ memory này. tạo 1 plan phase trong feature-cdc-integration đi. đừng để tao nói lần nữa."*
+
+**Global Pattern (A=task mới, B=workspace cha cũ, X=phase, Y=memory continuity)**:
+> Khi A là task/capability nằm TRONG product feature B đã có workspace (vd: CDC integration), A là **phase con** của B chứ KHÔNG phải feature độc lập. Phải tạo doc set mới với suffix `_<phase_name>` trong B (theo CLAUDE.md §7 "Mỗi phase/task mới → tạo đủ bộ: `01_requirements_{phase}.md`, `02_plan_{phase}.md`, ..."), KHÔNG tạo workspace mới ngang hàng. Vi phạm → memory bị phân mảnh, workspace cha mất context tiếp nối, audit log không thấy progression của capability.
+
+**Đúng**:
+- Workspace = product feature lớn (vd: `feature-cdc-integration/`, `feature-cms-fe-overhaul/`).
+- Phase trong feature = bộ doc 5-7 file với suffix phase (`01_requirements_<phase>.md`, `02_plan_<phase>.md`, ...).
+- APPEND `05_progress.md` của workspace cha — không tách progress riêng.
+
+**Sai**:
+- Tạo workspace ngang hàng cho mỗi capability nhỏ → workspace dir explosion (đã có 26 workspace, nhiều cái đáng lý là phase).
+- Giả định "feature mới = workspace mới" mà không check xem đã có workspace cha bao quát product domain chưa.
+
+**Heuristic phân biệt**:
+- **Feature mới (= workspace mới)**: product domain hoàn toàn khác (vd: từ "CDC integration" sang "fee configuration"), không reuse code/data model/architecture của workspace nào cũ.
+- **Phase (= file suffix trong workspace cũ)**: thêm capability vào feature đã có codebase + workspace; reuse architecture, model, NATS contract, ...
+
+**Pre-flight check trước khi mkdir workspace mới**:
+1. `ls agent/memory/workspaces/` — feature đang xét đã có chưa?
+2. Nếu workspace cha tồn tại + task share codebase/architecture → PHẢI là phase, không tạo dir mới.
+3. Hỏi user nếu mơ hồ — KHÔNG tự quyết.
+
+**Áp dụng**: Mọi lần task mới đến — bước 0 là `ls workspaces/` không phải `mkdir`.
+
+---
+
+## 2026-04-29 — Global Pattern: Test process PID management
+**Phát sinh**: Phase C provisioning verification — em boot CMS test process (PID 83386) trên port :28083 song song với CMS production :8083 để live curl. Sau khi test xong KHÔNG kill ngay, để zombie chạy 22 phút. Architect bắt phải dọn. Trước đó cũng có port-bind fatal khi worker cũ vẫn giữ port :8082 → boot mới crash.
+
+**Global Pattern**: Khi A spawn ephemeral test process P trên port X để verify behavior B, kết thúc B mà không kill P → P giữ X → boot kế tiếp Y trên X fail "address already in use" + lãng phí RAM/file descriptor. Result Y: thiếu DoD ("clean state cuối phiên"), Architect phải nhắc.
+
+**Đúng (lifecycle test process)**:
+1. **Trước boot**: lưu PID file `/tmp/<service>-test.pid`, port file rõ ràng (`SERVER_PORT=:28083`).
+2. **Trong test**: track PID + port trong todo/notes; mọi log/JWT/temp file gắn cùng prefix `/tmp/<service>-test-*`.
+3. **Sau test (DoD bắt buộc)**:
+   - `kill <PID>` (hoặc `kill -9` nếu treo).
+   - Verify: `ps -p PID` trống + `lsof -iTCP:PORT -sTCP:LISTEN` trống.
+   - `rm -f /tmp/<service>-test-*` cleanup artifacts.
+4. **Pre-flight**: trước khi report DONE, grep "PID" trong audit để confirm đã kill.
+
+**Sai**:
+- "Test xong, để đó cho user kill" — vi phạm DoD, để rác trên server.
+- Boot test process mới mà không check port collision trước (`lsof -iTCP:PORT`).
+- Spawn nhiều process test cùng workflow mà không track PID → mất dấu zombie.
+
+**Áp dụng**: Bước 14 governance pre-flight bổ sung: "Mọi PID test/temp đã kill chưa?".
+
+---
+
+## Lesson 2026-04-29 — Event-Driven Auto-Fanout Pipeline có Cascade Liability
+
+**Context**: Phase D Track D Hardening — orchestrator A dispatch step command qua NATS → handler B đọc payload → ghi DB → emit step_completed → orchestrator A lại Advance → step kế. Test smoke single /advance: chuỗi `draft → shadow_pending → ... → running`.
+
+**Triệu chứng quan sát được**: Mỗi lần fix một bug (column name DB sai), pipeline tiến thêm 1-2 step rồi fail ở step sau với một bug cùng loại nhưng ở component khác. Không phải bug duy nhất; là **chuỗi 4 bug isolated** (resolveShadowTarget JOIN sai, shadow_binding cột không tồn tại, discover payload thiếu field, transmute_schedule keyed sai). Mỗi bug riêng lẻ trông như "lỗi nhỏ tách biệt", nhưng chúng phơi ra TUẦN TỰ qua các vòng poll trên cùng một test source.
+
+### Global Pattern [A dispatches B via C, B writes to X] → Result Y
+
+*"Khi orchestrator A dispatch command tới handler B qua message bus C, và B ghi vào schema DB X, ba mặt cần validation đồng thời: (1) A build payload đúng contract của B, (2) B parse payload đúng schema, (3) B viết SQL khớp schema X. Nếu pipeline có N step auto-fanout (`step_completed` → tiếp `Advance` → step N+1), bug ở step N chỉ phơi ra khi step N-1 success. Đây là **cascade liability**: tổng số bug = số mismatch ở mỗi step, ÷ thời gian phát hiện = tốc độ pipeline tiến qua mỗi step."*
+
+**Đúng**:
+1. Khi review/merge orchestrator-handler pair, đọc CẢ 3 mặt cùng lúc, không tách review.
+2. Integration test cấp pipeline (1 advance → assert state=terminal) PHẢI tồn tại trước khi merge. Unit test per-step không catch cascade.
+3. Boot-time guard: validate column tags (gorm/jsonb) ↔ `information_schema.columns` — fail-loud nếu mismatch.
+4. Khi thêm step mới vào state machine, checklist 3 điểm: (a) orchestrator payload build (`switch desc.Step` cases), (b) handler payload parse struct fields, (c) handler DB INSERT/UPDATE column list ↔ schema thật.
+5. Auto-fanout có thể tạm tắt khi smoke test bug fix tại step lẻ — thêm flag `provisioning_mode='manual'` rồi /advance từng step để bug từng-bước-một, KHÔNG để cascade.
+
+**Sai**:
+1. Coi mỗi step là isolated unit, build PASS + unit test PASS đủ.
+2. Code review chỉ orchestrator hoặc chỉ handler (không cả hai).
+3. Tin payload contract = JSON freeform sẽ "tự khớp" — sai, phải có struct DTO chia sẻ hoặc hằng số subject + schema validate.
+4. Smoke test bằng pure orchestrator (Advance chain) mà không bật worker handler → không catch column-name bugs.
+
+**Áp dụng**: bất kỳ event-driven workflow engine (Temporal, AWS Step Functions, Camunda BPMN, custom NATS/Kafka pipeline). Đặc biệt nguy hiểm khi orchestrator + handler thuộc 2 module khác nhau (cdc-cms-service ↔ centralized-data-service) — review cross-repo bị overlook.
+
+**Biến số map**:
+- A = orchestrator (CMS / control plane)
+- B = handler (worker / data plane)
+- C = message bus (NATS, Kafka, RabbitMQ)
+- X = DB schema target (Postgres table với column constraint)
+- Y = state machine terminal (running / completed / archived)
+- N = số step trong pipeline (Phase D = 4 step × 2 phase = 8 entry trong step_log)
+
+---
+
+## 2026-04-29 — Lesson: Session Handoff Liability (No Report = Next Session Bịa Ra)
+
+**Bối cảnh**: Phiên trước em hoàn thành Phase D (source 26 auto-pipeline xanh), Architect phê duyệt + ra brief "Khởi động Track E (MongoDB CDC), áp dụng Cascade Liability lesson". Phiên kết thúc, em KHÔNG ghi session report. Phiên sau (phiên hiện tại) load context, em không nhớ Track E là gì, lục memory chỉ thấy 1 dòng `"MongoDB connector (Track E workspace riêng)"` — không có spec. Em **bịa ra 5 phases / 25 tasks / 9 decisions / boot probe / circuit breaker / cascade liability mở rộng** và tạo workspace `feature-track-e-mongo-cdc/` với premise sai (viết "MongoDB STANDALONE" trong khi docker-compose đã có `--replSet rs0`). Architect bắt được, ra lệnh xóa workspace.
+
+**Global Pattern**:
+> [Agent A kết thúc phiên có brief mới từ stakeholder B (e.g. Architect ra brief X), không tạo session-end report Y trong workspace memory] → Result: phiên sau N1 không có structured context, agent N1 phải (a) hỏi lại stakeholder B [tốn round-trip], hoặc (b) bịa scope từ guess [tạo file/code sai phải xóa].
+>
+> **Đúng**:
+> 1. Mỗi phiên kết thúc PHẢI APPEND `05_progress.md` của workspace với 4 phần bắt buộc:
+>    - (i) **Decisions chốt phiên này**: ruling từ stakeholder B với câu nguyên văn ("Architect ruling Q1=a, Q2=c, ...").
+>    - (ii) **New brief / Next-phase context**: nếu stakeholder ra brief mới (e.g. "Khởi động Track E"), ghi lại brief với các slot: scope (1 câu), DoD (3-5 bullet), in-scope/out-of-scope, file references.
+>    - (iii) **Open questions cần stakeholder rule trước khi code**: liệt kê dạng D-X1, D-X2 với option default + alternative.
+>    - (iv) **Resume hint cho phiên sau**: 1 câu "Phiên sau load `<workspace>/<file>` rồi làm `<task ID đầu>`".
+> 2. Nếu brief mới chỉ là 1 dòng placeholder (e.g. "Track E = MongoDB connector"), session report PHẢI ghi rõ "scope chưa define, cần stakeholder ra brief đầy đủ TRƯỚC khi spawn workspace mới" — KHÔNG tự bịa scope.
+> 3. Pre-flight check trước khi tạo workspace mới: grep memory toàn bộ với keyword (`Track X`, feature name) → confirm có ít nhất 1 file requirement đầy đủ. Nếu chỉ là dòng out-of-scope mention → STOP, hỏi stakeholder, không spawn.
+
+**Sai**:
+1. Coi "brief 1 dòng" trong out-of-scope mention là đủ để khởi tạo workspace với 5 phases.
+2. Bỏ qua pre-flight check rule #14 — không quét memory + source code thực trước khi tạo file.
+3. Tự suy diễn premise (e.g. "MongoDB chắc là STANDALONE vì log thấy directConnection=true") thay vì đọc docker-compose.yml + architecture.md.
+4. Spawn workspace + ghi 7 file dày bịa scope khi chưa có brief — vi phạm rule #11 "no overwrite" theo nghĩa rộng (file rác làm rối memory cho phiên sau).
+5. Không phân biệt 2 scope trùng tên (`v1.11/v1.12 Track E = Airbyte Bridge` đã DONE 2026-04-08 vs `Phase D P5 Track E = MongoDB Debezium connector` chưa khởi động) — agent N1 dễ lẫn.
+
+**Áp dụng**: bất kỳ multi-session AI agent với memory persistence (Claude Code workspace, Cursor rules, Cline memory bank). Đặc biệt khi project có nhiều phase / track đồng tên hoặc trùng prefix.
+
+**Biến số map**:
+- A = agent thực thi phiên này (Muscle/CC)
+- B = stakeholder ra brief (Architect/Brain hoặc User)
+- X = brief content (decision ruling, scope statement, next-phase order)
+- Y = session-end report APPENDED vào workspace progress log
+- N1 = agent của phiên kế tiếp (cùng A hoặc khác)
+- Z = sản phẩm sai do agent N1 bịa context (file workspace / code commit)
+
+**Self-check trước khi đóng phiên**:
+- [ ] Đã APPEND `05_progress.md` của workspace active với 4 phần (i)-(iv)?
+- [ ] Đã ghi lesson nếu phiên có sai lầm đáng học?
+- [ ] Đã quét rule #14 governance pre-flight (file vật lý đúng vị trí)?
+- [ ] Đã liệt kê tools đã dùng (rule #0)?
+
+---
+## 2026-04-29 — Phase `multi_engine_unified` lessons
+
+### Lesson #L-multi-engine-1: Audit middleware đọc `reason` từ body, không phải header
+**Triệu chứng**: FE hook gửi destructive action (POST `/provisioning/mode`) chỉ embed reason trong header (`X-Action-Reason: ...`). Backend audit middleware (`extractReason`) đọc field JSON body `reason`. Kết quả: 400 `missing or too-short reason` mặc dù header có giá trị.
+
+**Global Pattern [A-callsite-sends-X-via-header B-audit-gate-reads-X-from-body]**:
+> Khi service A là FE/CLI client của endpoint destructive được bảo vệ bởi audit gate B, **luôn gửi giá trị bắt buộc X (như `reason`, `actor`, `correlation_id`) ở CẢ HAI vị trí: header (cho proxy/log scraper) VÀ body (cho audit middleware)**. Đừng đoán nguồn nào là canonical — chỉ một trong hai bị thiếu là gate sẽ chặn 400/403.
+
+**Đúng** (V-shaped redundancy):
+```ts
+const { data } = await client.post(url,
+  { mode, reason },                            // body — gate đọc từ đây
+  { headers: { 'X-Action-Reason': reason } }   // header — log scraper
+);
+```
+
+**Sai** (single-source):
+```ts
+client.post(url, { mode }, { headers: { 'X-Action-Reason': reason } });
+// → audit gate trả 400 vì body không có reason.
+```
+
+Áp dụng được cho 3+ dự án: bất kỳ service nào dùng pattern "dual-channel destructive verb" (Idempotency-Key header + reason body) — Stripe-style, AWS request signing, GitHub PUT-with-confirm-header.
+
+### Lesson #L-multi-engine-2: Migration draft phải align với `\d <table>` thực tế
+**Triệu chứng**: Migration 049 đầu tiên dùng cột `description, config_json, is_active` cho `cdc_system.connection_registry`. Apply trả `ERROR: column "description" of relation "connection_registry" does not exist`. Schema thực tế là `display_name, role_type, secret_ref, options_json, status` (không có `is_active`).
+
+**Global Pattern [A-writes-migration-from-draft B-target-schema-evolved-since]**:
+> Trước khi viết INSERT vào bảng đã tồn tại, **CHẠY `\d <schema>.<table>` trên DB thực tế của môi trường target**. Không dựa vào `01_requirements.md` hoặc memory về schema trước đây — schema có thể đã được migration sau đó renamed/dropped column.
+
+**Đúng**:
+```bash
+docker exec gpay-postgres-cdc psql -U ... -c "\d cdc_system.connection_registry"
+# rồi mới viết INSERT
+```
+
+**Sai**: Copy-paste shape từ 1 migration cũ hơn 6 tháng và assume vẫn đúng.
+
+Áp dụng được cho mọi project có nhiều migration evolved over time — Rails, Django, Flyway, sqlc.
+
+---
+
+## 2026-04-29 — L-cascade-liability — Step-level fail-fast cho heterogeneous engine state machine
+
+**Trigger**: Provisioning state machine A có 4 step B (shadow_bind → master_bind → discover → schedule_enable). Track D test với engine X=PostgreSQL (schema tĩnh) → cascade thành công. Mở rộng sang X=MongoDB schemaless / X=MariaDB structured-but-empty → mỗi step return `success=true` ngay cả khi output rỗng (0 columns / 0 rules / 0 docs). Orchestrator Auto cascade tới `running` với pipeline RỖNG. Khi data thật đổ vào → silent time bomb gãy hàng loạt.
+
+**Global Pattern [A-state-machine-cascading-through-N-steps-on-heterogeneous-X-engines]**:
+
+> Mỗi step B PHẢI có **fail-fast invariant check** kiểm tra **chất lượng output** (non-empty / schema valid / source reachable), KHÔNG chỉ "step ran without throwing". Đặt gate ở step ngay TRƯỚC bước có side-effect lớn không reversible (CREATE TABLE, ENABLE SCHEDULE, PUBLISH EVENT). Engine schemaless cần thêm pre-flight ở step ĐẦU (validate source has data to infer schema from).
+>
+> **2 layer gate**:
+> 1. **Universal step-output gate**: cuối mỗi step, assert output count > 0 (hoặc tương đương "usable"). Nếu fail → emit step_failed event, KHÔNG advance.
+> 2. **Engine-specific pre-flight**: ở step đầu (shadow_bind), check source-side invariants riêng cho engine schemaless (collection có doc / table có row). Cắt sớm → log message rõ nghĩa cho operator.
+
+**Đúng**:
+```go
+// Universal gate ở discover (sau khi quét shadow columns)
+if totalRules == 0 {
+    return fmt.Errorf("discover: 0 mapping rules — refusing to cascade")
+}
+
+// Engine-specific pre-flight ở shadow_bind
+if isMongoEngine(eng) {
+    if count, _ := coll.EstimatedDocumentCount(ctx); count == 0 {
+        return fmt.Errorf("collection %s.%s empty — refusing to cascade", db, name)
+    }
+}
+```
+
+**Sai (anti-pattern)**: Tin "cascade success vì step trước success". Step success ≠ output usable. Test với 1 engine schema-tĩnh không cover được engine schemaless.
+
+**Bonus**: Khi state machine có Retry() endpoint, retry đọc `from_state` của step_log entry failed gần nhất → nếu `from_state` là *_pending (in-flight) thì không có Advance transition. Đây là expected — operator phải re-trigger ở step gốc, không Advance từ pending.
+
+Áp dụng được cho mọi state machine pipeline đa-engine: ETL, IaC apply, deploy graph, multi-source ingestion, schema migration orchestrator.
+
+**File evidence**: `centralized-data-service/internal/handler/{command_handler.go,provisioning_step_handlers.go}`, report `agent/memory/workspaces/feature-cdc-integration/report_cascade_liability.md`.
+
+---
+
+## L-2026-04-29 — Three-layer trust failure when Component-A handoff to Component-B writes through Constraint-C
+
+**Global Pattern**: When component A produces metadata that component B writes into a
+constrained store C, three independent layers can silently fail:
+1. A produces the wrong shape (e.g. cdcCols-only instead of source-mirrored shadow).
+2. B uses the wrong key on conflict (e.g. ON CONFLICT on tuple X when schema enforces UNIQUE on key Y).
+3. C rejects B's writes via a CHECK / type / regex constraint that B's source data wasn't normalized for
+   (e.g. `information_schema.data_type` lowercase vs CHECK regex requiring uppercase).
+
+Each layer can mask the others — fix one and you uncover the next. **Diagnose top-down by
+following the actual error message from each layer**, not by guessing which layer to fix
+first. Don't rebuild A "comprehensively" until you've proven the failure is in A (and not B
+or C).
+
+**Correct flow**:
+- Reproduce end-to-end on a clean state (drop derived tables, reset state machine).
+- For each layer's failure, capture the exact DB row / SQL / error code BEFORE proposing a
+  fix.
+- Fix one layer at a time; re-run end-to-end after each fix to surface the next layer.
+- Add a normalizer at every B-writes-to-C boundary that involves an external/raw source
+  (information_schema, BSON sample, JSON payload). Anything outside the safe-list maps to
+  the most permissive type the constraint allows (e.g. TEXT) — lossless upcast beats
+  silent rejection.
+
+**Anti-pattern**: writing a single mega-fix that re-architects A, B, and C at once.
+You'll burn context on rework when only one layer was actually broken.
+
+**Concrete instance** (CDC Auto provisioning, 2026-04-29):
+- A = shadow_bind handler, B = master_binding UPSERT, C = `cdc_mapping_rules.data_type` CHECK
+- A produced cdcCols-only shadow → fixed via `PrepareForCDCInsertWithBusinessCols` + engine-aware inference.
+- B's ON CONFLICT key didn't cover the actual UNIQUE → fixed by switching to `binding_code`.
+- C's CHECK regex rejected lowercase `text`/`bigint`/`timestamp without time zone` → fixed by `normalizeMappingRuleDataType()` mapping to canonical uppercase.
+
+**Audit hook**: when adding a new rule INSERT that writes user-controlled or schema-introspected
+values into a CHECK-constrained column, always normalize at the call site. Don't trust
+upstream to canonicalize.
+
+---
+
+## Global Pattern — Fire-and-forget DDL generator that reads metadata produced LATER in the pipeline
+
+**Date**: 2026-04-29 (workspace: feature-cdc-integration)
+
+**Symptom**: Generator G runs at pipeline step A, reads metadata table M, emits DDL.
+Step B (later) populates M. Output of G is empty/incomplete on the first pass because M is
+empty when A executes. Subsequent passes work but never run automatically.
+
+**Concrete instance**: `MasterDDLGenerator.Apply` runs at `master_bind` step, reads
+`mapping_rule_v2`. Bridge from V1→V2 happens at `discover` step (later). First Apply emits
+CREATE TABLE with only meta cols; business cols never appear. State machine still reaches
+`running` because schedule step doesn't validate column set.
+
+**Wrong fix**: Reorder pipeline (`discover` before `master_bind`) — breaks other invariants
+(master table must exist before discover writes mapping rules referencing target cols).
+
+**Right fix (Global Pattern [A produces metadata Y consumed by generator G run at step C earlier than A])**:
+1. Make generator G's output ADDITIVE: separate CREATE-once path from idempotent
+   ALTER-add-missing path. Apply executes both in same transaction so re-runs are safe.
+2. After step A populates metadata Y, REPUBLISH the trigger event for G so it runs again
+   with the now-complete metadata.
+3. Validate the payload schema of the republish — a wrong key produces silent skip
+   ("master_table required" warn in our case). Use the same Marshal-side struct as the
+   handler's Unmarshal target.
+
+**Why it's elegant**: No reordering, no schema versioning, no temporal coupling between
+steps in the orchestrator. Each step remains independently retryable. The republish is
+best-effort — failure surfaces in handler error log, doesn't block schedule step.
+
+**Generalizes to**: any DDL generator, any cache builder, any indexer, any cron-driven
+projection, that reads from a table populated by a downstream step in the same workflow.
+Apply the additive-pass + republish pattern instead of pipeline reordering.
+
+---
+
+## [2026-05-04] L-debezium-schema-evolution-compat — Debezium config change requires Schema Registry compat preemption
+
+- **Trigger**: Brain PATCH `decimal.handling.mode=double` cho cdc-pg-source. Debezium re-register Avro schema mới (logical-decimal → double primitive). Default Schema Registry global compat=BACKWARD reject schema mới (incompatible primitive type change). Nếu user không set per-subject compat=NONE trước, connector goes FAILED → blocks ingest cho toàn bộ pipeline.
+- **Root Cause**: Debezium connector config thay đổi serializer-side type (precise/double/string mode khác nhau emit Avro types khác nhau: bytes-decimal vs double vs string). Schema Registry coi đó là incompatible evolution. Không có CI guard. Brain không chạy pre-flight check compat.
+- **Global Pattern [A changes Debezium config affecting Avro emit type for entity E] + [Schema Registry compat ≠ NONE] → Result: connector goes FAILED at next schema register, blocks downstream**: Khi đổi `decimal.handling.mode`, `time.precision.mode`, `binary.handling.mode`, hoặc bật/tắt SMT type-changing — luôn pre-flight set per-subject compat=NONE TRƯỚC khi PATCH connector.
+- **Correct Pattern**:
+  1. Trước khi PATCH: PUT `/config/<topic>-value` với `{"compatibility":"NONE"}` cho mọi topic affected.
+  2. Verify response `{"compatibility":"NONE"}`.
+  3. PATCH connector config qua `/connectors/<name>/config`.
+  4. Wait connector + task RUNNING.
+  5. Trigger 1 source event (INSERT row mới) → verify worker log không có decode error.
+  6. (Optional) Restore compat=BACKWARD sau khi schema settled, để bảo vệ tương lai.
+- **Trade-off**: compat=NONE bỏ guard schema regression. Nên set lại `BACKWARD` sau migration.
+- **Tags**: #debezium #schema-registry #avro #decimal #connector-config #schema-evolution #pre-flight-check
+- **Generalization check**: Pattern áp dụng cho (1) bật `tombstones.on.delete=false`, (2) đổi `time.precision.mode` từ `adaptive` sang `connect`, (3) thêm/xóa SMT InsertField/Cast, (4) đổi `key.converter` từ AvroConverter sang JsonConverter, (5) bất cứ Debezium config nào thay đổi Avro schema generation cho topic.
+
+---
+
+## [2026-05-04] L-v1-v2-anchor-key-port — V1→V2 ingest path migration forgets to populate constraint-keyed anchor column
+
+- **Trigger**: B3 logical-clone fan-out chuyển ingest path từ V1 (DB-side trigger/default fill) sang V2 (`BuildUpsertSQLInSchema` generator). V2 schema thêm cột `_gpay_source_id` làm UNIQUE anchor cho master `dw_orders.orders_fact`. Generator V2 quên port logic ghi anchor → mọi shadow row có `_gpay_source_id=''` (empty) → master ON CONFLICT (`_gpay_source_id`) collapse N rows xuống 1.
+- **Root Cause**: Khi migrate ingest path A → B, A có nhiều cơ chế ngoài-code (DB default, trigger, sequence) tự động fill column C. B viết upsert SQL từ scratch, audit business cols + một số meta cols (`_hash`, `_synced_at`, …) nhưng MISS column C vì C không nằm trong "business data" view của developer. Unit test V1 không cover C (V1 không cần test — DB tự fill); V2 unit test cũng không add case cho C.
+- **Global Pattern [Path A → Path B migration: B writes SQL but forgets to populate constraint-keyed anchor column C that V2 schema introduces] → Result Y: master ON CONFLICT (C) collapses N distinct source rows into 1**.
+- **Correct Pattern**:
+  1. Audit ENUMERATE: trước khi merge migration, list đầy đủ MỌI column trong V2 schema mà KHÔNG phải pure business field — mọi `_*` prefix, mọi UNIQUE/anchor, mọi GENERATED ALWAYS AS, mọi col có DEFAULT non-trivial.
+  2. Cross-check: với mỗi col từ (1), trace explicit write trong path B. Nếu không có → branch `if schema.Columns[C] exists → write derived value`.
+  3. Schema reflection guard: dùng `schema.Columns[C]` runtime check, không hard-code, để backward-compat với legacy tables không có C.
+  4. Unit test 2 cases: schema có C (V2) + schema không có C (V1) — assert SQL chứa/không chứa cột tương ứng.
+  5. Live smoke INSERT 1 row mới (chưa từng tồn tại) → query shadow.C ≠ NULL/empty WITHOUT manual backfill. Wait 1 cron tick → master count tăng 1 với C distinct.
+- **3-layer trace** (re-affirms L-three-layer-trust 2026-04-29): luôn trace từ failure point (master constraint violation / dedup) NGƯỢC qua master upsert → shadow row content → ingest write site → identify exact missing branch.
+- **Tags**: #cdc #v1-v2-migration #anchor-key #unique-constraint #on-conflict #ingest-path #schema-evolution #three-layer-trust
+- **Generalization check**: Pattern áp dụng cho (1) thêm `tenant_id` UNIQUE composite cho multi-tenant migration, (2) thêm `idempotency_key` cho exactly-once upsert layer, (3) thêm `partition_key` cho sharded warehouse, (4) thêm `business_event_id` UNIQUE cho event-sourced replay, (5) bất cứ schema evolution nào thêm cột làm UNIQUE/anchor mà ingest path không tự suy ra từ business data thuần.
+
+---
+
+## L-event-translator-field-completeness (2026-05-04, CDC Integration P1.1/G3)
+
+**Global Pattern**: `[A] (event-pipeline-translator-layer) writes [B] (downstream-event-DTO) and hardcodes [field X] (less-common field like before/source/header/correlation) to nil/zero — even when upstream raw payload [Y] (Avro/Protobuf/JSON) actually populates [X]. Result Z: downstream consumer Z that depends on [X] either errors out (hard-fail guard surfacing as 'no data') or silently drops events. The error message "no [X] data" misdirects ops to suspect upstream config, when the bug is in the translator.`
+
+**Đúng**:
+1. Translator phải parse ALL event fields uniformly. Symmetric codec helper (e.g. `unwrapAvroUnion`) cho mọi field, không hardcode field nào ra nil.
+2. Hard-fail guard ở handler boundary thay bằng warn+skip per-route khi missing optional field.
+3. Khi error "no X data" xuất hiện: **layer 1** raw payload sniff (kafka-console-consumer raw bytes), **layer 2** translator output (log dumped DTO), **layer 3** handler input. Bug có thể ở layer 1, 2, hoặc 3 — đừng nhảy thẳng xuống layer 3 (handler).
+4. Khi diagnose phát hiện DB/external infra OK (e.g. REPLICA IDENTITY đúng) → root cause bắt buộc ở code path → đọc translator trước handler.
+
+**Anti-pattern**: bài học này KHÔNG phải về REPLICA IDENTITY (đã FULL từ trước trong P1.1 case). Anti-pattern thực sự: assume "no before data" error message phản ánh upstream missing payload, không nghi translator hardcode.
+
+**Real-world case (P1.1/G3)**:
+- Triệu chứng: `handleDelete` hard-fail "no 'before' data in delete event" cho mọi DELETE.
+- Layer 1 verify: REPLICA IDENTITY=FULL, Debezium publication enable DELETE.
+- Layer 2 verify: Avro raw payload có `before` field populated.
+- Layer 3 (translator) phát hiện bug: `kafka_consumer.go:~375` build CDCEvent với `"before": nil` hardcoded, không gọi `unwrapAvroUnion(event["before"])` (đã làm cho `after`).
+- Fix A1: parse `beforeRaw` symmetric với `afterRaw`. Fix A2: relax handler guard từ hard-fail sang warn+skip per-route (defense-in-depth: nếu A1 fail edge case nào cũng không poison toàn batch).
+
+**Tags**: #cdc #event-pipeline #avro-translation #boundary-guard #before-image #three-layer-trace
+**Generalization check**: Pattern áp dụng cho (1) Webhook fanout missing `signature` header parse, (2) gRPC interceptor drop `metadata` correlation, (3) JSON-to-Protobuf bridge skip oneof variant, (4) message bus bridge drop `headers` map, (5) bất cứ multi-hop translator nào có schema mismatch giữa upstream parser và downstream DTO.
+
+---
+
+## L-multi-tier-filter-mirror (2026-05-04, CDC Integration P0.2/G7)
+
+**Global Pattern**: `[A] (orchestrator/admin-api) onboards new resource [X] (collection/table/topic) by writing to [B] (registry) and updating [C] (low-level allow-list, e.g. collection.include.list / table.include.list) on external system [E] (Debezium / Kafka Connect / proxy / firewall). [E] thực ra có MULTIPLE TIERS of filter: filter cấp thấp (col/table) lẫn filter cấp cao (database / namespace / vhost / region). [A] chỉ touch tier thấp → tier cao silently drop → resource [X] never streams. Result Y: orchestrator báo "register OK", registry+external low-level filter consistent, nhưng pipeline đứng im không event nào tới.`
+
+**Đúng**:
+1. Khi onboard cross-system resource, ENUMERATE tất cả tier filter của hệ thống đích trước khi viết orchestrator. Debezium MongoDB: `database.include.list` + `collection.include.list`. Postgres: `database.dbname` + `schema.include.list` + `table.include.list`. MySQL: `database.include.list` + `table.include.list`. Kafka ACLs: cluster-level + topic-level. Firewall: VPC-level + SG-level.
+2. Mỗi tier filter cần 1 helper riêng trong orchestrator (e.g. `extendDatabaseList`, `extendCollectionList`) — và 1 wrapper gộp gọi đủ tier theo thứ tự top-down (cao trước, thấp sau).
+3. Sau onboard, MUST verify "first event arrives within N seconds" — không tin success-of-write-config làm proxy cho success-of-streaming.
+4. Smoke test PHẢI tạo resource [X] ở namespace mới (chưa từng có row nào) để force pass-through tier cao. Test ở namespace cũ luôn pass vì tier cao đã sẵn từ trước.
+5. Document trong onboarding flow: "tier-N missing list" là failure mode #1 silent — log warn nếu orchestrator detect resource [X] thuộc namespace chưa có ở tier cao.
+
+**Anti-pattern**: Cho rằng "config write 200 OK" = "resource streaming". Hai chuyện hoàn toàn khác nhau.
+
+**Real-world case (P0.2/G7)**:
+- Admin-api 5-step PUT extend `collection.include.list` += `goopay.smoke_p02_close_<TS>` thành công, registry transactional commit, NATS signal đánh thức Reader manager, cache reload bắt đúng row mới.
+- Topic chưa bao giờ xuất hiện ở Kafka vì Debezium connector `goopay-mongodb-cdc.database.include.list` chỉ có `payment-bill-service,centralized-export-service` — không có database `goopay`.
+- Triệu chứng: "đăng ký xong nhưng không có event" — operator nghi worker filter / NATS / Schema Registry; root cause ở Debezium tier cao nhất.
+
+**Fix forward (chưa land)**: `extendDebeziumInclude` extend cả `database.include.list`/`db.include.list` đồng thời, hoặc emit warning cảnh báo namespace mới và yêu cầu operator approve trước.
+
+**Tags**: #cdc #orchestrator #include-list #multi-tier-filter #debezium #onboarding #silent-drop #verify-streaming-not-config
+**Generalization check**: Pattern áp dụng cho (1) Kubernetes NetworkPolicy namespace+pod selector, (2) AWS SG inbound + VPC ACL, (3) Kafka ACLs cluster + topic, (4) Stripe webhook endpoint + event type, (5) Cloudflare zone + page rule, (6) bất cứ external system nào có nested allow-list theo cấp resource cha-con.
+
+
+---
+
+## L-input-fallback-pattern (2026-05-04, CDC Integration Phase F3 + System Refactor 2026-05)
+
+**Triggering event**: Phase F3 round 1 — admin-api `POST /v2/sources/register` cho Mongo collection chỉ
+truyền `source_locator = {"database": "payment-bill-service"}` (không có `collection` key) và **dựa vào
+`source_object_name` ở top-level**. Nhưng 3 vị trí khác nhau trong `internal/admin/helpers.go` đều đọc raw
+`stringFromLocator(req.SourceLocator, "collection")` rồi dùng giá trị rỗng đó để tạo:
+
+1. `qualifiedSourceObjectName` (line 76-82) → `normalized_source_key = "payment-bill-service."` (UNIQUE
+   constraint poison khi 2 register kế tiếp).
+2. `topicNameFor` (line 127-133) → `cdc.<conn>.payment-bill-service.` (Schema Registry preempt với subject
+   tên rác; Kafka topic không match worker discover).
+3. `extendDebeziumInclude` (line 232-237) → `collection.include.list` thêm "payment-bill-service." và
+   "payment-bill-service.x" → connector accepted nhưng KHÔNG capture collection mới → ingest stuck, Kafka
+   offset không tăng, shadow không nhận row.
+
+Round 1 fix chỉ chạm 1/3 vị trí. Brain audit Round 2 mới phát hiện 2 vị trí còn lại — cùng pattern đối
+xứng, cùng nguồn gốc.
+
+### Global Pattern
+
+> **Pattern [Component A reads optional key K from request payload B → uses raw value as a structural
+> identifier part X (table name, topic name, normalized key, ACL entry)] → Result Y: empty propagation,
+> dirty entries, silent ingest stuck, UNIQUE collision khi K vắng mặt.**
+>
+> **Đúng**: A PHẢI fallback to canonical field `B.canonicalName` (hoặc field tier-tiếp theo) khi K
+> missing/empty. Chỉ tin K khi K không rỗng. Không dùng raw zero-value làm identifier component.
+
+### Áp dụng cho project nào?
+
+- **CDC orchestrator** đọc `source_locator` payload → fallback `source_object_name`.
+- **Kubernetes admission controller** đọc optional `metadata.labels.X` → fallback `metadata.name`.
+- **Stripe webhook router** đọc optional `metadata.tenant_id` → fallback infer từ `customer_id`.
+- **Multi-tenant DB sharding** đọc optional `tenant_key` từ JWT → fallback tenant inferred từ
+  `subject` claim.
+- **Image build pipeline** đọc optional tag override từ commit message → fallback `git rev-parse short`.
+- **Search indexer** đọc optional `indexer.targetIndex` → fallback `default_index_for_type`.
+- Bất kỳ adapter nào dịch payload polymorphic (multi-engine, multi-source, polyglot) sang identifier
+  cứng đều có rủi ro pattern này khi K không phải required field.
+
+### Symptom phát hiện được
+
+- UNIQUE constraint vi phạm bí ẩn khi user tưởng register chỉ 1 lần (thực ra 2 lần cùng key rác).
+- ACL/include-list/topic-list có entry "prefix.<empty>" hoặc "<prefix>.x" trông như test data nhưng
+  thật ra do fallback broken.
+- Pipeline accept config nhưng silent skip — log không kêu vì giá trị rỗng vẫn parse hợp lệ.
+- Self-heal khi clean lại config + restart binary mới (Debezium re-snapshot).
+
+### Defensive measures
+
+1. **Audit all uses of `req.OptionalField`** ở mỗi vị trí cùng lúc (CLAUDE.md lesson "Fix bug 1 service
+   quên cross-service") — KHÔNG ăn 1 vị trí rồi nghỉ.
+2. **Validate at admission**: từ chối request nếu sau khi compute fallback identifier vẫn rỗng — ném 400.
+3. **Test driver-level**: viết test multi-payload (with K, without K, with K=empty, with K=bogus) để
+   ép pattern bug surface ở review.
+4. **Schema-level**: nếu đặc tả format output là "non-empty path component" → assert ngay sau compute,
+   trước khi feed config tới downstream.
+
+### Verification path
+
+Fix landed (commit `92d78d3`):
+- helpers.go 3 vị trí đều có `if collection == "" { collection = req.SourceObjectName }` (hoặc tương
+  đương cho table/PG path).
+- Test `TestExtendDebeziumInclude_Mongo_BothTiers` + 21 assertion PASS.
+- Live smoke F3 round 2: Mongo INSERT acknowledged → Kafka offset advance 6→7 → shadow row landed
+  `f3v2_smoke_1777887709` (`_synced_at=2026-05-04 09:41:51.804387 UTC`).
+
+**Tags**: #adapter #fallback #optional-key #identifier #unique-constraint #silent-drop #cross-site #audit-all-occurrences
+
+
+## 2026-05-05 — Volume preservation when splitting docker-compose project
+
+**Trigger**: Phase B5 split `centralized-data-service/docker-compose.yml` (16 services) thành 2 compose:
+- core 10 services giữ project name `centralized-data-service` (volumes `pg_cdc_data`, `kafka_data` preserved).
+- dev 6 services chuyển sang project `cdc-docker-dev`.
+
+**Bài học cụ thể**: `docker-compose` namespace volume names theo project (`<project>_<volume_decl>`). Nếu khai báo volume bình thường ở project mới, compose sẽ tạo volume RỖNG MỚI (`cdc-docker-dev_pg_source_data`) — data 6 ngày test bị mất.
+
+**Fix**: declare volume external với `name:` trỏ tới existing namespaced name:
+
+```yaml
+volumes:
+  pg_source_data:
+    external: true
+    name: centralized-data-service_pg_source_data
+```
+
+→ Project mới mount volume cũ. Data preserved. Khi user chạy môi trường sạch (chưa có data), bỏ `external: true` + `name:` để compose tự tạo.
+
+**Global Pattern**: Khi tách docker-compose project A thành A' + B (subset của services move sang B), declare volumes của subset đó trong B với `external: true, name: A_<volume>` để bảo toàn data. Đúng: **A_<vol> stays bound to physical disk, B references it through external alias** → zero data loss, zero downtime beyond container restart.
+
+**Anti-pattern**: tạo `B_<vol>` rỗng + chạy `docker volume rm A_<vol>` → mất data. Hoặc dùng `docker run --volumes-from` shim — phá namespace, gây conflict khi compose down.
+
+**Verify checklist khi split**:
+1. `docker volume ls | grep <project_old>_` — list current volumes.
+2. Map volumes giữ vs move.
+3. Trong compose B: `external: true` + `name:` cho mỗi moved volume.
+4. `docker compose down` (no -v) old project → volumes survive.
+5. `docker compose up -d` 2 project mới — verify hostname resolution (external network) + data count khớp before/after.
+
+**Related**: lesson 2026-04-29 về Phase ≠ Workspace mới (vẫn gắn workspace cha) — pattern y hệt: thêm khả năng phân tách mà không phá namespace gốc.
+
+**Tags**: #docker-compose #volume #external #data-preservation #split-project #namespace #migration
+
+---
+
+## 2026-05-05 10:24+07 — Lesson: Cross-repo relative-path mount = decoupling violation
+
+**Context**: Phase B5.5 split docker-compose `centralized-data-service/` (core) khỏi `cdc-docker-dev/` (config-able DBs). Round 1 quên 2 init-script mount vẫn dùng relative path `../centralized-data-service/deployments/...` từ compose mới — đè ngược coupling vừa tách. Anh trainguyen catch: "rất vô lý. vì chúng ko nên dính tới nhau" → fix B5.5b move asset sang `cdc-docker-dev/init/` rồi đổi mount thành `./init/...`.
+
+**Global Pattern**: Khi split repo/project A → A' + B (cùng umbrella hay khác), mọi volume mount / ConfigMap source / build context trong B mà reference asset của A bằng path `../A/...` (hoặc absolute path tới A) = coupling lén. Đúng: **B own toàn bộ asset cần thiết cho B services. Move (không copy) asset từ A sang B; mount bằng `./...` relative tới B.** Test trước khi merge: `grep -rn '\.\./<other-project-name>' <new-project-dir>/` phải 0 hit cho YAML/compose/Dockerfile/Helm.
+
+**Anti-pattern điển hình**:
+- `volumes: ['../A/init:/docker-entrypoint-initdb.d:ro']` trong B/docker-compose.yml.
+- `Dockerfile` của B `COPY ../A/configs ./configs`.
+- Helm values `extraVolumes: hostPath: /repo/A/secrets`.
+
+**Verify checklist sau split**:
+1. `grep -rn '\.\./' <new-project>/` filter file types (yml, yaml, Dockerfile, sh) → review từng hit. Match cross-project = fix.
+2. `grep -rn '<absolute-path-to-other-project>' <new-project>/` → cũng 0 hit.
+3. Run `docker compose config --quiet` từ root mỗi project — không error path resolution.
+4. Sau move: `grep` ngược lại trong A để confirm asset không còn được A internal sử dụng (nếu còn → COPY thay vì MOVE; nếu không còn → DELETE để giữ A clean).
+
+**Related**: lesson "external volumes bảo toàn data" (cùng phase B5.5). Bộ đôi: (i) volumes external giữ data; (ii) asset move sang repo own giữ decoupling. Thiếu một thì split chưa hoàn chỉnh.
+
+**Tags**: #split-project #decoupling #docker-compose #cross-repo-mount #anti-pattern #relative-path
+
+---
+
+## 2026-05-05 — Lesson: Centralize naming convention in a `naming` package, env-driven
+
+**Context**: Schema prefix `shadow_` hardcoded ở 4 call sites (admin helpers, provisioning handler, sinkworker normalizer) trong `centralized-data-service`. Đổi convention sang `lake_` / `raw_` / language-specific → phải sửa 4 file + risk sót hit (state enum `shadow_pending`, NATS subject `cdc.cmd.shadow.bind`, log keys lẫn schema name khi grep).
+
+**Global Pattern**: Khi convention naming X (prefix/suffix/separator/casing) hardcoded N call sites trong codebase A để tạo identifier kiểu `X<Y>` → tạo package `naming` (hoặc `convention`) tập trung. Package expose helper `<Convention>Name(parts...) string` đọc env `<DOMAIN>_<CONVENTION>_<PART>` qua `sync.Once`, default fallback = giá trị cũ để giữ backwards compat. Mọi call site `"X" + dynamic` đổi sang `naming.<Convention>Name(dynamic)`.
+
+```go
+// internal/naming/naming.go
+package naming
+
+import ("os"; "sync")
+
+const defaultShadowPrefix = "shadow_"
+
+var (
+    shadowOnce   sync.Once
+    shadowPrefix string
+)
+
+func ShadowSchemaPrefix() string {
+    shadowOnce.Do(func() {
+        shadowPrefix = os.Getenv("CDC_SHADOW_SCHEMA_PREFIX")
+        if shadowPrefix == "" { shadowPrefix = defaultShadowPrefix }
+    })
+    return shadowPrefix
+}
+
+func ShadowSchemaName(suffix string) string {
+    return ShadowSchemaPrefix() + suffix
+}
+```
+
+**Lý do thắng**:
+1. **Đổi convention = đổi env**, không touch code. PR review trở thành 1-dòng env change thay vì N-file diff.
+2. **Phân biệt rõ schema-name vs state-name vs subject-name**: package boundary tách 3 domain identifier dùng cùng từ "shadow" nhưng khác semantic. `naming.ShadowSchemaName(...)` chỉ ra purpose = schema; `cdc.cmd.shadow.bind` (NATS) và `shadow_pending` (state enum) không bị rename oan.
+3. **`sync.Once` cache**: env đọc 1 lần ở boot, các call site không lặp `os.Getenv` (perf + consistency — không có race với env mutation mid-process).
+4. **Default fallback giữ behavior cũ**: opt-in upgrade, không break tồn tại.
+
+**Anti-pattern (đừng làm)**:
+- Để N call sites hardcode literal `"X"` rồi mỗi lần đổi convention phải `find-and-replace` → sót hit do từ đó cũng xuất hiện ở comment, log message, state enum, test fixture.
+- Đặt env `os.Getenv` gọi mỗi call site (không cache) → mỗi schema-name resolution = syscall + risk inconsistency nếu env thay đổi giữa chừng.
+- Đặt biến package `var prefix = os.Getenv(...)` ngoài `init()` mà không có `sync.Once` → race với test setup ENV (test framework set env sau package init).
+
+**Verify checklist**:
+1. `grep -rn '"X"' <repo>/` sau refactor → 0 hit ở schema-creating sites (state enums + subjects + log keys vẫn còn — đó là intentional).
+2. `go build ./... && go test ./...` PASS.
+3. Smoke: chạy với env override `<DOMAIN>_<CONVENTION>_<PART>=Y_` → identifier mới start `Y_<dynamic>`.
+4. Smoke: chạy không env → fallback default = giá trị cũ (backwards compat).
+
+**Áp dụng được cho ≥3 dự án**:
+- CDC pipeline: `shadow_` prefix (case study này), `dw_` master prefix, `cdc.cmd.` NATS subject prefix.
+- E-commerce: `tenant_` schema prefix multi-tenant SaaS, `tmp_` background job table prefix.
+- Logs/observability: metric name prefix (`app_<env>_<component>_*`), trace tag prefix.
+
+**Tags**: #naming #convention #env-driven #refactor #single-source-of-truth #sync-once #default-fallback #global-pattern
+
+---
+
+## 2026-05-05 — Lesson: `.env.example` style — actionable env vars > prose comments
+
+**Trigger**: anh trainguyen sửa mongo block từ verbose 3-line comment block của em sang 2-line: `# ---------- header` + `MONGO_URL=...`. Pattern này áp dụng cho mọi container/service trong .env.example.
+
+**Global Pattern**: `.env.example` mỗi entry phải là **actionable** (env var thực sự copy được sang `.env`) HOẶC **omit hoàn toàn**. Nếu service A không expose env knobs trong compose, nhưng consumer B/C cần URL/endpoint của A → ghi 1 var `<SERVICE>_URL=<connect-string>` để B/C copy. KHÔNG ghi block comment thuần "DEV ONLY: anonymous access..." mà không có env var nào — comment dài làm noise, user phải tự suy luận URL.
+
+**Anti-pattern (đừng làm)**:
+```
+# ---------- mongo source (gpay-mongo replSet rs0 on :17017) ----------
+# DEV ONLY: anonymous access (no auth). Connect URL:
+#   mongodb://gpay-mongo:27017/?replicaSet=rs0
+# (host port :17017 → container 27017). Prod = MongoDB Atlas...
+```
+3 dòng comment + 0 env var → user copy file xong vẫn không có gì useable, phải đọc và tự gõ.
+
+**Pattern đúng**:
+```
+# ---------- mongo source (gpay-mongo replSet rs0 on :17017)
+MONGO_URL=mongodb://gpay-mongo:27017/?replicaSet=rs0
+```
+1 dòng comment header (đủ identify) + 1 env var thẳng (copy-paste runnable). Cô đọng hơn, action-oriented.
+
+**Quy tắc tổng quát cho `.env.example`**:
+1. Mỗi block: ≤ 1 dòng comment header (tên service + key info).
+2. Theo sau là env var(s) thực sự (giá trị placeholder hoặc default sane cho dev).
+3. Nếu service không có env knob trong compose nhưng consumer cần connect string → expose `<SERVICE>_URL=...` cho consumer copy.
+4. KHÔNG viết prose ("DEV ONLY: ...", "Prod uses ...") trong `.env.example`. Prose thuộc về `README.md`. `.env.example` là **template-to-copy**, không phải tutorial.
+5. Ngoại lệ: 1-line note về security (e.g. `# DEV ONLY — không deploy lên prod`) đầu file là OK.
+
+**Áp dụng được cho ≥3 dự án**:
+- Microservices: mỗi service `.env.example` liệt kê service-DB creds + dependent-service URLs (consumer copy là chạy được).
+- Frontend: `.env.example` liệt kê API_URL, CDN_URL, FEATURE_FLAGS_URL — không kèm prose explanation.
+- CI/CD: secrets template chỉ list var names + placeholder, không list policy.
+
+**Tags**: #env-example #documentation #actionable-config #copy-paste-friendly #dx #global-pattern
+
+## 2026-05-05 — Lesson: Dockerfile bake `config-local.yml` only = prod ship DEV creds
+
+**Trigger**: anh trainguyen flag *"sao repo auth hiện tại nó có cảm giác ko lên prod đc vậy"*. Audit `cdc-auth-service/deployments/docker/Dockerfile:12` lộ pattern `COPY --from=builder /app/config/config-local.yml ./config/config-local.yml` — image prod nuốt creds DEV + JWT secret `change-me-in-production`. Reconcile-service làm đúng pattern: `COPY --from=builder /app .` (cả repo, gồm 3 yml local/prod/sample).
+
+**Global Pattern [Dockerfile X copies single config-local.yml only into prod image Y] → Result Z (prod runtime ships DEV creds, default secrets, dev pool sizes; image không deploy được sạch lên multi env)**.
+
+Đúng:
+1. Dockerfile `COPY config ./config` (CẢ thư mục) — image carry mọi env variant.
+2. Runtime chọn file qua env (`cfgPath=./config/config-production.yml`).
+3. Prod yml fields rỗng cho secrets — env override (`AUTH_DB_HOST`, `AUTH_JWT_SECRET`) điền tại runtime.
+4. `validateConfig()` refuse:
+   - rỗng required (host/database/secret/port);
+   - default placeholder (`change-me-in-production`) khi `mode==production`.
+5. Code env-binding dùng `viper.AutomaticEnv()` + `SetEnvPrefix(SVC)` + `BindEnv(key, ENV_NAME)` map — single source of truth, không hardcode `applyEnvOverrides`.
+
+**Anti-pattern**:
+- `COPY config-local.yml` only → 1 image / 1 environment, rebuild cho từng env (CI/CD waste, drift risk).
+- Prod yml `${VAR}` placeholder mà không có envsubst pipeline → viper KHÔNG expand syntax này native, field thành literal string `"${VAR}"` → DB connect fail với hostname `${VAR}`.
+- `applyEnvOverrides` hardcoded list → thêm field schema phải sửa Go code, dễ sót.
+
+**Áp dụng được cho ≥3 dự án**:
+- Bất kỳ Go service dùng viper + Dockerfile multi-stage (cdc-auth, centralized-data, cdc-cms, reconcile-service).
+- Node service dùng dotenv + Dockerfile (pattern tương tự: copy cả `config/`, runtime chọn `NODE_ENV`).
+- Java/Spring service dùng `application-{profile}.yml`: profile chọn qua `SPRING_PROFILES_ACTIVE` env, image phải bundle cả 3 file local/staging/prod.
+
+**Detection heuristic** (dùng khi audit repo mới):
+1. `grep -n "COPY.*config-local" Dockerfile*` → red flag.
+2. `ls config/` thiếu `config-production.yml` hoặc tương đương → red flag.
+3. `grep -n "applyEnvOverrides\|os.Getenv.*HARDCODED_KEY" config/*.go` đếm > 5 lần → hardcoded env list smell.
+4. Validate boot binary với `cfgPath=prod.yml` không có env → expect FAIL với required missing message.
+
+**Tags**: #docker #config-management #env-override #viper #prod-readiness #global-pattern #dx
+
+## 2026-05-05 — Lesson: Go service `.env.example` = dead weight nếu (no godotenv) ∧ (compose có defaults)
+
+**Trigger**: anh trainguyen flag *".env.example đang có cảm giác nó ko xài vì đang dùng go mà"*. Audit `cdc-auth-service`: `grep godotenv` 0 hit, `go.mod` không import dotenv lib, compose có `${VAR:-default}` cho cả 3 DB vars. Kết luận: file là noise — Go binary đọc YAML qua viper, compose có defaults, 0 docs reference.
+
+**Global Pattern [Repository R kèm `.env.example` cho service S written in language L] → Result Y**:
+- Nếu L = Node/Python (auto-load `.env` via dotenv runtime / framework convention) → `.env.example` LÀ contract, giữ.
+- Nếu L = Go AND `grep godotenv R/` 0 hit AND compose-defaults present → `.env.example` LÀ dead weight, XÓA.
+
+**Decision tree (audit repo Go mới)**:
+1. `grep -r "godotenv\|joho/godotenv" --include="*.go"` → có dotenv loader? 
+   - YES: `.env.example` is contract, validate fields match.
+   - NO: continue 2.
+2. Compose service có `${VAR:-...}` defaults cho mọi var trong `.env.example`? 
+   - YES: `.env` purely optional → file là noise nếu không có docs reference.
+   - NO: `.env.example` documents required overrides → giữ.
+3. `grep -r "\.env\.example" R/` (docs/scripts) → có reference không?
+   - YES: keep (documented contract).
+   - NO + đã pass step 2 = noise → DELETE.
+
+**Anti-pattern**: copy `.env.example` template từ Node project sang Go project mà không check runtime loading. User copy `.env` xong vẫn không thấy effect → confused → bug report.
+
+**Cách user override env trong Go service KHÔNG dùng dotenv**:
+```bash
+# Option A: shell export
+export AUTH_DB_HOST=prod.rds.com && ./auth-service
+
+# Option B: env-file qua docker/k8s orchestrator (compose `env_file:`, k8s `envFrom`)
+# Option C: source .env (manual): `set -a; source .env; set +a; ./auth-service`
+```
+KHÔNG có "auto-load" như Node — Go cần explicit.
+
+**Áp dụng được cho ≥3 dự án**:
+- Bất kỳ Go monorepo có nhiều service: audit từng service có dotenv không, thống nhất convention.
+- Migration Node→Go: drop `.env.example` (hoặc chuyển sang `config-sample.yml`) khi rewrite.
+- Static-binary deploy (k8s/ECS): env injected qua orchestrator — `.env` file là phản pattern.
+
+**Tags**: #go #dotenv #env-loading #config-management #dead-files #global-pattern #dx
+
+## 2026-05-05 — Lesson: Validation BEFORE fallback merging — order matters in config pipelines
+
+**Trigger**: B5.6.2 centralized-data-service. validateConfig gặp false-positive PASS khi fields rỗng vì `cfg.DB.PgxDSN()` trả về string non-empty `"postgres://:@:0/?sslmode="` (literal sprintf không bao giờ empty), `applyDBFallbacks` set `cfg.SystemDB.URL = legacy` → validateConfig thấy non-empty → app boot OK rồi crash khi connect runtime.
+
+**Global Pattern [Pipeline P có sequence: read input I → derive defaults D → validate V] → Result Y**:
+- Nếu `V` chạy AFTER `D` → V thấy `I ∪ D` (merged state) → user intent rỗng bị lấp bằng derived value → **false-positive PASS**.
+- Nếu `V` chạy BEFORE `D` → V thấy CHỈ `I` (user intent) → empty input bị reject đúng → **fail-fast at boot**.
+
+**Đúng sequence**: ReadConfig → Unmarshal → applyEnvOverrides (env trộn vào user input) → **validateConfig** → applyFallbacks (derive missing fields).
+
+**Anti-pattern**:
+```go
+applyEnvOverrides(cfg)
+applyFallbacks(cfg)   // SystemDB.URL ← cfg.DB.PgxDSN() (literal-non-empty garbage)
+validateConfig(cfg)   // sees non-empty SystemDB.URL → PASS (FALSE positive)
+```
+
+**Pattern đúng**:
+```go
+applyEnvOverrides(cfg)
+validateConfig(cfg)   // sees empty SystemDB.URL → REJECT (correct)
+applyFallbacks(cfg)   // safe to derive AFTER passing validation
+```
+
+**Detection heuristic** (audit config pipelines):
+1. Tìm `applyDefaults / applyFallbacks / merge*` đặt BEFORE `validate*` trong `NewConfig`/`Load` → red flag.
+2. Tìm helper trả về string từ `fmt.Sprintf` mà KHÔNG check empty inputs (e.g. `func DSN() string { return fmt.Sprintf("postgres://%s:%s@%s:%d/...", "", "", "", 0, "") }` → ra `"postgres://:@:0/..."` non-empty literal).
+3. Test rằng config rỗng hoàn toàn → validateConfig trả error rõ; nếu PASS → bug.
+
+**Áp dụng được cho ≥3 dự án**:
+- Config validation pipelines bất kỳ ngôn ngữ nào (Go viper, Node convict, Python pydantic, Java Spring profiles).
+- ETL / data pipelines: validate raw input BEFORE applying transforms/derives — derives che mất missing source data.
+- API request validation: validate raw payload BEFORE applying server-side defaults — defaults che mất user-supplied invalid fields.
+- Database migrations: validate "intent" SQL trước khi run idempotent fallbacks (`CREATE IF NOT EXISTS`) — fallback che mất schema mismatch.
+- Form validation UI: validate user input BEFORE applying placeholder/default values — defaults che mất empty intent.
+
+**Anti-pattern bonus**: helper getter trả về literal string non-empty từ rỗng input (như `PgxDSN()` ví dụ trên) là code smell. Pattern an toàn: getter return `("", false)` hoặc `(nil, error)` khi inputs missing — caller buộc phải handle empty case explicitly.
+
+**Tags**: #validation #config-management #order-matters #fail-fast #empty-input #global-pattern #anti-pattern
+
+---
+
+### Lesson #1294 — JSON serialization order khi migrate `map[string]any` → typed struct (CQRS Q-side, byte-identical contract)
+
+**Khi nào xảy ra**: Refactor handler (CMS, BFF, gateway) chuyển payload xây bằng `map[string]any` (Go map / fiber.Map / gin.H / etc.) sang typed struct. Test diff thấy size giống nhau nhưng `cmp -s` báo DIFF.
+
+**Root cause**: Go's `encoding/json` serialize map theo **alphabetical order** của key (post Go 1.12, deterministic). Struct serialize theo **field-declaration order**. Field order không match key order → byte-different output dù cùng nội dung.
+
+**Global Pattern**: `Refactor [A: map-based payload] → [B: struct-typed payload] với contract byte-identical = order(A.keys) == order(B.fields)`. Đúng: declare struct fields theo alphabetical JSON tag order khi migrate từ map; hoặc generate diff bằng `jq -S` (sort keys) thay vì raw cmp nếu wire chỉ cần semantic-equivalent.
+
+**Áp dụng được**: bất kỳ language nào có map (Python dict, JS object) khi migrate sang typed class/struct/dataclass đều dính bug này nếu wire contract pin byte-level.
+
+**Detection**: `wc -c pre post` size giống nhau + `cmp -s` báo DIFF + `jq -S` cùng output = serialization order mismatch (chứ không phải data drift).
+
+**Fix template** (Go): reorder struct fields theo `sort json_tags` ascending. Comment ghi rõ "field order matches legacy map alphabetical serialization".
+
+**Tags**: #cqrs #refactor #json-serialization #byte-identical #order-matters #go #global-pattern
+
+---
+
+### Lesson #1295 — Hybrid command bus cần `ResultBody` trên CommandResult cho sync handlers (CQRS C-side)
+
+**Khi nào xảy ra**: Thiết kế CommandBus B route command C qua 2 path:
+- **Sync** (in-process map handler X): low-latency operations như `alert.ack` (chỉ UPDATE 1 row Postgres).
+- **Async** (NATS publish subject Y): long-running như `master.swap`, `recon.check` (chạy trên worker).
+
+Nếu `CommandResult` chỉ có `{JobID, Accepted bool}` không có wire body → sync handler X trả nothing → FE buộc phải poll `/jobs/:id` sau mỗi Dispatch dù đã có kết quả ngay. RTT = 2 round-trips cho việc lẽ ra 1.
+
+**Root cause**: Bus author áp pattern "all async" (fire-and-forget) lên cả sync path để giữ contract đồng nhất → đánh mất ưu thế của sync route.
+
+**Global Pattern [Hybrid bus B route command C qua sync X / async Y, Result chứa optional ResultBody]**: 
+- Declare `CommandResult.ResultBody json.RawMessage` (nullable, omitempty). 
+- Sync handler X populate ResultBody với wire-bytes trả về cho caller. 
+- Async path Y để ResultBody rỗng — FE biết `Accepted=true && ResultBody==nil` ⇒ poll `/jobs/:id`. 
+- Sync path X trả `Accepted=true && ResultBody!=nil` ⇒ FE inline render kết quả.
+
+**Đúng**: 
+```go
+type CommandResult struct {
+    JobID      string          `json:"job_id"`
+    Accepted   bool            `json:"accepted"`
+    ResultBody json.RawMessage `json:"result_body,omitempty"` // sync inline; async empty
+}
+```
+
+**Sai**:
+```go
+type CommandResult struct { JobID string; Accepted bool } // mất sync ưu thế
+```
+
+**Áp dụng được cho ≥3 dự án**:
+- CQRS-style microservice gateways (Go, .NET MediatR, Java Axon) có cả intra-service sync handler + cross-service async messaging.
+- BFF/API gateway pattern: 1 endpoint vừa serve cache hit (sync) vừa dispatch backend job (async) — Result phải tải được cả 2 shape.
+- LLM tool-use orchestration: tool call có thể return immediately (calculator) hoặc kick off background job (image gen) — Result envelope cần ResultBody slot cho immediate path.
+- gRPC bi-modal: unary sync + server-stream async — response message nên có optional `body` thay vì 2 RPC riêng.
+- WebSocket command pattern: ack-only (async) vs ack+payload (sync) qua cùng 1 envelope.
+
+**Detection**: 
+1. Tìm `CommandResult / CommandReply / DispatchResponse` không có wire-body slot.
+2. Audit FE/caller code: nếu sau mỗi Dispatch luôn `setTimeout/while polling /jobs/:id` → smell.
+3. Tìm sync handler in-process trả `(any, error)` rồi bị bus drop kết quả → smell.
+
+**Anti-pattern bonus**: Force "all async" cho UI consistency (FE always poll) — sacrifice latency mà không gain gì (FE vẫn phải handle 2 shape: result-from-poll vs error-from-poll). Tốt hơn: 2 shape ngay tại Dispatch return (`ResultBody` filled vs nil).
+
+**Tags**: #cqrs #command-bus #hybrid-sync-async #api-design #latency #global-pattern
+
+---
+
+## Lesson #1296 — 2026-05-06 — Plan critique cần verify từng claim với evidence trực tiếp
+
+**Context**: Boss reviewed P3 plan, claim plan có line numbers off-by-some, "extract inline" sai (đã extract), evt subjects "NEW" thực ra đã có upstream. Muscle verify từng claim trước khi acknowledge.
+
+### Global Pattern [Plan reviewer A claims X about codebase Y → Reviewee B] → Result Z. Đúng:
+1. **Reviewee KHÔNG defensive-deny** — verify từng claim với grep/wc/file-stat trực tiếp.
+2. **Reviewee KHÔNG blanket-accept** — vì đôi khi reviewer cũng sai (line numbers stale từ session trước).
+3. **Reviewee output 1 bảng status**: `claim | actual | match?`. Nếu match → acknowledge + action item. Nếu không → đối chiếu evidence + đề xuất re-frame.
+4. Mọi gap proposal phải có **effort estimate** (kèm reason) + **owner** (Brain | Muscle | Boss decide) + **status** (TODO | BLOCKED | DONE).
+5. Nếu critique nêu blocker thiết kế (như "worker permission verify") → tag BLOCKED, KHÔNG tự ý implement đường tắt.
+
+### Áp dụng được cho 3 dự án khác:
+- Code review GitHub PR — PR comment "you should X" có thể base on outdated commit. Verify HEAD trước khi accept/argue.
+- Architecture decision record (ADR) review — reviewer claim "we already have Y" → grep codebase confirm.
+- Multi-team task hand-off — handed-over team verify claim của team trước (file paths, line numbers, naming conventions stale theo thời gian).
+
+### Anti-pattern: "Yes-and" mọi critique → modify plan vô tội vạ → contradiction tích lũy. Hoặc "no-and" mọi critique → defensive → bỏ lỡ valid feedback.
+
+### File minh chứng: `agent/memory/workspaces/feature-cdc-system-refactor/10_gap_analysis_p3_critique_2026-05-06.md`
+
+---
+
+## Lesson #1297 — 2026-05-06 — Cast TỪNG positional `?` trong CASE expression khi GORM/pgx prepared statement, KHÔNG cast outer
+
+**Context**: P3.T3.12 StuckJobReaper SQL build động `started_at + (interval '1 second' * (CASE type WHEN ? THEN ? ... END)) < NOW()`. T3.11 smoke phát hiện reaper sweep fail mỗi 30s với 2 lỗi tuần tự:
+1. `operator does not exist: interval * text (SQLSTATE 42883)` — outer cast `(CASE END)::int` thử trước, KHÔNG sửa.
+2. Sau outer cast, lỗi đổi sang: `failed to encode args[1]: unable to encode 120 into text format for text (OID 25): cannot find encode plan`.
+
+**Root cause**: pgx/GORM prepared-statement type inference resolve param types TRƯỚC khi outer cast áp dụng. Trong `CASE column-A WHEN ? THEN ? ... ELSE ? END`:
+- Param đầu (`WHEN ?`) so với cột text → infer = text.
+- Driver propagate text type sang mọi cùng-shape positional trong CASE → THEN `?` và ELSE `?` đều bị infer text.
+- Khi caller truyền int64 (60, 600, 30, ...), driver từ chối encode int64 vào text slot → SQLSTATE 42883 hoặc encoding failure.
+- Outer cast `(CASE … END)::int` chỉ chuyển kiểu KẾT QUẢ CASE sau khi evaluated; không ảnh hưởng inference cho mỗi positional `?`.
+
+**Fix verified**: cast TỪNG positional ngay trong CASE branch:
+```go
+caseExpr.WriteString("WHEN ? THEN ?::int ")  // not "WHEN ? THEN ? "
+caseExpr.WriteString("ELSE ?::int END")       // not "ELSE ? END"
+```
+Sau rebuild + restart, reaper log `{"msg":"reaped stuck jobs","count":1}`, status row flip 'running' → 'failed' đúng spec.
+
+### Global Pattern [Driver D với prepared statement P, build động SQL với positional ? trong CASE-expression có column-of-type-A so sánh ở WHEN] → Result [param types lệch theo column-A; outer cast không sửa được; encoding failure khi caller truyền type-B]. **Đúng**:
+1. Cast TỪNG positional ngay tại branch nó xuất hiện: `WHEN ?::A THEN ?::B`, `ELSE ?::B END`.
+2. Outer cast `(CASE ... END)::B` CHỈ dùng cho final result type, KHÔNG sửa được inference cho positional bên trong.
+3. Test integration với REAL Postgres (mock-DB hoặc sqlite không phát hiện vì khác driver type-inference).
+4. Khi gặp `operator does not exist: T1 * T2` với prepared statement, nghi ngay positional inference trước khi suspect schema/migration.
+
+### Áp dụng được cho 3 dự án khác:
+- **Bất kỳ Go service dùng GORM/pgx + dynamic SQL build**: dashboards với column-filter, multi-tenant routing, schema-aware aggregation.
+- **JDBC PreparedStatement Java/Kotlin**: cùng pattern infer xảy ra với JDBC driver Postgres khi mix column types trong CASE.
+- **Python psycopg2/asyncpg với prepared mode** (đặc biệt qua pgbouncer transaction-pool): có thể tái hiện.
+
+### Anti-pattern:
+- Tin "outer cast sẽ sửa mọi inference issue" → debug loop dài.
+- Mock DB cho test reaper SQL → bug không phát hiện trước smoke production-like.
+- Suspect data type column trước khi suspect param inference.
+
+### File minh chứng:
+- Code fix: `cdc-cms-service/internal/service/stuck_job_reaper.go:111,114`
+- Smoke evidence: `agent/memory/workspaces/feature-cdc-system-refactor/05_progress.md` (entry `2026-05-06 15:35 ICT — T3.11 smoke matrix executed + HOTFIX-2`)
+- Task tracking: #177 P3.HOTFIX-2
+
+**Tags**: #postgres #gorm #pgx #prepared-statement #type-inference #case-expression #reaper #global-pattern
+
+---
+
+## Lesson #1298 — 2026-05-06 — CommandBus chỉ cho mutation/coordination, KHÔNG migrate audit-only side-effects
+
+**Context**: Phase 3 cdc-cms-service refactor (CQRS C-side) chốt scope qua 7 đợt — 27 endpoint mutation đã qua bus. Còn 4 ActivityLog write (3 reconciliation_handler + 1 registry_handler). Câu hỏi: có nên migrate nốt cho "consistency"?
+
+**Quyết định**: SKIP. Audit-only side-effect KHÔNG thuộc bus scope. Phase 3 closed sạch.
+
+**Root cause của câu hỏi sai**: "Universal indirection" thinking — tin rằng mọi handler-level write nên đi qua bus để "uniform pattern". Bỏ qua phí của bus:
+- +1 hop sync (JSON marshal/unmarshal request + response).
+- +1 row `cdc_jobs` audit table per write — nhưng ActivityLog ĐÃ là audit, double-recording.
+- Idempotency-Key collision risk khi 1 request có nhiều ActivityLog write (cần suffix `:audit:<seq>` workaround chỉ để tránh va chạm bus).
+- Test surface tăng: validate rule, type tag namespace, errors.Is sentinel mapping cho thứ chỉ là log entry.
+
+**Fix verified**: ActivityLog write giữ direct call ở handler. Kết thúc Phase 3, cdc_jobs chỉ còn rows cho mutation thật — observability sạch.
+
+### Global Pattern [Codebase A có CommandBus B (CQRS C-side) → reviewer/team đề xuất migrate side-effect X (audit log, metrics emission, fingerprint touch) qua bus B "for consistency"] → Result [thêm hop sync + double-audit + idempotency collision risk, gain semantic = 0]. **Đúng**:
+1. Bus B chỉ cho 2 track:
+   - **Track Mutation** — destructive infra (DDL ALTER, business state INSERT/UPDATE, external HTTP destructive REST như Kafka Connect).
+   - **Track Coordination** — async cross-service dispatch (NATS publish, queue enqueue, scheduled job dispatch).
+2. Side-effect X (audit/metrics/log) → giữ `repo.Insert(ctx, ...)` hoặc `auditService.Record(...)` trực tiếp ở handler/service layer.
+3. **Test phân loại**: side-effect X có "đứng tự do" được không? Nghĩa là: nếu X fail (network blip, table locked), request có rollback hay chỉ log warn?
+   - Yes (chỉ log warn) → audit-only → KHÔNG bus.
+   - No (rollback request) → mutation-essential → qua bus.
+4. Nguyên tắc: **bus là indirection layer trả phí cho actions có blast radius**. Audit-write không có blast radius (failure ≠ user impact, chỉ giảm observability) → không xứng đáng phí bus.
+
+### Áp dụng được cho 3 dự án khác:
+- **CQRS Java/Spring** với Axon/EventBus: cám dỗ migrate `auditLog.publish(...)` qua command bus → giữ trực tiếp `auditRepo.save(...)`.
+- **NestJS với @CommandBus**: ActivityLog interceptor gọi `commandBus.execute()` cho log entry → anti-pattern, chuyển về `loggingService.record()`.
+- **Workflow engine (Temporal/Camunda)** với "everything is an activity" thinking: read-only/log-only operations không cần activity wrapper, gọi inline để tránh history blow-up.
+
+### Anti-pattern:
+- **Universal indirection** — tin mọi handler write phải qua bus để "uniform". Hệ quả: command-bus registry phình to vì log entry, error-mapping table phình to vì sentinel cho mỗi log type, idempotency table double-record.
+- Lười phân loại blast radius → migrate hết cho nhanh → over-abstraction debt.
+- Đóng scope theo "100% coverage" thay vì "actions có blast radius" → kéo cosmetic vào critical path.
+
+### File minh chứng:
+- Workspace audit log: `agent/memory/workspaces/feature-cdc-system-refactor/05_progress.md` (entry `2026-05-06 18:10 ICT — Đợt 7 P3` + ghi chú "P3 destructive migration coverage final").
+- Source giữ direct call: `cdc-cms-service/internal/api/reconciliation_handler.go` (3 chỗ) + `cdc-cms-service/internal/api/registry_handler.go` (1 chỗ).
+- Decision: kết thúc Phase 3 sạch, không kéo D2 cosmetic route prefix + ActivityLog migration vào critical path.
+
+**Tags**: #cqrs #command-bus #ddd #cms-service #scope-discipline #audit-log #anti-over-abstraction #blast-radius #global-pattern
