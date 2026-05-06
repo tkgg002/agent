@@ -809,3 +809,12 @@ caseExpr.WriteString("ELSE ?::int END")
 - Test: 4 unit guards (`activity_logger_test.go`) — nil receiver safety (cả 3 method), buildRow defaults TriggeredBy="manual", error pointer propagation, JSON details roundtrip. Full sweep `go test ./... -count=1` PASS (api/commands/queries/messaging/middleware/service).
 - Pattern global thu được: "Hai write semantic [sync vs async] cho audit-log helper → caller chọn theo request contract criticality" — đã có trong global lessons.md (existing).
 - cms commit `7ea23d7`. **T13 close**. Còn pending: T14 V1↔V2 dedup (`h.registry.X` = 0 ngoài logAction); T17 test uplift.
+
+## 2026-05-07 00:32 ICT — T14 P4: V1↔V2 dedup ✓
+- DoD `grep "h.registry\." internal/api/source_object_actions_handler.go` = 0 đạt. 10 thin-delegate V2 method (Register/UpdateBridge/BulkRegister/CreateDefaultColumns/Standardize/ScanFields/Transform/DispatchStatus/DetectTimestampField/TransformStatus) đều là `return h.registry.X(c)` 1-line wrapper — xóa hoàn toàn.
+- Router-level swap: 10 mount entries trong `internal/router/router.go` đổi từ `sourceObjectActionsHandler.X` → `registryHandler.X`. Wire URL contract giữ nguyên (`/api/v1/source-objects/...` namespace V2 alias) — FE không phải patch.
+- Cleanup phụ: `registry *RegistryHandler` field không còn referenced → xóa khỏi V2 struct + constructor + `server.go:206` wire (constructor signature từ 5 args xuống 4).
+- V2 handler giờ chỉ chứa 7 V2-direct endpoint (UpdateV2/CreateDefaultColumnsV2/StandardizeV2/ScanFieldsV2/DispatchStatusV2/DetectTimestampFieldV2/TransformStatusV2) + helper `resolveDispatchScopeBySourceObjectID`. File 691 → 555 dòng.
+- Verify: `go build ./...` + `go test ./... -count=1` PASS (api/commands/queries/messaging/middleware/service all green, 0 regression).
+- Pattern global: "V2 thin-delegate to V1 → router-level swap (mount V1 handler trực tiếp vào URL namespace V2) ưu tiên hơn duplicate logic — wire URL stays với namespace V2 nhưng owner thực sự là V1 handler". Sẽ APPEND vào `agent/memory/global/lessons.md`.
+- cms commit `084a4a1`. **T14 close**. T17 test uplift unblocked (T13/T14/T15/T16 đều done).
