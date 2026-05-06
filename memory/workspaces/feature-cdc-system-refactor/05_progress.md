@@ -896,3 +896,205 @@ caseExpr.WriteString("ELSE ?::int END")
 - Smoke: TransformStatusV2 id=1,30 → 200; TransformStatus registry id=1,2,3,5,10 → 200, id=20 → 404. Tests `go test ./internal/app/queries/...` PASS.
 
 **Result**: G-A `SyncFromLegacy in api/app` = 1 hit (V2SyncCommand delegate, expected). G-B `db.Raw in internal/api/` = **0**. Task #18 DONE; Task #19 (service drainage / repo migrate) còn lại.
+
+## [2026-05-07 ~02:35 UTC] — Task #18 cleanup: track 2 helper files (cms commit `5d44172`)
+
+**Trigger**: post-commit audit `git ls-files` cho thấy đợt A (`f957d6a`) và đợt B (`7998863`) reference `utils.PgIdent` + package `internal/domain/mapping` nhưng quên `git add` 2 file nguồn — git history broken (fresh clone build fail).
+
+**Fix**: 1 commit `chore` track-only:
+- `cdc-cms-service/internal/domain/mapping/errors.go` (P1 sentinels `ErrInvalidScope` / `ErrDuplicate` — wired bởi `mapping_rule_repo_gorm.go` + `mapping_rule_handler.go`).
+- `cdc-cms-service/pkgs/utils/pg_ident.go` (P4/T4.8 fail-closed identifier quoter — wired bởi `recon_read_repo_gorm.go:310` + `bridge_status_repo_gorm.go:50`).
+
+**Verify**:
+- `git ls-files | grep -E "domain/mapping/errors|pkgs/utils/pg_ident"` → 2 hits ✓
+- `go vet ./...` PASS ✓
+- `go build ./...` PASS ✓
+- `go test ./internal/api/... ./internal/app/... ./internal/infra/persistence/...` PASS (4/4 packages) ✓
+- `grep "h\.db\.\(Raw\|Exec\)" internal/api/reconciliation_handler.go internal/api/source_object_actions_handler.go` → 0 hits ✓ (DoD §P4 Boss-scoped 2 handlers).
+
+**Lesson candidate (Global Pattern)**: *Khi Commit X reference symbol từ Package Y, kiểm `git ls-files Y` trước khi push — code-review không bắt được oversight nếu file đã ở worktree (build local PASS) nhưng chưa staged. Đúng: trong `git status` final-check phải scan `??` lines, không chỉ `M`/`D`.*  → sẽ append `agent/memory/global/lessons.md` ở session sau khi tổng hợp các lesson liên quan track-pattern (đợt khác ưu tiên cao hơn lúc này).
+
+---
+
+## [2026-05-07] Task #19 đợt A — schema_log_repo migrate to infra/persistence (commit `22b0953`)
+
+**Scope**: Đợt mở màn cho Task #19 (drain G-D legacy `internal/repository/`). Repo đầu tiên audit-only (shallow domain), nên là pilot ít rủi ro nhất.
+
+**Deltas**:
+- `internal/app/ports/repository.go` +10: thêm interface `SchemaLogRepo { Create, GetByTable }` (model.SchemaChangeLog reused per ADR-CMS-HEX §3 audit-skip).
+- `internal/infra/persistence/schema_log_repo_gorm.go` +41 (NEW): GORM adapter, SQL lifted byte-identical (`Order("executed_at DESC").Limit(100)`).
+- `internal/api/schema_change_handler.go`, `internal/service/approval_service.go`: field type `*repository.SchemaLogRepo` → `ports.SchemaLogRepo` (port-driven).
+- `internal/server/server.go:86`: `schemaLogRepo := persistence.NewSchemaLogRepo(db)`.
+- `internal/repository/schema_log_repo.go`: DELETED (G-D row -1).
+
+**Verify**:
+- `go build ./...` PASS.
+- BE restart PID=859 / `/health` 200 READY.
+- Smoke 3/3 (admin JWT mint qua node HMAC):
+  - `GET /api/schema-changes/history` → 200 `{"count":0,"data":[]}` (GetByTable no-filter).
+  - `GET /api/schema-changes/history?table=cdc_test_user_e2e` → 200 (filter branch).
+  - `GET /api/schema-changes/pending` → 200 trả pending real (chứng minh handler khác cùng struct vẫn wire OK).
+
+**Đợt B candidates**: `mapping_rule_repo` (10 funcs/5 callers), `pending_field_repo` (6/3), `registry_repo` (12/5), `source_repo` (6/2), `wizard_repo` (5/5). Ưu tiên `pending_field_repo` (smallest blast — chỉ approval/schema flows đã cùng surface với đợt A).
+
+---
+
+## [2026-05-07] Task #19 đợt B — pending_field_repo migrate to infra/persistence (commit `a38fa27`)
+
+**Scope**: Tiếp đợt A (schema_log_repo). Cùng surface (schema-changes flow), blast nhỏ — chỉ 2 callers (handler + approval service) + 1 wire-site server.go.
+
+**Deltas**:
+- `internal/app/ports/repository.go` +10: thêm interface `PendingFieldRepo { GetByID, GetByStatus, Update }` (3 methods, audit-skip).
+- `internal/infra/persistence/pending_field_repo_gorm.go` +64 (NEW): GORM adapter, SQL lifted byte-identical (Order detected_at DESC, default page_size=20).
+- `internal/api/schema_change_handler.go`, `internal/service/approval_service.go`: field swap `*repository.PendingFieldRepo` → `ports.PendingFieldRepo`.
+- `internal/server/server.go:84`: `pendingRepo := persistence.NewPendingFieldRepo(db)`.
+- `internal/repository/pending_field_repo.go`: DELETED (G-D row -1, total -2 từ Task #19).
+
+**Dead-code drop**: 2 methods `UpsertPendingField` + `GetTableColumns` KHÔNG migrate — CMS callers = 0; Worker (centralized-data-service) tự maintain bản copy của riêng nó cho Schema Inspector. Không cross-service drift mới.
+
+**Verify**:
+- `go build ./...` PASS.
+- BE restart PID=3761 / `/health` 200 READY.
+- Smoke 3/3 (admin JWT reuse từ đợt A):
+  - `GET /api/schema-changes/pending?page=1&page_size=2` → 200 + 2 real pending rows.
+  - `GET /api/schema-changes/pending?source_db=payment-bill-service` → 200 `total=6` (filter active).
+  - `GET /api/schema-changes/pending?status=approved` → 200 `total=0` (status branch active).
+- 3 GetByStatus branches (default, source_db, status) đều exercised.
+
+**G-D progress**: 2/6 legacy repos drained (schema_log + pending_field). Còn `mapping_rule_repo` (10 funcs/5 callers — biggest), `registry_repo` (12/5), `source_repo` (6/2), `wizard_repo` (5/5).
+
+**Đợt C candidate**: `wizard_repo` next — surface tách bạch (Wizard-only, không vướng schema-changes/registry/recon). Token budget đợt B ≤ 50% session ✓.
+
+## [2026-05-07 ~02:50 UTC] — Task #19 đợt C: drop reconciliation_service no-op (cms commit `ed09a06`)
+
+**Trigger**: Boss "tiếp" sau Task #18 closure. G-C row đầu tiên trong plan §G-C: `reconciliation_service.go` no-op từ Airbyte retirement (plan §R3) — DELETE per plan.
+
+**State đầu vào**:
+- Đợt B (`a38fa27`) đã unwire reconSvc khỏi server.go (4 sites: field/constructor/struct init/goroutine launch). Code đợt B nằm trong commit message Task #19 đợt B (pending_field_repo migrate) như side-effect cleanup.
+- File `reconciliation_service.go` sau đợt B: orphan, no consumer, no test caller.
+- File `reconciliation_service_test.go`: guard test pin no-op invariant — invariant biến mất khi type biến mất → đồng bộ delete.
+
+**Fix**: 1 commit refactor delete-only:
+- `cdc-cms-service/internal/service/reconciliation_service.go` (55 lines)
+- `cdc-cms-service/internal/service/reconciliation_service_test.go` (39 lines)
+
+**Verify**:
+- `grep -rn "ReconciliationService\|reconciliation_service" internal/ cmd/` → 0 hits ✓
+- `go build ./...` PASS ✓
+- `go vet ./...` PASS ✓
+- `go test ./...` 7 packages PASS (internal/api, internal/app/commands, internal/app/queries, internal/infra/messaging, internal/middleware, internal/service, internal/service/health/probes) ✓
+
+**Plan §G-C delta**: 16 service file → 15 còn lại. Còn 14 file cần migrate / refactor / delete (`master_swap`, `provisioning_orchestrator`, `provisioning_state_machine`, `source_object_v2_sync`, `shadow_automator`, `system_health_collector`, `system_health_compute`, `system_health_alerts`, `system_health_queries`, `activity_logger`, `alert_manager`, `stuck_job_reaper`, `prom_client`, `approval_service`).
+
+**Note về work parallel**: Phát hiện 2 commit Task #19 đợt A (`22b0953` schema_log_repo) và đợt B (`a38fa27` pending_field_repo) đã có sẵn trong git log với same author/hostname — nghĩa là session prior trong cùng day đã tiến triển 2 đợt mà summary compaction không capture. Đợt C này tiếp đúng tuyến tính (G-C → G-D split: A/B kéo G-D forward, C bắt đầu G-C). Không trùng lặp công việc.
+
+---
+
+## [2026-05-07] Task #19 đợt C — wizard_repo migrate to infra/persistence (commit `d3c6044`)
+
+**Scope**: Wizard surface tách bạch (chỉ Source→Master automation, không vướng schema-changes/registry/recon). 4 callers + 1 wire-site, blast trung bình.
+
+**Deltas**:
+- `internal/app/ports/repository.go` +13: thêm interface `WizardRepo { Create, Get, Update, AppendProgress }` (4 methods, full surface).
+- `internal/infra/persistence/wizard_repo_gorm.go` +63 (NEW): GORM adapter, JSONB defaults + AppendProgress raw `progress_log || ?::jsonb` push lifted byte-identical.
+- `internal/app/commands/{create,patch,wizard_execute}_wizard.go`: field swap `*repository.WizardRepo` → `ports.WizardRepo` (3 cmd handlers); drop `repository` import.
+- `internal/api/wizard_handler.go`: same swap; drop `repository` import.
+- `internal/server/server.go:87`: `wizardRepo := persistence.NewWizardRepo(db)`. **Key invariant**: `queries.NewGetWizardSessionHandler(wizardRepo)` vẫn compile vì `queries.WizardReader` chỉ require `Get(ctx, id)` — Go structural typing match `ports.WizardRepo` implicitly. Không phải sửa queries package.
+- `internal/repository/wizard_repo.go`: DELETED (G-D row -1, total -3 từ Task #19).
+
+**Verify**:
+- `go build ./...` PASS.
+- `go test ./internal/app/queries/... ./internal/app/commands/...` PASS (commands 0.728s).
+- BE restart PID=7472 / `/health` 200.
+- Smoke 3/3 (admin JWT):
+  - `POST /api/v1/wizard/sessions` body=`{}` → 201 + UUID, status=draft (Create exercised).
+  - `GET /api/v1/wizard/sessions/<id>` → 200 + same row (Q-side Get via structural typing).
+  - `PATCH /api/v1/wizard/sessions/<id>` body=`{"master_name":"public_test_e2e"}` → 200 + GET re-fetch confirm persist (Update exercised).
+- AppendProgress chưa exercise (chỉ chạy trong Execute path) — chấp nhận, code lifted byte-identical.
+
+**G-D progress**: 3/6 legacy repos drained (schema_log + pending_field + wizard). Còn `mapping_rule_repo` (10/5), `registry_repo` (12/5), `source_repo` (6/2).
+
+**Đợt D candidate**: `source_repo` (6 funcs / 2 callers — smallest blast còn lại). `mapping_rule_repo` + `registry_repo` để cuối — biggest, đụng hầu hết handler.
+
+---
+
+## [2026-05-07] Task #19 đợt D — source_repo migrate (renamed → SystemConnectorRepo) (commit `df185c0`)
+
+**Scope**: Connection-Fingerprint registry table (`cdc_sources`) — backs system-connectors UI dropdown. 2 callers (handler + commands), 1 wire-site.
+
+**Naming reframe**: Port name = `SystemConnectorRepo` (NOT `SourceRepo`) — `ports.SourceRepo` was already taken by V2 source-object registry (different aggregate). Cùng-tên-khác-ngữ-nghĩa = drift trap; rename khử ambiguity.
+
+**Deltas**:
+- `internal/app/ports/repository.go` +18: thêm interface `SystemConnectorRepo { Upsert, List, GetByID, MarkDeleted }`. Doc-comment tách bạch với `SourceRepo` ngay trên.
+- `internal/infra/persistence/system_connector_repo_gorm.go` +60 (NEW): GORM adapter, Upsert clause column-list + `status != deleted` + `created_at DESC` byte-identical.
+- `internal/api/system_connectors_handler.go`: field swap `*repository.SourceRepo` → `ports.SystemConnectorRepo`; drop `repository` import.
+- `internal/server/server.go:86`: `sourceRepo := persistence.NewSystemConnectorRepo(db)`. **3 invariant checks**:
+  1. `queries.NewListSourcesHandler(sourceRepo)` — `queries.SourceReader { List, GetByID }` structural-match ✓.
+  2. `queries.NewGetSourceHandler(sourceRepo)` — same ✓.
+  3. `commands.NewCreateSystemConnectorHandler(... sourceRepo ...)` — `commands.SourceFingerprintRepo { Upsert, MarkDeleted }` structural-match ✓.
+- `internal/repository/source_repo.go`: DELETED (G-D row -1, total -4 từ Task #19).
+
+**Dead-code drop**: `GetByConnectorName` — 0 CMS callers; Worker (centralized-data-service) tự maintain.
+
+**Side-fix (NOT committed)**: 6 files trong `internal/service/` (activity_logger, prom_client, stuck_job_reaper + tests) bị DELETE ở working tree từ session trước — phá `go build` cascade qua router→server→service. Restore qua `git restore --source=HEAD --staged --worktree --` đưa về committed state. Không stage vì commit history HEAD đã đúng — chỉ working-tree dirty. **Lesson candidate**: trước khi resume session phải `git status` quét `D` lines, không chỉ `M`/`??`.
+
+**Verify**:
+- `go build ./...` PASS (sau khi restore service files).
+- BE restart PID=9977 / `/health` 200.
+- Smoke 2/2 (admin JWT reuse):
+  - `GET /api/v1/sources` → 200 `{"count":0,"data":[]}` (List path, empty table).
+  - `GET /api/v1/sources/99999` → 404 (GetByID error branch).
+- Upsert + MarkDeleted skip exercise (cần Kafka Connect connector real — code lifted byte-identical, low risk).
+
+**G-D progress**: 4/6 legacy repos drained (schema_log + pending_field + wizard + system_connector). Còn `mapping_rule_repo` (10/5), `registry_repo` (12/5).
+
+**Đợt E candidate**: `mapping_rule_repo` next — 10 funcs, 5 callers (handler + approval_service + wizard sync + 2 nữa). Token budget cho Task #19 đã chạy 4/6 đợt — đợt E + F đóng task hoàn toàn.
+
+---
+
+## [2026-05-07] Task #19 đợt E — bulk migrate prom_client/stuck_job_reaper/activity_logger to infra/{http,messaging,persistence} (commit `55b3afc`)
+
+**Scope**: G-C tier (service-layer drainage), 3 module/6 file di chuyển trong cùng commit theo Boss demand "làm song song đi". Đây là đợt G-C đầu tiên migrate file ra khỏi `internal/service/` — không phải đổi naming/abstraction, chỉ tách layer theo Hexagonal.
+
+**Deltas**:
+- `internal/infra/http/prom_client.go` (NEW từ rename): package `http` (matches `kafka_connect.go` convention). Type names giữ nguyên (`PromClient`, `PromClientConfig`, `LatencyResult`, `PercentileSource` constants `Source{Prometheus,FallbackWorker,Unknown}`).
+- `internal/infra/http/prom_client_test.go` (NEW từ rename): travel với code (private `computeHistogramQuantile` cần same-package).
+- `internal/infra/messaging/stuck_job_reaper.go` (NEW từ rename): package `messaging`. Types `StuckJobReaper`, `NewStuckJobReaper`, `DefaultJobTimeouts`.
+- `internal/infra/messaging/stuck_job_reaper_test.go` (NEW từ rename): travel với code (truy cập private fields `interval`, `timeouts`, `defaultTO`).
+- `internal/infra/persistence/activity_logger.go` (NEW từ rename): package `persistence`. Types `ActivityLogger`, `ActivityEntry`, `ActivityFilter`, `NewActivityLogger`. Imports `cdc-cms-service/internal/model` cho `model.ActivityLog`.
+- `internal/infra/persistence/activity_logger_test.go` (NEW từ rename): travel với code (private `buildRow` method).
+- `internal/service/{prom_client,stuck_job_reaper,activity_logger}{,_test}.go`: DELETED — git detect rename (similarity 99%).
+- `internal/server/server.go` (4 sites):
+  - L46 struct field: `*service.StuckJobReaper` → `*messaging.StuckJobReaper`.
+  - L205 ctor call: `service.NewActivityLogger` → `persistence.NewActivityLogger`.
+  - L230 ctor call: `service.NewPromClient(service.PromClientConfig{` → `infrahttp.NewPromClient(infrahttp.PromClientConfig{`.
+  - L320 ctor call: `service.NewStuckJobReaper` → `messaging.NewStuckJobReaper`.
+  - Imports đã có sẵn từ Đợt B/C (`infrahttp`, `messaging`, `persistence`).
+- `internal/api/registry_handler.go`: thêm import `internal/infra/persistence` + `replace_all` 3 token (`*service.ActivityLogger`, `service.ActivityEntry`, `service.ActivityFilter` → `persistence.X`). KEEP `service` import vì còn `*service.ShadowAutomator` + `*service.SourceObjectV2SyncService`.
+- `internal/api/reconciliation_handler.go`: drop `service` import + add `persistence` import + 2 replace_all (`*service.ActivityLogger`, `service.ActivityEntry` → `persistence.X`). Sau swap không còn ref `service.X` nào → drop sạch.
+- `internal/api/source_object_actions_handler.go`: same pattern (drop `service` + add `persistence` + 2 replace_all).
+- `internal/service/system_health_collector.go` (cross-package edit): `Collector` struct field `prom *PromClient` + ctor param + `Snapshot.Latency LatencyResult` đều ref local types — sau khi PromClient/LatencyResult dời sang `infra/http`, phải `import infrahttp "cdc-cms-service/internal/infra/http"` + đổi 4 ref (`*infrahttp.PromClient` x2, `infrahttp.LatencyResult` x1).
+
+**Quirks/Notes**:
+- Package name `http` collide với stdlib khi caller nào cần xài cả 2 → dùng import alias `infrahttp` chỉ ở consumer (server.go, system_health_collector.go). File trong `internal/infra/http/` xài `import "net/http"` cùng với `package http` — Go cho phép vì local package name không collide với imported package name trong file scope.
+- 6 file ở session trước bị mark D ở working tree nhưng commit history HEAD vẫn đúng — Đợt D Note đã call out. Lần này tôi re-do delete + write từ đầu, lần đầu tiên migration vào git history qua commit `55b3afc` (git detect rename 99% similarity).
+
+**Verify**:
+- `go build ./...` PASS ✓
+- `go vet ./...` clean ✓
+- `go test ./...` PASS — 7 packages (api, app/commands, app/queries, infra/http, infra/messaging, infra/persistence, middleware, service, service/health/probes).
+- DoD grep `service\.{PromClient,LatencyResult,PercentileSource,SourceFallback,SourcePrometheus,StuckJobReaper,NewStuckJobReaper,DefaultJobTimeouts,ActivityLogger,ActivityEntry,ActivityFilter,NewActivityLogger,NewPromClient,PromClientConfig}` → EMPTY ✓.
+- Smoke deferred — purely refactor, byte-identical wire shape.
+
+**Plan §G-C delta**: 14 → 11 service file còn (master_swap, provisioning_orchestrator, provisioning_state_machine, source_object_v2_sync, shadow_automator, system_health_{collector,compute,alerts,queries}, alert_manager, approval_service). 3 module trong 1 commit theo Boss instruction.
+
+**Đợt F candidate**: alert_manager (đụng `system_health_collector` + `alerts_handler` + `commands/{ack,silence}_alert.go`, blast trung bình) HOẶC system_health_{compute,alerts,queries} co-migrate (3 file cùng aggregate, blast tập trung) HOẶC `master_swap` (đụng commands/master_create + jobs flow, blast nhỏ nhưng SQL nặng — đáng tách riêng).
+
+**Lesson candidate (sẽ promote sang `agent/memory/global/lessons.md` sau khi dứt Task #19)**:
+- **Global Pattern [Move package P containing types T to new path Q]** → caller-update + same-package test files always travel. Đúng flow:
+  1. Write file mới ở Q (test cùng location).
+  2. Delete file cũ ở P (cùng commit, git detect rename khi similarity ≥50%).
+  3. Update mọi caller ngoài P (import alias nếu collide).
+  4. Update intra-package consumers còn lại trong P (cross-package import + qualified type ref).
+  5. Build/vet/test/DoD-grep mới commit.
+
