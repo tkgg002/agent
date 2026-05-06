@@ -801,3 +801,11 @@ caseExpr.WriteString("ELSE ?::int END")
 - cms commit `477ba19`. **T15 close**. Còn pending: P7 T17 test uplift.
 
 
+
+## 2026-05-07 00:08 ICT — T13 P3: ActivityLog helper extraction ✓
+- DoD `grep "model.ActivityLog{" internal/api/` = 0 đạt. Tạo `internal/service/activity_logger.go` (149 dòng) làm single owner cdc_activity_log writes/reads. Method `RegistryHandler.logAction` xóa hoàn toàn — V1+V2 caller chuyển sang `service.ActivityLogger`.
+- Sang 3 method API: `Log(ctx)` sync (recon dispatch dùng để surface audit failure), `LogAsync()` fire-and-forget với context.Background() — hot path không bị cancel khi HTTP returns, `ListActivityLogs(ctx, filter)` thay query inline ở DispatchStatus.
+- 11 call site replaced: `registry_handler.go` (5 logAction + 1 query), `reconciliation_handler.go` (3 inline db.Create — recon-check / recon-heal-trigger / recon-backfill-source-ts), `source_object_actions_handler.go` (4 V2-direct hooks). Wired ở `server.go:200` shared cross-handler.
+- Test: 4 unit guards (`activity_logger_test.go`) — nil receiver safety (cả 3 method), buildRow defaults TriggeredBy="manual", error pointer propagation, JSON details roundtrip. Full sweep `go test ./... -count=1` PASS (api/commands/queries/messaging/middleware/service).
+- Pattern global thu được: "Hai write semantic [sync vs async] cho audit-log helper → caller chọn theo request contract criticality" — đã có trong global lessons.md (existing).
+- cms commit `7ea23d7`. **T13 close**. Còn pending: T14 V1↔V2 dedup (`h.registry.X` = 0 ngoài logAction); T17 test uplift.
