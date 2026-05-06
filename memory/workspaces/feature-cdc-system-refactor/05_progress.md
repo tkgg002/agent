@@ -841,3 +841,14 @@ caseExpr.WriteString("ELSE ?::int END")
 - Verify: `go build ./...` PASS, `go test ./... -count=1` PASS (no regression). No collision với existing test names (`TestSanitizeErrRedactsURLs` + `TestDetectConditions_HighConsumerLag` ở `system_health_collector_test.go` vẫn pass).
 - T17 cumulative: 30 tests new (đợt 1: 13 + đợt 2: 17), 5 file. Coverage tạm thời chưa đo (cần `-coverprofile`); đợt 3 sẽ target probe HTTP unit tests via httptest stub + reconciliation_service no-op.
 - cms commit `25f645d`. T17 ongoing.
+
+## 2026-05-07 01:42 ICT — T17 P7 đợt 3: HTTP probe wire-contract tests ✓
+- 4 file mới under `internal/service/health/probes/`, 13 tests, all PASS:
+  - `worker_test.go` (4): `/healthz` path enforce, 2xx merges body+latency_ms, 5xx → down+http_status, transport error → unknown với URL prefix redacted (bare `host:port` trong Go dial error là runtime artifact — stays by design, documented in comment), garbled body still up.
+  - `nats_test.go` (3): `/jsz` streams/consumers/messages mapped, empty body → unknown, 5xx → down+http_status.
+  - `kafka_connect_test.go` (2): root REST cluster meta (version/commit/kafka_cluster_id) merged, 5xx → down.
+  - `debezium_test.go` (4): `/connectors/<name>/status` URL path enforce, RUNNING state extract, FAILED task trace truncated len=503 (500 + "..." marker — security critical: unbounded stack traces phải KHÔNG leak vào FE banner), 404 → down, empty body → unknown.
+- Pattern: `httptest.NewServer` per-test cho full isolation. Helper `newProbeDeps()` shared trong worker_test.go (HTTPDeps với http.DefaultClient + 1s timeout).
+- Verify: `go test ./internal/service/health/probes/ -count=1 -v` 13 PASS, `go test ./... -count=1` full sweep 0 regression.
+- T17 cumulative: 43 tests new (đợt 1: 13 + đợt 2: 17 + đợt 3: 13), 9 file. Coverage tăng đáng kể cho `internal/service/health/probes/` từ 0% → ~80% (4/8 probe files đã cover; remaining: kafka_lag prom-text-format parser, postgres pg_isready, redis PING — đợt sau).
+- cms commit `5c95ab5`. T17 ongoing.
