@@ -783,3 +783,12 @@ caseExpr.WriteString("ELSE ?::int END")
 - Swagger: 8 `@Router` annotation `/api/X` → `/api/v1/X` ở `reconciliation_handler.go` (cosmetic doc, runtime unaffected).
 - Verify: `go build ./...` PASS, `go test ./internal/middleware/...` PASS (0.78s), live smoke 3 case CMS d2 :8094 — `/api/system/health` legacy nhận `Deprecation: true` + `Sunset: Tue, 31 Dec 2026 23:59:59 GMT` + `Link: </api/v1/system/health>; rel="successor-version"`; `/api/v1/system/health` canonical sạch headers; `/health` root không bị stamp. Cùng handler trả cùng body — dual-mount đúng.
 - cms commit `64af966`. PENDING agent commit. **Phase 4 D2 close**.
+
+## 2026-05-06 23:42 ICT — T16 P6: V2 sync atomicity (db.Transaction wrap) ✓
+- `SourceObjectV2SyncService` (`internal/service/source_object_v2_sync.go`) — `SyncFromLegacy` cũ chạy 2 INSERT độc lập (source_object_registry → shadow_binding) ngoài tx; failure giữa 2 bước để lại orphan source_object phá recon kỳ tới.
+- Tách thân logic ra `SyncFromLegacyTx(ctx, tx, entry)`. Wrapper public `SyncFromLegacy` gọi `s.db.Transaction(...)`. Resolve helpers (`resolveSourceConnectionID`/`resolveShadowConnectionID`) nhận `*gorm.DB` param. Fail-fast `nil tx` lộ wiring bug.
+- Callers (`registry_handler.go::Register`/`Update`/`BulkRegister`) giữ nguyên — atomicity nội bộ. `SyncFromLegacyTx` exposed sẵn cho future caller (RegisterRegistry handler) fold V1+V2 vào outer tx; comment `register_registry.go:24-28` document V2 sync intentionally post-bus (idempotent, no destructive op) → tx propagation qua bus không cần ngay.
+- Test guards (`source_object_v2_sync_test.go`): 3 case — nil entry (cả entrypoint), nil tx fail-fast với message rõ. Rollback semantic verify ở deploy-time E2E (project convention — sqlmock không có deps).
+- Verify: `go build ./...` PASS, `go test ./... -count=1` PASS (api/commands/queries/messaging/middleware/service all green, 0 regression).
+- cms commit `4a2a6e7`. **T16 close** (P6 done; P5 T15 health probe split + P7 T17 test uplift còn pending).
+
