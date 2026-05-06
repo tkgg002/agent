@@ -729,3 +729,12 @@ caseExpr.WriteString("ELSE ?::int END")
 - Server.go: 4 RegisterSync mới (alert.silence, master.approve, wizard.execute, source.update-v2). Build + `go test ./internal/...` 4/4 OK.
 - Smoke 4 POST với entity không tồn tại → 4 cdc_jobs rows status=failed, idempotency_key đầy đủ. Replay master.approve cùng key → 202 same id, count=1 (Đợt 1 atomic upsert hoạt động xuyên Đợt 2 commands).
 - Task #179 → completed. PENDING commit.
+
+## 2026-05-06 16:51 ICT — Đợt 3 P3 (#180): 4 handler khó → bus ✓
+- **schedule.update** — `UpdateScheduleCommand` sync (`schedule_handler.go:Update`). Replace First+Updates+ActivityLog. Errors: `ErrScheduleNotFound` (404) / `ErrScheduleNoFields` (400). API giữ getResponseByID post-bus để response shape giữ nguyên.
+- **registry.update** — `UpdateRegistryCommand` sync (`registry_handler.go:Update`). Lớn nhất Đợt 3: TableRegistry Updates + cascading mapping_rule auto-approve (inactive→active) + 2× PublishReload + 2 ActivityLog rows, tất cả atomic trong handler. v2sync.SyncFromLegacy giữ post-bus ở API (read service, không destructive).
+- **transmute.run** — `TransmuteRunCommand` async (`transmute_schedule_handler.go:RunNow`). Reuse subject `cdc.cmd.transmute` đã đăng ký Đợt 1; wire payload (master_table/triggered_by/correlation_id) byte-identical với legacy publish nên TransmuteHandler worker không phải sửa.
+- **recon.failed-log-mark-retrying** — `MarkFailedLogRetryingCommand` sync (`reconciliation_handler.go:RetryFailedLog`). Sibling write sau RetryFailedCommand Dispatch. Idempotency-Key suffix `:mark` để tránh va UNIQUE constraint với row Dispatch chính.
+- Server.go: 3 RegisterSync mới (schedule.update, recon.failed-log-mark-retrying, registry.update). Build + `go test ./internal/app/commands/...` PASS.
+- Smoke 4 endpoint live (CMS d3 :8083): 200/202/202/202. cdc_jobs có 5 type: schedule.update success, registry.update success, transmute.run pending (worker async), recon.retry-failed pending, recon.failed-log-mark-retrying success. 5 idempotency_key distinct nhờ `:mark` suffix.
+- Task #180 → completed. PENDING commit.
