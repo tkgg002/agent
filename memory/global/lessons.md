@@ -2253,3 +2253,50 @@ Sau rebuild + restart, reaper log `{"msg":"reaped stuck jobs","count":1}`, statu
 - File 691 → 555 dòng. Test sweep 0 regression.
 
 **Tags**: #refactor #namespace-evolution #v1-v2 #thin-delegate #router-swap #dry #global-pattern
+
+---
+## Lesson — Test uplift dưới project-convention "no sqlmock / no testcontainers"
+**Date**: 2026-05-07 (T17 P7 close — feature-cdc-system-refactor workspace)
+
+### Context
+DoD upstream cho test uplift task thường yêu cầu sqlmock golden-path + coverage threshold (e.g. 35% combined). Nhưng nếu codebase đã chốt project convention "validation/shape tests only, transactional → deploy-time E2E" (no sqlmock in go.sum), việc thêm dependency mới = architectural decision — không tự ý thi công.
+
+### Global Pattern
+Khi codebase X có convention "test framework Y is excluded by design" và task T yêu cầu `coverage ≥ N%`:
+1. KHÔNG thêm Y silently — escalate decision ra Brain/architect HOẶC accept partial DoD.
+2. Lift coverage qua 4 lane sqlmock-free:
+   - **Pure-fn tests** — predicates state machine, validators identifier, type-coerce helpers, struct round-trip JSON.
+   - **HTTP wire-contract tests** — `httptest.NewServer` per-test cho probe / external-API caller. Stub server controls status code + body; verify map-from-body + status downgrade rules.
+   - **Nil-receiver / no-op tests** — guard hot-path khỏi panic khi wiring oversight.
+   - **Trace-context propagation tests** — OTEL `trace.NewSpanContext(...)` stub feeds `context.WithSpanContext`, verify helpers stamp `trace_id`/`span_id` vào payload/log entry.
+3. Document explicitly: file-level DoD (every-file-≥1-test) → ✓; coverage-target DoD → cap với reason "project convention X excludes Y".
+
+### Đúng (project-convention preserve)
+1. Identify pure-fn surface qua `grep "^func " <pkg>/*.go` — pick non-receiver / receiver-only-with-cfg-fields.
+2. Mỗi test file: 50–150 dòng, table-driven where applicable, comment ngắn header giải thích "why this is testable without Y".
+3. Atomic 2-commit per đợt (cms test files + agent workspace progress APPEND). Mỗi đợt 5–17 tests.
+4. Coverage report `go test -cover -count=1` per-package — track delta đợt-to-đợt vào progress.md để Boss thấy curve.
+5. Final: APPEND per-file checklist (✓/✗ với reason) vào workspace progress.md.
+
+### Sai (anti-patterns)
+1. Thêm Y silently vào go.sum → vi phạm convention; PR review bị reject.
+2. Skip task vì "không thể đạt 35%" → bỏ luôn lift coverage cho lane non-DB (≈40%+ codebase testable không cần Y).
+3. Test cả receiver methods bằng cách inject `*gorm.DB` thật trong test → đụng test isolation; thực tế là ad-hoc testcontainer.
+4. Per-file 1 monster test với 30 sub-cases trong một function → debug nightmare khi 1 case fail; rather: 1 file → 5–10 small tests với tên rõ.
+
+### Counter-pattern (khi KHÔNG áp dụng project-convention preserve)
+- Codebase chưa có convention rõ → free to add Y after RFC + Brain approval (CLAUDE.md §8 escalation).
+- Module hoàn toàn DB-only (e.g. repository layer) → không có pure-fn surface; nếu Brain approve sqlmock thì thi công, không thì document "deferred to deploy-time E2E" với link tới E2E suite.
+
+### File minh chứng (T17 P7, 5 đợt, 11 files cms, 60 tests)
+- Đợt 1 cms `48567b8` — `provisioning_state_machine_test.go` (4) + `system_health_compute_test.go` (9). State predicates + alert wire shape.
+- Đợt 2 cms `25f645d` — `shadow_automator_test.go` (2 validateIdent) + `system_health_alerts_test.go` (8 detectConditions/toFloat64/ownsAlertName) + `health/probes/deps_test.go` (7 SanitizeErr security gate).
+- Đợt 3 cms `5c95ab5` — `health/probes/{worker,nats,kafka_connect,debezium}_test.go` (13 HTTP via httptest). Coverage probes 0% → 57.2%.
+- Đợt 4 cms `2f6b3b1` — `provisioning_orchestrator_test.go` (6 OTEL trace helpers) + `health/probes/kafka_lag_test.go` (6 prom-text-format aggregation, prefix filter, rebalance -1 skip). Coverage probes 57.2% → 82.8%.
+- Đợt 5 cms `5804fe6` — `reconciliation_service_test.go` (2 no-op contract) + `approval_service_test.go` (3 JSON wire). Closes file-level DoD.
+
+**Áp dụng đa-dự án**: Bất kỳ Go service codebase nào với convention sqlmock/testcontainer-free. Pattern variables: X=codebase với convention exclude, Y=test framework excluded (sqlmock/testcontainers/mockery), N=coverage threshold target, T=test uplift task.
+
+**Trade-off**: Repository / DB-orchestrator coverage không thể vượt ~25% mà không có Y. Phải document explicitly trong workspace 07_status.md để stakeholder thấy: "T17 file-level DoD met; coverage gap blocked by sqlmock decision — needs RFC".
+
+**Tags**: #testing #go #sqlmock-free #project-convention #pure-fn #httptest #otel-trace-test #global-pattern
