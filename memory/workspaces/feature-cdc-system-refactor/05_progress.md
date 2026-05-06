@@ -792,3 +792,12 @@ caseExpr.WriteString("ELSE ?::int END")
 - Verify: `go build ./...` PASS, `go test ./... -count=1` PASS (api/commands/queries/messaging/middleware/service all green, 0 regression).
 - cms commit `4a2a6e7`. **T16 close** (P6 done; P5 T15 health probe split + P7 T17 test uplift còn pending).
 
+## 2026-05-06 23:53 ICT — T15 P5: Health collector probe split ✓
+- `system_health_collector.go` 781 → 271 dòng (≤300 budget). 7 probe tách thành 7 file dưới `internal/service/health/probes/` (worker, kafka_connect, debezium, kafka_lag, nats, postgres, redis) — mỗi probe plain func nhận `HTTPDeps{Client, ProbeTimeout}` + URL args, không kéo Collector struct.
+- Helpers `httpGet`/`sanitizeErr`/`isSchemeByte` chuyển vào probes (`HTTPDeps.Get` + `probes.SanitizeErr`). DB queries → `system_health_queries.go` (94 dòng); FE alert/overall compute → `system_health_compute.go` (102 dòng) — cùng `service` package giữ Snapshot + Status* constants native, không duplicate.
+- Probe parallel qua errgroup giữ nguyên (đã tồn tại từ trước). Cấu trúc tách cô lập domain (HTTP / DB / compute) — runtime semantic không đổi, wire format byte-identical.
+- Test: `system_health_collector_test.go` cập nhật `sanitizeErr(...)` → `probes.SanitizeErr(...)` (1 import + 1 call). 5 existing test all PASS.
+- Verify: `go build ./...` + `go vet ./...` + `go test ./...` PASS. Live `/api/system/health` smoke skip — refactor pure structural, JSON contract test (`TestSnapshotJSONStability`) đã cover wire format.
+- cms commit `477ba19`. **T15 close**. Còn pending: P7 T17 test uplift.
+
+
