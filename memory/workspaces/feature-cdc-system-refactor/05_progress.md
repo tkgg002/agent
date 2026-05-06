@@ -852,3 +852,14 @@ caseExpr.WriteString("ELSE ?::int END")
 - Verify: `go test ./internal/service/health/probes/ -count=1 -v` 13 PASS, `go test ./... -count=1` full sweep 0 regression.
 - T17 cumulative: 43 tests new (đợt 1: 13 + đợt 2: 17 + đợt 3: 13), 9 file. Coverage tăng đáng kể cho `internal/service/health/probes/` từ 0% → ~80% (4/8 probe files đã cover; remaining: kafka_lag prom-text-format parser, postgres pg_isready, redis PING — đợt sau).
 - cms commit `5c95ab5`. T17 ongoing.
+
+## 2026-05-07 02:05 ICT — T17 P7 đợt 4: Provisioning trace helpers + kafka-exporter probe ✓
+- 2 file mới, 12 tests, all PASS:
+  - `internal/service/provisioning_orchestrator_test.go` (6) — `newProvisioningCorrelationID` format `prov-<sourceID>-<step>-<unixnano>` + uniqueness via UnixNano. `injectProvisioningTraceContext` (nil payload no-op, no-span untouched, valid span stamps `trace_id`/`span_id`). `provisioningEntryWithSpan` (valid span fills entry.TraceID/SpanID, no-span preserves preset). Three helpers chạy mỗi CAS publish trong orchestrator — OTEL trace propagation drift ở đây invisible-but-load-bearing cho W3C Trace Context across CMS → centralized-data-service.
+  - `internal/service/health/probes/kafka_lag_test.go` (6) — empty URL graceful unknown, prom-text-format aggregation (multi-partition sum: `cdc.goopay.orders` p0=7+p1=3=10), prefix filter (`other.topic` excluded khi prefix=`cdc.goopay.`), rebalance -1 value skipped (KHÔNG count vào total), missing metric family → ok with total=0, 5xx → down+http_status, malformed body → unknown với error prefix `parse metrics:`.
+- Coverage delta:
+  - `internal/service`: 20.0% → 21.4% (+1.4%) — service capped low vì heavy DB orchestrator + repo path; cần sqlmock để vượt 35%.
+  - `internal/service/health/probes`: 57.2% → 82.8% (+25.6%) — chỉ còn Postgres (pg_isready DB ping) + Redis (PING) chưa cover; cần real Redis/PG client mock.
+- Verify: `go test ./... -count=1` PASS toàn repo, `go build ./...` PASS.
+- T17 cumulative: 55 tests across 11 files (đợt 1: 13 / đợt 2: 17 / đợt 3: 13 / đợt 4: 12).
+- cms commit `2f6b3b1`. T17 ongoing — service coverage cần escalate quyết định sqlmock vs project-convention cap.
