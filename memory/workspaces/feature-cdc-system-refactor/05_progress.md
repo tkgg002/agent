@@ -738,3 +738,12 @@ caseExpr.WriteString("ELSE ?::int END")
 - Server.go: 3 RegisterSync mới (schedule.update, recon.failed-log-mark-retrying, registry.update). Build + `go test ./internal/app/commands/...` PASS.
 - Smoke 4 endpoint live (CMS d3 :8083): 200/202/202/202. cdc_jobs có 5 type: schedule.update success, registry.update success, transmute.run pending (worker async), recon.retry-failed pending, recon.failed-log-mark-retrying success. 5 idempotency_key distinct nhờ `:mark` suffix.
 - Task #180 → completed. PENDING commit.
+
+## 2026-05-06 17:11 ICT — Đợt 4 P3 (#181): 4 handler last-mile → bus ✓
+- **schedule.create** — `CreateTransmuteScheduleCommand` sync (UPSERT). Validation cron-expr/mode/master_table giữ ở API; handler chạy SQL UPSERT atomic với cdc_jobs audit.
+- **schedule.toggle** — `ToggleTransmuteScheduleCommand` sync. `ErrTransmuteScheduleNotFound` → 404 mapping qua errors.Is.
+- **registry.register** — `RegisterRegistryCommand` sync (lớn nhất Đợt 4): atomic INSERT TableRegistry + EnsureShadowTable DDL + rollback `db.Delete` nếu DDL fail + PublishReload + ActivityLog. Dùng `ShadowTableEnsurer` interface trong commands package — commands KHÔNG import service trực tiếp, ShadowAutomator pointer match interface implicit. CreateDefaultColumnsCommand dispatch + v2sync giữ post-bus ở API (idempotent, không destructive-essential).
+- **registry.bulk-register** — `BulkRegisterRegistryCommand` sync. BulkCreate + PublishReload + ActivityLog, atomic. Per-entry CreateDefaultColumns dispatch ở API loop với Idempotency-Key suffix `:cdc:<entry_id>` (mở rộng pattern `:mark` Đợt 3 thành `:<role>:<key>` cho N siblings).
+- Server.go: 4 RegisterSync mới (reuse `shadowAutomator`/`db`/`natsClient` đã khởi tạo). Build + `go test ./internal/app/commands/... ./internal/api/...` PASS.
+- Smoke 4 endpoint live (CMS d4 :8083): cdc_jobs 4 row distinct idempotency_key, type/status đầy đủ. Errors propagate đúng qua bus → API: schedule.toggle 404 (not_found), registry.register/bulk 500 (constraint violation pre-existing — bus + handler chạy đúng).
+- Task #181 → completed. PENDING commit.
