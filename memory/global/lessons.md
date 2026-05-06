@@ -2216,3 +2216,40 @@ Sau rebuild + restart, reaper log `{"msg":"reaped stuck jobs","count":1}`, statu
 - Decision: kết thúc Phase 3 sạch, không kéo D2 cosmetic route prefix + ActivityLog migration vào critical path.
 
 **Tags**: #cqrs #command-bus #ddd #cms-service #scope-discipline #audit-log #anti-over-abstraction #blast-radius #global-pattern
+
+---
+
+## Lesson — Router-level swap khi V2 handler chỉ là thin-delegate to V1
+
+**Ngày**: 2026-05-07
+**Workspace**: `agent/memory/workspaces/feature-cdc-system-refactor/` (T14 P4)
+**Pattern Global**:
+> Khi handler **B** trong namespace mới chỉ chứa các method 1-line `return aHandler.X(c)` (thin-delegate to handler **A** legacy) → đừng duplicate logic vào B. Thay router-level mount: route URL của namespace B mount **A** trực tiếp. Wire URL contract cho client giữ nguyên (B namespace), nhưng implementation owner duy nhất là A.
+>
+> **Đúng**:
+> 1. Xóa B.X (thin-delegate) khỏi handler.
+> 2. Trong router: `routerGroup.Method("/path-namespace-B/X", aHandler.X)` (thay vì `bHandler.X`).
+> 3. Nếu B chỉ còn helper field references A không dùng nữa → xóa luôn field + tham số constructor.
+>
+> **Sai**:
+> 1. Duplicate logic A trong B.X (DRY violation).
+> 2. Add facade service C để cả A và B gọi (over-abstraction khi A đủ làm owner).
+> 3. Xóa method delegate B.X mà không update router → 500 / 404 trên route.
+
+**Áp dụng đa-dự án**: Bất kỳ codebase nào có namespace evolve (V1 → V2 / legacy → modern) với một handler giữ vai trò shim. Nếu shim chỉ thin-delegate (>50% method chỉ 1-line), router-level swap rút gọn nhanh hơn duplicate logic. Pattern variables: A=V1Handler/LegacyHandler, B=V2Handler/NewHandler, X=method name, namespace-B=URL prefix mới.
+
+**Trade-off**:
+- Swagger godoc (gắn theo method) bị mất khi xóa B.X. Phải hoặc (a) move @Router annotation vào A.X, hoặc (b) accept doc loss đến khi cleanup riêng.
+- Nếu B sau này cần extend (auth khác, body schema khác) thì phải re-introduce method — lúc đó duplicate có lý do.
+
+### Counter-pattern (khi KHÔNG dùng router-level swap):
+- B.X có pre/post-hook khác A.X (e.g. extra audit, metric, response shape diff) → B phải sống dưới function của riêng nó.
+- B namespace cần versioning độc lập (breaking change soonish) → giữ B.X làm "boundary lock-in" cho contract.
+
+### File minh chứng:
+- T14 commit cms `084a4a1` — xóa 10 thin-delegate V2 method (`Register`, `UpdateBridge`, `BulkRegister`, `CreateDefaultColumns`, `Standardize`, `ScanFields`, `Transform`, `DispatchStatus`, `DetectTimestampField`, `TransformStatus`).
+- Router swap: `internal/router/router.go` 13 mount entries `sourceObjectActionsHandler.X` → `registryHandler.X` cho URL prefix `/v1/source-objects/...`.
+- Cleanup phụ: `SourceObjectActionsHandler.registry *RegistryHandler` field xóa luôn vì không còn caller.
+- File 691 → 555 dòng. Test sweep 0 regression.
+
+**Tags**: #refactor #namespace-evolution #v1-v2 #thin-delegate #router-swap #dry #global-pattern
