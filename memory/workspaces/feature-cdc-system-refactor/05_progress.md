@@ -764,3 +764,13 @@ caseExpr.WriteString("ELSE ?::int END")
 - Smoke 3 case (CMS d6 :8083): non-existent ID 9999999 → 404, pending shadow proposal id=1 (orders/smoke_d6_col TEXT) → 200 (ALTER `shadow_goopay_source.orders` applied, schema_proposal.status='approved', applied_at NOT NULL), replay → 409 not_pending. cdc_jobs 3 row distinct idempotency_key, error_message đúng sentinel name (1 success + 2 failed).
 - Task #183 → completed. cms commit `f562b96`. PENDING agent commit.
 - **P3 destructive migration coverage update**: 21 handler / 21 endpoint đã qua bus (5 đợt × 4 + Đợt 6 × 1). Còn lại system_connectors.Create/Delete (HTTP→Kafka Connect REST, không phải DB destructive) — design riêng nếu Boss cần audit.
+
+## 2026-05-06 18:10 ICT — Đợt 7 P3 (#184): system_connectors 6 endpoint → bus ✓
+- **system-connector.create** — `CreateSystemConnectorCommand` sync (HTTP Connect Create + best-effort `SourceFingerprintRepo.Upsert`; fingerprint pre-built ở API qua `parseFingerprint`).
+- **system-connector.delete** — `DeleteSystemConnectorCommand` sync (HTTP Delete + best-effort `MarkDeleted`).
+- **system-connector.lifecycle** — `LifecycleSystemConnectorCommand` sync (op param: `restart` | `restart-task` | `pause` | `resume`) — 1 command bao 4 endpoint, helper `dispatchLifecycle` API tránh duplicate.
+- 2 narrow interface trong commands package: `KafkaConnectorWriter` (5-method) + `SourceFingerprintRepo` (2-method). `*infrahttp.KafkaConnectClient` + `*repository.SourceRepo` satisfy implicit qua structural typing — commands KHÔNG import infra/http hay repository.
+- Server.go: ctor `NewSystemConnectorsHandler(client, sourceRepo, bus, logger, listQ, getQ, pluginsQ)` bổ sung bus + 3 RegisterSync mới (`system-connector.create/delete/lifecycle`). Build + `go test ./internal/app/commands/... ./internal/api/...` PASS.
+- Smoke 5 negative case (CMS d7 :8083, Kafka Connect localhost:18083): restart/delete/pause/restart-task non-existent + create bad class → tất cả 502 với err detail nguyên văn từ Connect HTTP 404/500. cdc_jobs 5 row distinct idempotency_key, status=failed, `error_message` capture full diagnostic (`kafka connect HTTP 404: Unknown connector...` / `HTTP 500: Failed to find any class...`).
+- Task #184 → completed. cms commit `2f5040b`. PENDING agent commit.
+- **P3 destructive migration coverage final**: 27 endpoint / 24 handler đã qua bus (Đợt 1×4 + 2×4 + 3×4 + 4×4 + 5×4 + 6×1 + 7×6). System connectors là layer cuối; còn lại 4 ActivityLog write (3 reconciliation_handler + 1 registry_handler) là audit side-effect, không phải destructive — không cần bus.
