@@ -1098,3 +1098,67 @@ caseExpr.WriteString("ELSE ?::int END")
   4. Update intra-package consumers còn lại trong P (cross-package import + qualified type ref).
   5. Build/vet/test/DoD-grep mới commit.
 
+## [2026-05-07] Task #19 đợt F — mapping_rule_repo dead-code drop (commit `c940251`)
+
+**Scope**: G-D drainage drop #5 (5/6). Reframe từ migration → pure dead-code drop. Audit grep 3 caller (approval_service, mapping_rule_handler, registry_handler): tất cả hold `mapping_rule_repo` field nhưng 0 hit trên `<field>.<method>` — routing thực tế đi qua `bus.Execute` + `queries.ListMappingRulesHandler` + `tx.Create` raw, KHÔNG đi qua legacy repo. 9 method (GetByID/GetAllActive/GetByTable/Create/GetAll/GetAllFiltered/GetAllFilteredPaginated/CreateIfNotExists/UpdateStatus) đều orphan.
+
+**Files** (5 files, +6/-126):
+- M `internal/api/mapping_rule_handler.go` — drop dead `repo` field + ctor param
+- M `internal/api/registry_handler.go` — drop dead `mappingRepo` field + ctor param
+- M `internal/server/server.go` — drop wire init line 83 + 3 ctor arg sites (L199/L210/L220)
+- M `internal/service/approval_service.go` — drop dead `mappingRepo` field + ctor param
+- D `internal/repository/mapping_rule_repo.go` (113 lines / 9 method)
+
+**Verify**:
+- `go build ./...` PASS ✓
+- BE restart fresh + `/health` 200 ✓
+- Smoke `GET /api/mapping-rules` HTTP 200, count=32, payload full ✓ (admin JWT mint qua HMAC-SHA256 reuse từ đợt B)
+
+**Lesson candidate**: Khi field migration audit, distinguish "migrate path" vs "drop path" qua grep `<receiver>.<field>.<method>` count. Nếu = 0 across all callers → field DEAD, drop thay vì migrate.
+
+**Đợt G candidate (final G-D)**: `registry_repo` (12 funcs / 5 callers — biggest blast). Cần method-by-method audit: nếu pattern "field-held-but-unused" lặp lại ở registry → drop tail. Nếu thực sự active → port migrate full. Token budget Task #19 đã chạy 5/6 đợt — đợt G đóng task hoàn toàn.
+
+
+---
+
+## [2026-05-07] Task #19 đợt G — bulk migrate master_swap + shadow_automator to infra/persistence (commit `3424764`)
+
+**Scope**: §G-C drainage drop. 2 modules từ `internal/service/` → `internal/infra/persistence/`. 4 file rename (99% / 98% similarity), 0 logic changes.
+
+**Why infra/persistence**:
+- `master_swap.go` wrap gorm TX cho 2-RENAME atomic swap (`ALTER TABLE ... RENAME` × 2) + activity log INSERT trong cùng TX. SET LOCAL lock_timeout='3s' bound blocking window. Pure DB write op.
+- `shadow_automator.go` wrap gorm Exec cho `CREATE SCHEMA / TABLE / INDEX / TRIGGER` 8-col CDC layout, attach Sonyflake trigger via SQL helper. Pure DDL.
+- Cả 2 đều là Postgres-only DDL/DML wrappers → infra/persistence là home đúng (không phải app/commands vì chưa qua bus).
+
+**Critical constraint phát hiện khi planning**:
+- `validateIdent()` helper sống ở `shadow_automator.go` (line 115) làm SQL-injection guard cho cả 2 module:
+  - `master_swap.SwapAsync` line 51-56: validate `master_name` + `new_table_name`
+  - `shadow_automator.EnsureShadowTable` line 37-42: validate `target_table` + `shadow_schema`
+- Nếu chỉ move 1 file thì caller bên kia mất reference (helper unexported `validateIdent`, lowercase). → **Phải move cùng đợt + cùng package** để giữ helper accessible nội bộ.
+
+**Files** (7 files staged: 4 renames + 3 caller mods):
+- R `internal/service/master_swap.go` → `internal/infra/persistence/master_swap.go` (99%)
+- R `internal/service/master_swap_test.go` → `internal/infra/persistence/master_swap_test.go` (99%)
+- R `internal/service/shadow_automator.go` → `internal/infra/persistence/shadow_automator.go` (99%)
+- R `internal/service/shadow_automator_test.go` → `internal/infra/persistence/shadow_automator_test.go` (98%)
+- M `internal/api/master_registry_handler.go` — swap `service` import → `persistence`, `*service.MasterSwap` → `*persistence.MasterSwap` (struct field L35 + ctor param L41)
+- M `internal/api/registry_handler.go` — `*service.ShadowAutomator` → `*persistence.ShadowAutomator` (L30 field + L43 ctor param). `persistence` import đã có sẵn từ đợt E (ActivityLogger).
+- M `internal/server/server.go` — `service.NewShadowAutomator` → `persistence.NewShadowAutomator` (L198), `service.NewMasterSwap` → `persistence.NewMasterSwap` (L200). KHÔNG thay đổi `service.NewSourceObjectV2SyncService` ở giữa (line 199) — module đó chưa drain.
+
+**Verify**:
+- `go build ./...` PASS ✓
+- `go vet ./...` clean ✓
+- `go test ./... -count=1` PASS (all packages including `internal/infra/persistence` 1.486s, `internal/service` 2.068s) ✓
+- DoD grep `service\.MasterSwap|service\.NewMasterSwap|service\.ShadowAutomator|service\.NewShadowAutomator` → 0 hits ✓
+- Git rename detection: 4/4 files giữ ≥98% → diff stat chỉ 17 insertions / 19 deletions (mostly import line + caller refs)
+
+**Edge case fixed**:
+- Khi check working tree thì 4 file `service/{master_swap,shadow_automator}.{go,_test.go}` xuất hiện lại (parallel session đợt F restore?). Phải `rm -f` lần 2 + verify build vẫn PASS (không có collision vì 2 path khác nhau, build OK ngay cả khi 2 bộ định nghĩa cùng tồn tại — chỉ caller mới chọn path nào). Sau khi xoá lần 2 thì test PASS, DoD grep clean.
+
+**Lesson candidate (cho global/lessons.md)**: 
+> Global Pattern [Helper H tied to caller A in package P; A migrates to package Q] → Pitfall: Helper inaccessible nếu unexported, cảm giác "chỉ move A là xong".  
+> Đúng: Move A + H + sibling-callers-of-H sang Q cùng đợt. Audit step: grep `<helper-name>` cross-file để identify sibling callers TRƯỚC khi split commit. Nếu helper export-able an toàn (no internal state), có thể export để cho phép split — nhưng default = move together.
+
+**§G-C status sau đợt G**: 11 → 9 service files remaining (provisioning_orchestrator, provisioning_state_machine, source_object_v2_sync, system_health_collector, system_health_compute, system_health_alerts, system_health_queries, alert_manager, approval_service).
+
+**Đợt H candidate**: `system_health_*` cluster (4 files cùng concern observability/health) — likely move cùng nhau sang `infra/observability/` hoặc `app/queries/health/`. Hoặc `provisioning_*` pair (orchestrator + state_machine — coupled state). Pick whichever closes blast-radius nhanh hơn ở đợt sau.
