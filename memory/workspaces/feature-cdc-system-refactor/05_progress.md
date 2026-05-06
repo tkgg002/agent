@@ -818,3 +818,17 @@ caseExpr.WriteString("ELSE ?::int END")
 - Verify: `go build ./...` + `go test ./... -count=1` PASS (api/commands/queries/messaging/middleware/service all green, 0 regression).
 - Pattern global: "V2 thin-delegate to V1 → router-level swap (mount V1 handler trực tiếp vào URL namespace V2) ưu tiên hơn duplicate logic — wire URL stays với namespace V2 nhưng owner thực sự là V1 handler". Sẽ APPEND vào `agent/memory/global/lessons.md`.
 - cms commit `084a4a1`. **T14 close**. T17 test uplift unblocked (T13/T14/T15/T16 đều done).
+
+## 2026-05-07 00:55 ICT — T17 P7 đợt 1: Pure-fn tests for state machine + health compute ✓
+- Auto Mode tiếp T17 (P7 — last task workspace). Project convention preserved: NO sqlmock (không nằm trong go.sum), không testcontainers — validation/shape unit tests only. Coverage target sẽ tích lũy qua nhiều đợt.
+- File mới `internal/service/provisioning_state_machine_test.go` (88 dòng, 4 tests):
+  - `TestProvisioningCanAdvance` — table-driven 13 state, pin CanAdvance contract.
+  - `TestProvisioningIsPending` / `TestProvisioningIsTerminal` — pin pending+terminal vocabulary (D4 Provisioned legacy + Archived).
+  - `TestProvisioningTransitions_PendingTargetsMatchFinalizer` — round-trip invariant: mọi NextPending từ Transitions phải có entry tương ứng ở PendingToFinalize và finalize ra đúng NextOnSuccess. Catches drift khi thêm step mới.
+  - Critical invariant: cms ↔ centralized-data-service hai bản byte-equivalent — test cms-side đảm bảo predicates không drift.
+- File mới `internal/service/system_health_compute_test.go` (~125 dòng, 9 tests):
+  - 6 cho `computeAlerts`: empty snapshot, Infrastructure DOWN (1 critical), Debezium FAILED, Reconciliation drift+error mix, FailedSync count_1h>0 / =0 (silent).
+  - 3 cho `computeOverall`: critical-beats-warning, warning-only=degraded, empty=healthy.
+  - Wire shape pinned: `{level, component, message}` keys — FE banner read contract không drift.
+- Verify: `go test ./internal/service/ -run "TestProvisioning|TestComputeAlerts|TestComputeOverall" -count=1 -v` → 13 PASS (no name collision với existing `TestComputeOverall`/`TestComputeAlertsPerSection`). `go build ./...` + `go test ./internal/service/ -count=1` PASS.
+- cms commit `48567b8`. T17 ongoing — đợt sau target shadow_automator / approval_service / reconciliation_service / system_health_alerts.go (toFloat64 + ownsAlertName + detectConditions pure-ish helpers).
