@@ -875,3 +875,24 @@ caseExpr.WriteString("ELSE ?::int END")
 - Verify: `go test ./... -count=1` PASS toàn repo (api/commands/queries/messaging/middleware/service/probes all green, 0 regression).
 - T17 cumulative: 60 tests across 13 files (đợt 1: 13 / đợt 2: 17 / đợt 3: 13 / đợt 4: 12 / đợt 5: 5).
 - cms commit `5804fe6`. T17 file-level DoD đạt; coverage-target DoD (35% combined) còn cap bởi sqlmock decision.
+
+---
+
+## [2026-05-07 ~02:30 UTC] — Task #18 P4 G-A/G-B closed (đợt A+B, 2 commits)
+
+**Trigger**: Boss frustration "mấy ngày không refactor xong" + auto-mode "a" approval to execute Task #18.
+
+**Đợt A — V2Sync + recon raw drainage** (cms commit `f957d6a`):
+- New `internal/app/commands/v2_sync.go` — `V2SyncCommand` (sync mixin) wraps `SourceObjectV2SyncService.SyncFromLegacy`. RegistryHandler 3 sites (Register/Update/BulkRegister) now `bus.Execute(V2SyncCommand{...})` — closes G-A.
+- 5 missing methods added to `ReconReader` (ResolveTargetTableByScope / GetFailedLogByID / GetRetryScopeByLogID / ListBackfillRuns / CountTableRows). Adapter `recon_read_repo_gorm.go` now satisfies the full port — fixes build broken since `49fb39c`.
+- `reconciliation_handler.go` raw SQL fully drained: 4 hits (resolveTargetTable, RetryFailedLog scope, BackfillSourceTsStatus list+count) → reader. `pgIdent` local helper deleted; `utils.PgIdent` is the single source.
+- Smoke 3/3: LatestReport / BackfillSourceTsStatus / ListFailedLogs all 200.
+
+**Đợt B — BridgeStatus reader** (cms commit `7998863`):
+- New port `internal/app/queries/bridge_status_reader.go` with `ProbeBridgeStatus`, `ResolveDispatchScopeBySourceObjectID`, `ListDispatchActivity` + sentinels. Adapter `bridge_status_repo_gorm.go`.
+- `RegistryHandler.TransformStatus` migrated (4 raw queries → 1 reader call); `fmt` import dropped.
+- `SourceObjectActionsHandler` consolidated onto same reader (`bridgeReader`). Local `sourceObjectDispatchScope` struct deleted.
+- `server.go` wires one `bridgeStatusReader` for both handlers.
+- Smoke: TransformStatusV2 id=1,30 → 200; TransformStatus registry id=1,2,3,5,10 → 200, id=20 → 404. Tests `go test ./internal/app/queries/...` PASS.
+
+**Result**: G-A `SyncFromLegacy in api/app` = 1 hit (V2SyncCommand delegate, expected). G-B `db.Raw in internal/api/` = **0**. Task #18 DONE; Task #19 (service drainage / repo migrate) còn lại.
