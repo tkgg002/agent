@@ -863,3 +863,15 @@ caseExpr.WriteString("ELSE ?::int END")
 - Verify: `go test ./... -count=1` PASS toàn repo, `go build ./...` PASS.
 - T17 cumulative: 55 tests across 11 files (đợt 1: 13 / đợt 2: 17 / đợt 3: 13 / đợt 4: 12).
 - cms commit `2f6b3b1`. T17 ongoing — service coverage cần escalate quyết định sqlmock vs project-convention cap.
+
+## 2026-05-07 02:25 ICT — T17 P7 đợt 5: Reconciliation no-op + approval request shape ✓
+- 2 file mới, 5 tests, all PASS:
+  - `internal/service/reconciliation_service_test.go` (2) — Start ctx cancel return contract (post-Airbyte plan v2 §R3 retired loop, type kept cho server.go callers — pin no-op invariant), Stop idempotency (close-once pattern via select-default branch). Logger phải zap.NewNop() vì Start log "no-op after Airbyte retirement" trước khi `<-ctx.Done()`.
+  - `internal/service/approval_service_test.go` (3) — ApproveRequest JSON tag wire contract (`target_column_name`/`final_type`/`approval_notes`), RejectRequest (`rejection_reason`), `strPtr` nil-vs-empty distinction (matters cho *string DB column type). FE schema-approval modal post verbatim — field-name drift silent break form.
+- DoD "every service file has ≥1 test": satisfied except `system_health_queries.go` (pure DB, project convention skip).
+- Service files với test (12/13):
+  ✓ activity_logger, alert_manager, approval_service, master_swap, prom_client, provisioning_orchestrator (helpers), provisioning_state_machine, reconciliation_service, shadow_automator (validateIdent), source_object_v2_sync, stuck_job_reaper, system_health_alerts, system_health_collector, system_health_compute
+  ✗ system_health_queries (DB-only, sqlmock-free convention skip)
+- Verify: `go test ./... -count=1` PASS toàn repo (api/commands/queries/messaging/middleware/service/probes all green, 0 regression).
+- T17 cumulative: 60 tests across 13 files (đợt 1: 13 / đợt 2: 17 / đợt 3: 13 / đợt 4: 12 / đợt 5: 5).
+- cms commit `5804fe6`. T17 file-level DoD đạt; coverage-target DoD (35% combined) còn cap bởi sqlmock decision.
