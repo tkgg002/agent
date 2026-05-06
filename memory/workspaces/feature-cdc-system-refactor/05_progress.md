@@ -774,3 +774,12 @@ caseExpr.WriteString("ELSE ?::int END")
 - Smoke 5 negative case (CMS d7 :8083, Kafka Connect localhost:18083): restart/delete/pause/restart-task non-existent + create bad class → tất cả 502 với err detail nguyên văn từ Connect HTTP 404/500. cdc_jobs 5 row distinct idempotency_key, status=failed, `error_message` capture full diagnostic (`kafka connect HTTP 404: Unknown connector...` / `HTTP 500: Failed to find any class...`).
 - Task #184 → completed. cms commit `2f5040b`. PENDING agent commit.
 - **P3 destructive migration coverage final**: 27 endpoint / 24 handler đã qua bus (Đợt 1×4 + 2×4 + 3×4 + 4×4 + 5×4 + 6×1 + 7×6). System connectors là layer cuối; còn lại 4 ActivityLog write (3 reconciliation_handler + 1 registry_handler) là audit side-effect, không phải destructive — không cần bus.
+
+## 2026-05-06 23:30 ICT — Phase 4 D2 cosmetic: /api/v1 prefix unify ✓
+- Backwards-compat shim — `internal/middleware/deprecation.go` (NEW): `CanonicalAPIRoute` folds /api/v1 → /api legacy + `DeprecateLegacyAPIPath` stamps RFC 8594 Sunset (2026-12-31 GMT) + `Deprecation: true` + `Link rel="successor-version"` chỉ trên hit /api/* không phải /api/v1/*.
+- Idempotency MW (`idempotency.go`): gọi `CanonicalAPIRoute` trước build Redis cache key → legacy + canonical client share cùng namespace, không fork replay cache.
+- Audit MW (`audit.go::actionFor`): strip /v1 trước lookup `ActionMap` → 7 hardcoded route key giữ single-namespace, không cần duplicate.
+- Router (`router.go`): deprecation MW mount app-level (cover /api/system/health ngoài apiGroup) + 26 route dual-mount (17 `dualGet` + 6 `dualPost` + 3 `dualPatch`) + `registerDestructive`/`registerDestructiveRestart` dual-mount nội bộ + `/api/v1/system/health` alias.
+- Swagger: 8 `@Router` annotation `/api/X` → `/api/v1/X` ở `reconciliation_handler.go` (cosmetic doc, runtime unaffected).
+- Verify: `go build ./...` PASS, `go test ./internal/middleware/...` PASS (0.78s), live smoke 3 case CMS d2 :8094 — `/api/system/health` legacy nhận `Deprecation: true` + `Sunset: Tue, 31 Dec 2026 23:59:59 GMT` + `Link: </api/v1/system/health>; rel="successor-version"`; `/api/v1/system/health` canonical sạch headers; `/health` root không bị stamp. Cùng handler trả cùng body — dual-mount đúng.
+- cms commit `64af966`. PENDING agent commit. **Phase 4 D2 close**.
