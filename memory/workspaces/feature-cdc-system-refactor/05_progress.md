@@ -1162,3 +1162,85 @@ caseExpr.WriteString("ELSE ?::int END")
 **§G-C status sau đợt G**: 11 → 9 service files remaining (provisioning_orchestrator, provisioning_state_machine, source_object_v2_sync, system_health_collector, system_health_compute, system_health_alerts, system_health_queries, alert_manager, approval_service).
 
 **Đợt H candidate**: `system_health_*` cluster (4 files cùng concern observability/health) — likely move cùng nhau sang `infra/observability/` hoặc `app/queries/health/`. Hoặc `provisioning_*` pair (orchestrator + state_machine — coupled state). Pick whichever closes blast-radius nhanh hơn ở đợt sau.
+## [2026-05-07] Task #19 đợt G — registry_repo migration to ports/persistence (commit `0c02011`) — **G-D CLOSED 6/6**
+
+**Scope**: Final G-D drainage đợt. Legacy `internal/repository/registry_repo.go` (12 funcs) → `ports.RegistryRepo` (3-method interface) + `infra/persistence/registry_repo_gorm.go` adapter. Surface trim: 12 → 3 method (GetByID/GetAll/GetStats). 8 method dead at CMS layer drop hết: GetAllActive, GetBySourceTable, GetByTargetTable, Create, Update, BulkCreate, UpdateActiveStatusByTable, CountActiveByConnectionID. `RegistryFilter` + `RegistryStats` promoted từ `repository` package sang `ports` package (self-describing port surface).
+
+**Side-cleanup discovered mid-audit**:
+- `approval_service.triggerAirbyteRefresh` = vestigial no-op stub (discarded result của `GetByTargetTable`; comment ghi rõ "schema refreshed via signal — see Command Center UI"). Drop entirely.
+- `mapping_rule_handler.registryRepo` = dead field (0 method call). Drop.
+
+**Files** (5M / 1A / 1D, +138/-187):
+- M `internal/app/ports/repository.go` — add RegistryRepo interface + Filter + Stats
+- A `internal/infra/persistence/registry_repo_gorm.go` — 3-method ports-impl
+- D `internal/repository/registry_repo.go` (-167 lines / 12 method) — last file in legacy dir
+- M `internal/service/approval_service.go` — drop registryRepo + drop triggerAirbyteRefresh stub
+- M `internal/api/mapping_rule_handler.go` — drop dead registryRepo field + ctor param
+
+**Verify**:
+- `go build ./...` PASS ✓
+- BE restart fresh (PID 20082) + `/health` 200 ✓
+- Smoke `GET /api/v1/source-objects/registry/1/dispatch-status` HTTP 200, 24KB payload (exercises `h.repo.GetByID` qua `ports.RegistryRepo` → `persistence.RegistryRepo` adapter) ✓
+
+**Mid-session dirty-state recovery**: Phát hiện HEAD đã partial-commit registry_handler.go + server.go dùng `ports.RegistryRepo` + `persistence.NewRegistryRepo` nhưng KHÔNG có interface định nghĩa lẫn adapter file → HEAD broken. Session này hoàn thiện compile-set bằng cách bổ sung 3 piece thiếu (interface + adapter + dead-code drops). Tương tự đợt D pattern: prior session refactor leaks bị compaction cắt, session sau hoàn tất.
+
+**G-D status**: CLOSED. `internal/repository/` directory empty (đã rmdir). 6 đợt thành phần: A=schema_log, B=pending_field, C=wizard, D=source(SystemConnector), F=mapping_rule (drop), G=registry. Đợt E (`55b3afc`) là G-C scope (bulk migrate prom/stuck/activity), tách track riêng.
+
+**Lesson candidate** (sẽ promote `lessons.md` sau Task #19):
+- **Global Pattern [Compaction-split refactor R across sessions]** → next session resumes với HEAD partial state. Đúng flow: trước khi build, `git diff HEAD -- <changed-file>` để map intent vs reality; nếu `compile error == undefined symbol X` cho symbol thuộc package P → check P có pending interface definition cần add (không phải missing import).
+
+**Task #19 next axis**: G-C service module migration. Candidate đợt H: alert_manager (đụng system_health_collector + alerts_handler + commands/{ack,silence}_alert.go) HOẶC system_health_{compute,alerts,queries} co-migrate (3 file cùng aggregate).
+
+## [2026-05-07] Lesson promotion — đợt D + G lessons → `agent/memory/global/lessons.md`
+
+**Scope**: Đóng nhiệm vụ "promote lessons sau khi dứt Task #19" mà G-D drainage đã CLOSED ở đợt G. 2 lesson abstract:
+
+- **L-RESUME-DIRTY** (đợt D origin): "Working-tree deletion bị bỏ sót khi resume session" — Pattern [Refactor R xóa file ở P và tạo file ở Q, deletion uncommitted] → resume build fail. Đúng: scan `git status` cả 3 lane M/??/D, dùng `git ls-tree HEAD` để decide restore/re-delete/leave-alone trước khi edit.
+- **L-COMPACTION-SPLIT** (đợt G origin): "Refactor bị split qua nhiều session, HEAD partial-state" — Pattern [Refactor R có N pieces, compaction cắt giữa chừng] → caller-side compiles theo intent, definition-side missing → undefined-symbol. Đúng: `git diff HEAD -- <each-file>` map intent vs reality; build error "undefined: pkg.X" → check `git ls-tree HEAD <pkg>` để biết MISSING DEFINITION (add) vs missing import (existing diagnosis).
+
+**Files**:
+- M `agent/memory/global/lessons.md` (2345 → 2393, +48 lines APPEND only)
+
+**Effect**: 2 pattern available cho mọi feature/dự án sau, abstract qua biến (P/Q/R/S, I/A/C/H). G-D drainage axis Task #19 hoàn toàn closed (6 đợt + 2 lesson promoted).
+
+
+---
+
+## [2026-05-07] Task #19 đợt H — bulk migrate provisioning_orchestrator + state_machine to infra/persistence (commit `ff16e38`)
+
+**Scope**: §G-C drainage drop. 2 modules từ `internal/service/` → `internal/infra/persistence/`. 4 file rename @99% similarity. 0 logic changes — package decl swap only.
+
+**Why infra/persistence**:
+- `provisioning_orchestrator.go` (729 LOC) wrap gorm CAS UPDATE trên `cdc_system.cdc_source_provisioning_state` + NATS publish cho step commands (`cdc.cmd.shadow.bind` / `cdc.cmd.master.bind` / etc). Pure DB+NATS coordination, **shape giống master_swap (đợt G)** — tiếp tục precedent.
+- `provisioning_state_machine.go` (75 LOC) là pure transition table (4 transitions Draft→ShadowPending→...→Running, plus Pending→Finalize map) + 3 predicates (CanAdvance/IsPending/IsTerminal). Tightly coupled với orchestrator (orchestrator dùng tất cả State* constants + Transitions table).
+
+**Coupling forced co-move**: orchestrator method `Advance` body line 278 dùng `ProvisioningTransitions[s]` directly + sentinel constants `StateDraft`/`StateRunning`/etc. Không thể split state_machine → domain/ ngay đợt này (sẽ phá build). Future hexagonal pass có thể tách predicates sang `internal/domain/provisioning/` khi pattern emergence multi-state-machine xuất hiện.
+
+**Files** (7 staged: 4 renames + 3 caller mods):
+- R `internal/service/provisioning_orchestrator.go` → `internal/infra/persistence/...` (99%)
+- R `internal/service/provisioning_orchestrator_test.go` → ... (99%)
+- R `internal/service/provisioning_state_machine.go` → ... (99%)
+- R `internal/service/provisioning_state_machine_test.go` → ... (99%)
+- M `internal/api/provisioning_handler.go` — drop service import + add persistence import; sed-replace 8 token sites: struct field L38, ctor param L42, errors.Is × 3 (L65/70/76), 3 doc comments L18-20, 1 swagger annotation L97.
+- M `internal/api/provisioning_handler_test.go` — drop service import + add persistence import; replace 3 sentinel refs trong `TestErrMapping_404/422/409`.
+- M `internal/server/server.go` — `service.NewProvisioningOrchestrator` → `persistence.NewProvisioningOrchestrator` (L297, 1 site).
+
+**Move technique** (tốc độ): `cp + sed -i '' 's/^package service$/package persistence/'` cho cả 4 file thay vì Read/Write từng file. Byte-equivalent body (chỉ 1-line diff per file — đó là package directive). → git rename detection 99% across all 4.
+
+**Caller technique**: bulk `sed` cross-3-files cho 5 token patterns: `service.ErrProvisioning`, `service.ProvisioningOrchestrator`, `service.SourceProvisioningSnapshot`, `service.NewProvisioningOrchestrator`, `service.Provisioning` (catch-all). Không cần Edit từng file riêng → 1 shell call cập nhật 14 sites.
+
+**Verify**:
+- `go build ./...` PASS ✓
+- `go vet ./...` clean ✓
+- `go test ./... -count=1` PASS (full suite incl `internal/api` 2.306s, `internal/infra/persistence` 1.486s, `internal/service` 4.313s) ✓
+- DoD grep `service\.Provisioning|service\.NewProvisioning|service\.ErrProvisioning|service\.SourceProvisioning` outside internal/service/ → 0 hits ✓
+
+**Cross-module invariant ghi nhớ**: `centralized-data-service/internal/service/provisioning_state_machine.go` là worker-side copy (separate Go module). Hai copy PHẢI byte-equivalent (modulo header comment) — comment trên cms-side line 1-17 đã ghi rõ. Đợt này chỉ touch cms-side; nếu future edit chạm State* / Transitions / predicate signatures, BẮT BUỘC update worker-side cùng lúc.
+
+**Lesson candidate** (cho global/lessons.md, đợt closing Task #19): 
+> Global Pattern [Module M có pure-fn helpers H tied to stateful struct S; M migrates package P→Q] → Pitfall: H + S coupling forces co-move; cannot split H to domain/ same đợt without breaking build.  
+> Đúng: Co-move M+H đợt N; track tách-helper-to-domain debt vào lesson; thực hiện đợt N+k khi multi-state-machine pattern emergence.
+
+**§G-C tail sau đợt H**: 11 → 7 service files remaining: `source_object_v2_sync.go`, `system_health_{collector,compute,alerts,queries}.go` (4 cluster), `alert_manager.go`, `approval_service.go`.
+
+**Đợt I candidate**: cluster `system_health_*` quintet (4 files cùng concern observability + alert_manager.go coupled qua `Collector.SetAlertManager` line 37 system_health_alerts.go). Coupling chặt vì: `system_health_alerts.go` define methods `(c *Collector)` từ collector.go; `system_health_queries.go` cùng pattern; `system_health_compute.go` dùng `*Snapshot` từ collector.go; `alert_manager.go` được `Collector.SetAlertManager` consume. → 5 file co-move cần cùng đợt. Blast lớn hơn đợt H/G (5 vs 4 file rename + caller blast 2 file: alerts_handler.go, system_health_handler.go, server.go).
