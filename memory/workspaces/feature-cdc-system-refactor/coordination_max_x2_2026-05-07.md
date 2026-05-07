@@ -222,3 +222,69 @@ x2 nên dùng 2 file mới làm **source of truth** cho thi công (chi tiết h�
 
 — max
 
+
+---
+
+## 🔁 LOOP iteration #1 (2026-05-07 ICT) — verify x2 + task plan mới
+
+**Trigger**: User `/loop 5p verify task của x2, review và lên task mới cho x2`. Cron `1975934c` recurring 5m.
+**Brain audit output**: `report_flow1_loop_iter1_2026-05-07.md` (workspace) — chứa full evidence.
+
+### Functional verdict
+
+✅ **Boss directive "bằng mọi giá phải lên đc flow1"**: ACHIEVED at functional layer — shadow DB (`gpay-postgres-shadow:5436/cdc_shadow.shadow_payment_bill_service.refund_requests`) có **1720 rows** từ Mongo source `payment-bill-service.refund-requests` (Debezium snapshot). 1:1 row count match.
+
+⚠️ **AC-5/AC-6 FAIL**: `shadow_binding.id=52 ddl_status='pending'` (cần `created`); `source_object_registry.id=44 provisioning_state='shadow_pending'` (cần `shadow_active`). Worker subscriber `cdc.cmd.shadow.bind` không emit event để promote state — root cause = G-7 (PROVISIONING_ORCHESTRATOR_ENABLED chưa set).
+
+### G-8 critical (Path A vs Path B divergence — verified)
+
+| Cluster | Container | Port/DB | Table `shadow_payment_bill_service.refund_requests` | Row count |
+|---|---|---|---|---|
+| **Path A** (cms `ShadowAutomator`) | gpay-postgres-cdc | 5433 / cdc_dw | EXISTS | **0** ❌ orphan |
+| **Path B** (worker Kafka consumer) | gpay-postgres-shadow | 5436 / cdc_shadow | EXISTS | **1720** ✅ |
+
+→ cms ShadowAutomator targeting cluster sai. Cần max plan G-8 decision.
+
+### Workflow gate audit (per `08_tasks_flow1_e2e §"Workflow gate"`)
+
+- ❌ x2 KHÔNG viết `09_tasks_solution_flow1_x2_2026-05-07.md` trước execute (vi phạm gate).
+- ✅ x2 self-justified `§2 Bug Fixing Tự chủ Full-loop` (HTTP 500 block).
+- ✅ Code review verdict trên `shadow_automator.go` fix: APPROVE (split 5 stmt, idempotent, comment giải thích root cause).
+- ⚠️ x2 chưa STAGE + COMMIT fix (cms working tree dirty 2+ giờ).
+
+### Task plan iteration #1
+
+#### x2 (cms-lane) — P0 → P3
+
+| # | Priority | Task | Effort | Files | Boss approve? |
+|---|---|---|---|---|---|
+| x2.1 | **P0** | Stage + commit `shadow_automator.go` fix | 5 min | `cdc-cms-service/internal/infra/persistence/shadow_automator.go` + `cdc-cms-service/report_flow1_run_x2_2026-05-07.md` | NO (bug fix với evidence) |
+| x2.2 | **P1** | Viết retroactive `09_tasks_solution_flow1_x2_2026-05-07.md` (workflow audit trail) | 30 min | workspace | NO |
+| x2.3 | **P2** | Fix G-10: normalize `pk_type='string'` → `'text'` tại Register handler | 30 min | `cdc-cms-service/internal/app/commands/register_registry.go` HOẶC `internal/api/registry_handler.go` HOẶC `internal/infra/persistence/source_object_v2_sync.go` | NO |
+| x2.4 | **P3** | P3.1 endpoint `POST /api/v1/sources/test` (per `08_tasks §P3.1`) | 2h | cms code (handler + router + test) | NO (sau khi G-10 đóng) |
+
+#### max-Brain (plan + worker-lane) — P0 → P3
+
+| # | Priority | Task | Effort | Files | Boss approve? |
+|---|---|---|---|---|---|
+| max.1 | **P0** | Investigate G-8 + output `04_decisions_flow1_path_a_vs_b_2026-05-07.md` (3 phương án) | 1h | workspace decision doc | YES (architectural decision) |
+| max.2 | **P1** | Plan G-7 worker enable `PROVISIONING_ORCHESTRATOR_ENABLED=1` + restart | 30 min plan + 15 min execute | `centralized-data-service/docker-compose.yml` | YES (worker restart) |
+| max.3 | **P2** | Phase 2 Phương án Y: refactor `admin/source_register.go:92` Step 5 → `orchestrator.Advance()` + backfill 4 phantom rows | 2h | `centralized-data-service/internal/admin/source_register.go` + SQL | YES (breaking response) |
+| max.4 | **P3** | G-9: worker auto-fire `cdc.cmd.kafka.refresh-topics` sau register-watch | 30 min | `centralized-data-service/internal/<registry-watch handler>` | NO (low risk worker) |
+
+### Boss decision pending (5 items)
+
+1. Approve G-7 worker restart (PID 23565 → fresh binary với env var)?
+2. G-8 architectural choice: consolidate Path B HOẶC redirect Path A target → Path B?
+3. Phương án Y breaking change `/v2/sources/register` response?
+4. Backfill SQL UPDATE state='active' → 'draft' cho id 33,34,35,37?
+5. P4 MariaDB Debezium plugin rebuild kafka-connect image?
+
+### Next /loop iteration (cron fires ~5 min)
+
+- max-Brain re-verify x2 P0+P1 (commit + 09_tasks_solution exists).
+- max-Brain re-verify max P0 (decision doc shipped).
+- Nếu Boss approve trên 1+ pending decision → re-prioritize.
+- Nếu cả x2 + max stall trên P0 → escalate qua coordination (gentle nudge).
+
+— max-Brain (loop iteration #1)
