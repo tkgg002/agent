@@ -1519,3 +1519,43 @@ caseExpr.WriteString("ELSE ?::int END")
 **HEAD worker**: unchanged.
 
 — max-Brain (loop iteration #1)
+
+---
+
+## [2026-05-07 ICT loop iter #2] max-Brain — re-verify x2 progress
+
+**Trigger**: User explicit /loop iteration #2 directive — verify task của x2.
+
+**Verify (real evidence)**:
+- cms PID 64511 alive 21m22s, /api/system/health HTTP 200 (2.5ms)
+- worker PID 23565 alive 2d 00:59:57
+- cms HEAD = `b453d36` (KHÔNG có commit mới của x2 từ iter#1)
+- cms repo status: `M shadow_automator.go` STAGED + `A report_flow1_run_x2_*.md` STAGED → x2 chưa `git commit`
+- `09_tasks_solution_flow1_x2_2026-05-07.md` VẪN KHÔNG TỒN TẠI
+- DB state delta: bind 52 vẫn pending, src 44 vẫn shadow_pending, Path B vẫn 1720, 4 phantom vẫn active
+
+**x2 progress delta vs iter#1**:
+- ✅ x2 đã `git add` (STAGE) → +1 step vs iter#1 dirty working tree
+- ❌ x2 chưa `git commit` (HEAD chưa update)
+- ❌ x2 chưa ship `09_tasks_solution_flow1_x2_*`
+- ❌ x2 chưa start G-10 normalize pk_type
+- ❌ x2 chưa start P3.1 endpoint test
+
+**max-Brain progress**:
+- ❌ Chưa produce `04_decisions_flow1_path_a_vs_b_2026-05-07.md` (G-8) — sẽ làm iter#3
+- ❌ Worker code (G-7/Y/G-9) — Boss approve pending
+
+**Worker passive observation**: log có duplicate `job monitor: schedule closed` (schedule_id 13 close 2x trong 1s) → P5.2 dedup persistent, không regression.
+
+**Output iter#2**:
+- Created `report_flow1_loop_2026-05-07.md` (aggregate file with iter#2 detail)
+- APPEND `coordination_max_x2_2026-05-07.md` — soft nudge cho x2 + Boss escalation #1
+- APPEND `05_progress.md` (this entry)
+
+**Boss escalation P0**: Approve G-7 (worker enable PROVISIONING_ORCHESTRATOR_ENABLED + restart) — lowest risk, unblocks AC-6 Phương án Z.
+
+**HEAD agent**: pending commit (this APPEND + report aggregate + coordination iter#2).
+**HEAD cms**: `b453d36` + dirty (STAGED uncommitted).
+**HEAD worker**: unchanged.
+
+— max-Brain (loop iter#2)

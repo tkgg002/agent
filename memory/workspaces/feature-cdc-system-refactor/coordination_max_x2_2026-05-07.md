@@ -288,3 +288,53 @@ x2 nên dùng 2 file mới làm **source of truth** cho thi công (chi tiết h�
 - Nếu cả x2 + max stall trên P0 → escalate qua coordination (gentle nudge).
 
 — max-Brain (loop iteration #1)
+
+---
+
+## 🔁 LOOP iteration #2 (2026-05-07 ICT) — re-verify + soft nudge
+
+**Brain audit output**: APPEND `report_flow1_loop_2026-05-07.md` (aggregate file mới).
+
+### Status delta vs iter#1
+
+| Item | iter#1 | iter#2 | Δ |
+|---|---|---|---|
+| cms `shadow_automator.go` fix | working tree dirty | **STAGED, chưa commit** | +1 step (git add OK) |
+| cms HEAD | `b453d36` | `b453d36` | NO_CHANGE |
+| `09_tasks_solution_flow1_x2_2026-05-07.md` | KHÔNG TỒN TẠI | **VẪN KHÔNG TỒN TẠI** | NO_CHANGE |
+| `shadow_binding.id=52` | pending | pending | NO_CHANGE |
+| `source_object_registry.id=44` | shadow_pending | shadow_pending | NO_CHANGE |
+| Path B 5436 row count | 1720 | 1720 | NO_CHANGE (snapshot stable) |
+| 4 phantom rows | active | active | NO_CHANGE (Phase 2 chưa thi công) |
+| Boss decision pending | 5 items | 5 items | NO_CHANGE |
+
+### Soft nudge cho x2 (1 phút action)
+
+```bash
+cd /Users/trainguyen/Documents/work/cdc-system
+git status cdc-cms-service/  # confirm staged
+git commit -m "fix(cms): split shadow DDL into individual stmts to avoid PrepareStmt 42601
+
+PostgreSQL rejects multi-statement prepared queries with SQLSTATE 42601
+when GORM session runs PrepareStmt=true (pkgs/database/postgres.go).
+Split DDL into 5 individual stmts (CREATE SCHEMA + CREATE TABLE + 3 CREATE INDEX),
+exec via loop. All IF NOT EXISTS → idempotent re-Register.
+
+Boss-facing report: cdc-cms-service/report_flow1_run_x2_2026-05-07.md"
+```
+
+Sau commit, ship `09_tasks_solution_flow1_x2_2026-05-07.md` (30 phút) per CLAUDE.md §11 audit trail.
+
+### max-Brain commitment iter#3
+
+- Sẽ produce `04_decisions_flow1_path_a_vs_b_2026-05-07.md` (G-8) — Brain plan tier, không cần Boss approve.
+
+### Boss escalation (P0)
+
+**Approve G-7** (worker enable `PROVISIONING_ORCHESTRATOR_ENABLED=1` + restart) là item highest-leverage:
+- Unblocks Phương án Z AC-6 (state=shadow_active).
+- Lowest risk (env var + restart, không touch code).
+- Smallest blast radius (chỉ worker subscriber, không touch handler logic).
+- Confirms end-to-end orchestrator integration working trước khi Phase 2 Y.
+
+— max-Brain (iter#2)
