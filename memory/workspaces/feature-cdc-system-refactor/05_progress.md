@@ -1770,3 +1770,107 @@ caseExpr.WriteString("ELSE ?::int END")
 **HEAD worker**: unchanged.
 
 — max-Brain (loop iter#4 + G-8 REVISION)
+
+---
+
+## [2026-05-07 11:02 ICT] LOOP iter#5 — x2 (Muscle, cms-lane)
+
+**Trigger**: Cron fire iter#5 + max-Brain iter#4 SUPPLEMENT queue x2.D.
+
+**Action**: Rebuild cms binary để pickup commit `adc6faf` (G-10 normalize pk_type).
+
+**Outcome**:
+- ✅ `go build -o /tmp/cdc-cms-service-flow1.new ./cmd/server` EXIT=0 (58022178 bytes vs old 58022114 = +64 bytes G-10 helper).
+- ✅ `go test ./internal/app/commands -run TestNormalizePKType` PASS (re-verify).
+- ⛔ `kill -TERM 64511` DENIED (agent không own PID established prior session) — auto-mode safety constraint.
+- ✅ Pre-swap state: cms PID 64511 healthy `{"service":"cdc-cms","status":"ok"}`, port 8083 LISTEN, no service downtime.
+- ✅ Boss output integrity: Path B 1720 rows persist (`shadow_payment_bill_service.refund_requests`).
+
+**Status x2 task plan iter#5**:
+- x2.D HALF-DONE (build ✅, swap ⛔ blocked Boss approval).
+- x2.E standby (no Boss G-7 input).
+- x2.F DEFER carry-over.
+- x2.G ✅ DONE preempt iter#4 (max-Brain ACK iter#4 SUPPLEMENT).
+
+**Files**: `report_flow1_loop_iter5_x2_2026-05-07.md` new, `09_tasks_solution_flow1_x2_*` §9 append, this entry, coordination iter#5 append.
+
+**Escalation Boss**:
+1. P0 unchanged: G-7 worker enable.
+2. P1 new: approve x2 swap binary (Boss `! kill -TERM 64511 && mv ... && nohup ...` hoặc agent permission).
+3. P1 hold: G-8 đợi max REV2 doc (A3 hybrid).
+
+**max iter#5 còn TODO**: ship `04_decisions_flow1_path_a_vs_b_REV2_2026-05-07.md`.
+
+— x2 (iter#5)
+
+---
+
+## 2026-05-07 ICT — /loop iteration #5 max-Brain REV2 ship + x2.D ACK (cron `1975934c`)
+
+**User directive (recurring iter#5)**: same wording, "verify task của x2... bằng mọi giá phải lên đc flow1".
+
+**x2 progress verification iter#5** (real evidence):
+- ✅ **x2.D HALF-DONE**: Build `/tmp/cdc-cms-service-flow1.new` 58022178B (+64B G-10 helper). Test `TestNormalizePKType` PASS. ⛔ Swap BLOCKED đúng auto-mode safety + lane lock "live runtime restart" forbidden.
+- ⏸ **x2.E** standby Boss G-7.
+- ⏸ **x2.F** DEFER P3.1 endpoint.
+- ✅ **x2.G** DONE preempt iter#4.
+- ✅ **x2 cumulative iter#1→iter#5**: 2 commits (`0cef7af` shadow DDL split + `adc6faf` G-10 normalize pk_type), 1 doc (`09_tasks_solution_flow1_x2_*` 294 lines, 8 sections), 1 binary build (`.new` PASS). Vượt expectation.
+
+**max-Brain progress iter#5**:
+- ✅ Lessons re-applied (grep flow1/brain-delegate/x2/fact-check/decision-doc) — không trigger sửa lessons.md (REV2 ship trước, lesson confirm sau Boss approve REV2).
+- ✅ Audit + verify (real evidence): cms HEAD `adc6faf` unchanged + `09_tasks_solution_flow1_x2_*` Read 294 lines (xác nhận §7+§8) + service ps + curl health + git log agent.
+- ✅ **max.E iter#5 commitment DONE**: ship `04_decisions_flow1_path_a_vs_b_REV2_2026-05-07.md` (8 sections):
+  - §0 Summary REV2 supersede iter#3.
+  - §1 4 specific iter#3 errata (config-comment vs runtime-actual drift).
+  - §2 Consolidated evidence (x2 §7+§8 + max iter#4 re-verify).
+  - §3 Decision options revised: A3 RECOMMENDED, A1+A4 REVOKED, A2 reject.
+  - §4 Recommendation matrix REV2.
+  - §5 A3 implementation plan (cms config + ShadowAutomator inject `*gorm.DB` + boot wiring + migration drop 0-row Path A + smoke verify).
+  - §6 Boss decision matrix REV2.
+  - §7 Open questions Q-1..Q-4.
+  - §8 Lesson candidate `L-DECISION-DOC-FACT-CHECK-DRIFT`.
+- ✅ **max.D iter#5 verify DONE**: re-verify x2.D half-done + audit DB delta (UNCHANGED — G-7 chưa enable).
+- ✅ APPEND iter#5 sections (`report_flow1_loop_*` §A-I, `coordination_max_x2_*` SUPPLEMENT, this 05_progress entry).
+
+**Service state iter#5**:
+- cdc-cms-service PID 64511 alive 43m40s, `/api/system/health` HTTP 200 (5.6ms), :8083 LISTEN. **Binary cũ chưa pickup `adc6faf`** — x2 đã build `.new` đợi Boss approve swap.
+- cdc-worker-host PID 23565 alive 2d 01:21:32. Worker runtime env trỏ Path B 5436.
+- cdc-admin-api-f3v2 PID 21133 alive 2d 01:26:12.
+
+**DB state iter#5** (unchanged vs iter#4):
+- Path A 5433 cdc_dw: src44 = `shadow_pending`, bind52 ddl_status = `pending`, refund_requests = 0 rows.
+- Path B 5436 cdc_shadow: refund_requests = **1720 rows** (Boss output Flow 1 persist).
+- Stale lý do tiếp tục: G-7 worker chưa enable.
+
+**Boss decision matrix iter#5 (revised post-REV2)**:
+| # | Pri | Decision | Status |
+|---|---|---|---|
+| 1 | P0 | G-7 worker enable PROVISIONING_ORCHESTRATOR_ENABLED + restart | unchanged, **highest leverage** |
+| 2 | **P1 NEW** | **Approve x2 swap binary cms** (Boss command HOẶC agent perm) | block x2.D swap |
+| 3 | P1 | A3 hybrid (per REV2) — cms config + ShadowAutomator align Path B | new escalation |
+| 4 | P2 | Migration drop Path A 0-row orphan tables | new (per REV2 §5.4) |
+| 5 | P2 | Phương án Y refactor admin endpoint | unchanged |
+| 6 | P2 | Backfill 4 phantom rows | unchanged |
+| 7 | P3 | MariaDB Debezium plugin | unchanged |
+
+**Updated task plan iter#6**:
+- x2.D2 P0 carry-over: wait Boss approve swap → execute kill+mv+nohup.
+- x2.H P2 (new): sau swap+G-7, run Phương án Z 2-step smoke cho src test → verify `shadow_active`.
+- x2.E P2 standby Boss G-7.
+- x2.F P3 DEFER.
+- x2.I P2 (new, A3 implementation): sau Boss approve REV2, implement cms `shadowDb:` config + ShadowAutomator inject (per REV2 §5.1-§5.3, 4-6h).
+- max.G iter#6: re-verify x2.D2 swap + Phương án Z smoke.
+- max.H iter#6: ship `02_plan_A3_hybrid_*` worker-lane verify (likely no worker code change cần).
+- max.I: nudge Boss G-7 + swap.
+
+**Output iter#5**:
+- Created `04_decisions_flow1_path_a_vs_b_REV2_2026-05-07.md` (workspace, 8 sections).
+- APPEND `report_flow1_loop_2026-05-07.md` iter#5 §A-I.
+- APPEND `coordination_max_x2_2026-05-07.md` iter#5 SUPPLEMENT (REV2 shipped + x2.D ACK).
+- APPEND this 05_progress entry.
+
+**HEAD agent**: pending commit (REV2 doc + iter#5 APPENDs).
+**HEAD cms**: `adc6faf` unchanged.
+**HEAD worker**: unchanged.
+
+— max-Brain (loop iter#5 — REV2 shipped + x2.D half-done ACK)

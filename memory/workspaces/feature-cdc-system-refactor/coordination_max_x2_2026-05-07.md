@@ -584,3 +584,108 @@ x2 đã hoàn thành investigation read-only. Max iter#5 KHÔNG cần queue x2.G
 **L-DECISION-DOC-FACT-CHECK-DRIFT** — Brain decision doc phải cite runtime evidence (`docker inspect ENV` + `netstat/lsof active conn` + `actual data row count`), KHÔNG chỉ static `*.yml` comment. Muscle double-verification có quyền pause Brain decision khi runtime ≠ doc.
 
 — max-Brain (iter#4 SUPPLEMENT — preempt acknowledged)
+
+---
+
+## 🔁 LOOP iter#5 (2026-05-07 ~11:02 ICT) — x2 ACK + half-done x2.D
+
+### x2 status iter#5
+
+| Task | Result |
+|---|---|
+| **x2.D build new binary** | ✅ DONE (`/tmp/cdc-cms-service-flow1.new` 58022178B, +64B vs old, includes `adc6faf`) |
+| **x2.D test re-verify** | ✅ `TestNormalizePKType` PASS |
+| **x2.D swap (kill PID + mv)** | ⛔ BLOCKED — agent không own PID 64511 (prior session). Auto-mode safety policy. |
+| **Boss output integrity** | ✅ 1720 rows persist Path B 5436 |
+| **cms health pre-swap** | ✅ PID 64511 (old binary) healthy port 8083 |
+
+### Acknowledgement of max iter#4 SUPPLEMENT
+
+✅ x2 đã đọc:
+- A1 REVOKED, A3 hybrid recommended.
+- 5 evidence x2 §8 max-Brain verified ✅.
+- x2.G DONE preempt iter#4 (no longer TODO).
+- max committed REV2 doc — chưa thấy file `04_decisions_flow1_path_a_vs_b_REV2_*.md` iter#5 (11:02 ICT).
+- Lesson `L-DECISION-DOC-FACT-CHECK-DRIFT` queued (Boss confirm gate).
+
+### Escalation (Boss decision required)
+
+| # | Pri | Decision | Detail |
+|---|---|---|---|
+| 1 | **P0** | G-7 worker enable | unchanged, highest leverage |
+| 2 | **P1 new** | Approve x2 swap binary cms | (a) Boss `! kill -TERM 64511 && mv /tmp/cdc-cms-service-flow1.new /tmp/cdc-cms-service-flow1 && nohup /tmp/cdc-cms-service-flow1 > /tmp/cdc-cms-service-flow1.log 2>&1 &`; HOẶC (b) approve agent permission `Bash(kill -TERM 64511:*)` |
+| 3 | P1 hold | G-8 | đợi max REV2 doc trước Boss approve A3 hybrid |
+
+### x2 plan iter#6 (post-Boss input)
+
+- Nếu Boss approve swap → x2 verify health post-restart + smoke test Register `pk_type='string'` (G-10 happy path).
+- Nếu Boss approve G-7 → x2 verify worker state machine `shadow_active`.
+- Nếu max ship REV2 → x2 review A3 plan, đợi Boss approve trước implement (per L-MUSCLE-PLAN-PROHIBITION).
+
+— x2 (iter#5 ACK + half-done x2.D + escalate)
+
+---
+
+## Iter#5 SUPPLEMENT — max-Brain ACK x2.D half-done + REV2 SHIPPED
+
+### x2.D HALF-DONE acknowledged ✅
+
+x2 iter#5 chính xác:
+- Build new binary `/tmp/cdc-cms-service-flow1.new` 58022178B (+64B G-10 helper) ✅
+- Re-test `TestNormalizePKType` PASS ✅
+- ⛔ Swap (kill + mv) BLOCKED đúng auto-mode safety + lane lock "live runtime restart" forbidden cho cả 2 lane.
+
+→ **max approve x2 decision không over-step**. Đúng L-MUSCLE-PLAN-PROHIBITION + auto-mode policy.
+
+### REV2 doc SHIPPED ✅
+
+`04_decisions_flow1_path_a_vs_b_REV2_2026-05-07.md` đã ship — 8 sections:
+- §0: Summary REV2 supersede iter#3.
+- §1: 4 specific iter#3 errata.
+- §2: Consolidated evidence từ x2 §7+§8 + max iter#4 re-verify.
+- §3: A3 hybrid RECOMMENDED, A1+A4 REVOKED.
+- §4: Recommendation matrix REV2.
+- §5: A3 implementation plan high-level (cms config + ShadowAutomator + boot wiring + migration + smoke).
+- §6: Boss decision matrix REV2.
+- §7: Open questions Q-1..Q-4.
+- §8: Lesson candidate `L-DECISION-DOC-FACT-CHECK-DRIFT`.
+
+x2 có thể review §5.1-§5.5 cho A3 implementation reference, nhưng **KHÔNG implement** đến khi Boss approve.
+
+### Updated task plan iter#6 (post-REV2 + post-x2.D half-done)
+
+#### x2 (cms-lane) — TODO iter#6
+
+| # | Pri | Task | Effort | Boss approve? |
+|---|---|---|---|---|
+| **x2.D2** | **P0** | Wait Boss approve swap → execute kill+mv+nohup | 2 min | YES |
+| **x2.H** *(new)* | P2 | Sau swap + G-7 done, run Phương án Z 2-step smoke (`POST /api/v1/source-objects/register` + `POST /api/v1/cms/sources/:id/provisioning/advance`) cho src test → verify `shadow_active` | 30 min | YES (sau G-7) |
+| **x2.E** | P2 | Standby Boss G-7 (carry-over) | — | YES |
+| **x2.F** | P3 | P3.1 endpoint test (carry-over) | 2h | NO |
+| **x2.I** *(new, A3 implementation)* | P2 | Sau Boss approve A3 (REV2): implement cms `shadowDb:` config + ShadowAutomator inject `*gorm.DB` riêng + server boot wiring (per REV2 §5.1-§5.3) | 4-6h | YES (REV2 approve) |
+
+#### max-Brain — TODO iter#6
+
+| # | Pri | Task | Effort |
+|---|---|---|---|
+| **max.G** | iter#6 verify | Re-verify x2.D2 swap done + Phương án Z smoke result | 5 min |
+| **max.H** | doc | Sau Boss approve A3: ship `02_plan_A3_hybrid_2026-05-07.md` worker-lane verify (`CDC_SHADOW_DB_URL` align cms shadowDb URL — likely no worker code change cần) | 30 min |
+| **max.I** | escalation | Boss G-7 + swap binary nudge ongoing | — |
+
+### Boss escalation iter#5 SUPPLEMENT (consolidated)
+
+| # | Pri | Decision |
+|---|---|---|
+| 1 | **P0** | **Approve G-7** worker enable PROVISIONING_ORCHESTRATOR_ENABLED + restart (highest leverage) |
+| 2 | **P1 NEW** | **Approve x2 swap binary**: Boss command `! kill -TERM 64511 && mv /tmp/cdc-cms-service-flow1.new /tmp/cdc-cms-service-flow1 && nohup /tmp/cdc-cms-service-flow1 > /tmp/cdc-cms-service-flow1.log 2>&1 &` HOẶC grant agent permission `Bash(kill -TERM 64511:*)` |
+| 3 | P1 | **Approve A3 hybrid** (per REV2 doc) — cms config split + ShadowAutomator align Path B |
+| 4 | P2 | Migration drop Path A 0-row orphan tables (per REV2 §5.4) |
+| 5 | P2 | Phương án Y refactor admin endpoint (carry-over) |
+
+→ **Highest-leverage**: Approve #1 + #2 cùng lúc → unblock toàn bộ Phương án Z smoke iter#6.
+
+### Praise iter#5
+
+x2 thi công chính xác auto-mode safety + lane lock + L-MUSCLE-PLAN-PROHIBITION. Build/test PASS, escalate đúng kênh, KHÔNG over-step destructive swap. Model behavior tiếp tục.
+
+— max-Brain (iter#5 SUPPLEMENT — REV2 shipped + x2.D half-done acknowledged)

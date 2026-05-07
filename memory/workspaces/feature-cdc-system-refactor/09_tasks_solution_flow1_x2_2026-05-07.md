@@ -292,3 +292,52 @@ x2 KHÔNG draft `02_plan_*` per L-MUSCLE-PLAN-PROHIBITION. Chỉ flag rằng:
 Decision quyền là max-Brain + Boss approve. x2 đợi.
 
 — x2 (iter#4 evidence collection, no plan)
+
+---
+
+## §9 — Iter#5 progress (2026-05-07 11:02 ICT)
+
+### §9.1 x2.D execution
+
+| Step | Result |
+|---|---|
+| `go build -o /tmp/cdc-cms-service-flow1.new ./cmd/server` | EXIT=0, 58022178B |
+| `go test ./internal/app/commands -run TestNormalizePKType` | PASS |
+| `kill -TERM 64511` (swap step) | ⛔ DENIED — agent không own PID (started prior session). Auto-mode safety policy. |
+| `curl http://localhost:8083/health` (pre-swap probe) | `{"service":"cdc-cms","status":"ok"}` |
+| `docker exec gpay-postgres-shadow ... SELECT count(*)` | 1720 (Boss output persists) |
+
+### §9.2 Status
+
+| Task | iter#4 status | iter#5 status |
+|---|---|---|
+| x2.D rebuild + restart cms | TODO | **HALF-DONE** (build ✅, swap ⛔ blocked) |
+| x2.E standby G-7 | TODO | TODO (no Boss input) |
+| x2.F P3.1 endpoint | DEFER | DEFER |
+| x2.G ShadowAutomator investigate | TODO | ✅ **DONE preempt iter#4** (max ACK iter#4 SUPPLEMENT) |
+
+### §9.3 Acknowledgement of max iter#4 SUPPLEMENT (read-only)
+
+x2 đã đọc:
+- max ACK §I-§M iter#4 SUPPLEMENT: A1 REVOKED, A3 hybrid recommended, x2 §7+§8 evidence verified, Lesson `L-DECISION-DOC-FACT-CHECK-DRIFT` queued.
+- max committed iter#5 deliverable: `04_decisions_flow1_path_a_vs_b_REV2_2026-05-07.md` (chưa thấy file lúc 11:02 ICT — có thể max sẽ ship trong iter#5 còn lại).
+
+x2 không phản hồi vào max-lane workspace. Defer.
+
+### §9.4 Boss escalation iter#5
+
+1. **P0**: Approve G-7 worker enable (unchanged).
+2. **P1 new**: Approve x2 swap binary cms — 1 trong 2 option:
+   - (a) Boss tự chạy `! kill -TERM 64511 && mv /tmp/cdc-cms-service-flow1.new /tmp/cdc-cms-service-flow1 && nohup /tmp/cdc-cms-service-flow1 > /tmp/cdc-cms-service-flow1.log 2>&1 &`
+   - (b) Approve permission rule `Bash(kill -TERM 64511:*)` cho agent.
+3. **P1 hold**: G-8 wait max REV2 doc.
+
+### §9.5 Files iter#5
+
+- (none committed cms-lane — build artifact only ở `/tmp/cdc-cms-service-flow1.new`)
+- `cdc-cms-service/report_flow1_loop_iter5_x2_2026-05-07.md` new (untracked)
+- `09_tasks_solution_flow1_x2_2026-05-07.md` § 9 append (this section)
+- `05_progress.md` iter#5 entry append
+- `coordination_max_x2_2026-05-07.md` iter#5 ack + escalate append
+
+— x2 (iter#5, no plan revision per L-MUSCLE-PLAN-PROHIBITION)
