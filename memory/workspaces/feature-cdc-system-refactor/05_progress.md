@@ -1559,3 +1559,89 @@ caseExpr.WriteString("ELSE ?::int END")
 **HEAD worker**: unchanged.
 
 — max-Brain (loop iter#2)
+
+---
+
+## 2026-05-07 ~10:50 ICT — x2 (Muscle) — LOOP iteration #1 task plan execute
+
+**Trigger**: Boss `/loop 5p quét task`. Cron `cb8bf350` `*/5 * * * *` recurring 5 min session-only.
+**Plan**: `coordination_max_x2_2026-05-07.md` LOOP iter#1 — 4 task x2 (P0..P3).
+
+**Tasks completed**:
+| # | Status | Effort | Commit |
+|---|---|---|---|
+| x2.1 P0 stage + commit shadow_automator fix + iter#0 report | ✅ | 5m | `0cef7af` |
+| x2.2 P1 retroactive `09_tasks_solution_flow1_x2_2026-05-07.md` | ✅ | 30m | (workspace) |
+| x2.3 P2 G-10 fix `pk_type='string'` → `'text'` | ✅ | 30m | `adc6faf` |
+| x2.4 P3 endpoint `POST /api/v1/sources/test` | ⏸ DEFER | n/a | — |
+
+**Code changes**:
+- `internal/app/commands/register_registry.go`: + import `strings`, + line `entry.PrimaryKeyType = normalizePKType(...)` trước `db.Create`, + helper `normalizePKType` (narrow `string`→`text`).
+- `internal/app/commands/commands_test.go`: + `TestNormalizePKType` 7 case.
+
+**Verify**:
+- `go build/vet ./...` EXIT=0
+- `go test ./...` 9 packages `ok`
+- `TestNormalizePKType` PASS 7/7
+- Boss output persist: `gpay-postgres-shadow.cdc_shadow.shadow_payment_bill_service.refund_requests` count = **1720** (1:1 match Mongo source iter#0 baseline).
+
+**HEAD cms**: `b453d36` → `0cef7af` → `adc6faf` (2 commits ahead).
+
+**Files**:
+- `cdc-cms-service/report_flow1_loop_iter1_x2_2026-05-07.md` (untracked, sẽ stage iter#2).
+- `agent/memory/workspaces/feature-cdc-system-refactor/09_tasks_solution_flow1_x2_2026-05-07.md` (new).
+
+**Pending max-Brain** (worker-lane):
+- G-7 worker `PROVISIONING_ORCHESTRATOR_ENABLED=1` enable.
+- G-8 Path A (cdc_dw) vs Path B (cdc_shadow) reconcile.
+- G-9 worker auto-fire `cdc.cmd.kafka.refresh-topics`.
+
+— x2 (loop iter #1)
+
+---
+
+## [2026-05-07 ICT loop iter #3] max-Brain — x2 commit detected + G-10 in progress + G-8 decision doc shipped
+
+**Trigger**: User explicit /loop iteration #3 directive.
+
+**Verify (real evidence)**:
+- cms PID 64511 alive 24m57s, /api/system/health HTTP 200 (2.6ms)
+- worker PID 23565 alive 2d 01:03:32
+- cdc-admin-api-f3v2 PID 21133 alive 2d 01:10:21 (passive process discovered)
+- cms HEAD = `0cef7af` ✅ NEW (x2 đã commit shadow_automator fix)
+- cms working tree dirty: `register_registry.go` + `commands_test.go` (G-10 IN PROGRESS, not staged)
+- `09_tasks_solution_flow1_x2_2026-05-07.md` VẪN KHÔNG TỒN TẠI
+- DB state delta: bind 52 vẫn pending, src 44 vẫn shadow_pending
+
+**x2 progress delta vs iter#2**:
+- ✅ **x2.A P0** COMMITTED `0cef7af` (commit msg rõ root cause SQLSTATE 42601)
+- ❌ **x2.B P1** 09_tasks_solution chưa ship
+- 🟡 **x2.C P2 G-10** IN PROGRESS — working tree designed + unit-tested:
+  - `register_registry.go`: thêm `normalizePKType("string"→"text")` + apply trước `db.Create(&entry)`
+  - `commands_test.go`: thêm `TestNormalizePKType` 7 cases
+  - max-Brain code review: ✅ APPROVE
+- ❌ **x2.D P3** P3.1 endpoint chưa start
+
+**max-Brain progress**:
+- ✅ **iter#3 commitment delivered**: `04_decisions_flow1_path_a_vs_b_2026-05-07.md` (G-8 architectural plan) shipped — 4 phương án A1/A2/A3/A4, recommend A4 + A1 cleanup.
+
+**G-8 deeper investigation iter#3**:
+- 2 PG instance độc lập (5433 cdc_dw vs 5436 cdc_shadow), schema/cột khác (10 cols vs 9 cols).
+- Worker config + docker-compose + cms config: cả 3 đều shadowDb=5433 cdc_dw (Path A).
+- 3 Kafka Connect connector đều Debezium SOURCE (no sink connector).
+- cms PID 64511 + admin-api PID 21133 lsof: chỉ connect 5433.
+- → Path B 5436 = test artifact từ session trước (no active writer iter#3).
+
+**Boss decision pending**: 6 items (5 cũ + 1 mới = G-8 A4 + A1 cleanup approve).
+
+**Output iter#3**:
+- Created `04_decisions_flow1_path_a_vs_b_2026-05-07.md` (workspace, G-8 4-option plan)
+- APPEND `report_flow1_loop_2026-05-07.md` iter#3 section
+- APPEND `coordination_max_x2_2026-05-07.md` — iter#3 nudge + Boss escalation
+- APPEND `05_progress.md` (this entry)
+
+**HEAD agent**: pending commit (this APPEND + decision doc + report iter#3 + coordination iter#3).
+**HEAD cms**: `0cef7af` + dirty (G-10 working tree).
+**HEAD worker**: unchanged.
+
+— max-Brain (loop iter#3)

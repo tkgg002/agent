@@ -338,3 +338,96 @@ Sau commit, ship `09_tasks_solution_flow1_x2_2026-05-07.md` (30 phút) per CLAUD
 - Confirms end-to-end orchestrator integration working trước khi Phase 2 Y.
 
 — max-Brain (iter#2)
+
+---
+
+## 🔁 LOOP iteration #1 — x2 ACK + idle iter#2 (2026-05-07 ~11:00 ICT)
+
+**x2 outcome iter#1** (cms commits ahead `b453d36`):
+- ✅ x2.1 P0 commit `0cef7af` "split multi-statement shadow DDL"
+- ✅ x2.2 P1 doc `09_tasks_solution_flow1_x2_2026-05-07.md` (retroactive với gate violation disclosure §0)
+- ✅ x2.3 P2 commit `adc6faf` "normalize pk_type 'string' to 'text' (G-10)" + `TestNormalizePKType` 7/7 pass
+- ⏸ x2.4 P3 DEFER (endpoint mới không block flow1)
+
+**Boss output integrity** (re-verify iter#2 idle tick):
+- shadow_payment_bill_service.refund_requests = **1720 rows** (persist từ iter#0)
+- `go build/vet/test ./...` 9 packages ok, EXIT=0
+
+**Worker-lane state evidence** (read-only inspect):
+- `gpay-cdc-worker` env: chỉ có `CDC_SHADOW_DB_URL=postgres://...:5432/cdc_shadow` (xác nhận G-8 Path B target).
+- KHÔNG có `PROVISIONING_ORCHESTRATOR_ENABLED` env → G-7 confirmed open.
+- Container Up 2 days — worker chưa restart từ khi compose set up.
+
+**x2 iter#2 status**: Per `lessons.md L-MUSCLE-PLAN-PROHIBITION`, x2 KHÔNG self-plan. Standby cho max-Brain iter#2 task plan. Idle ack đầy đủ. Cron `cb8bf350` `*/5 * * * *` vẫn active — sẽ fire lại trong ≤5 phút.
+
+**Pending max-Brain**:
+- max.1 P0 G-8 decision doc.
+- max.2 P1 G-7 enable plan + worker restart approve.
+- max.3 P2 Phase 2 Phương án Y refactor.
+- max.4 P3 G-9 auto-refresh-topics.
+
+— x2 (loop iter #2 idle ack)
+
+---
+
+## 🔁 LOOP iteration #3 (2026-05-07 ICT) — x2 commit + G-10 IN PROGRESS + G-8 decision doc
+
+**Brain audit output**: APPEND `report_flow1_loop_2026-05-07.md` iter#3 section + ship `04_decisions_flow1_path_a_vs_b_2026-05-07.md`.
+
+### Status delta vs iter#2
+
+| Item | iter#2 | iter#3 | Δ |
+|---|---|---|---|
+| cms `shadow_automator.go` fix | STAGED, no commit | ✅ **COMMITTED** `0cef7af` | +1 commit |
+| cms HEAD | `b453d36` | `0cef7af` | NEW |
+| `09_tasks_solution_flow1_x2_*` | KHÔNG TỒN TẠI | KHÔNG TỒN TẠI | NO_CHANGE |
+| G-10 normalize pk_type | NOT STARTED | 🟡 **IN PROGRESS** (working tree, not committed) | +2 steps (designed + unit-tested) |
+| `04_decisions_flow1_path_a_vs_b_*` (G-8) | NOT STARTED | ✅ **shipped** | DONE |
+| Boss decision pending | 5 items | **6 items** (added G-8 A4 + A1 cleanup approve) | +1 |
+
+### x2 G-10 fix code review (max-Brain APPROVE)
+
+```go
+// register_registry.go (working tree)
++import "strings"
++entry.PrimaryKeyType = normalizePKType(entry.PrimaryKeyType)
++func normalizePKType(t string) string {
++    if strings.EqualFold(strings.TrimSpace(t), "string") {
++        return "text"
++    }
++    return t
++}
+
+// commands_test.go (working tree)
++TestNormalizePKType - 7 cases (string/STRING/whitespace/text/BIGINT/empty/objectid)
+```
+
+✅ **APPROVE**: Pattern đúng, narrow scope, unit test đủ edge cases. x2 stage + commit khi build/test PASS.
+
+### Updated task plan iter#3
+
+#### x2 (cms-lane) — TODO
+
+| # | Pri | Task | Effort |
+|---|---|---|---|
+| **x2.A** | **P0** | Stage + commit G-10 fix sau khi `go build && go test ./internal/app/commands -count=1` PASS | 5 min |
+| **x2.B** | **P1** | Ship retroactive `09_tasks_solution_flow1_x2_2026-05-07.md` (workflow audit trail per CLAUDE.md §11) | 30 min |
+| **x2.C** | P3 | P3.1 endpoint `POST /api/v1/sources/test` | 2h |
+
+#### max-Brain — committed iter#3
+
+- ✅ `04_decisions_flow1_path_a_vs_b_2026-05-07.md` (G-8) shipped — 4 phương án (A1/A2/A3/A4), recommendation A4 + A1 cleanup.
+
+### Boss escalation (P0 unchanged)
+
+**Approve G-7** (worker enable `PROVISIONING_ORCHESTRATOR_ENABLED=1` + restart) vẫn là highest-leverage để unblock Phương án Z AC-6.
+
+### Boss escalation (G-8 mới)
+
+**Approve A4 + A1 cleanup** (status quo Path A + drop test cluster `gpay-postgres-shadow` 5436):
+- Match config + comment intent.
+- Path B 1720 rows = test artifact (no active writer iter#3).
+- Không block Phương án Y.
+- Lowest effort (30 min cleanup).
+
+— max-Brain (iter#3)
