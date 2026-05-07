@@ -43,3 +43,10 @@
 - Lane lock effective from `b4a3461`: max owns worker (`centralized-data-service/`) + workspace docs; x2 owns cms (`cdc-cms-service/`).
 - Pending Task #19 closure: x2 lands Đợt J commit + APPEND `05_progress.md` → Task #19 marked CLOSED.
 - Worker-lane sub-issues queued for max post-Đợt-J: P3 prune residue 1 row legacy_1, duplicate close-loop log dedup, Track E (Mongo CDC) plan kickoff.
+
+## 2026-05-07 09:48 ICT Updates (post-Đợt-J)
+
+- `feature-cdc-system-refactor`: **Task #19 CLOSED** ✅ — Đợt J landed by x2 (cms `b453d36`, agent `57d1b2a`). 10 đợt A→J done; `internal/service/` removed entirely; cms hexagonal-aligned (`app/{commands,queries,ports}` + `domain/` + `infra/{cache,http,messaging,persistence,observability}` + `api/` + `server/` + `middleware/` + `router/` + `model/`). Q3 (rebuild + restart cms-server) ALSO done by x2: PID 52079 `/tmp/cdc-cms-service-postJ` post-`b453d36` binary, smoke test 3 endpoint PASS (200 trên `/health`, `/api/system/health`, `/api/v1/source-objects/registry/1/dispatch-status`).
+- Workspace `feature-cdc-system-refactor`: status row trong table có thể đọc là 🟡 Active (audit trail) — actual phase: ⏸ Paused (Task #19 đóng, chờ next directive).
+- Next priorities cho max-Brain (post-Task-#19): plan Track E (Mongo CDC, blocked on Boss brief — lesson L-1436 không bịa scope), P3 prune residue 1 row legacy_1 investigation (worker-lane), duplicate close-loop log dedup investigation (worker-lane).
+- max output 2026-05-07 ICT: `report_flow1_connect_source_2026-05-07.md` (overview Wizard step 1–5 manual operator flow per Boss directive).
