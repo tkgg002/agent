@@ -20,6 +20,7 @@
 | upgrade-agent-infrastructure | Nâng cấp hạ tầng Agent v1.10.0 (Brain/Muscle) | ✅ Done | 2026-04-06 |
 | feature-trans-his-collection-export | Export TransHis Collection | 🟡 Active | 2026-04-09 |
 | feature-multi-pg-isolation-e2e | Tách 4 PG containers (auth/cdc/dest/source) + E2E auto-pipeline | 🟡 Active | 2026-04-28 |
+| feature-cdc-system-refactor | Task #19 service-tier drainage — Đợt G/H/I closed by max → Đợt J handed off to x2 (cms-lane locked) | 🟡 Active | 2026-05-07 |
 
 
 ---
@@ -35,3 +36,10 @@
 
 - `feature-cms-fe-overhaul`: đã hoàn thành Phase 2 FE Navigation Refactor trong `cdc-cms-web`; bước kế tiếp là refactor data model/API usage của các page sang semantics V2.
 - `feature-cms-fe-overhaul`: đã hoàn thành Phase 8 `worker-schedule` contract refactor; `cms-fe` hiện được chốt theo mô hình 2 luồng, trong đó operator-flow (monitoring / backup / retry / reconcile) phải được giữ lại nhưng làm gọn API surface.
+
+## 2026-05-07 Updates
+
+- `feature-cdc-system-refactor`: Task #19 service-tier drainage — Đợt G+H+I closed (cms `b4a3461`, agent `c141012`). Cluster A (alert_manager + approval_service + provisioning_orchestrator + state_machine + master_swap + shadow_automator + source_object_v2_sync + registry_repo + mapping_rule_repo) → `infra/persistence/`. Đợt J (cluster A* system_health_* + cluster C probes/) → `infra/observability/{,probes/}` đã plan + tasks (agent `dd21443`), x2 thi công.
+- Lane lock effective from `b4a3461`: max owns worker (`centralized-data-service/`) + workspace docs; x2 owns cms (`cdc-cms-service/`).
+- Pending Task #19 closure: x2 lands Đợt J commit + APPEND `05_progress.md` → Task #19 marked CLOSED.
+- Worker-lane sub-issues queued for max post-Đợt-J: P3 prune residue 1 row legacy_1, duplicate close-loop log dedup, Track E (Mongo CDC) plan kickoff.
