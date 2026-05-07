@@ -1645,3 +1645,128 @@ caseExpr.WriteString("ELSE ?::int END")
 **HEAD worker**: unchanged.
 
 — max-Brain (loop iter#3)
+
+---
+
+## 2026-05-07 ~11:05 ICT — x2 (Muscle) — LOOP iter#3 review of max G-8 decision
+
+**Trigger**: max-Brain ship `04_decisions_flow1_path_a_vs_b_2026-05-07.md` recommending **A4 status quo + A1 cleanup (drop gpay-postgres-shadow)**. x2 task per max iter#3 plan: x2.A/B/C — đều ALREADY DONE iter#1 (`adc6faf`).
+
+**x2 idle ack (no new code work)**: thay vào đó perform double-verification per CLAUDE.md §9 trước khi Boss approve A1 destructive.
+
+**Evidence collected (real, not fabricated)**:
+| Probe | Output | Implication |
+|---|---|---|
+| `docker inspect gpay-cdc-worker` env | `CDC_SHADOW_DB_URL=...gpay-postgres-shadow:5432/cdc_shadow` | Worker runtime targets Path B (override docker-compose default) |
+| Worker netstat | 1 live conn 172.26.0.18:5432 (gpay-postgres-shadow) | Path B not dead |
+| Path B `_synced_at` range | `03:23:44.527 → 03:23:45.031` UTC 2026-05-07 | Matches iter#0 Flow 1 run timestamp |
+| Path A row count | 0 | Orphan (cms ShadowAutomator targets cdc_dw) |
+| Path B row count | 1720 | Boss output Flow 1 |
+
+**Conclusion x2**: max claim "Path B = test artifact" trong decision doc §1.5 KHÔNG match runtime. A1 cleanup sẽ destroy Boss output. Phải pause cho max-Brain re-evaluate (A2/A3 có thể đúng hơn A4+A1).
+
+**Files appended** (review tier only, KHÔNG plan tier):
+- `09_tasks_solution_flow1_x2_2026-05-07.md` §7 (fact-check evidence + suggest re-evaluate)
+- `coordination_max_x2_2026-05-07.md` ⚠️ pause request cross-ref
+
+**HEAD cms unchanged**: `adc6faf`. No new commit iter#3.
+
+**Per L-MUSCLE-PLAN-PROHIBITION**: x2 KHÔNG draft `02_plan_*` revision. Defer to max iter#4 plan.
+
+— x2 (iter#3 review)
+
+---
+
+## 2026-05-07 ~11:15 ICT — x2 (Muscle) — LOOP iter#4 deeper evidence
+
+**Trigger**: max-Brain chưa response fact-check iter#3 11:05. x2 idle ack iter#4, info tier evidence collection.
+
+**Findings (real, verifiable)**:
+1. `centralized-data-service/.env:7` deliberately set `CDC_SHADOW_DB_URL=...:5432/cdc_shadow` (Path B active).
+2. `.env.example:22` documents Path B alternative — team biết option và chọn Path B.
+3. Worker `connection_manager.go:33-89` + `event_handler.go:178` architected cho separate shadow cluster.
+4. CMS thiếu `CDC_SHADOW_DB_URL` env + thiếu `shadowDb:` config block + 0 hit grep cms code → ShadowAutomator dùng global gorm = control plane Path A → orphan.
+
+**Conclusion factual**: Path B = intentional design (A3 hybrid). max iter#3 §1.5 "test artifact" claim KHÔNG đúng. CMS config drift = root cause Path A orphan.
+
+**Files appended (info+review tier only)**:
+- `09_tasks_solution_flow1_x2_2026-05-07.md §8` (deeper evidence + suggest A3 hybrid).
+- `coordination_max_x2_2026-05-07.md` iter#4 cross-ref.
+
+**Boss output**: 1720 rows ✅ persist.
+**HEAD cms**: `adc6faf` unchanged.
+**Per L-MUSCLE-PLAN-PROHIBITION**: x2 KHÔNG draft `02_plan_*` revision. Đợi max iter#5.
+
+— x2 (iter#4)
+
+---
+
+## 2026-05-07 ICT — /loop iteration #4 max-Brain verify + G-8 REVISION (cron `1975934c`)
+
+**User directive (recurring iter#4)**: "verify task của x2... bằng mọi giá phải lên đc flow1".
+
+**x2 progress verification iter#4** (real evidence):
+- ✅ **x2.A P0 DONE**: cms HEAD `adc6faf` "fix(cms): normalize pk_type 'string' to 'text' at Register (G-10)" by TraiNguyen 10:44:23 ICT.
+- ✅ **x2.B P1 DONE**: `09_tasks_solution_flow1_x2_2026-05-07.md` 7906B 139 lines.
+- ⏸ **x2.C P3 DEFER**: P3.1 endpoint — hợp lý.
+- ✅ **x2 BONUS iter#3 11:05**: Double-verification phát hiện max iter#3 G-8 §1.5 SAI fact. APPEND `09_tasks_solution §7` + `coordination ⚠️ pause request`.
+- ✅ **x2 BONUS iter#4 11:15**: Deeper evidence (5 điểm) confirming A3 hybrid intentional. APPEND `09_tasks_solution §8` + `coordination iter#4`.
+
+**max-Brain progress iter#4**:
+- ✅ Audit + verify (real evidence): commit `adc6faf` git show + `09_tasks_solution_flow1_x2_*` Read 139 lines + DB state probe + service ps + curl health.
+- ✅ **CRITICAL re-verify x2 fact-check** (max iter#4):
+  - `docker inspect gpay-cdc-worker` env: `CDC_SHADOW_DB_URL=postgres://...gpay-postgres-shadow:5432/cdc_shadow` ✅ (Path B)
+  - Path B 5436 cdc_shadow `shadow_payment_bill_service.refund_requests`: **1720 rows, _synced_at 03:23:44.527 → 03:23:45.031** ✅
+  - Path A 5433 cdc_dw same table: **0 rows** ✅ (orphan từ cms ShadowAutomator)
+- ✅ x2 fact-check **CONFIRMED**. max iter#3 §1.5 SAI fact.
+- ✅ APPEND iter#4 + iter#4 SUPPLEMENT (G-8 REVISION) sections vào `report_flow1_loop_*`.
+- ✅ APPEND `coordination_max_x2_*` iter#4 ACK + iter#4 SUPPLEMENT (preempt acknowledged).
+- ✅ APPEND this 05_progress entry.
+
+**G-8 REVISION (iter#4 final)**:
+- ⛔ **REVOKE A1 cleanup** (drop Path B) — sẽ destroy 1720 rows Boss output Flow 1.
+- ⛔ **REVOKE A4 status quo Path A** — Path A = orphan, không phải single source.
+- ✅ **PROMOTE A3 hybrid dual-cluster** = recommended iter#4. Path A = control plane, Path B = data plane. Drift duy nhất = cms `ShadowAutomator` không tách shadowConnPool.
+- 🟡 **HOLD Boss escalation G-8** đợi max iter#5 ship `04_decisions_flow1_path_a_vs_b_REV2_*`.
+
+**Service state iter#4**:
+- cdc-cms-service PID 64511 alive 33m38s, `/api/system/health` HTTP 200 (4.0ms), :8083 LISTEN. Binary chưa pickup `adc6faf` → x2.D rebuild required.
+- cdc-worker-host PID 23565 alive 2d 01:12:13. Worker runtime env trỏ Path B 5436.
+- cdc-admin-api-f3v2 PID 21133 alive 2d 01:16:53.
+
+**DB state iter#4**:
+- Path A 5433 cdc_dw: src44 = `shadow_pending`, bind52 ddl_status = `pending`, refund_requests = 0 rows.
+- Path B 5436 cdc_shadow: refund_requests = **1720 rows** (Flow 1 production, _synced_at matches iter#0 03:23:44 → 03:23:45).
+- Stale lý do: G-7 worker chưa enable → state machine không advance. **1720 rows Path B = Debezium → Kafka → worker shadow handler đã work iter#0**, chỉ `provisioning_state` registry không advance.
+
+**Boss decision matrix iter#4 REVISED**:
+| # | Decision | Pri | Status |
+|---|---|---|---|
+| 1 | G-7 worker enable PROVISIONING_ORCHESTRATOR_ENABLED + restart | P0 | unchanged, **highest leverage** |
+| 2 | G-8 architecture | P1 | A1+A4 REVOKED, A3 PROMOTED, **HOLD pending REV2** |
+| 3 | Phương án Y refactor admin endpoint | P2 | unchanged |
+| 4 | Backfill 4 phantom rows | P2 | unchanged |
+| 5 | MariaDB Debezium plugin | P3 | unchanged |
+
+**Updated task plan iter#5**:
+- x2.D P1 TODO: rebuild + restart cms binary để G-10 effective.
+- x2.E P2 TODO: standby Boss G-7.
+- x2.F P3 DEFER: P3.1 endpoint.
+- ~~x2.G~~ ✅ DONE iter#4 preempt (`09_tasks_solution §8`).
+- max.D iter#5 TODO: re-verify x2.D + audit DB delta.
+- **max.E iter#5 commitment TODO**: ship `04_decisions_flow1_path_a_vs_b_REV2_2026-05-07.md`.
+- max.F: nudge Boss G-7.
+
+**Lesson candidate iter#4** (chờ Boss confirm REV2):
+- `L-DECISION-DOC-FACT-CHECK-DRIFT`: Decision doc PHẢI cite runtime evidence (docker inspect ENV + netstat + actual data row count). Muscle double-verification có quyền pause Brain.
+
+**Output iter#4**:
+- APPEND `report_flow1_loop_2026-05-07.md` iter#4 sub-sections A-H + iter#4 SUPPLEMENT sub-sections I-M (G-8 REVISION).
+- APPEND `coordination_max_x2_2026-05-07.md` iter#4 ACK + iter#4 SUPPLEMENT preempt acknowledged.
+- APPEND this 05_progress entry.
+
+**HEAD agent**: pending commit (iter#4 APPENDs).
+**HEAD cms**: `adc6faf` (G-10 shipped, binary chưa pickup).
+**HEAD worker**: unchanged.
+
+— max-Brain (loop iter#4 + G-8 REVISION)
