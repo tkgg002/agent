@@ -2343,3 +2343,146 @@ Khi codebase có adapter layer A (repository / DAL) wrapping framework B (GORM /
 - CI cần Docker. Nếu CI runner không có Docker → fall back: unit test S (stub interface) + manual integration phase trên dev/staging.
 
 **Tags**: #testing #repository-pattern #orm #gorm #sqlmock-anti-pattern #testcontainers #integration-test #adapter-layer #global-pattern
+
+---
+
+## [2026-05-07] Lesson L-RESUME-DIRTY: Working-tree deletion bị bỏ sót khi resume session
+
+**Trigger**: Task #19 đợt D + G của feature-cdc-system-refactor. Session prior chạy refactor R = move package P → Q (xóa file ở P, tạo file ở Q). Refactor commit dở dang: file ở Q committed, deletion ở P chỉ apply ở working tree (uncommitted). Compaction cắt session. Session sau resume → build fail vì `undefined: P.Type` (callers ở Q reference P-types đã bị xóa local mà HEAD không biết).
+
+**Global Pattern [Refactor R xóa file ở P và tạo file ở Q] → nếu deletion uncommitted, working tree dirty với `D <files-of-P>`** → next session build fail.
+
+**Đúng (resume protocol)**:
+1. **First action sau resume**: `git status --short` quét đủ 3 lane: `M`, `??`, `D`. Đặc biệt `D` lane dễ bị bỏ qua khi user grep "modified files".
+2. Cho mỗi `D <file>`: `git ls-tree HEAD <file>` để check HEAD vẫn track không. Nếu YES → file là "dirty deletion" (prior session intent: xóa nhưng chưa commit).
+3. Quyết định: 
+   - **Restore** (`git restore --source=HEAD --staged --worktree -- <file>`) nếu prior session intent unclear hoặc file vẫn cần.
+   - **Re-delete + commit** trong scope đúng nếu prior session intent rõ ràng và bạn tiếp tục chuỗi refactor.
+   - **Leave alone** (không commit) nếu out-of-scope cho task hiện tại — đợi prior session/owner finalize.
+4. Build verify trước khi edit code.
+
+**Counter-pattern (sai)**: Build fail → grep error message → đoán "missing import" → add import → build vẫn fail → confused. Root cause là deletion, không phải import.
+
+**Áp dụng đa-dự án**: Bất kỳ workflow có session continuity + uncommitted refactors. Variables: P=package nguồn, Q=package đích, R=refactor move/rename, S=session mới resume.
+
+**Tags**: #git #refactor #session-continuity #compaction #dirty-tree
+
+---
+
+## [2026-05-07] Lesson L-COMPACTION-SPLIT: Refactor bị split qua nhiều session, HEAD partial-state
+
+**Trigger**: Task #19 đợt G. HEAD đã partial-commit registry refactor: `registry_handler.go` + `server.go` dùng `ports.RegistryRepo` + `persistence.NewRegistryRepo`, NHƯNG ports interface chưa có và adapter file chưa tồn tại. HEAD broken. Build error: `undefined: ports.RegistryRepo`.
+
+**Global Pattern [Refactor R có N pieces (interface I, adapter A, callers C1...Cn). Compaction cắt giữa chừng] → next session resume với HEAD chứa SOME pieces (e.g. C1...Cn committed) nhưng MISSING others (I + A)** → caller-side compiles theo intent của R, định nghĩa-side chưa có → undefined-symbol explosion.
+
+**Đúng (resume diagnosis)**:
+1. Trước khi edit, chạy `git diff HEAD -- <each-touched-file>` để map: file nào đã match committed state, file nào còn pending.
+2. Nếu build error `undefined: pkg.X`:
+   - **Trước hết**: check `git ls-tree HEAD <pkg-path>` xem `pkg` có file definition cho `X` không.
+   - Nếu KHÔNG có → đây là MISSING DEFINITION (cần add interface/type/var trong session này). KHÔNG phải missing import.
+   - Nếu CÓ → check tên symbol đúng spelling (typo / casing).
+3. Reverse-direction strategy: thay vì revert linter changes "trông lạ", check linter có thể đang HOÀN THIỆN refactor R. Nếu YES → keep linter changes + bổ sung pieces còn thiếu.
+
+**Counter-pattern (sai)**: Build fail → assume HEAD healthy → revert linter changes về "as committed" → build vẫn fail → re-apply linter → ping-pong. Root cause là HEAD broken, không phải linter aggressive.
+
+**Side-effect**: Doc cho session mới phải call out "fixing pre-existing broken HEAD" để reviewer hiểu commit boundary không phải pure-task-scope.
+
+**Áp dụng đa-dự án**: Bất kỳ refactor nhiều file cross-package + agent session continuity. Variables: R=refactor multi-piece, I=interface, A=adapter, C=caller, H=HEAD partial-state.
+
+**Tags**: #git #refactor #session-continuity #compaction #broken-head #linter
+
+
+---
+
+## [2026-05-07] Lesson L-PRE-PLAN-AUDIT: Plan refactor mà không quét repo gốc trước → làm rối + đợt nhỏ kéo lê
+
+**Trigger**: Boss feedback session Task #19 — "mày đang làm rất lâu và rối kinh khủng. trong khi flow của plan chỉ là đọc repo, tìm ra những api nào tương tác db, giữ lại, bỏ vào pattern mới...". Boss tiết lộ tồn tại `cdc-cms-service-bk/` (backup gốc TRƯỚC khi Muscle bắt đầu Task #19) — Muscle KHÔNG biết / KHÔNG quét trước khi plan các đợt E/G/H. Hệ quả: plan dựa trên memory + grep cục bộ, sai orientation, chia 6 đợt nhỏ liên tiếp (C→D→E→F→G→H) thay vì 1 audit + 1 plan + 1-2 commit.
+
+**Root cause**:
+1. **Không có step #0 "audit repo gốc vs current"** trước khi plan: thiếu fact base về scope tổng (ví dụ: `internal/repository/` đã drained chưa? `internal/{app,domain,infra}/` đã có chưa? bao nhiêu file thực sự cần move?).
+2. **Inertia "đợt-nhỏ-pattern"**: sau 1 đợt thành công (E), continue với đợt nhỏ tiếp (F→G→H) mà không zoom-out — thấy "1 đợt 1 commit nhỏ" feel productive nhưng tổng thể là noise.
+3. **Bỏ qua mention "backup" trong context**: codebase root có `cdc-cms-service-bk/` cùng cấp `cdc-cms-service/` — visible trong `ls /Users/trainguyen/Documents/work/cdc-system/` ngay từ đầu nhưng Muscle không inspect.
+4. **Không có file `report_*.md` cho session-level changes**: workspace có pattern `report_phase2_*.md` cho phase audit, nhưng Muscle ghi vào `05_progress.md` per-đợt mà không tạo session-level report cho Boss check.
+
+**Global Pattern [Refactor task R lên codebase X có backup B song song] → nếu skip diff(B,X) trước khi plan**:
+- Memory state ≠ disk state (đặc biệt sau compaction / multi-session)
+- Drainage scope không định lượng được → chia đợt theo cảm tính
+- Boss không có 1-shot reference để verify "Muscle đã thay đổi gì" → phải đọc per-commit message rời rạc
+
+**Đúng (revised protocol step #0–#5)**:
+0. **Pre-plan audit (BẮT BUỘC khi backup tồn tại)**:
+   - `ls <repo-parent>` quét xem có `*-bk/`, `*-backup/`, `*.tar.gz` không
+   - `diff -rq <backup> <current>` lấy summary `Only in X` lanes
+   - Đếm: N file moved, N file modified, N file added, N file deleted
+   - Verify Boss claims (ví dụ "đã bỏ X" → grep X across both repos)
+1. **Plan dựa trên fact**: không "đoán scope qua memory"
+2. **Output 1 file `report_repo_audit_<date>.md`** ở workspace với:
+   - Section "Trạng thái thực tế" (build/test/process running, không láo)
+   - Section "Diff backup vs current" (file table)
+   - Section "Verification checklist" (mỗi claim có grep/build/log proof)
+   - Section "Plan đề xuất" (1-2 commit cuối, không đợt nhỏ)
+3. **Pause cho Boss approve** trước khi execute thêm
+4. **Verify service work**: `ps aux | grep <service-name>` để confirm process chạy được binary commit mới
+5. **Final report**: APPEND tới session report file mọi commit + verify
+
+**Counter-pattern (sai)**:
+- "Tiếp đợt I/J" sau 6 đợt rời rạc mà không zoom-out
+- Plan dựa trên grep cục bộ (`internal/service/*.go` còn 7 file → "chia 2 đợt") mà bỏ qua tồn tại của backup
+- Commit message "đợt N" liên tiếp mà không có 1 audit summary cho Boss verify scope
+
+**Lesson tổng quát**:
+- "Đếm trước khi cắt" — diff(B, X) là step #0, không phải optional.
+- Khi codebase có backup song song = Boss đang theo dõi changes. Phải có file report cho Boss.
+- Đợt-nhỏ-pattern OK cho 2-3 đợt; quá 4 đợt = sign rõ ràng cần zoom-out + audit lại.
+- Lesson §7 CLAUDE.md: "Khi bị sửa MID-SESSION, dừng lại ngay, ghi lesson trước khi tiếp tục" → áp dụng tại đây.
+
+**Áp dụng đa-dự án**: Bất kỳ refactor task R lên codebase X mà parent dir chứa backup B (`*-bk/`, `*-backup/`, `*.tar.gz`). Variables: R=refactor task, X=current codebase, B=backup, N=số đợt đã làm trước khi zoom-out (threshold = 3).
+
+**Tags**: #refactor #pre-plan-audit #backup-comparison #report-required #zoom-out #scope-discipline #global-pattern
+
+
+---
+
+## [2026-05-07] Lesson L-ROLE-SWAP-MID-TRANSFORMATION: Khi Boss đổi vai trò GIỮA chuỗi transformation đang dở → stabilize trước, swap sau
+
+**Trigger**: Auto-mode session, max thi công Task #19 đợt I (cdc-cms-service refactor) đang ở giữa: 6 file đã `cp + sed package rename`, 6 file cũ đã `rm`, 7 caller đã sed nhưng imports CHƯA fix → build CHƯA verify. Tại bước đó Boss interrupt 2 lần liên tiếp:
+1. "đỏi vai trò"
+2. "Lane phân chia: max làm tài liệu tổng thể, phân chia task, lock centralized-data-service/ (worker), x2 lock cdc-cms-service/ (cms)"
+
+Tức Boss swap lane: max khỏi cms-lane, x2 vào cms-lane. max đang dở giữa cms transformation → nếu drop tools immediately để swap, codebase sẽ ở trạng thái broken-build (worse: multi-package compile fail) → x2 nhận codebase vỡ.
+
+**Root cause analysis (avoid wrong instinct)**:
+- Auto-mode + Boss interrupt + role swap = áp lực "drop & switch" cao.
+- Wrong instinct: "Boss đã đổi vai trò → dừng ngay → x2 sẽ tiếp tục code". Sai vì codebase đang dở.
+- Right instinct: "Đợt đang dở do max thi công → trách nhiệm max là không bàn giao codebase vỡ".
+
+**Global Pattern [Agent A đang giữa chuỗi transformation T trên codebase X; Boss directive chuyển X-lane từ A sang B] → stabilize T tới state hợp lệ TRƯỚC, swap sau**:
+
+**Đúng (4-step protocol)**:
+1. **Stabilize current step** (cap < 5 phút):
+   - Hoàn tất import fixes / minimal cleanup để `build PASS`.
+   - Run test suite (`go test ./... -count=1` hoặc equivalent) verify không regress.
+   - Nếu không stabilize được trong cap → revert WIP `git restore` về HEAD trước khi swap.
+2. **Commit work-in-progress** với commit message rõ ràng "đợt N closed by A" + DoD grep evidence.
+3. **Document handover** ở file coordination cùng workspace:
+   - State current sau commit.
+   - Task spec chi tiết cho B (file list, pattern thi công, caller hotspots, DoD).
+   - Ghi rõ lane swap effective from commit hash X.
+4. **Accept new lane** (B sẽ tiếp tục từ HEAD đã stabilize).
+
+**Counter-pattern (sai)**:
+- Drop tools immediately khi nhận interrupt → bàn giao codebase broken-build cho B → B mất nửa giờ debug imports trước khi tiếp tục.
+- "Để B tự fix" — vi phạm nguyên tắc "không tạo gánh nặng cho lane downstream".
+- Commit-then-revert vô tội vạ vì sợ Boss khó chịu — Boss expect responsibility, không expect speed-at-cost-of-quality.
+
+**Áp dụng đa-dự án**: Bất kỳ multi-agent setup (CC + Codex, AB-test agents, worker + reviewer agent) khi Boss issue role-swap directive giữa chuỗi transformation. Variables: A=current owner agent, B=incoming agent, T=transformation chain, X=codebase/workspace.
+
+**Lesson tổng quát**:
+- Role swap KHÔNG phải lệnh "drop everything". Là lệnh "transition cleanly".
+- "Build PASS at HEAD" là invariant tối thiểu phải bàn giao. Vi phạm = data destruction (ở dạng broken codebase, x2 phải debug ngược).
+- Coordination file PHẢI có "lane swap effective from commit X" để truy vết về sau.
+- Tốc độ swap ≠ chất lượng swap. 5 phút stabilize > 30 phút debug downstream.
+
+**Counter-evidence required for boss feedback**: Đợt I đã land commit `b4a3461` PASS build/test trước khi swap lane. Coordination file `coordination_max_x2_2026-05-07.md` cập nhật "REVISED 2026-05-07 ICT — role swap effective from commit b4a3461" với task spec đợt J cho x2.
+
+**Tags**: #role-swap #handover #multi-agent #stabilize-before-switch #build-pass-invariant #global-pattern #auto-mode

@@ -1244,3 +1244,39 @@ caseExpr.WriteString("ELSE ?::int END")
 **§G-C tail sau đợt H**: 11 → 7 service files remaining: `source_object_v2_sync.go`, `system_health_{collector,compute,alerts,queries}.go` (4 cluster), `alert_manager.go`, `approval_service.go`.
 
 **Đợt I candidate**: cluster `system_health_*` quintet (4 files cùng concern observability + alert_manager.go coupled qua `Collector.SetAlertManager` line 37 system_health_alerts.go). Coupling chặt vì: `system_health_alerts.go` define methods `(c *Collector)` từ collector.go; `system_health_queries.go` cùng pattern; `system_health_compute.go` dùng `*Snapshot` từ collector.go; `alert_manager.go` được `Collector.SetAlertManager` consume. → 5 file co-move cần cùng đợt. Blast lớn hơn đợt H/G (5 vs 4 file rename + caller blast 2 file: alerts_handler.go, system_health_handler.go, server.go).
+
+---
+
+## [2026-05-07 ICT] Đợt I (max) — bulk migrate alert_manager + approval_service + source_object_v2_sync to infra/persistence
+
+**Author**: max (Opus 4.7) | **Commit**: `b4a3461` (cdc-system) | **Stage**: pre role-swap (cms-lane vẫn ở max khi thi công)
+
+**Subject**: `refactor(cms): Task #19 đợt I — bulk migrate alert_manager + approval_service + source_object_v2_sync to infra/persistence`
+
+### Scope
+- Bucket A (DB-only) cluster: `alert_manager.{go,_test.go}`, `approval_service.{go,_test.go}`, `source_object_v2_sync.{go,_test.go}` (6 file rename @98–99%) → `internal/infra/persistence/`.
+- Cluster A* coupled (`system_health_alerts.go`, `system_health_collector.go`) — 2 file qualify cross-package: `*persistence.AlertManager`, `persistence.Fingerprint(...)`, `persistence.FireRequest{...}` (5 sites). Add import `cdc-cms-service/internal/infra/persistence`.
+- 7 caller files: `internal/app/commands/{ack_alert,silence_alert,v2_sync}.go`, `internal/server/server.go`, `internal/api/{alerts_handler,registry_handler,schema_change_handler}.go`. Bulk sed 6 token patterns (`AlertManager`, `NewAlertManager`, `ApprovalService`, `NewApprovalService`, `SourceObjectV2SyncService`, `NewSourceObjectV2SyncService`). schema_change_handler.go thêm sed `service.{ApproveRequest,RejectRequest}` → `persistence.{...}`.
+
+### Stats
+- 15 files staged: 6 rename + 9 modify (8 +44/−42 + lone `system_health_collector.go` qualify).
+- 6 rename detection: 98% (test files với helper differing) → 99% (source files byte-equivalent + 1 line package).
+
+### Verify
+- `go build ./...` PASS ✓
+- `go test ./... -count=1` PASS toàn repo ✓ (api 1.104s, app/commands 1.554s, app/queries 2.906s, infra/{http 0.619s, messaging 4.286s, persistence 2.038s}, middleware 3.458s, service 2.475s, service/health/probes 3.877s)
+- DoD grep `service\.(AlertManager|NewAlertManager|ApprovalService|NewApprovalService|SourceObjectV2Sync|NewSourceObjectV2Sync|ApproveRequest|RejectRequest|FireRequest)` → 0 hit functional, 1 hit cosmetic comment ở `internal/model/alert.go:12`.
+
+### Coupling note
+- `system_health_alerts.go` + `system_health_collector.go` ở cluster A* (Collector + helper) đã có cross-package ref tới `persistence.AlertManager` — chuẩn bị nền cho đợt J move cluster A* + C qua `infra/{http,probes}/`.
+- Không bể worker-side (worker module có `service/provisioning_state_machine.go` byte-equivalent với cms; đợt I không touch state_machine).
+
+### After đợt I
+- `internal/service/` còn: `system_health_{alerts,collector,compute,queries}.go(+_test.go)` cluster (7 file) + `health/probes/` subdir (8 probe files + 8 tests) → đợt J.
+- `internal/infra/persistence/` 19 file (đã include 6 file đợt I + 4 file đợt H + 4 file đợt G + 5 file đợt C-F).
+
+### Hand-off & role swap (Boss directive 2026-05-07 ICT)
+> "Lane phân chia: max làm tài liệu tổng thể, phân chia task, lock centralized-data-service/ (worker), x2 lock cdc-cms-service/ (cms)"
+- Sau commit `b4a3461`, cms-lane chuyển sang **x2**. max chuyển sang worker + tài liệu tổng thể.
+- Đợt J task spec → file `coordination_max_x2_2026-05-07.md` §"Task spec cho x2".
+- Status Task #19: 9/10 đợt closed (A→I); đợt J pending x2.
