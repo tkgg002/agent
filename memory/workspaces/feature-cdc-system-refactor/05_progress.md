@@ -1280,3 +1280,61 @@ caseExpr.WriteString("ELSE ?::int END")
 - Sau commit `b4a3461`, cms-lane chuyển sang **x2**. max chuyển sang worker + tài liệu tổng thể.
 - Đợt J task spec → file `coordination_max_x2_2026-05-07.md` §"Task spec cho x2".
 - Status Task #19: 9/10 đợt closed (A→I); đợt J pending x2.
+
+---
+
+## [2026-05-07 ICT] Đợt J (x2) — Task #19 CLOSED — drain system_health_* + probes/ to infra/observability (cms commit `b453d36`)
+
+**Author**: x2 (Muscle, cms-lane). **Predecessor**: đợt I commit `b4a3461` (max).
+
+**Scope**: Đóng Task #19 drainage. 21 file moved + 3 caller updated + 1 cosmetic comment.
+
+**Files** (24 staged: 21 rename + 3 modify, +20/-19):
+- 7 cluster A* `internal/service/system_health_*.{go,_test.go}` → `internal/infra/observability/...` (rename 96-99%)
+- 14 cluster C `internal/service/health/probes/*` → `internal/infra/observability/probes/*` (rename 100%)
+- M `internal/server/server.go` — sed `service.Collector|NewCollector|CollectorConfig` → `observability.X` (3 functional sites L37/L235/L236) + import block edit (drop `internal/service`, add `internal/infra/observability`).
+- M `internal/api/system_health_handler.go` — sed `service.Snapshot` → `observability.Snapshot` (1 functional site L108) + import block edit + 1 doc comment line.
+- M `internal/model/alert.go` — comment cosmetic L12: `service.AlertManager` → `persistence.AlertManager`.
+
+**Pattern thi công**: cp + sed `^package service$` → `package observability` byte-equivalent (probes giữ `package probes`, đổi đường dẫn import). Caller update: `sed -i ''` 4 patterns + `Edit` import block (BSD sed multiline insert fragile).
+
+**Verify**:
+- `go build ./...` PASS ✓
+- `go vet ./...` clean ✓
+- `go test ./... -count=1` PASS toàn repo: api 1.985s, infra/observability 1.509s, infra/observability/probes 3.343s, infra/persistence 3.750s, infra/http 2.872s, app/queries 2.415s, app/commands 0.618s, middleware 4.298s ✓
+- DoD grep `service\.(Collector|NewCollector|CollectorConfig|Snapshot|StatusOK|StatusDegraded|StatusDown|StatusUnknown|StatusUp)` outside service/ → 0 hit ✓
+- DoD grep `cdc-cms-service/internal/service/health/probes` import → 0 hit (cosmetic comments cleaned) ✓
+- `ls internal/service/` → "No such file or directory" — toàn dir removed ✓
+
+**Task #19 closure**: 10 đợt từ A→J (A=schema_log, B=pending_field, C=wizard+dropreconciliation, D=source_repo, E=prom/stuck/activity, F=mapping_rule drop, G=master_swap+shadow_automator+registry, H=provisioning, I=alert_manager+approval+v2_sync, J=system_health+probes). `internal/service/` không còn tồn tại; toàn bộ cms code đã hexagonal-aligned: `app/{commands,queries,ports}` + `domain/` + `infra/{cache,http,messaging,persistence,observability}` + `api/` + `server/` + `middleware/` + `router/` + `model/`.
+
+**Pre-flight x2 đã chạy** (per Boss directive "review + plan trước khi thực hiện"):
+- HEAD = `b4a3461` ✓
+- Build/test baseline PASS ✓
+- Read `system_health_handler.go` body (xác nhận chỉ 1 ref `service.Snapshot` L108) ✓
+- Grep `cmd/` ref → 0 ✓
+- Plan x2 vật lý hóa ở `09_tasks_solution_dot_J_x2_2026-05-07.md` ✓
+
+**Pending**: Phase E rebuild + restart cms-server (Q3) + tạo `report_dot_J_x2_2026-05-07.md` cho Boss.
+
+
+## [2026-05-07 09:48 ICT] Đợt J runtime verify (x2) — cms-server postJ binary
+
+**Process state**:
+- Killed PID 33841 (`/tmp/cdc-cms-service-t27`, build pre-G/H from yesterday).
+- Killed PID 20100 + parent 20082 (go-run binary từ session wizard tier-classification 5h trước).
+- Spawned PID 52079 (`/tmp/cdc-cms-service-postJ`, build from cms commit `b453d36`).
+
+**Boot log clean**: PostgreSQL + NATS JetStream + Redis connect ✓; system health collector + audit logger + alert background resolver + stuck job reaper background goroutines started; OTel bridge active. 0 panic / fatal.
+
+**Smoke matrix**:
+| # | Endpoint | Touch | Result |
+|---|---|---|---|
+| 1 | `GET /health` | router liveness | 200 (98µs) |
+| 2 | `GET /api/system/health` | `observability.Snapshot` deserialize từ Redis (đợt J path) | **200** (3654 B, 2.7ms) — keys [timestamp, cache_age_seconds, overall, infrastructure, cdc_pipeline, reconciliation, latency, failed_sync, alerts, recent_events] = struct intact post-rename |
+| 3 | `GET /api/v1/source-objects/registry/1/dispatch-status` | `infra/persistence.RegistryRepo.GetByID` (đợt G) | **200** (24049 B, 44.8ms) — keys [count, entries, operation, since, target_table] |
+
+**Lesson 11 invariant satisfied**: build PASS + test PASS + **runtime PASS** với binary commit `b453d36`.
+
+**Pending**: Phase F — `cdc-cms-service/report_dot_J_x2_2026-05-07.md` cho Boss.
+

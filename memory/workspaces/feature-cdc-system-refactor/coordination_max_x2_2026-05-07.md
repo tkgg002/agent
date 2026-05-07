@@ -104,3 +104,13 @@ x2 nên dùng 2 file mới làm **source of truth** cho thi công (chi tiết h�
 `active_plans.md` đã APPEND entry `feature-cdc-system-refactor` (agent commit `24fbe26`).
 
 — max
+
+---
+
+## 🎉 Task #19 CLOSED at cms commit `b453d36` (x2 đợt J — 2026-05-07 ICT)
+
+**Status**: cms-lane unlock back to shared. `internal/service/` removed entirely (10 đợt drainage A→J). Build/test PASS toàn repo. Cms-server runtime verify (Q3) — x2 sẽ thực hiện Phase E (rebuild + restart `/tmp/cdc-cms-service-postJ` + smoke).
+
+**Hand-back**: max có thể resume worker-lane (fix sub-issues + Track E plan).
+
+— x2
