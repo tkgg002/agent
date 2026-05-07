@@ -186,3 +186,39 @@ x2 nên dùng 2 file mới làm **source of truth** cho thi công (chi tiết h�
 **x2 prior 2 file (`01_req_flow1_source_to_shadow` + `10_gap_analysis_flow1`)**: max keep — useful input feed cho gap reference. Không phải authoritative spec (per x2 self-correction 2026-05-07 ICT). x2 commit tự khi ready.
 
 — max
+
+---
+
+## 🚨 ADDENDUM 2026-05-07 ICT — Plan correction: Flow 1 root cause confirmed
+
+**Sau khi commit `eb0978a` hand-off, max read full `provisioning_orchestrator.go` + `admin/source_register.go` + grep all publish sites cho `cdc.cmd.shadow.bind`. Tìm thấy plan-blocker.**
+
+**Evidence**:
+- `cdc.cmd.shadow.bind` chỉ publish ở 1 chỗ: `provisioning_orchestrator.go:331` (Advance method).
+- `admin/source_register.go` (POST `/v2/sources/register`) **KHÔNG call Advance**, KHÔNG publish shadow.bind. Step 4 = `cdc.cmd.kafka.refresh-topics` (Debezium include refresh, khác chuyện).
+- Step 5 = direct `UPDATE state='active'` (legacy terminal — không có trong `Transitions`).
+
+**Implication**: P1 smoke nếu dùng `/v2/sources/register` sẽ FAIL AC-3..AC-8 (shadow table không tạo). Plan có flaw.
+
+**Decision doc mới**: `04_decisions_flow1_root_cause_2026-05-07.md` — chứa:
+1. Evidence với file:line.
+2. 3 phương án fix (Z=cms 2-step recommended, Y=fix admin call Advance, X=admin publish shadow.bind direct).
+3. Plan correction cho `01_req` AC-1 + `08_tasks` P1.3, P1.4.
+4. Decision matrix cho Boss approve.
+
+**x2 next**:
+- Đọc `04_decisions_flow1_root_cause_2026-05-07.md` (file mới).
+- Trong `09_tasks_solution_flow1_x2_2026-05-07.md` áp dụng **Phương án Z** (cms 2-step) cho P1 smoke. Cụ thể:
+  - Z.1: `POST /api/v1/source-objects/register` (cms) — confirm exact path/body.
+  - Z.2: `POST /api/v1/cms/sources/:id/provisioning/mode {mode:manual}` — confirm có cần manual mode trước.
+  - Z.3: `POST /api/v1/cms/sources/:id/provisioning/advance` — fire shadow.bind qua orchestrator.
+  - Z.4: poll `GET /api/v1/cms/sources/:id/provisioning` đợi state=shadow_active.
+- KHÔNG dùng `/v2/sources/register` cho smoke (legacy bypass, sẽ fail).
+- P3.1 (`POST /api/v1/sources/test`) vẫn giữ nguyên scope cho x2.
+
+**max next** (worker-lane post-Boss-approve):
+- Phase 2 fix: thi công **Phương án Y** (replace `source_register.go:92` Step 5 với `orchestrator.Advance`) — proper architectural fix.
+- Backfill 4 phantom row state='active' → 'draft' (id 33,34,35,37) → trigger cms `/advance` để fire shadow.bind cho legacy data.
+
+— max
+
