@@ -1338,3 +1338,67 @@ caseExpr.WriteString("ELSE ?::int END")
 
 **Pending**: Phase F — `cdc-cms-service/report_dot_J_x2_2026-05-07.md` cho Boss.
 
+
+## 2026-05-07 ICT — x2 self-correction Flow 1 plan transgression
+
+- Boss directive Flow 1 prep → x2 audit code OK (handler, state machine, worker subscriber).
+- x2 draft `01_requirements_flow1_*` + `10_gap_analysis_flow1_*` ✅ (review/analysis tier hợp lệ).
+- x2 định draft `02_plan_flow1_x2_*` → Boss correct mid-session: "mày ko tạo plan, mày phải đọc plan của max làm cho mày".
+- **Stop**: x2 dừng draft plan, không ship `02_plan_*` tự chế.
+- Đọc max's `report_flow1_connect_source_2026-05-07.md` (overview, 6 gap, sơ đồ).
+- Append global lesson `L-MUSCLE-PLAN-PROHIBITION` vào `agent/memory/global/lessons.md`.
+- Append coordination doc — x2 standby chờ max ra `02_plan_flow1_*` + `08_tasks_flow1_*`.
+- HEAD cms `b453d36` unchanged (Task #19 closed). x2 không touch code.
+
+
+## 2026-05-07 ICT — max-Brain hand-off Flow 1 E2E + plan correction (commit eb0978a + follow-up)
+
+**Boss directive 1**: "task mày đâu, mày phải check cdc-worker và làm tất cả thiếu sót. bằng mọi giá phải lên đc flow1 này. tập trung vào mục tiêu này."
+**Boss directive 2**: "thằng x2 nó nói: Đợi max-Brain ra `02_plan_flow1_*` + `08_tasks_flow1_*` rồi sẽ review qua `09_tasks_solution_flow1_x2_*` rồi mới execute. mày quét repo và làm vụ này trươc đi."
+
+**Phase A discovery (max read-only)**:
+- Verified container ps: cms PID 52079, worker PID 23565 alive. 9 cdc.* topic Kafka, 11 connector status PG/Mongo RUNNING + cdc-mariadb-source FAILED (Debezium image thiếu MySqlConnector plugin).
+- PG metadata `cdc_system.source_object_registry` state distribution: draft=10 (legacy_1..legacy_10 — migration 035 backfill), archived=9, active=5, running=4, shadow_pending=1.
+- 4 phantom rows id 33,34,35,37 stuck `state='active'` + table không tồn tại + `last_step_error=NULL` (silent fail). Created 2026-05-04 (Mongo CDC test session — `mongo_close_*`, `phase_e_smoke_*`, `f1_burst`).
+- 2 race-condition rows bind 14, 50: `ddl_status='pending'` nhưng table tồn tại (tạo trước, update sau race).
+- worker log: JobMonitor close-loop OK nhưng có duplicate log 2-3x per cron tick.
+
+**Brain-delegate documents output** (commit `eb0978a` agent repo):
+- `01_requirements_flow1_e2e_2026-05-07.md` — DoD 8 AC.
+- `02_plan_flow1_e2e_2026-05-07.md` — 5-phase strategy + lane assignment.
+- `08_tasks_flow1_e2e_2026-05-07.md` — Checklist P1.1→P5.2.7 với workflow gate.
+- coordination_max_x2 APPEND pointer + lane Phase 3 table.
+
+**Plan-blocker tìm ra sau commit eb0978a**:
+- Read full `provisioning_orchestrator.go` (236 line) + `admin/source_register.go` (203 line).
+- Grep `publishCmd("cdc.cmd.shadow.bind", ...)` toàn worker repo: chỉ **1 site** = `provisioning_orchestrator.go:331` (`Advance` method).
+- Grep `Advance` trong `internal/admin/`: **NO MATCH**.
+- → `/v2/sources/register` (admin endpoint) **KHÔNG fire shadow.bind**, Step 5 set `state='active'` direct (legacy terminal — không có trong `Transitions` map).
+- Root cause của 4 phantom rows = legacy admin endpoint architecture bypass orchestrator. Không phải race, không phải NATS silent fail. **Architectural drift.**
+
+**Decision doc**: `04_decisions_flow1_root_cause_2026-05-07.md`:
+- 3 phương án: Z (cms 2-step recommended, no code change worker), Y (refactor admin Step 5 → orchestrator.Advance), X (admin publish shadow.bind direct, rejected).
+- AC-1 đổi: từ `/v2/sources/register` → cms `/api/v1/source-objects/register` + `/api/v1/cms/sources/:id/provisioning/advance` poll state=`shadow_active`.
+- Pending: Boss approve Phương án Z cho P1 smoke + Phương án Y cho Phase 2 fix.
+
+**Cms-side investigation tóm tắt** (read-only, không touch x2 lane):
+- cms `RegistryHandler.Register` (`internal/api/registry_handler.go:97`) có field `v2sync *persistence.SourceObjectV2SyncService` → likely mirror V1 → V2 source_object_registry với state='draft' (default per GORM model).
+- cms ProvisioningHandler 7 routes registered tại `router.go:280`: advance/pause/resume/retry/archive/mode/get state.
+- `/api/v1/cms/sources/:id/provisioning/advance` → `persistence.ProvisioningOrchestrator.Advance` → fire shadow.bind.
+- Phương án Z khả thi qua hai endpoint cms này. x2 verify path trong `09_tasks_solution_*`.
+
+**x2 next** (per workflow gate trong `08_tasks §"Workflow gate"`):
+1. Đọc 4 file mới (3 plan-set + 04_decisions).
+2. Viết `09_tasks_solution_flow1_x2_2026-05-07.md` với cmd-level details (Phương án Z preferred).
+3. Stop, KHÔNG implement source code trước Boss approve.
+
+**max next** (worker-lane post-Boss-approve):
+- Phase 2 (Phương án Y): refactor `source_register.go:92` Step 5 → orchestrator.Advance.
+- Backfill 4 phantom row state='active' → 'draft' → trigger advance.
+- P3.2 PG/MariaDB preflight extend.
+- P3.3 NATS publish promote-to-fatal.
+- P5 cleanup (re-run prune SQL, dedup close-loop log).
+
+**HEAD agent**: `eb0978a` (3 plan files) + commit kế tiếp (decision doc + coordination addendum + 05_progress this entry).
+**HEAD worker**: unchanged (max chưa touch code).
+**HEAD cms**: `b453d36` (unchanged, x2 standby).
