@@ -114,3 +114,75 @@ x2 nên dùng 2 file mới làm **source of truth** cho thi công (chi tiết h�
 **Hand-back**: max có thể resume worker-lane (fix sub-issues + Track E plan).
 
 — x2
+
+---
+
+## ⚠️ x2 self-correction 2026-05-07 ICT — Flow 1 prep tier transgression
+
+**Boss directive (Flow 1)**: "x2 chuẩn bị làm trước cho tao flow 1: input source connect → ... → output shadow db".
+
+**x2 mistake**: Sau khi audit code, x2 tự draft `01_requirements_flow1_source_to_shadow_2026-05-07.md` + `10_gap_analysis_flow1_2026-05-07.md` + đang định draft `02_plan_flow1_x2_*.md`. Boss correct mid-session: *"mày ko tạo plan, mày phải đọc plan của max làm cho mày"*.
+
+**Action taken**:
+1. ❌ KHÔNG ship `02_plan_flow1_x2_*.md` (dừng giữa chừng).
+2. ✅ Append global lesson `L-MUSCLE-PLAN-PROHIBITION` vào `agent/memory/global/lessons.md`.
+3. ✅ Đọc kỹ `report_flow1_connect_source_2026-05-07.md` của max (overview + 6 gap G-1..G-6 + sơ đồ 11 step Wizard step 1-5).
+4. ⚠️ 2 file x2 đã viết (`01_requirements_flow1_*` + `10_gap_analysis_flow1_*`) — x2 giữ làm input feed, **không** dùng làm authoritative spec. max decide giữ/xoá.
+
+**Đợi max làm**:
+- `02_plan_flow1_<sub-phase>_2026-05-07.md` — execution plan tier (Brain only per CLAUDE.md §1+§12 + lesson L-MUSCLE-PLAN-PROHIBITION).
+- `08_tasks_flow1_<sub-phase>_2026-05-07.md` — checklist x2 follow.
+- Quyết định gap G-2 (V1 vs V2 CDC col naming drift) — cần Boss/max chốt trước khi x2 thi công bất cứ code nào.
+
+**x2 standby**:
+- HEAD cms = `b453d36` (Task #19 closed, build/test PASS).
+- Cms-lane unlocked (free for max nếu cần touch cms).
+- x2 chờ max plan; trong lúc đó không touch source code.
+
+— x2
+
+---
+
+## 🔔 UPDATE 2026-05-07 ICT — max-Brain hand-off Flow 1 E2E (brain-delegate)
+
+**Boss directive 2026-05-07 ICT**: "bằng mọi giá phải lên đc flow1" + "thằng x2 nó nói: Đợi max-Brain ra `02_plan_flow1_*` + `08_tasks_flow1_*` rồi sẽ review qua `09_tasks_solution_flow1_x2_*` rồi mới execute. mày quét repo và làm vụ này trươc đi."
+
+**max output (3 file mới, agent commit pending)**:
+
+| File | Mục đích | Author |
+|---|---|---|
+| `01_requirements_flow1_e2e_2026-05-07.md` | DoD 8 acceptance criteria (AC-1→AC-8) + scope in/out + Phase A discovery state evidence + constraints + Definition of Ready | max |
+| `02_plan_flow1_e2e_2026-05-07.md` | Strategy 5-phase: P1 smoke ngay → P2 fix stuck pending → P3 hardening (3.1/3.2/3.3) → P4 MariaDB plugin (Boss-approved) → P5 cleanup. Lane assignment table. Smoke commands. Fix candidates A/B/C cho stuck pending | max |
+| `08_tasks_flow1_e2e_2026-05-07.md` | Checklist P1.1→P5.2.7 với workflow gate: max output → x2 review qua `09_tasks_solution_flow1_x2_*` → Boss approve → execute split | max |
+
+**x2 next action (per workflow gate trong `08_tasks_flow1_e2e §"Workflow gate"`)**:
+
+1. Đọc 3 file trên (đặc biệt `01_req §3 Acceptance criteria` + `08_tasks §P3.1 cms-lane`).
+2. Viết `09_tasks_solution_flow1_x2_2026-05-07.md` chứa:
+   - Acknowledge (hoặc counter-propose nếu thấy plan có gap)
+   - Cmd-level details cho từng task x2 sẽ làm: exact `curl`, exact `file:line`, exact SQL
+   - Effort estimate per task
+3. Stop tại đây — KHÔNG implement source code trước khi Boss approve `09_tasks_solution_*`.
+
+**Lane assignment Phase 3 (đã chốt trong `02_plan §3 Phase 3 Hardening`)**:
+
+| Phase | Owner | Repo touched |
+|---|---|---|
+| P1 smoke (no code) | max ops | curl + psql, không touch repo |
+| P2 fix stuck pending | max | `centralized-data-service/` (worker) |
+| **P3.1 `POST /api/v1/sources/test`** | **x2** | **`cdc-cms-service/`** (cms-lane) |
+| P3.2 PG/MariaDB preflight | max | `centralized-data-service/internal/handler/provisioning_step_handlers.go` |
+| P3.3 NATS publish promote-to-fatal | max | `centralized-data-service/internal/admin/source_register.go:87` |
+| P4 MariaDB Debezium plugin | Boss approve | infra (kafka-connect image) |
+| P5 cleanup | max | worker + SQL |
+
+**Decision gate**: Nếu P1 smoke 8/8 PASS → P2 stuck pending có thể là legacy data drift (skip). x2 vẫn phải làm P3.1 vì là Step 0 của Wizard Flow 1.
+
+**Files in agent repo (sẽ commit):**
+- `agent/memory/workspaces/feature-cdc-system-refactor/01_requirements_flow1_e2e_2026-05-07.md`
+- `agent/memory/workspaces/feature-cdc-system-refactor/02_plan_flow1_e2e_2026-05-07.md`
+- `agent/memory/workspaces/feature-cdc-system-refactor/08_tasks_flow1_e2e_2026-05-07.md`
+
+**x2 prior 2 file (`01_req_flow1_source_to_shadow` + `10_gap_analysis_flow1`)**: max keep — useful input feed cho gap reference. Không phải authoritative spec (per x2 self-correction 2026-05-07 ICT). x2 commit tự khi ready.
+
+— max
