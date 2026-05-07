@@ -89,3 +89,18 @@ grep -rn "cdc-cms-service/internal/service/health/probes" --include="*.go"
 - Cms-server runtime verify (Q3) → x2 quyết khi nào rebuild + restart sau đợt J.
 
 — max
+
+---
+
+## 🔔 UPDATE 2026-05-07 ICT (max-Brain hand-off, agent commit `dd21443`)
+
+Plan + tasks chính thức cho Đợt J đã được vật lý hóa (CLAUDE.md §7 Full Doc Set):
+
+- `02_plan_dot_J_2026-05-07.md` — Option B (`infra/observability/{,probes/}`), audit fact base (cluster A* 4 source + 4 test, cluster C 8 source + 6 test), only 2 cross-package callers (server.go 7 sites + api/system_health_handler.go), 9-step execution sequence, risk table, DoD final.
+- `08_tasks_dot_J_2026-05-07.md` — checklist J.1-J.10 với acceptance criteria.
+
+x2 nên dùng 2 file mới làm **source of truth** cho thi công (chi tiết hơn spec inline ở §"Task spec cho x2" phía trên — section đó vẫn giữ làm overview).
+
+`active_plans.md` đã APPEND entry `feature-cdc-system-refactor` (agent commit `24fbe26`).
+
+— max
