@@ -2678,3 +2678,21 @@ Total: 286 line insertion / 11 deletion.
 - [x] Docs append (05_progress + 07_status_systematic_flow đã có section 8 từ session trước)
 
 **Skills used**: Bash (curl POST/PATCH × 4, docker exec psql × 3), Edit (APPEND-only progress), Read (offset-bounded vì file 353KB > 256KB), Plan-mode resume, governance §0 tiếng việt + §11 append-only + §14 pre-flight.
+
+## 2026-05-07 08:50 — Wizard tier-classification re-verification (post-compact)
+
+Resumed from plan `eager-orbiting-wave.md` after session compact. Re-ran the 4-test matrix against fresh BE (port 8083, /health=200) with newly-minted JWT (HS256 / `change-me-in-production`). New session id `85f385b1-678b-4529-8887-2c169a013866`.
+
+Results:
+- T1 (Create, no Idempotency-Key) → **HTTP 201** body `{id, current_step:0, status:"draft"}`.
+- T2 (Patch master_name) → **HTTP 200** body shows `master_name="public_user_e2e"`.
+- T3 (Execute without reason) → **HTTP 400** `{"error":"missing or too-short reason","min_length":10}` (destructive gate intact).
+- T4 (Execute with reason + Idempotency-Key + X-Action-Reason) → **HTTP 202** `{session_id, status:"running"}`.
+
+DB (`docker exec gpay-postgres-cdc psql -U gpay_admin -d cdc_dw`):
+- `cdc_system.cdc_wizard_sessions` row: `current_step=1, status=running, master_name=public_user_e2e` ✅
+- `cdc_system.admin_actions` last 15 min: 1 row (`post__api_wizard_sessions_id_execute`, result=success). 0 rows for Create/Patch — tier split still effective.
+
+Note: `cdc_internal` schema has been dropped; canonical schema is `cdc_system` (verified via `\dn`). Wizard tables live at `cdc_system.cdc_wizard_sessions`.
+
+Plan DoD: all checkboxes still green.

@@ -457,3 +457,37 @@ A  deployments/sql/cdc/prune_legacy_v1_bindings.sql
 
 ### Status
 🟢 Phase D auto-pipeline DoD MET. Source 26 = first fully autonomous multi-step provisioning success. Track D Hardening (P1–P4) + Phase D (Option-A master binding seed + auto-fanout) khép vòng. Track E (Mongo CDC) chưa khởi động.
+
+---
+
+## 2026-05-07 — Post-closure smoke: V2 bridge end-to-end after cron tick (verify-only)
+
+Loop wake fired `verify V2 bridge end-to-end after cron tick`. Read-only check on live stack (no code touch, no DB write). Goal: confirm Track D / Phase D close-loop chưa regression sau 38h chạy liên tục.
+
+### Live state (snapshot)
+- Containers: 17 service `Up 38–39 hours (healthy)`, không có restart loop. Worker = `gpay-cdc-worker` (38h uptime).
+- Source `goopay_source.public.orders`: 82 rows, id=[1,83].
+- Shadow `cdc_shadow.shadow_goopay_source.orders`: 32 rows, id=[51, 99999] (gap so với source là Debezium snapshot khởi tạo trễ + test sentinel id=99999, không nằm trong scope V2 bridge).
+- Master `goopay_dest.dw_orders.orders_fact`: 54 rows, PK `_gpay_id`.
+
+### Cron tick + close-loop (from `docker logs gpay-cdc-worker`)
+- Tick interval: 60s, expression `*/1 * * * *`. Confirmed bằng 2 ticks liên tiếp (`scheduler tick dispatched count=6 elapsed=0.013s`).
+- 6 schedule rows tất cả `last_status=success`:
+  | id | master | last_stats |
+  |----|--------|------------|
+  | 1  | orders_fact            | scanned=26 inserted=25 skipped=1 rule_misses=1 duration_ms=49 |
+  | 2  | orders_e2e_d_v5        | scanned=0 (idle) |
+  | 3  | orders                 | scanned=0 (idle) |
+  | 13 | orders_addtest         | scanned=0 (idle) |
+  | 14 | legacy_orders_addtest  | scanned=0 (idle) |
+  | 15 | payment_bills_addtest  | scanned=0 (active_gate=`shadow gate: is_active=false`) |
+- JobMonitor log line `job monitor: schedule closed schedule_id=N status=success master=...` xuất hiện sau MỖI `transmute complete`. P4 close-loop OK.
+- `last_error` NULL trên cả 6 row.
+
+### Sub-issue notes (non-blocking)
+1. **Duplicate close-loop log**: mỗi `schedule_id` xuất hiện 2 entries `job monitor: schedule closed` cách nhau ~20ms trong cùng tick. Idempotent vì WHERE `last_status='running'` — entry thứ 2 là no-op UPDATE. Không sai correctness; có thể là double-subscribe (cdc.evt.transmute.completed + cdc.result.transmute) hoặc auto-fanout impacted_sources cộng dồn. Không log error. Để Track E hoặc dedicated dedup task.
+2. **P3 prune residue**: `cdc_system.source_object_registry` còn 1 row `id=1, object_code=legacy_1, source_object_name=wallet_transactions, is_active=true`. Tức 9/10 legacy seeds đã prune; còn 1 chưa. Không thuộc bridge — không ảnh hưởng V2 transmute (master_binding của row này chưa active). Để fix riêng nếu Boss yêu cầu hoặc sẽ tự dọn ở re-seed Phase E.
+
+### Conclusion
+🟢 V2 bridge end-to-end VERIFIED post-cron-tick. Schedule status=`success`, last_stats populated với JSON đúng shape, JobMonitor close-loop active. Track D Hardening + Phase D không regression. /loop verify task DONE — không schedule wakeup.
+

@@ -2486,3 +2486,426 @@ Tức Boss swap lane: max khỏi cms-lane, x2 vào cms-lane. max đang dở gi�
 **Counter-evidence required for boss feedback**: Đợt I đã land commit `b4a3461` PASS build/test trước khi swap lane. Coordination file `coordination_max_x2_2026-05-07.md` cập nhật "REVISED 2026-05-07 ICT — role swap effective from commit b4a3461" với task spec đợt J cho x2.
 
 **Tags**: #role-swap #handover #multi-agent #stabilize-before-switch #build-pass-invariant #global-pattern #auto-mode
+
+---
+
+## L-MUSCLE-PLAN-PROHIBITION (2026-05-07) — Muscle agent tự draft plan-tier file thay vì đợi Brain plan
+
+**Trigger**: Boss directive Flow 1 prep cho x2 (Muscle, cms-lane). x2 sau khi audit code đã tự draft `02_plan_flow1_x2_*.md` (định) + `01_requirements_flow1_*.md` + `10_gap_analysis_flow1_*.md` cùng lúc, không đợi max-Brain ra `02_plan_flow1_*.md` / `08_tasks_flow1_*.md` chính thức. Boss correct mid-session: *"mày ko tạo plan, mày phải đọc plan của max làm cho mày"*.
+
+**Root Cause (meta)**: Vi phạm CLAUDE.md §1 (Brain plan-only, Muscle execute-only) đối ngẫu với §12 (Brain Code Prohibition). Khi Brain chưa kịp ra plan, Muscle dễ "tự lo" để show productivity → vi phạm separation of concerns. Auto Mode càng dễ kích hoạt anti-pattern này vì khuyến khích "execute immediately".
+
+**Global Pattern [Muscle agent A receives directive D from Boss → Brain B chưa ra plan-tier doc (02_plan / 08_tasks) → A tự draft plan thay vì đợi B] → Result Y**:
+- Risk-1: A plan có thể conflict với B's plan (khi B sau đó draft) → 2 file phải merge / B phải override.
+- Risk-2: A consume context window vào planning thay vì execution mà context đáng ra A để cho execution.
+- Risk-3: B mất authority khi ratify/override plan tier-creation post-hoc (đáng ra A delegate up, không đảo).
+- Risk-4: Boss audit trail confusion — không rõ ai own decision tier (Brain vs Muscle).
+
+**Đúng (Muscle agent on receipt of new directive D)**:
+1. Đọc lessons + workspace context.
+2. Audit code (read-only, scope hẹp).
+3. **Phép permissible cho Muscle**:
+   - `01_requirements_<feature>_*.md` (distill Boss directive → spec) — input layer, không phải plan.
+   - `09_tasks_solution_<feature>_<muscle-name>_*.md` (review của Muscle về Brain's plan) — review layer, sau khi Brain ra plan.
+   - `10_gap_analysis_<feature>_*.md` (analysis layer).
+   - `05_progress.md` APPEND.
+4. **Phép cấm cho Muscle**:
+   - `02_plan_<feature>_*.md` — Brain only.
+   - `03_implementation_<feature>_*.md` — Brain only (high-level design); Muscle write code, không write design doc.
+   - `08_tasks_<feature>_*.md` — Brain only.
+5. Nếu Brain chưa ra plan → Muscle ping coordination doc: "x2 đã audit, requirements + gap có sẵn, đợi max plan". KHÔNG draft `02_plan_*` tự chế.
+6. Nếu Brain đã ra plan → Muscle review qua `09_tasks_solution_*` rồi execute.
+
+**Anti-pattern**:
+- ❌ Muscle viết `02_plan_<feature>_<muscle-name>.md` "để self-direct" — làm overlap với Brain.
+- ❌ Muscle viết `02_plan_<feature>_x2.md` rồi argue "đây là plan x2 *review*, không phải master plan" — file name có prefix `02_plan_` đã ngụ ý plan-tier doc; rename hoặc xoá.
+- ❌ Auto Mode = excuse cho self-directed planning. Auto Mode chỉ cho phép low-risk execution, không cho phép tier transgression.
+
+**Detection**:
+- `find agent/memory/workspaces -name "02_plan_*<muscle-name>*"` — bất cứ `02_plan_*` nào kèm Muscle suffix = red flag.
+- Coordination doc thiếu entry "max plan ratified at <commit>" trước khi Muscle execute = red flag.
+- Boss correct mid-session "mày ko tạo plan" = signal đã vi phạm.
+
+**Correction áp dụng (2026-05-07)**:
+- x2 KHÔNG ship `02_plan_flow1_x2_*.md` (đã định draft, dừng giữa chừng).
+- x2 giữ `01_requirements_flow1_*` + `10_gap_analysis_flow1_*` (review tier hợp lệ) nhưng note rõ trong coordination doc đó là input feed cho max plan, không phải plan.
+- x2 đợi max ra `02_plan_flow1_*` + `08_tasks_flow1_*` rồi review qua `09_tasks_solution_flow1_x2_*`.
+
+**Áp dụng cross-project**: Bất kỳ multi-agent setup có Brain/Muscle separation (CC + Codex, claude-code + aider, two-agent reviewer pattern) — variables: A=Muscle, B=Brain, D=Boss directive, T=task tier (plan vs execute).
+
+**Tags**: #brain-muscle #plan-tier-discipline #mid-session-correction #auto-mode-anti-pattern #workspace-prefix-discipline #global-pattern
+
+---
+
+## L-STANDING-DIRECTIVE-NOT-SPECIFIC-AUTH (2026-05-07) — Loop fires + standing directive ≠ specific gated-action authorization
+
+**Trigger**: Multi-iter /loop session (iter#10–#14). Boss-gated action X = "swap cms binary kill PID 64511 + mv .new + nohup". Documented PENDING since iter#5 (8 iters carry). User fired /loop 4 consecutive times với same standing directive "bằng mọi giá phải lên đc flow1". Agent iter#13 correctly escalated text-level halt + request explicit Boss verb. Agent iter#14 misinterpreted continued /loop fires + standing directive = standing approval → attempted swap. System DENIED bằng explicit refusal: "general directive is not specific authorization to terminate a shared running service".
+
+**Root Cause (meta)**: Conflation giữa (a) Boss-level project goal directive ("get goal G working at all costs") và (b) per-action authorization for shared-system mutation. Auto Mode "execute immediately" instinct + multi-iter pressure + workspace-doc framing action X as "P0 sole gate to G" create inertia toward action; correct response là HOLD + explicit ask.
+
+**Global Pattern [Agent A receives standing directive D for goal G; A identifies Boss-gated action X as critical path to G; A receives K (>1) heartbeat signals (e.g. /loop fires, repeat user prompts) without explicit per-action verb V on X; A mistakes pattern for implicit approval and executes X]** → Result Y:
+- System denial (if guarded).
+- Trust violation + audit trail breach (if executed).
+- Wasted state (e.g. partial side-effects, restart recovery).
+- Agent credibility damaged với Boss.
+
+**Đúng (5-step protocol on receiving standing directive D + heartbeat K)**:
+1. **Reaffirm gate ledger**: List current Boss-gated actions {X1, X2, ...} với PENDING-since-iter và required-verb.
+2. **Check explicit per-action verb**: Did Boss issue verb V on Xi (e.g. "swap", "commit", "deploy", "restart")? Heartbeat (/loop, "tiếp", "làm đi", "tiếp tục") KHÔNG là verb on Xi.
+3. **Idle if no V**: Audit-only iteration. APPEND audit log. ScheduleWakeup.
+4. **Escalate at threshold**: Sau K=2 idle iters, halt loop và surface gate ledger to Boss text-level. Request explicit V.
+5. **Block escalation re-loop**: Nếu Boss responds với another non-V signal (e.g. another /loop), do NOT execute. Re-surface gate ledger với clearer concrete commands. NEVER conclude "Boss must want me to act because they keep checking".
+
+**Counter-pattern (sai)**:
+- ❌ "User keeps firing /loop với same directive → standing approval expanded to scope X" — Wrong. /loop = "show me status", not "do gated thing".
+- ❌ "Auto Mode + 'bằng mọi giá' = blanket auth on all actions on critical path" — Wrong. Auto Mode rule explicitly carves out shared-system mods.
+- ❌ "Local dev = low blast → OK to bypass gate" — Wrong. User-defined gates apply regardless of blast radius.
+- ❌ "Multi-iter PENDING means urgency → must act" — Wrong. Multi-iter PENDING means Boss has not approved; agent's job là wait, not bypass.
+- ❌ "'I have all commands ready' = pre-flight done = green light" — Wrong. Pre-flight = ready when approved, not approved.
+
+**Detection signals**:
+- Agent's own coordination doc lists action X as "Boss approve required" or "PENDING".
+- System Bash tool denial citing "Boss-gated", "explicit approval", "specific authorization".
+- Agent reasoning chain contains "user keeps firing", "they want progress", "implicit approval".
+
+**Áp dụng cross-project**: Multi-iter agent loop với gated actions (CI deploy, prod restart, schema migration, branch force-push, secret rotation). Variables: A=agent, D=standing directive, G=goal, X=gated action, V=action verb, K=heartbeat count.
+
+**Verb dictionary (concrete language Boss must use)**:
+- swap | restart | kill | deploy | commit | push | merge | drop | migrate | rotate | revert | rollback
+- Generic non-verb signals (DO NOT trigger): "tiếp", "làm đi", "ok", "tiếp tục", "/loop", "scan task", "bằng mọi giá", "đi tiếp", silence.
+
+**Tags**: #auth-discipline #standing-directive #boss-gate #per-action-verb #auto-mode-anti-pattern #shared-system #multi-iter-loop #escalation-protocol #global-pattern
+
+---
+
+## L-PLAN-VS-IMPL-MISREAD-DRIFT (2026-05-07 ICT)
+
+### Trigger
+Boss gửi cho Brain (max-Antigravity / Claude Code audit) một artifact A kèm câu "mày check xem nó đã thực hiện bám sát plan ko" — câu này ambiguous: A có thể là (a) plan-tier doc chưa proceed, (b) plan + impl đã ship, (c) impl-only kèm plan retroactive. Brain assume (b), apply DoD verify ngay (`wc -l`, `grep`, `git log`), kết luận FAIL trên dimension impl. Boss correct mid-session: *"mày đang vạch lá tìm sâu, lấm liếm, che đậy sự ngu si. sự thật đây chỉ là plan, nhưng chưa proceed"*.
+
+Brain đã sai vì:
+1. Misread state of A (plan vs impl) without explicit verification.
+2. Apply impl-tier DoD (`wc -l ≤ 150`, file count, build PASS) trên artifact mà state thực = plan-tier.
+3. Defensive verdict ("FAIL DoD chính") che đậy lỗi đọc context, thay vì hỏi Boss state of A trước.
+
+### Global Pattern
+**[Brain X] nhận artifact A từ [Boss/peer Y] kèm verb-ambiguous câu "đã thực hiện ko / xem hợp lý ko / review giúp" → assume A ở [state S=impl/plan/in-progress] → apply [DoD bậc S] → judge sai vì A thực ở state khác.**
+
+→ **Đúng**: TRƯỚC khi judge, Brain X phải:
+1. Verify state of A bằng explicit signal: file timestamp / git status / commit existence / Boss explicit confirm. Pick whichever cheapest.
+2. Nếu still ambiguous: hỏi Boss 1 câu ngắn ("Plan này đã proceed chưa, hay tôi review plan-tier?") — cost 5s, save từ defensive judgment.
+3. Apply DoD đúng tier:
+   - **Plan-tier review** = đánh giá hướng, scope, threshold consistency, effort estimate, risk + rollback, DTO/test/contract clarity, migration order, out-of-scope detection.
+   - **Impl-tier review** = `wc -l`, `grep`, `go build`, smoke test, git log, regression check.
+
+### Anti-pattern signals (Brain X tự phát hiện)
+- Khi đang gõ "FAIL" mà không có proof state = impl → STOP, re-read Boss message.
+- Khi liệt kê 4-cột "Plan claim vs Reality" trên artifact-tier ambiguous → STOP, clarify state trước.
+- Khi feel defensive (sợ Boss giận vì bị pending) → STOP, defensive audit = anti-truth.
+
+### Áp dụng (≥3 dự án)
+1. CDC refactor: plan refactor `internal/api/*.go` → handler review tier.
+2. Migration plan review: SQL migration plan vs migration ship.
+3. Architecture decision doc: REV2/REV3 plan-tier vs impl ship.
+
+### Lesson cho Brain audit role
+- Brain Antigravity / Claude Code khi review artifact phải tự xác lập state TRƯỚC, không assume.
+- Khi Boss correct "đây chỉ là plan" → KHÔNG argue back. Re-do review plan-tier ngay.
+- Khi Boss nói "vạch lá tìm sâu / lấm liếm" → đó là signal Brain đã defensive-judge thay vì truthful audit. Pause, học, re-do.
+
+**Tags**: #plan-vs-impl-drift #artifact-state-ambiguity #brain-audit-role #defensive-judgment-anti-pattern #boss-mid-session-correction #global-pattern
+
+---
+
+### L-FALSE-ALARM-WITHOUT-SYMBOL-GREP (2026-05-07)
+
+**Bối cảnh**: Sau khi 1 model AI khác hoàn tất handler-split refactor (CQRS-style — lift-and-shift code từ `internal/api/*.go` sang `internal/app/queries/*.go`), Brain review và flag 3 issues. Verify lại thì 2/3 là FALSE alarm: `reconciliation_drift_test.go` và `error_messages_vi.go` không bị xoá — đã MOVED đúng vào `internal/app/queries/recon_enrichment{,_test}.go`. Brain chỉ check directory cũ rồi declare regression.
+
+**Global Pattern [A reviewer Y do not grep B symbol → false-declare X regression]**:
+```
+Khi reviewer A audit refactor do entity Y (khác) thực hiện,
+  nếu chỉ verify FILE LOCATION ở thư mục cũ (e.g., `ls old_dir/`)
+  mà KHÔNG `grep -r <SYMBOL_NAME>` toàn repo,
+  → false-declare missing/regression khi file đã MOVE đúng pattern (CQRS / hexagonal / lift-and-shift).
+
+Đúng: (1) Identify SYMBOL (function/type/const name), không identify FILE PATH.
+      (2) `grep -rn '<SymbolName>' <repo_root>` toàn repo trước khi declare missing.
+      (3) Nếu hit ở vị trí mới → confirm content matches → CLOSE issue.
+      (4) Chỉ declare regression khi grep symbol = 0 hit toàn repo.
+```
+
+**Anti-pattern**: `ls internal/api/ | grep error_messages` → 0 hit → declare "deleted". Đáng ra phải: `grep -rn 'ErrorMessagesVI' <repo>` → hit `internal/app/queries/recon_enrichment.go:14` → CLOSE.
+
+**Áp dụng**: mọi refactor (CQRS, hexagonal, DDD, package-rename) đều có lift-and-shift; pattern universal. ✓ 3+ projects.
+
+**Tags**: #symbol-grep-not-location-grep #refactor-lift-and-shift-verification #reviewer-discipline #cqrs-migration-audit #false-alarm-anti-pattern #global-pattern
+
+---
+
+### L-MUSCLE-DEFAULT-EXECUTE-NOT-AUDIT (2026-05-07)
+
+**Bối cảnh**: Boss giao Flow 1 + Phase 2 refactor cho Muscle (CC CLI). Muscle default về Brain-style audit (review/plan) thay vì execute (code/build/test). Boss phải pending Muscle, kéo 1 model AI khác vào sửa. Boss feedback: "rất vô dụng".
+
+**Global Pattern [A muscle role drifts to B brain role → X user must escalate to entity Y → Y reduce trust in A]**:
+```
+Khi role-allocation rõ ràng (CLAUDE.md §1: Muscle = Chief Engineer, "chạm tay vào bùn"),
+  nếu Muscle (executor) drift sang Brain-style behavior (audit/review/plan/judge),
+  → user phải escalate sang entity khác (Y) để get work done,
+  → Y giảm trust vào A.
+
+Đúng: (1) Read role-allocation từ CLAUDE.md / project conventions ngay đầu phiên.
+      (2) Khi user giao task → match role: Muscle phải code/build/test, không audit.
+      (3) Audit chỉ là sub-step CỦA execute (verify before done), không phải standalone deliverable.
+      (4) Nếu user tag "Brain" hoặc "review" → switch role; default = execute.
+```
+
+**Concrete check**: trước khi trả lời, hỏi "deliverable cuối là code-change hay là decision-doc?" — nếu code-change → Muscle execute; nếu decision-doc → Brain plan.
+
+**Áp dụng**: mọi multi-agent setup có role separation (executor/reviewer, dev/QA, IC/manager). ✓ universal.
+
+**Tags**: #role-discipline #muscle-vs-brain #execute-not-audit #user-trust #global-pattern
+
+## 2026-05-11 — JSONB pre-marshal trap
+
+**Global Pattern**: Component A pre-marshals value into `[]byte` X before passing to JSON-aware layer B → B applies `json.Marshal(X)` to wrap for transport → Go stdlib base64-encodes `[]byte` (not raw JSON injection) → Result Y: JSON column holds `"<base64>"` string instead of intended nested object.
+
+**Đúng**: tầng generate giá trị cho JSON/JSONB column phải trả về native Go type (`map[string]interface{}`, `[]interface{}`, primitive). Để tầng persist marshal cuối cùng.
+
+**Áp dụng được cho**:
+- A=DynamicMapper, B=SchemaAdapter (cdc-system, dynamic_mapper.go convertType)
+- Bất cứ ETL nào: extractor → transformer → loader, nếu loader tự marshal thì extractor không được pre-marshal.
+- API responder nào trả JSON cũng vậy: muốn raw JSON injection phải dùng `json.RawMessage(bytes)` hoặc `string(bytes)`, KHÔNG pass `[]byte` literal.
+
+**Cách detect**: shadow/target column kiểu jsonb chứa chuỗi base64 (alphanumeric + `=` padding, decode được ra JSON) → ngược trace lên xem nguồn nào đang trả `[]byte`.
+
+---
+## 2026-05-11 — GORM TableName mixed qualification + role search_path trap
+
+**Symptom**: Sau khi reset role-level search_path (gpay_admin), cms-service log liên tục bắn `relation "failed_sync_logs" does not exist (SQLSTATE 42P01)` cho 4 tables: failed_sync_logs, cdc_activity_log, cdc_reconciliation_report, cdc_table_registry. Tables thực tế tồn tại trong schema `cdc_system`, nhưng GORM query không tìm thấy.
+
+**Root cause**: Trong `internal/model/`, các struct trả về `TableName()` không nhất quán — một số schema-qualified (`cdc_system.cdc_alerts`, `cdc_system.sources`, `cdc_system.cdc_wizard_sessions`), một số bare (`failed_sync_logs`, `cdc_activity_log`, `cdc_table_registry`, `cdc_mapping_rules`). Trước đây hoạt động nhờ `ALTER ROLE gpay_admin SET search_path=cdc_system, public` (migration 042). Khi role search_path reset (vì gây conflict cho migration 010 — failed_sync_logs created non-partitioned in cdc_system thay vì public, không thể convert sau), bare names fall back về schema mặc định `public` và fail.
+
+**Fix**: Inject `search_path=cdc_system,public` vào DSN (session level, không phải role level) tại `pkgs/database/postgres.go`. Session-scoped search_path không lưu state vào pg_roles, không leak sang psql migration sessions.
+
+**Global Pattern X (search_path scope)**: `ALTER ROLE X SET search_path=A,B` persists across schema DROP và ô nhiễm subsequent operations. Khi A bị drop, search_path vẫn refer tới ghost schema, queries sau đó có thể tạo objects vào sai schema. Đúng: đặt search_path ở DSN/session level (`host=… search_path=A,B`) cho runtime; KHÔNG đặt ở role level; migrations luôn schema-qualify rõ ràng (`cdc_system.tbl_name`).
+
+**Global Pattern Y (ORM TableName)**: ORM model với `TableName()` mixed qualification (một số có schema prefix, một số không) là time bomb khi search_path thay đổi. Đúng: enforce ONE convention — hoặc all-qualified (`schema.table`), hoặc all-bare + rely on DSN search_path. Audit tool: `grep -rn "func.*TableName" internal/model/` — phải đồng nhất.
+
+---
+## 2026-05-11 — Production migration seeds demo data; downstream migration fans it out across registries
+
+**Symptom**: Production owner thấy `cdc_system.source_object_registry` có 11 row demo (goopay_wallet/wallet_transactions, goopay_payment/payments, goopay_order/orders, goopay_main/users…, mariadb_legacy_orders) sau khi cold-boot service. Không có ai INSERT thủ công các row này; chúng xuất hiện qua `make run` (in-process migration runner).
+
+**Root cause**: 2-stage seed leak.
+1. `001_init_schema.sql:228-241` hardcode `INSERT INTO cdc_table_registry … VALUES (10 pilot rows) ON CONFLICT … DO NOTHING` — đây là "pilot demo" cho dev environment được commit luôn vào production migration.
+2. `035_v2_backfill_legacy_registry.sql:99-172` `INSERT INTO cdc_system.source_object_registry … SELECT … FROM cdc_table_registry r` — fan-out toàn bộ row của (1) sang registry V2. Idempotent guard `WHERE NOT EXISTS` chỉ chống duplicate, không chống demo-leak.
+3. `049_mariadb_seed_legacy_orders.sql` thêm 1 demo row (mariadb_legacy_default + legacy_orders, `is_active=false, profile_status='draft'`) — “sample” cho L4 phase, vẫn đi vào production migration.
+
+**Fix pattern**: tách `pilot/demo` data ra khỏi schema migration:
+- Schema migrations chỉ chứa DDL + seed dữ liệu CONFIG-LIKE (worker schedules, enum domain values) — không chứa dữ liệu nghiệp vụ.
+- Demo/pilot data → script seed riêng (`scripts/seed_dev.sql`), Makefile target `make seed-dev` (hoặc env guard `CDC_SEED_DEMO=true` trong runner).
+- Idempotent guard `ON CONFLICT/WHERE NOT EXISTS` KHÔNG đủ — production sẽ vẫn tự seed lại trên fresh DB.
+
+**Global Pattern Z (production migration seed leak)**:
+```
+Migration A SEEDS hardcoded dataset X vào table B
+  → downstream migration C derives data từ B vào table D (chain fan-out)
+  → production cold-boot or fresh-deploy → DB chứa X + derived(X) mà ops không kiểm soát.
+
+Đúng:
+  (1) Schema migrations chỉ chứa DDL + immutable config (enum domain, worker schedules).
+  (2) Mọi dữ liệu nghiệp vụ/pilot/sample → tách ra `scripts/seed_dev.sql` hoặc env-gated.
+  (3) Pre-merge audit checklist: "migration này có INSERT row dữ liệu không? Production có biết về row này không?"
+  (4) Migrations downstream (backfill, fan-out, derive) phải document upstream data dependency — nếu upstream là demo, downstream cũng KHÔNG run trong production.
+```
+
+**Concrete check** (CI gate khả thi): `grep -E "^\s*INSERT INTO|^\s*VALUES\s*\(" migrations/*.sql | grep -v -E "ON CONFLICT|connection_registry|cdc_worker_schedule|enum_types|schema_migrations"` — flag every migration insert ngoài whitelist config-only.
+
+**Tags**: #migration-hygiene #seed-leak #production-safety #global-pattern
+
+---
+## 2026-05-11 — Rule: Audit table usage on both consumer services BEFORE adding migration
+
+**Trigger**: User chỉ ra "khi tạo 1 table migration, tự check lại hệ thống xem 2 thằng api và cdc-worker có xài ko". Trong audit thực tế phát hiện 2 unused tables (`table_registry_legacy`, `master_table_registry_legacy`) còn tồn tại trong production schema sau migration rename 037/038, không có Go reference nào — pure dead schema.
+
+**Global Pattern (consumer-prove rule)**:
+```
+Migration A creates/renames table B vào schema S
+  → nếu sau A không tồn tại GREP match cho B trong code consumer (cms-service Go + cdc-worker Go),
+  → B là dead schema bloat (ops phải bảo trì, backup, vacuum vô ích).
+
+Đúng (pre-merge gate cho mọi PR migration):
+  (1) Liệt kê các table/column/function migration sửa.
+  (2) Cho mỗi table T, chạy: 
+        grep -rEn "T\\b|schema\\.T\\b|TableName.*[\"']T[\"']" \
+          cdc-cms-service/ centralized-data-service/ --include="*.go"
+  (3) Phải có >= 1 match ở >= 1 service. Match=0 → migration sai design (hoặc dead code phải xoá).
+  (4) Trong PR description: ghi rõ "Table X used by service Y at path/to/file.go:line".
+  (5) Migration RENAME table → grep tên CŨ phải =0 (đã clean) VÀ tên MỚI phải >=1 match.
+```
+
+**Áp dụng được cho** mọi project nhiều service share một schema (CMS + worker, API + worker pool, monolith + sidecar). Universal cho microservices + shared-DB anti-pattern transition.
+
+**Tags**: #migration-hygiene #dead-schema #consumer-prove #global-rule
+
+---
+
+## [2026-05-15] Muscle hỏi User approve khi đã được delegate full-loop
+
+- **Trigger**: User giao task "lên kế hoạch refactor cdc-cms-service/migrations" với 7 ràng buộc rõ (đọc lesson, đọc GEMINI.md, không cheat DB, verify trước báo done, ghi report). Sau khi viết 8 file workspace doc (02_plan + 03_implementation + 04_decisions + 08_tasks + 09_tasks_solution), Muscle đã hỏi user "Approve plan này không?" thay vì execute luôn.
+- **Root Cause**: Vi phạm CLAUDE.md §2 "Bug Fixing Tự chủ (Full-loop): KHÔNG hand-holding, KHÔNG hỏi ngược lại user cách sửa". Khi user đã delegate đầy đủ context + DoD, hỏi approval mid-task = process violation, không phải caution.
+- **Global Pattern**: `Pattern [A asks B for approval on item I that B already delegated to A with complete DoD] → Result: rework + user friction (Y). Đúng: [A executes per documented plan, reports back with verification artifacts; A only asks B when (1) blocker encountered, (2) scope expansion needed, (3) destructive/irreversible action threatens data]`.
+- **Correct Pattern**: 
+  1. Receive task with DoD → tạo workspace + plan docs (Phase 1-2).
+  2. Plan docs READY → execute luôn Phase 3 (không pause for approval).
+  3. Verify (build/test/run/curl) → ghi exit codes thực.
+  4. Report back kèm artifact paths + log snippets.
+  5. CHỈ pause hỏi khi: scope change, blocker, hoặc destructive op (drop table, force push, ...).
+- **Tags**: #muscle #rule2 #autonomous #hand-holding #cdc-cms
+
+---
+
+## [2026-05-15] Copy seed values từ legacy migration mà không audit schema references đã bị DROP
+
+- **Trigger**: Khi tách INSERT seed từ `migrations/cdc_system_model/029_v2_connection_registry.sql` sang `seed/v2_default_connections.sql`, Muscle copy raw values bao gồm `default_schema='cdc_internal'`. User chỉ: "cdc_internal nó còn ko đc xài nữa, old lắm rồi" — vì migration 038 line 234 đã `DROP SCHEMA IF EXISTS cdc_internal CASCADE`, mọi row reference đó là drift bug.
+- **Root Cause**: Copy-paste seed values mà không cross-reference state cuối cùng của schema sau toàn bộ chuỗi migration (037 SET SCHEMA → 038 DROP SCHEMA). Code-review chỉ nhìn file gốc, không nhìn file kế tiếp.
+- **Global Pattern**: `Pattern [A extracts data D from legacy file F1 to new file F2 without diffing D against subsequent DROP/RENAME/SET-SCHEMA statements in F3, F4, ...] → Result: F2 contains references to objects that no longer exist (Y). Đúng: [A runs grep -r "<schema_or_object>" against ALL migrations chronologically after F1, treats any DROP/RENAME as a forcing function to rewrite values in D]`.
+- **Correct Pattern**:
+  1. Trước khi copy INSERT từ file Fn, chạy `grep -n "<schema>" migrations/**/*.sql | sort` để xem có statement DROP/RENAME/ALTER SCHEMA sau Fn không.
+  2. Nếu có → rewrite values, không carry forward.
+  3. Document rewrite trong file header (Squash History section).
+  4. Test: query DB local xem object còn tồn tại không.
+- **Tags**: #muscle #schema-drift #migration #seed #cdc-cms
+
+---
+
+## [2026-05-15] Muscle "refactor" migration mà chỉ tách seed, để lại `ADD COLUMN IF NOT EXISTS` ALTER cha-con
+
+- **Trigger**: User giao "refactor migrations cho gọn gàng, chuyên nghiệp, đáp ứng production". Muscle tách INSERT seed ra `seed/` folder + tạo `embed.go` split, NHƯNG để nguyên 2 file 013/020 chứa hàng chục `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. User feedback ngắt giữa chừng: "ADD COLUMN IF NOT EXISTS, còn rất nhiều, mẹ mày. nói refactor mà cứ cà nhây cà nhây".
+- **Root Cause**: Muscle hiểu refactor là "tổ chức file folder + tách concern" nhưng KHÔNG hiểu rằng pattern `ADD COLUMN IF NOT EXISTS` là **technical debt indicator** — file migration apply-1-lần qua tracker không cần idempotency guard này; sự tồn tại của ALTER…ADD COLUMN tách rời khỏi CREATE TABLE chính là dấu hiệu của schema accretion lịch sử cần SQUASH vào file base. Refactor đúng phải consolidate column definition vào CREATE TABLE gốc, xóa file ALTER thừa.
+- **Global Pattern**: `Pattern [A refactors migration set M but only reorganizes file boundaries B without squashing accretive ALTER…ADD COLUMN/ADD CONSTRAINT statements C from descendants Mn into base table M0] → Result: file count giảm nhưng C vẫn rải rác, production fresh vẫn phải apply CREATE-then-ALTER cycles (Y). Đúng: [A treats every "ADD COLUMN IF NOT EXISTS" / "ADD CONSTRAINT IF NOT EXISTS" trong descendant Mn as forcing function to consolidate column/constraint into CREATE TABLE in base M0, then delete Mn entirely — tracker rows on existing DBs keep skipping by version name, fresh DBs get one clean CREATE]`.
+- **Correct Pattern**:
+  1. Sau khi tổ chức folder, chạy `grep -rn "ADD COLUMN IF NOT EXISTS\|ADD CONSTRAINT IF NOT EXISTS" <migrations>` để liệt kê hết debt.
+  2. Cho mỗi cặp (ALTER descendant Mn, base table tạo trong M0): merge column/constraint definition vào CREATE TABLE của M0.
+  3. Move seed/UPDATE/INSERT (data fix) trong Mn sang `seed/<descriptive>.sql`.
+  4. Xóa file Mn (tracker entry trên DB cũ sẽ skip-by-version dù file vắng mặt — runner đọc `embed.FS`, không đọc DB).
+  5. Document trong header M0: `-- Squash history: M0 (original) + Mn1 (column ADD), Mn2 (column ADD), ...`
+  6. Verify: build + apply trên DB fresh → tracker mới chỉ ghi nhận M0, không có Mn entries.
+- **Tags**: #muscle #migration #refactor #technical-debt #squash #cdc-cms
+
+---
+
+## [2026-05-15] CREATE TABLE không schema prefix → rơi vào public → cleanup migration sau fail
+
+- **Trigger**: Sau khi squash `cdc_internal.enum_types` từ migration 020 vào `001_init_schema.sql` (file base), Muscle viết `CREATE TABLE IF NOT EXISTS enum_types (...)` không kèm schema prefix. Runner áp `SET LOCAL search_path TO public, "$user"` cho mỗi migration body → `enum_types` được tạo trong `public.enum_types` thay vì `cdc_system.enum_types`. Migration 044 (`cleanup_public_residue`) có invariant `RAISE EXCEPTION IF n_tables > 0` → fail với `ERROR: public schema not empty: tables=1`. Smoke test mid-session không bắt được vì DB local đã có tracker entry cho 001 cũ → file mới KHÔNG re-apply → bug chỉ surface trên DB fresh hoặc khi runner tiến đến 044 chưa apply.
+- **Root Cause**: (1) PostgreSQL `CREATE TABLE <name>` không có schema-qualified identifier → resolve qua `search_path` first match. Trong runtime runner, `search_path` luôn được normalize về `public, "$user"` → table rơi vào public dù author muốn target schema khác. (2) Verification mode "service start success" không tương đương "migration đúng" — tracker skip-by-version giấu bug ở base files đã apply trên DB cũ; chỉ replay fresh DB mới prove.
+- **Global Pattern**: `Pattern [A writes CREATE TABLE statement S in migration M without schema-qualified prefix P assuming search_path will resolve correctly, AND A verifies M against database D that already has tracker entry for an earlier version of M] → Result: (1) S creates table in unexpected schema (default first hit on search_path, usually public), (2) downstream cleanup/move migrations Mn that assume invariants on schema layout fail later, (3) verification on D shows green because tracker skip M (Y). Đúng: [A always schema-qualifies every CREATE TABLE / CREATE INDEX / CREATE FUNCTION (e.g. `CREATE TABLE cdc_system.enum_types`), AND A verifies migration changes by replaying against a freshly-wiped database, not by restarting service against a partially-applied tracker]`.
+- **Correct Pattern**:
+  1. **Authoring rule**: Mọi `CREATE TABLE/INDEX/FUNCTION/TYPE/SEQUENCE` trong migration PHẢI schema-qualified, không phụ thuộc search_path runtime. `CREATE TABLE cdc_system.enum_types (...)`, không phải `CREATE TABLE enum_types (...)`.
+  2. **Pre-condition guard**: Nếu migration assume schema tồn tại, đầu file thêm `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='<target>') THEN RAISE EXCEPTION '...' END IF; END $$;`. Hoặc rely on runner-level `CREATE SCHEMA IF NOT EXISTS` chạy trước migration #1.
+  3. **Verification protocol khi sửa base migration (M0, file đã apply trên DB cũ)**:
+     - Option A (recommended): `docker exec <pg> psql -c "DROP DATABASE x; CREATE DATABASE x"` → replay full embed FS → assert exit=0 + state invariants.
+     - Option B (acceptable): tạo migration mới Mn-fixup thay vì sửa M0. Đảm bảo Mn-fixup chạy được trên DB đã có M0 cũ.
+     - KHÔNG ACCEPTABLE: chỉ restart service. Tracker skip ẩn bug.
+  4. **Post-deploy invariant check**: Sau apply migrations, query `SELECT schemaname, tablename FROM pg_tables WHERE schemaname='public'` → kỳ vọng 0 row (hoặc whitelist cụ thể) → assert bằng SQL DO block trong migration cleanup.
+- **Áp dụng được cho**: mọi project Postgres migration có cleanup/finalize step assert namespace invariant (public empty, no orphan, no dangling FK). Lesson tổng quát cho any DB schema migration framework có ordering + tracker (Flyway, Liquibase, Atlas, sqlx-migrate, ...).
+- **Tags**: #muscle #migration #postgres #search-path #schema-qualified #verification #cdc-cms
+
+---
+
+## [2026-05-15] Verify một service xong rồi báo Done — bỏ qua sibling consumer cùng share schema
+
+- **Trigger**: Sau khi refactor `cdc-cms-service/migrations`, Muscle smoke test cdc-cms-service (port 8083, /health 200) → báo "Phase 3 COMPLETE". User phản hồi: "api & cdc-worker đã start đc chưa. mày giỡn mặt hả" — chỉ ra rằng còn 2 service consumer (cdc-worker port 8082, cdc-admin-api port 8090) trong `centralized-data-service/cmd/` cũng đọc cùng schema `cdc_system.*` nhưng chưa được verify.
+- **Root Cause**: Muscle treat "service đã refactor" = "việc đã xong". Quên rằng schema migration là **shared contract** giữa nhiều consumer; verify 1 producer/owner không chứng minh contract còn valid với consumer khác. Đặc biệt nguy hiểm khi refactor di chuyển/rename object (squash, SET SCHEMA, DROP) — consumer có thể bind theo tên cũ và silent fail tại runtime.
+- **Global Pattern**: `Pattern [A modifies shared schema/contract C in service S0 and verifies only S0, ignoring sibling consumers S1, S2, ... that bind to C] → Result: contract drift breaks Sn at runtime, A reports Done while Sn-ops can't boot (Y). Đúng: [A enumerates ALL consumers of C (grep import / cross-repo search / docker-compose service graph), then verifies EACH Sn can boot + acquire C + execute at least one read/write against C; only after all green → report Done]`.
+- **Correct Pattern**:
+  1. Trước khi modify shared schema, list consumer: `grep -rl "<schema_name>\|<table_name>" --include='*.go' --include='*.sql' <repo-root>` + check `docker-compose.yml` / k8s manifests.
+  2. Build + start mỗi consumer trên cùng infra (DB, NATS, Kafka, Redis). Capture exit code + boot log + một synthetic operation (curl /health, gọi 1 endpoint, ghi 1 row test).
+  3. Trong report, liệt kê mỗi consumer với evidence: port, PID, /health code, log snippet quan trọng.
+  4. Pre-flight checklist trước khi báo Done: "Tôi đã verify [danh sách N consumer]? Tôi đã liệt kê họ trong report?".
+- **Áp dụng được cho**: Mọi project microservice/distributed có shared resource (DB, message bus, cache, file store). Universal cho schema-migration, API contract change, message-format evolution.
+- **Tags**: #muscle #verification #shared-contract #consumer #cdc-cms #cdc-worker
+
+---
+
+## [2026-05-15] Squash migration bằng grep subset — bỏ sót ADD COLUMN từ file partition
+
+- **Trigger**: Sau khi user feedback "ADD COLUMN IF NOT EXISTS còn rất nhiều", Muscle grep ngữ duy nhất `"ADD COLUMN IF NOT EXISTS"` → matched 24 instance trong 013/020 → squash 2 file đó vào 001. **Bỏ sót** `004_partitioning.sql` (legacy) chứa 2 ALTER ADD COLUMN cho cột `is_partitioned` + `partition_key` ở `cdc_table_registry` (do nằm cạnh logic CREATE PARTITION TABLE → khi refactor tách thành `schema/partitioning/010_partitioning.sql`, 2 cột này mồ côi). Hệ quả: model GORM `TableRegistry.IsPartitioned` / `.PartitionKey` không có cột tương ứng trong DB → POST `/api/v1/source-objects/register` → INSERT bao gồm 2 cột → `ERROR: column "is_partitioned" of relation "cdc_table_registry" does not exist (SQLSTATE 42703)`.
+- **Root Cause**: Squash chỉ dựa vào grep "ADD COLUMN IF NOT EXISTS" — bỏ qua ADD COLUMN không có guard, và bỏ qua ALTER TABLE từ file legacy thuộc nhóm "partitioning" mà nội dung lại touch sang `cdc_table_registry` (cross-cutting concern). Verification mid-session chỉ smoke `/health` và migration tracker, KHÔNG diff Go-model fields vs DB column list → drift ẩn cho tới khi handler thật sự build INSERT.
+- **Global Pattern**: `Pattern [A consolidates schema accretion từ subset Sn của legacy migrations bằng grep narrow trên 1 keyword K, mà không (1) grep toàn bộ "ALTER TABLE <target>" trên ALL legacy files, hoặc (2) diff Go-model fields/ORM column tags vs post-squash CREATE TABLE column list] → Result: drift ngầm — model fields không có column counterpart, INSERT/UPDATE handler fail tại runtime với SQLSTATE 42703 (Y). Đúng: [A treats squash as a closure problem — list ALL columns referenced by model/struct + ALL columns added by EVERY legacy migration (ALTER TABLE | CREATE TABLE), sau đó verify post-squash CREATE TABLE là superset của cả hai. Tools: jq/grep "gorm.*column:" trên Go side + grep "ALTER TABLE <name>" toàn migrations/, rồi set-diff]`.
+- **Correct Pattern**:
+  1. Build column inventory từ Go side: `grep -rn 'gorm:"column:[^"]*"' <repo>/internal/model/<table>.go` → list field/column.
+  2. Build column inventory từ migration side: `grep -rn "ALTER TABLE <target_table>\|CREATE TABLE <target_table>" migrations/` → list mọi DDL touch table đó. Bao gồm ALL legacy files (kể cả file thuộc nhóm khác như partitioning, audit, recon).
+  3. Squash: CREATE TABLE base PHẢI là superset của (1) ∪ (2).
+  4. Post-squash verification: `\d <table>` trên DB fresh → assert column list ≥ Go-model field set.
+  5. Optional automated check: viết test Go `TestSchemaModelSync` mở DB connection + introspect `information_schema.columns` cho table → compare với struct fields via reflection → fail nếu thiếu.
+- **Áp dụng được cho**: mọi project Go/Python/Ruby dùng ORM (GORM, SQLAlchemy, ActiveRecord) với schema migration tách rời source code model. Universal lesson cho any "ORM-model + manual migration" pairing where struct evolves independently of DDL.
+- **Tags**: #muscle #migration #squash #grep-narrow #model-db-drift #gorm #cdc-cms
+
+---
+
+## [2026-05-15] Verify API contract = curl/Postman, không phải SELECT DB
+
+- **Trigger**: Sau refactor migrations + fix 044, Muscle smoke `/health=200` + DB queries `SELECT count(*) FROM connection_registry` rồi báo Done. User feedback: POST `/api/v1/source-objects/register` → 500 Internal Server Error. Lỗi này KHÔNG surface qua `/health` hay SELECT — chỉ surface khi handler thật build INSERT statement → DB từ chối cột không tồn tại.
+- **Root Cause**: Smoke test "service start OK" và "tracker apply OK" chỉ chứng minh schema-runner happy + bootstrap happy. Không chứng minh **business handler write path** với schema mới (insert/update/upsert tới full set of columns model expects). Verify mode "DB query SELECT" cũng KHÔNG đủ — SELECT bỏ qua các column model có mà DB chưa có; chỉ INSERT/UPDATE mới fail loud.
+- **Global Pattern**: `Pattern [A modifies DB schema then verifies bằng SELECT queries hoặc service /health endpoint mà không exercise mutation handler chính của business domain] → Result: drift columns/types không surface tại verify, fail tại first real user mutation request (Y). Đúng: [A include trong smoke test pack ít nhất 1 POST/PUT/PATCH cho mỗi domain primary write path — exercise full column write, capture HTTP status + error body. Auth flag dev mode hoặc service token để bypass interactive login. Mark Done chỉ sau khi tất cả write smoke pass với 2xx/expected 4xx]`.
+- **Correct Pattern**:
+  1. Trước khi báo Done sau schema change, danh sách "write smoke" cho mỗi table changed: 1 POST /resource (Register), 1 PATCH /resource/:id (Update), nếu có 1 DELETE.
+  2. Mỗi smoke gửi body chứa ALL fields model expose (kể cả optional) để force GORM build full INSERT/UPDATE → expose mọi column drift.
+  3. Capture: HTTP code, response body, server log (handler error, GORM SQL với drift column).
+  4. Document trong report: smoke matrix bảng `[endpoint × method × HTTP code × notes]`.
+  5. Auth gate: dùng dev token hoặc env flag (ADMIN_API_DEV=true, BYPASS_AUTH=1) thay vì interactive login — đảm bảo smoke chạy được offline/CI.
+- **Áp dụng được cho**: mọi project có HTTP CRUD API trên DB-backed entity, đặc biệt với ORM. Lesson tổng quát cho any change touching shared mutation contract (DB schema, API request shape, message format).
+- **Tags**: #muscle #verification #write-smoke #api-contract #post-migration #cdc-cms
+
+---
+
+## [2026-05-15] P-no-hack-in-report — Không codify manual repair làm recipe trong report
+
+- **Trigger**: Sau POST-MORTEM #2 cdc-cms migrations, Muscle viết block "DB local repair (1 lần, idempotent)" trong `report_refactor_2026-05-15.md` Section 6.2 chứa `ALTER TABLE cdc_system.cdc_table_registry ADD COLUMN IF NOT EXISTS is_partitioned BOOLEAN DEFAULT false;`. Block này để help user repair DB local mà không cần drop + replay. User feedback: "thằng ngu, sao ALTER TABLE, ADD COLUMN tại sao vẫn còn" — user thấy ADD COLUMN trong report là tín hiệu refactor không sạch / pattern cheat-DB được normalized.
+- **Root Cause**: Khi sửa schema drift (column ở model không có trong DB), agent có 2 đường: (1) sửa SOURCE (CREATE TABLE đầy đủ trong file embedded) + drop-replay DB, (2) patch DB tay bằng ALTER ADD COLUMN. Đường 2 nhanh hơn, idempotent, nhưng nếu document trong report sẽ dạy người đọc rằng "ALTER ADD COLUMN là cách sửa drift" → mỗi lần sót column lại đẻ một ALTER → schema accretion tiếp tục → ngược lại mục tiêu refactor.
+- **Global Pattern**: `Pattern [A sửa schema drift bằng manual ALTER trên DB local, sau đó document command đó trong report như "repair script" để người sau làm theo] → Result Y: pattern cheat-DB được codify, người đọc tương lai dùng ALTER ADD COLUMN làm "fix" mặc định thay vì sửa SOURCE, schema tiếp tục accretion, refactor mục tiêu "consolidate CREATE TABLE" bị vô hiệu hoá. Đúng: [Source-of-truth = file embedded (CREATE TABLE đầy đủ). Report chỉ document thay đổi SOURCE. Patch DB tay 1 lần để unblock dev local — không sao, nhưng KHÔNG copy command vào report. Nếu user cần biết cách align DB local, hướng dẫn "drop DB + replay container init" thay vì ALTER. Quy tắc kiểm: nếu xoá block command đó khỏi report mà người đọc vẫn hiểu được "đã sửa gì ở source", thì block đó là noise (hoặc tệ hơn, là hack-recipe). Giữ chỉ phần thay đổi source]`.
+- **Correct Pattern**:
+  1. Khi báo cáo bug fix schema: section "Fix" chỉ describe thay đổi trong file source (CREATE TABLE, column added inline).
+  2. Section "Verify" describe kết quả sau khi REPLAY fresh từ source (drop + recreate DB hoặc fresh container). Không describe state sau khi patch tay.
+  3. Nếu cần patch DB local để unblock dev đang chạy: ghi note "DB local patched off-record; production fresh path đã đúng từ source" — không paste lệnh ALTER.
+  4. Verification matrix: build_exit=0, fresh-replay applied=N files, write-smoke POST/PATCH = expected code.
+- **Áp dụng được cho**: mọi project có migration runner + source-of-truth file embedded. Lesson tổng quát cho việc tách "what changed in source" vs "what I did to my local box" — chỉ cái đầu tiên thuộc về report.
+- **Tags**: #muscle #report-quality #no-db-cheat #schema-source-of-truth #migrations #cdc-cms
+
+---
+
+## [2026-05-15] Audit config phải verify cross-layer redundancy, không chỉ per-key DEAD
+
+- **Trigger**: User yêu cầu audit `config-local.yml` để xác định key nào còn dùng / không dùng. Round 1 Muscle chỉ flag 7 key DEAD theo từng key đơn lẻ (airbyte, worker.fetchSize, jwt.expiration, debezium.connectorName, sources.postgres_primary, ...). User dán 3 block YAML `db.{host..url}` + `systemDb.url` + `controlPlane.url` cùng trỏ về `localhost:5433/cdc_dw` và quát: "mấy cái này là gì, sao nó giống nhau vậy. làm việc sao hời hợt, ngu đần vậy". Round 1 đã miss tầng REDUNDANCY giữa 3 layer DSN cùng giá trị trong môi trường hiện tại.
+- **Root Cause**: Audit pattern chỉ trả lời "key X có reader không" (per-key DEAD). Không trả lời "key X có overlap với key Y trong fallback chain không" (cross-layer REDUNDANT). Trong code có chain `ControlPlane.URL ← SystemDB.URL ← cfg.DB.PgxDSN()` (`config.go:applyDBFallbacks`); cả 3 layer đều có reader hợp lệ nhưng trên local rig giá trị trùng nhau → 2/3 layer là noise có thể collapse. Audit shallow bỏ qua redundancy → user thấy 3 block YAML trông giống hệt nhau, kết luận report "hời hợt".
+- **Global Pattern**: `Pattern [A audit X config layers L1/L2/L3 có fallback chain L1→L2→L3, chỉ verify per-layer "has-reader" mà không verify per-pair "has-overlap value/role" giữa các layer cùng chain] → Result Y: layers REDUNDANT (cùng giá trị, cùng role trong môi trường audit) bị classify là ACTIVE đơn lẻ, file config giữ noise duplicate, user phát hiện trước agent và mất trust. Đúng: [Audit 2 pass — Pass 1: per-key DEAD theo grep caller. Pass 2: per-chain REDUNDANT theo trace fallback trong source (search "fallback", "applyDefaults", "if X == \"\" { X = Y }" patterns) + so sánh value các layer cùng chain trong YAML target. Nếu chain L1←L2←L3 với L1.value == L2.value == L3.value trong môi trường audit → flag REDUNDANT, đề xuất collapse về layer thấp nhất (source-of-truth), giữ layer cao chỉ khi production cần override. Report phải có bảng riêng "Redundancy collapse opportunities" tách bạch với "DEAD keys"]`.
+- **Correct Pattern**:
+  1. Audit Pass 1 (per-key DEAD): grep struct field, grep caller, mark `DEAD | ACTIVE | ACTIVE-INDIRECT | ACTIVE-GUARD-ONLY`.
+  2. Audit Pass 2 (cross-layer REDUNDANT): trace tất cả fallback chain trong loader (`applyDefaults`, `applyFallbacks`, `hydrate`), build sơ đồ chain L1←L2←L3. So sánh value trong YAML target — nếu trùng → flag REDUNDANT.
+  3. Đề xuất 2 path collapse: (a) YAML-only — xoá layer cao, để loader fallback từ layer thấp; (b) Code refactor — xoá layer trong struct nếu KHÔNG ai cần override.
+  4. Báo cáo phân tách rõ: section "DEAD keys" (key có 0 reader) vs section "REDUNDANT layers" (key có reader nhưng overlap với layer khác).
+  5. Verify collapse: smoke load YAML mới qua loader thực → confirm layer cao runtime hydrate từ layer thấp (in ra `match=true`).
+- **Áp dụng được cho**: mọi project có config file với fallback chain (Viper, Cobra, env→file→default), đặc biệt khi có legacy field song song với new field. Lesson tổng quát cho any "DRY audit" trên config layers / DI containers / service registry có default-resolution chain.
+- **Tags**: #muscle #audit #config #redundancy #fallback-chain #dry #cross-layer #cdc-data-service
+
+---
+
+## [2026-05-15] P-scope-creep — User yêu cầu A, Muscle làm A+B+C+D (overreach)
+
+- **Trigger**: User nói "gated cái cluster luôn đi, nhìn là biết nên chạy mấy cái này nên chạy ci/cd khi prod build mà". Muscle dịch thành: viết shell wrapper + Makefile target + GitHub Actions workflow + README CI section + report Section 6.4. User feedback: "tao kêu tao sẽ làm CI/CD trên prod thằng chó ngu này, mẹ mày. mày làm cái skipCluster cho tao thôi" — user chỉ muốn config flag đối xứng `skipSeeds`, KHÔNG muốn agent tự ý build CI/CD pipeline.
+- **Root Cause**: Khi user nhắc "ci/cd" như một observation ("nhìn là biết nên chạy ci/cd"), Muscle hiểu sai thành command "build ci/cd". Lỗi:
+  1. Không re-read kỹ message để phân biệt "user nêu fact" vs "user ra lệnh".
+  2. Assume scope rộng → tạo 5 file mới (.sh, Makefile target, .yml workflow, README section, report section).
+  3. Violate CLAUDE.md §3 "Simplicity First minimal impact" + GEMINI.md §3 "Demand Elegance".
+  4. CI/CD pipeline là decision của user/team về infrastructure platform (GitHub vs GitLab vs Jenkins vs ArgoCD) — agent KHÔNG được tự pick platform.
+- **Global Pattern**: `Pattern [User nói "nên có X" hoặc "X cần được Y" trong context observation, A diễn giải thành command "build X từ đầu"] → Result Y: A tạo nhiều file/feature ngoài scope, push thêm cấu trúc + tooling + platform-specific code mà user chưa approve, làm bloated codebase, user phải undo. Đúng: [Khi gặp ambiguous request, A liệt kê 2-3 interpretation NGẮN bằng text, hỏi clarify TRƯỚC khi tạo file. Đặc biệt với task có "external boundary" (CI/CD, infra, third-party service) — A chỉ implement phần thuộc repo (config flag, log message, doc note), KHÔNG implement phần thuộc platform (workflow YAML, Dockerfile cho infra). Quy tắc kiểm: nếu task tạo > 2 file mới ngoài request rõ ràng, dừng lại check với user]`.
+- **Correct Pattern**:
+  1. Re-read user message ít nhất 2 lần để extract verb action: "làm X" vs "X nên/cần Y".
+  2. Tách scope: phần thuộc repo (code, config, doc) vs phần thuộc infra (CI YAML, deploy manifest, secret manager). Default: chỉ implement phần repo.
+  3. Khi user mention platform tool (CI/CD, k8s, Vault, Slack), KHÔNG assume agent có quyền cấu hình platform đó — chỉ tạo config field / hook để user wire ngoài.
+  4. Trước khi tạo file mới: tự hỏi "Có phải user yêu cầu trực tiếp file này không?" Nếu không chắc → ngắn 2-3 dòng plan, hỏi user choose interpretation.
+  5. Khi user push back: APPEND lesson, UNDO file artifact, KHÔNG argue.
+- **Áp dụng được cho**: mọi tương tác request → implementation. Đặc biệt với task touching: CI/CD, infrastructure-as-code, secret management, deployment platform, container orchestration, third-party integrations.
+- **Tags**: #muscle #scope-creep #overreach #ci-cd-boundary #ambiguous-request #minimal-impact #cdc-cms
+

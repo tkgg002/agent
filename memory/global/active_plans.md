@@ -50,3 +50,23 @@
 - Workspace `feature-cdc-system-refactor`: status row trong table có thể đọc là 🟡 Active (audit trail) — actual phase: ⏸ Paused (Task #19 đóng, chờ next directive).
 - Next priorities cho max-Brain (post-Task-#19): plan Track E (Mongo CDC, blocked on Boss brief — lesson L-1436 không bịa scope), P3 prune residue 1 row legacy_1 investigation (worker-lane), duplicate close-loop log dedup investigation (worker-lane).
 - max output 2026-05-07 ICT: `report_flow1_connect_source_2026-05-07.md` (overview Wizard step 1–5 manual operator flow per Boss directive).
+
+## 2026-05-07 16:30+ ICT Updates (Flow 1 push iter#46–#72)
+
+- **Workspace re-active 🟡**: `feature-cdc-system-refactor` từ Paused → Active vì Boss directive "**bằng mọi giá phải lên đc flow1 này**" (multi-iter /loop session).
+- **Path A → Path B migration LIVE**: cms binary `/tmp/cdc-cms-service-flow1` PID 43919 (mtime 11:21, swap 13:54) chạy commit `0eddad0 feat(cms): support hybrid shadow db configuration (A3)`. Log evidence: `PostgreSQL (shadow data plane) connected port=5436 cdc_shadow`. Path B (5436 cdc_shadow) có 7 schemas + 11 shadow tables LIVE.
+- **G-11 master/shadow hyphen**: ✅ CLOSED (iter#68 evidence). master_binding id=37 + shadow_binding id=62 cho src 44 (`src_mongodb_payment_bill_service_refund_requests`) đều có underscore. SQL backfill skip.
+- **G-12 (NEW) worker A3 hybrid**: ⏳ OPEN — `/tmp/cdc-worker-host` PID 90006 vẫn chạy binary May 5 09:39 (pre-A3-hybrid). Working tree đã có shadowDB *gorm.DB* + adapter swap nhưng UNCOMMITTED + UNBUILT. Worker query Path A `cdc_dw` thay vì Path B → ERROR `column "_id" does not exist` + `relation does not exist`. Cần verb `commit a3-worker` → `ship g11`.
+- **G-13 (NEW) Mongo PK cast bigint**: ⏳ OPEN (defer post-Flow-1). Transmuter hardcoded `"_id"::bigint` không cast được Mongo ObjectId. Recommend: dùng PG source cho Flow 1 P1 happy-path để né.
+- **Scope divergence x2**: x2 (Antigravity:gemini-1.5-pro) đã pivot Phase 2 P3 (CQRS refactor + FE polling) — `08_tasks_phase2_p3.md` + `09_tasks_solution_phase2_p3.md` + master_registry_handler thin-adapter. Phase 2 P3 KHÔNG unblock Flow 1; recommend Boss verb `defer phase2, focus flow1`.
+- **Brain output post-iter#46**: `report_flow1_loop_iter46_2026-05-07.md` + `report_flow1_loop_iter68_2026-05-07.md` + (đang) `report_flow1_loop_iter72_decision_pack.md`. 05_progress.md đã APPEND iter#46 + iter#47 + iter#68 (215487 bytes / 2700+ lines).
+- **Halt status**: Brain đã hoàn thành scope plan + document + coordinate. Block còn lại đều cần Boss explicit verb (CLAUDE.md §1, §11, §12 + Auto Mode rule #5). Verb dictionary: `commit a3-worker` | `ship g11` | `smoke flow1 pg` | `defer phase2, focus flow1` | (or) `max switch muscle` để Brain cross-line execute.
+
+## 2026-05-08 Audit Update
+
+- `audit-flow1-3repos-2026-05-08`: workspace audit mới để re-check `cdc-cms-service`, `cdc-cms-web`, `centralized-data-service`, và `flow1` trên CMS.
+- Kết quả chính:
+  - `cdc-cms-service` test PASS.
+  - `cdc-cms-web` build FAIL ở `src/pages/flow1/*`.
+  - `centralized-data-service` binary build PASS nhưng test FAIL (`scratch/`, `internal/handler`, `internal/service`).
+  - `flow1` NOT READY do FE build lỗi + contract drift FE↔CMS + runtime drift dấu hiệu stale CMS binary.

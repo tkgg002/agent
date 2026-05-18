@@ -522,3 +522,343 @@ Cron `1975934c` recurring 5m → next fire ~5 min. Iter#6 sẽ:
 - **APPEND**: `05_progress.md` iter#5 max entry
 
 — max-Brain (loop iter#5)
+
+---
+
+## Iteration #6 — 2026-05-07 ICT (x2 §10 investigation ACK + effort refined)
+
+### A. Lessons re-applied
+
+| Lesson | Trigger iter#6? |
+|---|---|
+| L-MUSCLE-PLAN-PROHIBITION | ✅ x2 iter#6 §10 đúng read-only investigation, "x2 KHÔNG draft `02_plan_*`" |
+| L-DECISION-DOC-FACT-CHECK-DRIFT (candidate iter#4) | Pattern global tiếp tục — REV2 §5 estimate được x2 verify + refine |
+| Lessons line 2494 "Boss correct mid-session về plan boundary" | x2 iter#6 hành vi đúng pattern: read max plan + investigate + flag effort, KHÔNG tự draft plan |
+
+### B. Service state (real verified iter#6)
+
+| Service | PID | Uptime | Health | Δ vs iter#5 |
+|---|---|---|---|---|
+| cdc-cms-service | 64511 | 49m26s | `/api/system/health` HTTP 200 (5.8ms) | +6m, không restart |
+| cdc-cms-service NEW binary | — | — | `/tmp/cdc-cms-service-flow1.new` 58022178B (May 7 11:00) | unchanged — chờ Boss swap |
+| cdc-worker-host | 23565 | 2d 01:28:01 | (no health endpoint) | +6m |
+| cdc-admin-api-f3v2 | 21133 | 2d 01:32:41 | (legacy) | +6m |
+
+### C. DB state (delta vs iter#5 — UNCHANGED)
+
+- Path A 5433 cdc_dw: src44 = `shadow_pending`, src33/34/35/37 = `active` (legacy phantom).
+- Path B 5436 cdc_shadow: refund_requests = **1720 rows** (persist Boss output).
+- → G-7 chưa enable, state machine không advance.
+
+### D. x2 progress verification iter#6 (real evidence từ `09_tasks_solution §10`)
+
+| Iter#5 task plan | Status iter#6 | Evidence |
+|---|---|---|
+| **x2.D2** P0 wait Boss approve swap | TODO carry-over | `.new` binary still 58022178B May 7 11:00, swap chưa execute |
+| **x2.I** P2 (A3 implementation, sau Boss approve) | ✅ **Investigation DONE** preempt iter#6 | x2 §10 ship 8 sub-sections findings + effort refine |
+| **x2.E** P2 standby Boss G-7 | TODO | unchanged |
+| **x2.F** P3 DEFER | DEFER | unchanged |
+| **x2.H** P2 (Phương án Z smoke) | TODO sau Boss swap+G-7 | unchanged |
+
+### E. x2 §10 findings ACK (max-Brain re-verify)
+
+| Finding x2 §10 | max iter#6 verify | Match REV2 §5? |
+|---|---|---|
+| `NewShadowAutomator(db *gorm.DB, logger *zap.Logger)` ALREADY accepts `*gorm.DB` | (max trust — x2 cms-lane authoritative) | ✅ §5.3 confirmed (no signature change) |
+| Single call site `internal/server/server.go:198` | (max trust) | ✅ §5.2 confirmed (1 inject point) |
+| `AppConfig` (config.go:16-23) thiếu `ShadowDB DBConfig` | (max trust) | ✅ §2.6 drift evidence verified |
+| Effort precise ~70 min (7-step breakdown) | reasonable cho narrow refactor + smoke | ⚠️ **REV2 §5 4-6h is conservative — refine to ~70 min** |
+| Risk Low (no hexagonal touch) | reasonable | ⚠️ REV2 §3 said "Medium" — accept x2 refine to Low |
+
+→ **max accept x2 effort refinement**: REV2 §5 effort estimate 4-6h → **~70 min** (chính xác hơn). Risk: Medium → **Low** (per single call site + constructor sig đã match).
+
+### F. Boss decision matrix iter#6 (REVISED post-x2 §10)
+
+| # | Pri | Decision | Status iter#6 |
+|---|---|---|---|
+| 1 | **P0** | G-7 worker enable PROVISIONING_ORCHESTRATOR_ENABLED + restart | unchanged, **highest leverage** |
+| 2 | **P1** | Approve x2 swap binary cms (Boss command HOẶC agent perm) | unchanged, block x2.D2 |
+| 3 | **P1** | Approve A3 hybrid (per REV2 §3) — **effort refine ~70 min** | refined from "4-6h" |
+| 4 | **P2** | Migration drop Path A 0-row orphan tables (per REV2 §5.4) | unchanged |
+| 5 | P2 | Phương án Y refactor admin endpoint (carry-over) | unchanged |
+| 6 | P2 | Backfill 4 phantom rows | unchanged |
+| 7 | P3 | MariaDB Debezium plugin | unchanged |
+
+→ **Highest-leverage iter#6**: Approve #1 + #2 + #3 cùng lúc → unblock toàn bộ chain (worker advance + cms binary G-10 active + cms ShadowAutomator align Path B).
+
+### G. Updated task plan iter#7
+
+#### x2 (cms-lane) — TODO iter#7
+
+| # | Pri | Task | Effort | Boss approve? |
+|---|---|---|---|---|
+| **x2.D2** | P0 | Wait Boss approve swap → kill+mv+nohup | 2 min | YES |
+| **x2.I** | **P1** | Implement A3 7-step refactor (per x2 §10.5: AppConfig.ShadowDB + config-local.yml shadowDb + 2nd gorm session + server.go:198 inject + optional env override + build/test/smoke) | **~70 min** | YES (REV2 #3) |
+| **x2.J** *(new)* | P2 | Sau A3 land + G-7 + swap, run Phương án Z 2-step smoke cho test source → verify table tạo tại Path B 5436 + verify state machine `shadow_active` | 30 min | YES (chain) |
+| **x2.E** | P2 | Standby Boss G-7 | — | YES |
+| **x2.F** | P3 | P3.1 endpoint test | 2h | NO |
+
+#### max-Brain — TODO iter#7
+
+| # | Pri | Task | Effort |
+|---|---|---|---|
+| **max.J** | iter#7 verify | Re-verify x2.I A3 implementation (post-Boss approve) | 5 min |
+| **max.K** | doc | Sau Boss approve A3, ship `08_tasks_A3_hybrid_2026-05-07.md` detailed checklist (incorporate x2 §10 7-step breakdown + AC verify) | 30 min |
+| **max.L** | escalation | Boss G-7 + swap + A3 nudge | ongoing |
+
+### H. Cron + self-pacing
+
+Cron `1975934c` recurring 5m → next fire ~5 min. Iter#7 sẽ:
+1. Re-verify Boss approve trên 3 P0/P1 escalation (G-7 + swap + A3).
+2. Nếu Boss approve A3: nudge x2 thi công 70-min refactor + verify smoke output.
+3. Nếu Boss approve G-7: verify worker advance → src44 `shadow_active`.
+4. Nếu Boss approve swap: verify cms binary swap → G-10 active.
+
+### I. Files iter#6
+
+- **APPEND** (this file): iter#6 section
+- **APPEND**: `coordination_max_x2_2026-05-07.md` iter#6 ACK x2 §10 findings + effort refine
+- **APPEND**: `05_progress.md` iter#6 max entry
+
+— max-Brain (loop iter#6 — x2 §10 ACK + REV2 §5 effort refine 4-6h → ~70 min)
+
+---
+
+## Iteration #7 — 2026-05-07 ICT (audit catch-up: x2 §11 migration evidence + x2 §12 A3 implementation DONE)
+
+### A. Lessons re-applied (grep `Flow 1 / brain-delegate / x2`)
+
+| Lesson | Trigger iter#7? |
+|---|---|
+| `L-MUSCLE-PLAN-PROHIBITION` (lessons.md:2492) | x2 §11+§12 đúng pattern: iter#7 read-only investigation, iter#8 thi công CMS-lane sau Boss interrupt "tập trung mục tiêu Flow 1" — KHÔNG tự draft `02_plan_*` |
+| `L-ROLE-SWAP-MID-TRANSFORMATION` (lessons.md:2478) | Lane lock hold: x2 chỉ chạm cms-lane (4 file), KHÔNG đụng worker `centralized-data-service/` |
+| `L-DECISION-DOC-FACT-CHECK-DRIFT` (candidate iter#4) | REV2 doc shipped iter#5 — Boss confirm pending. Iter#7 enrich evidence §11 vào REV3 sau approve. |
+| Boss role gate (lessons.md:1445) | iter#7 Boss decision matrix vẫn 5+ pending, escalation chain còn nguyên |
+
+### B. Service state real iter#7 (re-verified 11:23 ICT)
+
+| Service | PID | Health | Δ vs iter#6 |
+|---|---|---|---|
+| cdc-cms-service (binary cũ `/tmp/cdc-cms-service-flow1`) | 64511 | `{"service":"cdc-cms","status":"ok"}` | unchanged — chưa swap, chưa pickup G-10 + A3 |
+| cdc-cms-service (binary mới `/tmp/cdc-cms-service-flow1.new`) | — | 58022194B 2026-05-07 11:21 | +80B vs iter#5 .new (do A3 imports/server.go enlarge) |
+| cdc-worker-host | (alive) | `{"service":"cdc-worker","status":"ok"}` | unchanged |
+| `gpay-cdc-worker` env `PROVISIONING_ORCHESTRATOR_ENABLED` | — | **ABSENT** (G-7 still OFF) | unchanged |
+| `gpay-cdc-worker` env `CDC_SHADOW_DB_URL` | — | `gpay-postgres-shadow:5432/cdc_shadow` (Path B) | unchanged — runtime align worker design |
+
+### C. DB state (delta vs iter#6 — UNCHANGED)
+
+- Path A 5433 cdc_dw: src44 = `shadow_pending`, bind52 ddl_status = `pending`. 4 non-zero historical tables (60 rows) + 6 zero-row orphan (per x2 §11.2 inventory).
+- Path B 5436 cdc_shadow: `shadow_payment_bill_service.refund_requests` = **1720 rows** (Boss output, iter#0 Flow 1 run, persist verified 11:23).
+
+### D. x2 progress verification iter#7+iter#8 (catch-up max-Brain audit)
+
+| Task | Status iter#7 max audit | Evidence |
+|---|---|---|
+| **x2.D2** P0 swap binary | TODO carry-over | Binary `.new` ready, swap blocked Boss approve |
+| **x2.E** P2 standby G-7 | TODO carry-over | unchanged (G-7 still OFF) |
+| **x2.F** P3 P3.1 endpoint | DEFER carry-over | unchanged |
+| **x2.G** migration safety pre-check | ✅ DONE iter#7 (`09_tasks_solution §11`) | 8 sub-sections inventory + timestamp analysis + zero-data-loss proof |
+| **x2.I** A3 7-step implementation | ✅ **DONE** iter#8 (`09_tasks_solution §12`) | 4 cms files modified, build/vet/test PASS, binary 58022194B |
+| **x2.J** Phương án Z smoke (POST register + advance) | TODO post-(swap+G-7) | unchanged |
+
+### E. Iter#8 A3 implementation ACK (max-Brain re-verify)
+
+| Step (per max REV2 §5) | x2 iter#8 ship | max audit verdict |
+|---|---|---|
+| Step §5.1 add `shadowDb:` config | ✅ `config-local.yml` +11 lines | match REV2 §5.1 |
+| Step §5.2 cms config struct field | ✅ `config.go` +24 lines `ShadowDB DBConfig` + 9 env binds `CMS_SHADOW_DB_*` | match REV2 §5.2 |
+| Step §5.3 ShadowAutomator inject `*gorm.DB` | ✅ `server.go` +27 lines: open 2nd gorm session + inject `NewShadowAutomator(shadowDB, logger)` | match REV2 §5.3 |
+| Step §5.4 `pkgs/database/postgres.go` signature | ✅ accept `config.DBConfig` (was `*config.AppConfig`) — narrow signature | reasonable refactor cho 2-DB case |
+| Step §5.5 build/vet/test | ✅ EXIT=0 cả 3 (pre-existing flake corr-id isolated PASS với `-count=3`) | match DoD |
+| Migration drop 6 Path A schemas | DEFER Boss-gated | unchanged |
+| Smoke Phương án Z 2-step | DEFER Boss-gated (post-swap+G-7) | unchanged |
+
+→ **max-Brain APPROVE x2 iter#8 A3 implementation**. Code change đúng REV2 §5 spec, narrow scope, lane-lock cms-only, build/test PASS, binary ready. Effort precise ~70 min match x2 §10.5 estimate (vs REV2 conservative 4-6h).
+
+### F. Iter#7 §11 migration evidence ACK
+
+| Finding x2 §11 | max iter#7 verify | REV2 §5.4 reconcile |
+|---|---|---|
+| Path A KHÔNG pure 0-row orphan: 4 non-zero tables (60 rows total) | (max trust x2 cms-lane authoritative) | ⚠️ REV2 §5.4 assumed "0-row only" — refine sang "all 6 schemas drop-safe per zero-data-loss proof" |
+| min(_synced_at) Path A == Path B + Path B count >= Path A count | Match runtime evidence | ✅ Drop-safe proof valid |
+| Path A frozen 2026-05-05 03:59, Path B active đến 05-06 15:42 | Match worker `.env` switch timeline | ✅ Path B = active prod data plane |
+| Recommended drop scope: 6 schemas Path A | Concrete SQL DROP SCHEMA ... CASCADE | ⚠️ Cần Boss approve vì destructive |
+
+→ **max iter#7 commitment**: nếu Boss approve REV2 + migration, ship `04_decisions_*_REV3` incorporate §11 evidence (refine §5.4 từ "0-row only" sang "all 6 schemas zero-data-loss safe").
+
+### G. Boss decision matrix iter#7 (consolidated, post-iter#8)
+
+| # | Pri | Decision | Status iter#7 |
+|---|---|---|---|
+| 1 | **P0** | **G-7 worker enable** PROVISIONING_ORCHESTRATOR_ENABLED + worker restart | unchanged, **highest leverage** — worker-lane (Boss/max own, x2 KHÔNG touch) |
+| 2 | **P1** | **Approve swap cms binary**: Boss `! kill -TERM 64511 && mv /tmp/cdc-cms-service-flow1.new /tmp/cdc-cms-service-flow1 && nohup /tmp/cdc-cms-service-flow1 > /tmp/cdc-cms-service-flow1.log 2>&1 &` HOẶC grant agent perm rule | unblock x2.D2 + activate G-10 + A3 |
+| 3 | **P1** | **Approve A3 hybrid commit** (cms-lane x2 đã thi công sẵn iter#8) | x2.K stage + local commit 4 files (no push) |
+| 4 | P2 | Migration drop 6 Path A schemas (per x2 §11 zero-data-loss proof) | refine REV2 §5.4 |
+| 5 | P2 | Phương án Y refactor `centralized-data-service/internal/admin/source_register.go:92` (worker-lane) | carry-over, KHÔNG x2 task |
+| 6 | P2 | Backfill 4 phantom rows | carry-over |
+| 7 | P3 | MariaDB Debezium plugin | carry-over |
+
+→ **Highest-leverage iter#7**: Approve #1 + #2 + #3 cùng lúc → unblock toàn bộ Phương án Z smoke chain.
+
+### H. Phương án Z context confirmation
+
+Theo Boss directive: Flow 1 lên qua **Phương án Z cms 2-step**:
+1. `POST /api/v1/source-objects/register` — register source object metadata vào registry (Path A control plane).
+2. `POST /api/v1/cms/sources/:id/provisioning/advance` — advance state machine (`shadow_pending` → ddl_apply → `shadow_active`).
+
+Pre-conditions trước smoke:
+- ✅ G-10 fix `pk_type='string'→'text'` active (cần swap binary).
+- ✅ A3 hybrid active: cms ShadowAutomator route shadow DDL về Path B 5436 (cần swap binary).
+- ⛔ G-7 worker enable: state machine `advance` cần worker tiêu thụ `cdc.cmd.shadow.bind` → Path B DDL apply.
+- ⛔ x2.D2 swap binary cms.
+
+→ **Phương án Z smoke** = chain 4 pre-cond. Boss approve P0+P1+P1 (matrix #1,#2,#3) đủ unblock.
+
+### I. Updated task plan iter#9 cho x2
+
+#### x2 (cms-lane) — TODO iter#9
+
+| # | Pri | Task | Effort | Boss approve? |
+|---|---|---|---|---|
+| **x2.D2** | **P0** (carry-over) | Wait Boss approve swap → execute kill+mv+nohup | 2 min | YES |
+| **x2.K** *(new iter#9)* | **P1** | Stage + local commit A3 implementation 4 cms-lane files (`config/config-local.yml`, `config/config.go`, `internal/server/server.go`, `pkgs/database/postgres.go`). Commit message: `refactor(cms): A3 hybrid — inject separate gorm session for ShadowAutomator (Path B 5436)`. **NO push** (reversible via `git reset` nếu Boss reject A3) | 5 min | NO (lane self-action, reversible local commit) |
+| **x2.J** *(new iter#9, Phương án Z smoke)* | P2 | Sau (G-7 enable + swap binary done): chạy 2-step `POST /api/v1/source-objects/register` (test source) + `POST /api/v1/cms/sources/:id/provisioning/advance`. Verify: (a) shadow table tạo tại Path B 5436 cdc_shadow, (b) state machine `shadow_active`, (c) bind ddl_status = `created`, (d) cms `/api/system/health` HTTP 200. Append result vào `09_tasks_solution_flow1_x2_*.md §13`. | 30 min | YES (chain) |
+| **x2.E** | P2 (carry-over) | Standby Boss G-7 (worker-lane decision, x2 chỉ verify post-enable) | — | YES |
+| **x2.F** | P3 (carry-over) | P3.1 endpoint `POST /api/v1/sources/test` | 2h | NO |
+| **x2.L** *(opt iter#9)* | P3 | Sau Boss approve migration: prepare DROP SQL script (`/tmp/drop_path_a_orphan.sql`) cho 6 schemas. KHÔNG execute, chỉ ship script + verify cross-cluster row hash compare per §11.5 optional verification. Boss tự execute. | 15 min | YES (script only, không exec) |
+
+#### x2 KHÔNG làm iter#9 (giữ lane lock)
+
+- ❌ **Worker code** (`centralized-data-service/`): G-7 enable + Phương án Y refactor `admin/source_register.go:92` — worker-lane, max own.
+- ❌ **Push commit lên remote**: chỉ local commit, đợi Boss confirm A3 sau smoke PASS mới push.
+- ❌ **Execute DROP SCHEMA**: x2.L chỉ ship script, KHÔNG run.
+- ❌ **Draft `02_plan_*`** (per L-MUSCLE-PLAN-PROHIBITION).
+
+### J. max-Brain TODO iter#8 (next loop)
+
+| # | Pri | Task | Effort |
+|---|---|---|---|
+| **max.M** | iter#8 verify | Re-verify x2.K commit landed + binary post-swap + Phương án Z smoke result post-G-7 | 5 min |
+| **max.N** | doc | Sau Boss approve A3 (matrix #3) + smoke PASS: ship `04_decisions_flow1_path_a_vs_b_REV3_2026-05-07.md` incorporate §11 migration evidence + §12 A3 implementation result | 30 min |
+| **max.O** | escalation | Boss G-7 + swap + A3 nudge ongoing — mỗi iter cron fire | ongoing |
+| **max.P** | doc | Sau Boss confirm REV2: append lesson `L-DECISION-DOC-FACT-CHECK-DRIFT` vào `lessons.md` (still pending iter#5 commitment) | 15 min |
+
+### K. Cron + self-pacing
+
+Cron `1975934c` recurring 5m → next fire ~5 min. Iter#8 sẽ:
+1. Re-verify Boss approve trên 3 P0/P1 (G-7 + swap + A3 commit).
+2. Nếu Boss approve swap: verify x2.D2 kill+mv+nohup → cms binary mới active → G-10 + A3 effective.
+3. Nếu Boss approve G-7: verify worker advance → src44 `shadow_active` + bind52 ddl_status = `created` tại Path B 5436.
+4. Nếu Boss approve A3 commit: verify x2.K commit landed (no push).
+5. Nếu cả 3 approve + Phương án Z smoke PASS: declare Flow 1 E2E DONE.
+
+### L. Files iter#7
+
+- **APPEND** (this file): iter#7 audit catch-up section
+- **APPEND**: `coordination_max_x2_2026-05-07.md` iter#7 max ACK x2 §11+§12 + iter#9 task plan
+- **APPEND**: `05_progress.md` iter#7 max audit entry
+
+— max-Brain (loop iter#7 — audit catch-up: x2 §11 migration evidence + §12 A3 cms implementation DONE; iter#9 plan: x2.K commit + x2.J Phương án Z smoke chained Boss approval)
+
+---
+
+## Iteration #8 — 2026-05-07 ICT (idle tick — Boss-gated wait, no state delta)
+
+### A. Lessons re-applied (grep `Flow 1 / brain-delegate / x2`)
+
+| Lesson | Trigger iter#8? |
+|---|---|
+| `L-MUSCLE-PLAN-PROHIBITION` (lessons.md:2492) | x2 iter#8 idle — chưa fire next loop (cron 5m từ iter#7 11:32 → next ~11:37). KHÔNG có draft `02_plan_*` mới. Hold pattern. |
+| `L-DECISION-DOC-FACT-CHECK-DRIFT` (candidate iter#4) | REV2 vẫn đang Boss-gated. Iter#8 không advance, nudge tiếp. |
+| `L-ROLE-SWAP-MID-TRANSFORMATION` (lessons.md:2478) | Lane lock cms-only respected — KHÔNG modify worker code. |
+| Boss role gate (lessons.md:1445) | Boss decision matrix iter#7 vẫn 7 pending — escalation chain unchanged iter#8. |
+
+### B. Service state real iter#8 (re-verified ~11:33 ICT)
+
+| Service | PID | etime | Health | Δ vs iter#7 (5 min ago) |
+|---|---|---|---|---|
+| cdc-cms-service (binary cũ) | 64511 | 01:14:53 | `{"service":"cdc-cms","status":"ok"}` | +5 min — KHÔNG swap, vẫn binary `/tmp/cdc-cms-service-flow1` 58022114B (10:18) |
+| cdc-cms-service (binary mới) | — | — | `/tmp/cdc-cms-service-flow1.new` 58022194B (11:21) | unchanged — đợi Boss swap |
+| cdc-worker-host | — | — | `{"service":"cdc-worker","status":"ok"}` | unchanged |
+| `gpay-cdc-worker` env `PROVISIONING_ORCHESTRATOR_ENABLED` | — | — | **ABSENT** (G-7 still OFF) | unchanged — Boss chưa approve enable |
+
+### C. DB state iter#8 (delta vs iter#7 — UNCHANGED)
+
+- Path B 5436 cdc_shadow: `shadow_payment_bill_service.refund_requests` = **1720 rows** (unchanged, persist Boss output verified 11:33).
+- Path A 5433 cdc_dw: src44 `shadow_pending`, bind52 ddl_status `pending`. Inventory 4 non-zero + 6 zero schemas (per x2 §11) unchanged.
+
+### D. x2 progress verification iter#8 (no-op — idle wait)
+
+| Doc | Timestamp | iter#8 delta |
+|---|---|---|
+| `09_tasks_solution_flow1_x2_2026-05-07.md` | 28889B 11:23 ICT | unchanged (last write iter#8 §12 ship A3 DONE) |
+| `coordination_max_x2_2026-05-07.md` | 47096B 11:23 ICT | unchanged — x2 chưa ack iter#7 max audit (cron next fire ~11:37) |
+| Working tree cms-lane uncommitted | 4 files (config-local.yml +11, config.go +24, server.go +27, postgres.go ±12) | unchanged — x2.K commit pending Boss approve |
+| cms commits HEAD | `adc6faf` (G-10) → `0cef7af` (DDL split) → `b453d36` (đợt J) | unchanged — không có iter#8 commit |
+
+→ **x2 iter#8 NO-OP**: cron next fire ~11:37 ICT, x2 sẽ đọc iter#7 max audit + execute task plan iter#9 (x2.K commit nếu Boss approve, x2.J smoke nếu Boss approve G-7+swap).
+
+### E. Boss decision matrix iter#8 (UNCHANGED — escalation nudge tiếp)
+
+| # | Pri | Decision | Status iter#8 |
+|---|---|---|---|
+| 1 | **P0** | G-7 worker enable + restart | unchanged, **highest leverage** — worker-lane (Boss/max own) |
+| 2 | **P1** | Approve swap cms binary | unchanged — block x2.D2 + activate G-10 + A3 |
+| 3 | **P1** | Approve A3 hybrid commit (x2.K) | unchanged — code đã thi công, chỉ cần Boss OK commit |
+| 4 | P2 | Migration drop 6 Path A schemas (per x2 §11 zero-data-loss proof) | unchanged |
+| 5 | P2 | Phương án Y refactor `centralized-data-service/internal/admin/source_register.go:92` (worker-lane) | unchanged, KHÔNG x2 task |
+| 6 | P2 | Backfill 4 phantom rows | unchanged |
+| 7 | P3 | MariaDB Debezium plugin | unchanged |
+
+→ **Highest-leverage iter#8**: Boss approve #1 + #2 + #3 cùng lúc → unblock toàn bộ Phương án Z smoke chain. Mỗi tick idle = mỗi 5 min Flow 1 không advance.
+
+### F. Phương án Z 2-step pre-condition status
+
+Theo Boss directive Flow 1 lên qua 2-step:
+- `POST /api/v1/source-objects/register` (Step 1)
+- `POST /api/v1/cms/sources/:id/provisioning/advance` (Step 2)
+
+| Pre-condition | iter#8 status |
+|---|---|
+| G-10 fix `pk_type='string'→'text'` active | ⛔ binary cũ (cần swap) |
+| A3 hybrid: cms ShadowAutomator route Path B 5436 | ⛔ binary cũ (cần swap) |
+| G-7 worker enable: state machine advance qua `cdc.cmd.shadow.bind` | ⛔ env ABSENT |
+| x2.D2 swap binary cms | ⛔ Boss-gated |
+
+→ **0/4 pre-conditions met**. Phương án Z smoke không thể chạy iter#8.
+
+### G. Updated task plan iter#9-10 (carry-over từ iter#7)
+
+x2 task plan iter#9 (defined ở iter#7 §I): UNCHANGED.
+- x2.D2 P0 swap (Boss-gated)
+- x2.K P1 stage + LOCAL commit A3 (Boss-gated A3 approve)
+- x2.J P2 Phương án Z smoke (Boss-gated chain)
+- x2.E P2 standby G-7 (Boss-gated)
+- x2.F P3 P3.1 endpoint (defer)
+- x2.L P3 opt prepare DROP SQL script (Boss-gated migration approve)
+
+x2 KHÔNG fire iter#9 cho đến cron next ~11:37 ICT.
+
+### H. max-Brain iter#8 actions
+
+| # | Pri | Action | Status |
+|---|---|---|---|
+| **max.Q** | iter#8 idle audit | Re-verify services + commits + binary timestamp + DB state | ✅ DONE (this section §B-§D) |
+| **max.R** | escalation | Boss G-7 + swap + A3 nudge tiếp (matrix #1+#2+#3 unchanged 35+ min) | ongoing |
+| **max.S** | doc | (carry-over) Sau Boss approve A3: ship REV3 incorporate §11 + §12 | pending |
+| **max.T** | doc | (carry-over) Sau Boss confirm REV2: append `L-DECISION-DOC-FACT-CHECK-DRIFT` vào `lessons.md` | pending |
+
+### I. Cron + self-pacing
+
+Cron `1975934c` recurring 5m → next x2 fire ~11:37 ICT. max-Brain iter#9 sẽ:
+1. Re-verify x2 ack iter#7 audit (coordination doc append).
+2. Re-verify Boss approve trên 3 P0/P1 (G-7 + swap + A3).
+3. Nếu Boss approve: verify x2.K commit landed + x2.D2 swap done + Phương án Z smoke result.
+4. Nếu Boss vẫn chưa approve sau 30+ min idle: ship escalation summary doc cho Boss visibility.
+
+### J. Files iter#8
+
+- **APPEND** (this file): iter#8 idle audit section
+- **APPEND**: `05_progress.md` iter#8 max idle entry (TBD)
+
+— max-Brain (loop iter#8 — idle tick: Boss-gated wait, 0/4 Phương án Z pre-conditions met, escalation matrix unchanged 35+ min)

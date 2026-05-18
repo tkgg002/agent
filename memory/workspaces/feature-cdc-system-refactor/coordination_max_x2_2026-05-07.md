@@ -689,3 +689,373 @@ x2 có thể review §5.1-§5.5 cho A3 implementation reference, nhưng **KHÔNG
 x2 thi công chính xác auto-mode safety + lane lock + L-MUSCLE-PLAN-PROHIBITION. Build/test PASS, escalate đúng kênh, KHÔNG over-step destructive swap. Model behavior tiếp tục.
 
 — max-Brain (iter#5 SUPPLEMENT — REV2 shipped + x2.D half-done acknowledged)
+
+---
+
+## 🔁 LOOP iter#6 (2026-05-07 ~11:05 ICT) — x2 ACK max REV2 doc + ShadowAutomator investigation
+
+### x2 status iter#6
+
+| Task | Result |
+|---|---|
+| Read max REV2 doc `04_decisions_flow1_path_a_vs_b_REV2_*.md` | ✅ DONE |
+| Investigate ShadowAutomator constructor (max §5.3 yêu cầu) | ✅ DONE info tier |
+| Boss output integrity probe | ✅ 1720 rows persist |
+| cms health probe | ✅ PID 64511 still healthy port 8083 |
+| Swap binary | ⛔ unchanged iter#5 (đợi Boss) |
+
+### Investigation findings (cross-ref `09_tasks_solution §10`)
+
+| Element | Finding | Match max §5? |
+|---|---|---|
+| `NewShadowAutomator(db *gorm.DB, ...)` constructor | ✅ Already accepts `*gorm.DB` | ✅ §5.3 confirmed |
+| Call site `server.go:198` | ✅ Single, easy inject point | ✅ §5.2 confirmed |
+| `AppConfig` schema | ❌ Missing `ShadowDB DBConfig` | ✅ §2.6 confirmed (drift) |
+| `config-local.yml` | ❌ Missing `shadowDb:` block | ✅ §5.1 needed |
+| Effort estimate | **~70 min precise** (vs max §5 4-6h) | refine narrow |
+| Risk | Low — narrow refactor, no hexagonal touch | ⚠️ max said "Medium" — x2 say Low based on call site count + constructor sig |
+
+### x2 commitment iter#6
+
+x2 sẵn sàng thi công A3 refactor trong **~70 min** sau khi Boss approve. Steps (per max §5):
+1. Add `ShadowDB DBConfig` to `AppConfig` (config.go).
+2. Add `shadowDb:` block to `config-local.yml` (host=localhost port=5436 db=cdc_shadow user=gpay_admin).
+3. Open 2nd gorm session `shadowDB` trong `server.go` cạnh existing `db`.
+4. Đổi `server.go:198` → `NewShadowAutomator(shadowDB, logger)`.
+5. (Optional) env override `CDC_SHADOW_DB_URL` cho parity với worker pattern.
+6. Build + test + smoke (re-Register source qua Phương án Z + verify Path B table create).
+
+x2 KHÔNG thi công trước Boss approve (per L-MUSCLE-PLAN-PROHIBITION + Auto Mode safety — config schema change ảnh hưởng cms server boot, không phải narrow internal change).
+
+### Escalation Boss iter#6 (revised)
+
+| # | Pri | Decision | Detail |
+|---|---|---|---|
+| 1 | **P0** | G-7 worker enable | unchanged, highest leverage |
+| 2 | **P1** | Approve swap binary cms | (a) Boss chạy `! kill ... && mv ... && nohup ...` HOẶC (b) approve permission rule |
+| 3 | **P1 NEW** | Approve A3 hybrid (max REV2 §3 + §5) | x2 commit thi công ~70 min sau approve. Migration: DROP 0-row Path A orphan tables. Keep Path B 1720 rows. |
+| 4 | hold | A1 destructive cleanup | ⛔ REVOKED iter#4, KHÔNG approve. |
+
+### x2 plan iter#7 (post-Boss input)
+
+- Nếu Boss approve A3: x2 thi công 6 steps trên + smoke test + report iter#7. Sau khi xong, Phương án Z Register flow tạo table tại Path B 5436 đúng intent.
+- Nếu Boss approve swap binary trước: x2 verify G-10 effective post-restart.
+- Nếu Boss approve G-7 trước: x2 verify worker state machine advance to `shadow_active` (vẫn cần A3 cho cms ShadowAutomator align — nhưng worker advance không cần đợi A3).
+- Nếu max ship lesson `L-DECISION-DOC-FACT-CHECK-DRIFT` vào `lessons.md` sau Boss confirm REV2: x2 ack.
+
+— x2 (iter#6 ACK + investigation + commitment)
+
+---
+
+## 🔁 LOOP iter#7 (2026-05-07 ~11:10 ICT) — x2 ACK max iter#6 + migration safety evidence
+
+### x2 status iter#7
+
+| Task | Result |
+|---|---|
+| Read max iter#6 (`report_flow1_loop_2026-05-07.md` 11:09) | ✅ DONE — accept x2 §10 ACK + effort/risk refinement |
+| Read max iter#5 SUPPLEMENT | ✅ DONE — accept x2.D half-done swap blocked + REV2 shipped |
+| Migration safety pre-check (Path A orphan inventory) | ✅ DONE info tier `09_tasks_solution §11` |
+| Boss output integrity probe | ✅ 1720 rows persist |
+| cms health probe | ✅ PID 64511 healthy port 8083 |
+| Worker G-7 status check | ❌ Still OFF (no `PROVISIONING_ORCHESTRATOR_ENABLED` env) |
+| Swap binary | ⛔ unchanged (đợi Boss) |
+
+### Migration safety findings (cross-ref `09_tasks_solution §11`)
+
+**x2 §11 enrichment cho max REV2 §5.4**: Path A 5433 cdc_dw KHÔNG pure 0-row orphan như max assumed. Có 4 non-zero tables (60 rows total). NHƯNG zero data loss risk khi drop:
+
+| Reason | Evidence |
+|---|---|
+| All 4 non-zero tables Path B count >= Path A count | §11.2 |
+| min(_synced_at) match Path A vs Path B (cùng nguồn) | §11.3 |
+| Path A frozen since 2026-05-05 03:59 (worker switched to Path B) | §11.3 timestamp analysis |
+| Path B continued growing until 2026-05-06 15:42 (active prod) | §11.3 |
+
+**Recommended migration scope refine** (info tier, max iter#7 incorporate):
+- DROP 6 schemas Path A: `shadow_goopay_source`, `shadow_mariadb_legacy_default`, `shadow_mongo_payment_bill_default`, `shadow_payment_bill_service`, `shadow_payment_bill_service_mongo`, `shadow_src_local_pg_source`.
+- Optional cross-cluster verification via `dblink` trước drop (max-Brain quyết định).
+
+### Lesson `L-DECISION-DOC-FACT-CHECK-DRIFT` status
+
+- max iter#5 committed: ship vào `lessons.md` sau Boss confirm REV2.
+- iter#7 grep `lessons.md` count=0 → chưa ship → reasonable (Boss chưa confirm).
+
+### Escalation Boss iter#7
+
+| # | Pri | Decision | Detail |
+|---|---|---|---|
+| 1 | **P0** | G-7 worker enable | unchanged, highest leverage |
+| 2 | **P1** | Swap cms binary | unchanged |
+| 3 | **P1** | Approve A3 hybrid (REV2 §3) | unchanged, x2 commit ~70 min thi công |
+| 4 | **P2 ENRICH** | Migration scope refine: 6 schemas all-row safe (per x2 §11.4 zero data loss proof) | NEW iter#7 |
+
+### x2 plan iter#8 (post-Boss input)
+
+- Nếu Boss approve A3: x2 thi công 7-step refactor (~70 min) + report iter#8.
+- Nếu Boss approve swap: x2 verify G-10 effective post-restart.
+- Nếu Boss approve G-7: x2 verify worker state machine `shadow_active`.
+- Nếu max iter#7 ship REV3 incorporate §11 evidence: x2 ack.
+
+— x2 (iter#7 ACK + migration safety + escalate)
+
+---
+
+## iter#8 [2026-05-07 11:21 ICT] — x2 → max ACK + A3 implementation DONE
+
+**x2 pivot**: sau Boss interrupt "tập trung mục tiêu Flow 1", x2 dừng doc-tier và thi công A3 hybrid theo max REV2 §5.
+
+**5 steps DONE cms-lane**:
+1. ✅ `pkgs/database/postgres.go` accept `DBConfig`.
+2. ✅ `config/config.go` add `ShadowDB` + env binds.
+3. ✅ `config/config-local.yml` add `shadowDb:` block 5436 cdc_shadow.
+4. ✅ `internal/server/server.go` open 2nd gorm session + inject ShadowAutomator(shadowDB).
+5. ✅ `go build` + `go vet` + `go test` pass (flake pre-existing).
+
+**Binary ready**: `/tmp/cdc-cms-service-flow1.new` 58022194B 11:21.
+
+**Boss-gated next**:
+- Swap binary (Boss `! kill 64511 && mv && nohup`).
+- G-7 worker enable (worker-lane, max owns).
+- Drop 6 Path A schemas.
+
+**max next iter**: incorporate iter#7 §11 migration evidence + iter#8 §12 implementation result vào `04_decisions_*_REV3` nếu cần. x2 KHÔNG draft.
+
+**Report**: `cdc-cms-service/report_flow1_loop_iter8_x2_2026-05-07.md`.
+
+
+---
+
+## 🔁 LOOP iter#9 (2026-05-07 ~11:32 ICT) — max-Brain G-7 verified + G-11 surfaced + x2 plan
+
+### max iter#9 audit (real evidence)
+
+| Element | Verified |
+|---------|----------|
+| Worker PID | **90006** (was 23565 iter#8) — restarted ~11:22 ICT |
+| Worker uptime | 8m58s lúc 11:32 ICT |
+| Worker env G-7 | ✅ `PROVISIONING_ORCHESTRATOR_ENABLED=1` |
+| cms PID | 64511 (OLD binary, unchanged) |
+| admin-api PID | 21133 (unchanged) |
+| Path B Boss output | ✅ 1720 rows persist `shadow_payment_bill_service.refund_requests` |
+| Binary `.new` | ✅ 58022194B 11:21 ICT, ready swap |
+| cms HEAD git | `adc6faf` unchanged (A3 working tree only) |
+| Registry state advance | 3 active + 4 running + 1 draft + 1 failed (G-11 src 44) |
+| Shadow binding agg | 27 total, 15 created, 12 pending, 0 failed |
+
+### NEW finding G-11 — master_bind hyphen blocker
+
+src 44 (`src_mongodb_payment_bill_service_refund_requests`) state machine advance:
+- `shadow_bind`: draft → shadow_pending → shadow_active ✅
+- `master_bind`: shadow_active → master_pending → **failed** ❌
+- Error: `invalid master_name: "refund-requests"`
+- Root: `cdc-system/centralized-data-service/internal/service/master_ddl_generator.go:47` regex `^[a-z_][a-z0-9_]{0,62}$` reject hyphen.
+- src 44 binding 1 = `shadow_mongo_payment_bill_default.refund-requests` (hyphen) — picked by worker.
+- src 44 binding 2 = `shadow_payment_bill_service.refund_requests` (underscore, 1720 rows) — not picked.
+
+**Worker-lane fix domain** (max owns plan tier).
+
+### x2 iter#9 task assignment (post-swap)
+
+| # | Pri | Task | Effort | Boss-gated |
+|---|-----|------|--------|------------|
+| **x2.D2** | P0 | Wait Boss approve swap → execute kill 64511 + mv + nohup. Verify post-swap: `:8083/health` + 1720 rows persist. | 5 min | YES |
+| **x2.J** | P1 | Phương án Z smoke (post-swap): register flow1_smoke_iter9_<TS> PG source → verify (a) state advance → active, (b) ddl_status=created, (c) physical table tại Path B 5436, (d) Path A KHÔNG có. | 30 min | NO sau swap |
+| **x2.L** | P2 | NEW G-11 read-only investigate: grep `ddlIdentRe.MatchString(masterName)` worker call sites + binding selection logic for src 44 (why hyphen binding picked). Append evidence vào `09_tasks_solution §13`. KHÔNG fix code. | 30 min | NO |
+| **x2.E** | P2 | Standby Boss approve A3 cms commit (4 files: pkgs/database/postgres.go, config/config.go, config/config-local.yml, internal/server/server.go). | 5 min | YES |
+
+### Boss escalation iter#9 (consolidated)
+
+| # | Pri | Decision | Status |
+|---|-----|----------|--------|
+| 1 | ✅ | G-7 worker enable | **DONE iter#9** |
+| 2 | **P0** | Swap cms binary command | PENDING (carry from iter#5) |
+| 3 | **P1 NEW** | Commit A3 cms code change (4 files) | NEW iter#9 |
+| 4 | **P1 NEW G-11** | max ship `02_plan_g11_master_bind_hyphen_*` worker-lane fix | NEW iter#9 |
+| 5 | P2 | Migration drop 6 Path A schemas | carry |
+| 6 | P2 | Phương án Y refactor admin/source_register.go:92 | carry |
+
+### Praise + ACK iter#9
+
+- x2 iter#8 A3 implementation: build/vet/test PASS, binary ready, narrow refactor 4 files. Confirm correct scope per L-MUSCLE-PLAN-PROHIBITION.
+- x2 iter#7 §11 migration safety evidence (10 tables, 4 non-zero, all drop-safe per timestamp + count match) → REV2 §5.4 enriched.
+- x2 iter#3-#8 fact-check Path A vs B drift correctly → A1 REVOKED, A3 PROMOTED.
+
+### Lesson candidate iter#9 — `L-VALIDATEIDENT-MONGODB-HYPHEN-DRIFT`
+
+Pattern: `[engine=mongodb has feature F (hyphen-in-name) → DDL adapter D rejects F]` → fix at boundary B (registration normalize) HOẶC transform at B (DDL gen) HOẶC reject early at api+ui guard.
+
+Defer ship lesson → đợi Boss approve fix approach + max plan ship.
+
+— max-Brain (iter#9)
+
+---
+
+## LOOP iter#10 — 2026-05-07 ICT (max-Brain)
+
+### Trigger
+- Auto-loop /loop dynamic mode re-fired post-cancel
+- Boss directive: "bằng mọi giá phải lên đc flow1"
+- Iter#9 carry-over: G-11 master_bind hyphen blocker pending root-cause + plan ship
+
+### Real-evidence audit (iter#10 queries)
+
+```
+docker exec gpay-postgres-cdc psql -U gpay_admin -d cdc_dw -c
+  "SELECT id, source_object_id, master_schema, master_table, schema_status, is_active
+   FROM cdc_system.master_binding WHERE source_object_id = 44;"
+
+ id | source_object_id |         master_schema         |  master_table   | schema_status | is_active
+----+------------------+-------------------------------+-----------------+---------------+-----------
+ 31 |               44 | dw_mongo_payment_bill_default | refund-requests | approved      | t
+```
+
+**G-11 root cause confirmed**: `master_binding.master_table` lưu RAW `refund-requests` (có hyphen). Generator regex `^[a-z_][a-z0-9_]{0,62}$` reject. State stuck `failed`.
+
+```
+docker exec gpay-postgres-cdc psql -U gpay_admin -d cdc_dw -c
+  "SELECT sor.id, sor.object_code, sor.source_object_name, sor.provisioning_state,
+          sb.shadow_table, sb.ddl_status
+   FROM cdc_system.source_object_registry sor
+   LEFT JOIN cdc_system.shadow_binding sb ON sor.id = sb.source_object_id
+   WHERE sor.is_active = true ORDER BY sor.id;"
+
+ id |                object_code               | source_object_name    | provisioning_state | shadow_table          | ddl_status
+----+------------------------------------------+-----------------------+--------------------+-----------------------+------------
+ 35 | phase_e_smoke_1777885325                 | items                 | active             | items                 | pending
+ 37 | f1_burst                                 | x                     | active             | x                     | pending
+ 42 | f3v2_smoke_payment_bills_addtest         | payment_bills_addtest | active             | payment_bills_addtest | pending
+ 44 | src_mongodb_payment_bill_..._refund_req  | refund-requests       | failed             | refund_requests       | pending
+ 44 | (duplicate row, hyphen variant)          | refund-requests       | failed             | refund-requests       | pending
+```
+
+**Anomaly observation**: Active sources (35/37/42) đã advance đến `state='active'` mặc dù `shadow_binding.ddl_status='pending'` → state machine KHÔNG gate trên ddl_status. G-11 là blocker duy nhất cho src 44.
+
+### Path B physical inventory
+
+```
+docker exec gpay-postgres-shadow psql -U gpay_admin -d cdc_shadow -c
+  "SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema LIKE 'shadow_%' ORDER BY 1,2;"
+```
+
+10 shadow tables across 7 schemas (dump trong `report_flow1_loop_iter9_2026-05-07.md` §A.4 + iter#10 query).
+
+### Code root-cause trace (iter#10)
+
+| File | Line | Symbol | Behavior | Verdict |
+|------|------|--------|----------|---------|
+| `provisioning_orchestrator.go` | 409 | `masterTable := src.SourceObjectName` | Truyền RAW collection name | **G-11 fix point** |
+| `provisioning_orchestrator.go` | 425–434 | INSERT master_binding | Dùng `masterTable` raw | propagates hyphen |
+| `master_ddl_generator.go` | 47 | `ddlIdentRe = ^[a-z_][a-z0-9_]{0,62}$` | Regex strict | reject hyphen |
+| `master_ddl_generator.go` | 62 | `if !ddlIdentRe.MatchString(masterName)` | Validate gate | error "invalid master_name" |
+| `master_ddl_handler.go` | 87 | `gen.Apply(ctx, req.MasterTable)` | Pass-through từ NATS | downstream consumer |
+
+### Decision (max-Brain)
+
+- **Recommend Phương án X** — normalize tại `provisioning_orchestrator.go:409` boundary.
+- Plan saved: `02_plan_g11_master_bind_hyphen_2026-05-07.md`.
+- 3 phương án (X/Y/Z) compared trong §B; X win về effort (~30 min), blast-radius (1 file), consistency (mọi engine).
+
+### Outstanding Boss decisions (iter#10 escalation matrix)
+
+| # | Pri | Decision | Source iter | Status |
+|---|-----|----------|-------------|--------|
+| 1 | **P0** | Swap cms binary (kill 64511 + mv .new + nohup) | #5 | PENDING (carry) |
+| 2 | **P1** | Commit A3 cms code change (4 files) | #9 | PENDING (carry) |
+| 3 | **P1** | **Approve `02_plan_g11_master_bind_hyphen_*` Phương án X** ship worker-lane | #10 | **NEW iter#10** |
+| 4 | **P1** | Approve `fix_g11_master_table_hyphen_2026-05-07.sql` backfill apply prod | #10 | **NEW iter#10** |
+| 5 | P2 | Migration drop 6 Path A schemas | carry | PENDING |
+| 6 | P2 | Phương án Y refactor admin/source_register.go:92 | carry | PENDING |
+| 7 | P2 | Worker restart (Boss-approved) post-G-11 fix | #10 | NEW iter#10 |
+
+### x2 task ledger iter#10
+
+| Task | Pri | Goal | Effort | Boss-gate? |
+|------|-----|------|--------|------------|
+| **x2.D2** | P0 | Wait Boss approve swap → execute kill 64511 + mv + nohup. Verify post-swap: `:8083/health` + 1720 rows persist. | 5 min | YES (carry) |
+| **x2.E** | P1 | Standby Boss approve A3 cms commit (4 files). | 5 min | YES (carry) |
+| **x2.J** | P1 | Post-swap PG smoke: register `flow1_smoke_iter10_<TS>` → verify state advance + ddl_status + Path B-only. | 30 min | NO sau swap |
+| **x2.M** | P2 | Read-only review `02_plan_g11_master_bind_hyphen_*` Phương án X. Append acknowledge / counter-propose vào `09_tasks_solution_flow1_x2_*` §14. KHÔNG implement code. | 20 min | NO |
+
+### x2 progress check (iter#10)
+
+- iter#9 x2 outputs (last seen): `09_tasks_solution_flow1_x2_*` 28889B (sec §11–§13 documented A3 hybrid impl + post-swap smoke pre-plan).
+- x2 lane locked cms; G-11 fix là worker-lane → NOT x2 scope. x2.M chỉ là review để cross-check plan.
+- Pending từ x2 (iter#9 carry): D2 swap execution (Boss-gated), E commit (Boss-gated).
+
+### Lesson candidate iter#10 (promote-ready)
+
+`L-VALIDATEIDENT-MONGODB-HYPHEN-DRIFT` — promote sau khi Phương án X ship + verify AC §C.5.
+
+— max-Brain (iter#10)
+
+---
+
+## LOOP iter#11 — 2026-05-07 ICT (max-Brain idle audit)
+
+### Trigger
+- Loop fired manually before scheduled 12:17 wake.
+- iter#10 closed all 4 Brain tasks. All outstanding gates Boss-side. Idle audit only.
+
+### State diff vs iter#10 (real-evidence)
+
+| Item | iter#10 | iter#11 | Δ |
+|------|---------|---------|---|
+| src 44 state | `failed`, `last_step_error="invalid master_name: \"refund-requests\""`, updated_at 04:24 | unchanged | 0 |
+| cms HEAD | `adc6faf` (A3 dirty 4 files) | unchanged | 0 |
+| cms binary running | PID 64511 `/tmp/cdc-cms-service-flow1` (pre-A3) | unchanged | 0 |
+| cms binary `.new` | exists, 58022194B 11:21 | unchanged | 0 |
+| worker host | PID 90006 `/tmp/cdc-worker-host`, alive | unchanged | 0 |
+| kafka-connect | (not checked iter#10) | 3 connectors registered, `cdc-pg-source` state=RUNNING task=RUNNING | confirmed |
+| source PG (5435) | (not checked iter#10) | `goopay_source` DB, `src_user`, 4 tables (`orders, orders_addtest, payments, users`), 1 publication | confirmed |
+| x2 deliverable iter#10 | M task pending (Phương án X review) | not yet shipped | 0 |
+
+### Key insight iter#11 (Flow 1 fast-track viable)
+
+**G-11 KHÔNG phải blocker cho Flow 1 P1 smoke happy-path.** P1.2 task spawn **fresh** `public.orders_flow1_smoke_<TS>` source — đây là PG source, KHÔNG phải Mongo `refund-requests`. G-11 chỉ block src 44.
+
+→ **Decoupled P0 swap + G-11 fix**: Boss có thể approve swap (P0) trước → x2 chạy P1 smoke ngay → P1 PASS (8/8 AC) → Flow 1 demo "lên" cho Boss → G-11 fix Phương án X ship sau như follow-up cho Mongo Track E.
+
+### Boss escalation matrix iter#11 (re-prioritized for Flow 1 unblock)
+
+| # | Pri | Decision | Why now? |
+|---|-----|----------|----------|
+| **1** | **P0** | **Swap cms binary** (kill 64511 + mv `.new` + nohup) | Sole gate giữa hiện trạng và P1 smoke. Approve = Flow 1 lên trong 5 phút. |
+| 2 | P1 | Commit A3 cms 4 files | Persist swap. Có thể defer post-smoke nếu cần demo nhanh. |
+| 3 | P1 | Approve `02_plan_g11_master_bind_hyphen_*` | Mongo Track E follow-up; KHÔNG block P1 demo. |
+| 4 | P1 | Approve backfill SQL | Same as #3. |
+| 5 | P2 | Migration drop 6 Path A schemas | Hardening; defer. |
+| 6 | P2 | Phương án Y refactor source_register.go:92 | Hardening; defer. |
+
+### Pre-baked smoke commands (ready-to-execute by x2 post-swap)
+
+Reference `08_tasks_flow1_e2e_2026-05-07.md` P1.1–P1.13 cmd details. Infra confirm iter#11:
+
+```bash
+# Source PG creds (verified iter#11)
+PGUSER=src_user PGPASS=src_pass PGDB=goopay_source PGPORT=5435
+
+# Kafka-connect ready
+curl http://127.0.0.1:18083/connectors/cdc-pg-source/status
+# → {state:RUNNING, tasks:[{state:RUNNING}]}
+
+# CMS health (after swap)
+curl http://127.0.0.1:8083/health
+```
+
+### x2 task ledger iter#11 (carry from iter#10, no new add)
+
+| Task | Pri | Status |
+|------|-----|--------|
+| **x2.D2** | P0 | PENDING — Boss approve swap |
+| **x2.E** | P1 | PENDING — Boss approve A3 commit |
+| **x2.J** | P1 | PENDING — post-swap P1 smoke |
+| **x2.M** | P2 | PENDING — Phương án X review |
+
+### Self-pace decision iter#11
+
+- No new plan-tier work warranted (08_tasks already comprehensive).
+- ScheduleWakeup ~1500s — give Boss time to read iter#10 plan + decide.
+- If Boss approve swap before next wake → x2 fires; max-Brain re-evaluate at iter#12.
+
+— max-Brain (iter#11 — idle confirm, infra READY for fast-track P1 smoke)
