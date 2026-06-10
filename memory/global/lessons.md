@@ -647,7 +647,16 @@ _Bài học về phối hợp Brain↔Muscle, plan-before-code, gatekeeper appro
 
 ## 2. Architecture & Design — Coupling, DRY, CQRS, Single-Source-of-Truth, Observability
 
-_Bài học về thiết kế: tránh coupling thừa, DRY, single-source-of-truth, không over-engineer, thiết kế observability ở cấp hệ thống._ — **41 pattern**
+_Bài học về thiết kế: tránh coupling thừa, DRY, single-source-of-truth, không over-engineer, thiết kế observability ở cấp hệ thống._ — **42 pattern**
+
+### [2026-06-09] Sửa thuộc tính CHILD nhưng ghi vào PARENT id → đổi lan toàn bộ + xuyên layer
+- **Global Pattern**: `[UI sửa thuộc tính của record CON X (vd data_type cột master nested) nhưng API ghi vào record CHA P qua X.parent_id]` → `[1 cha P → N con (1 shadow field → N master col) nên sửa P đổi TẤT CẢ N con + đụng sang LAYER khác (master sửa làm hỏng shadow) — vi phạm cô lập tầng, data-corruption âm thầm]`. **Đúng**: thuộc tính của X ghi theo X.id (UPDATE bảng con WHERE id=X.id); chỉ ghi parent khi CHỦ Ý sửa parent. Quan hệ 1-parent-N-children → NGHIÊM CẤM update qua parent_id. Endpoint sửa tầng master CHỈ chạm bảng master, không bao giờ chạm bảng shadow.
+- **Bối cảnh (Trigger)**: trang master mappings, cột Data Type field nested (params_channelId, mapping_v2_id=243=params) gọi PATCH /mapping-rules/243 (v2 CHA) → đổi type của cả 40 nested cùng v2 + đổi luôn shadow params.
+- **Root Cause**: dùng record.mapping_v2_id (parent FK) làm khoá update thay vì record.id (child); nhầm "nested kế thừa v2" = "được sửa v2".
+- **Fix/Correct Flow**: endpoint UPDATE mapping_rule_master.data_type WHERE id=? (COALESCE(m.data_type,v2.data_type) → override tầng master, shadow nguyên) + FE đổi sang endpoint master theo record.id. Verify: sửa 1 nested → v2 cha + sibling KHÔNG đổi.
+- **Phạm vi (≥3 dự án?)**: Có — mọi UI/CRUD quan hệ parent-child + kiến trúc phân tầng (master/shadow, view/base, alias/canonical).
+- **Tags**: #coupling #layer-isolation #parent-child #crud #data-corruption #cdc #root-cause
+- **Nguồn**: lessons.md [2026-06-09]
 
 ### [2026-06-03] SQLi bare-interpolation DDL phải sweep toàn bộ site cùng class — không chỉ patch 1 chỗ
 - **Global Pattern**: `[Field F (vd data_type) từ store S được validate ở path P1 nhưng nhúng bare vào DDL ở path P2..Pn không guard]` → `[SQLi qua P2..Pn dù P1 sạch — whack-a-mole nếu chỉ patch từng site]`. **Đúng**: tách validator thành 1 helper package-level dùng chung (`IsTypeWhitelisted`); grep MỌI site `fmt.Sprintf(...DDL..., F)` và guard tất cả; whitelist đủ rộng (chấp nhận NUMERIC(p,s), VARCHAR(n)) để không drop giá trị hợp lệ; verify whitelist trên cả input hợp lệ lẫn payload injection.
@@ -1022,7 +1031,26 @@ _Bài học về thiết kế: tránh coupling thừa, DRY, single-source-of-tru
 
 ## 3. Schema & Migration — DDL, Migration ordering, search_path, Model↔DB Drift
 
-_Bài học về tiến hoá schema: thứ tự DDL/migration, search_path, drift giữa model và DB, add/rename column an toàn._ — **28 pattern**
+_Bài học về tiến hoá schema: thứ tự DDL/migration, search_path, drift giữa model và DB, add/rename column an toàn._ — **30 pattern**
+
+### [2026-06-09] State-flag ("đối tượng tồn tại thật") phải ĐỌC reality, KHÔNG suy từ predicate-proxy
+- **Global Pattern**: `[Flag F nghĩa "X tồn tại thật" (vd in_master = cột CÓ trong table) nhưng SET bằng predicate-proxy của stage trigger (status=approved, hoặc is_active AND approved) thay vì đọc trạng thái thật]` → `[F nói dối khi proxy lệch reality: (a) predicate đúng nhưng stage chưa chạy → F=true mà X chưa tồn tại; (b) đổi cờ điều khiển SAU khi đã tạo (tắt is_active) nhưng artifact không bị xoá → proxy=false mà X vẫn tồn tại]`. **Đúng**: tách *process-gate* (chọn rule để xử lý — dùng predicate is_active AND approved) ≠ *state-flag* (X có tồn tại — phải QUERY thực tế). Sau stage mutate (DDL), ĐỌC reality (information_schema.columns ở dest) rồi `SET F=(target_column IN actualCols)`. Flag = ảnh chụp reality, không suy từ filter của stage.
+- **Bối cảnh (Trigger)**: in_master set bằng `status='approved'` (rồi thử proxy `is_active AND approved`) → sai CẢ 2 chiều: field approved-inactive đã có cột bị báo not-in-master; field chưa DDL bị báo in-master. User: "in master là CÓ field trong table, sao lại check is_active & approve".
+- **Root Cause**: nhầm "ĐIỀU KIỆN để tạo cột" (predicate trigger) với "cột CÓ tồn tại" (state thật). DDL chỉ ADD không DROP business col → proxy không bao giờ khớp reality ở mọi thời điểm.
+- **Fix/Correct Flow**: master_ddl_generator sau ALTER → query `information_schema.columns` (dest, qua conn `db`) → `UPDATE mapping_rule_master SET in_master=(target_column IN (?))` (control g.systemDB). Verify 2 chiều cross-DB: {in_master=true}∖{cột}=∅ VÀ {cột∈rule}∖{in_master=true}=∅; edge: tắt is_active field đã có cột → in_master VẪN true (cột không bị drop).
+- **Lưu ý phụ**: process-gate phải nhất quán giữa các stage (DDL+transmute cùng lọc is_active AND approved); scan default is_active=true (đồng bộ shadow-mirror) để "duyệt = dùng".
+- **Phạm vi (≥3 dự án?)**: Có — mọi "materialized/exists/synced/deployed" flag (index-created, file-exists, đã-provision); nguyên tắc: flag-trạng-thái = đọc reality, không suy từ predicate.
+- **Tags**: #state-flag #proxy-vs-reality #idempotency #ddl #information-schema #cross-db-verify #root-cause
+- **Nguồn**: lessons.md [2026-06-09]
+
+### [2026-06-09] Đừng gộp "UNIQUE constraint (chống trùng OUTPUT)" với "FIND key (idempotency theo SOURCE)"
+- **Global Pattern**: `[Dev đổi UNIQUE của table T từ khoá-source X sang khoá-output Y để cho "1 source → N output", rồi thay LUÔN mọi chỗ "tìm theo X" (ON CONFLICT/lookup idempotency) sang Y]` → `[mất ngữ nghĩa "tạo-lại-nếu-chưa-có-theo-source"; auto-populate tạo trùng/sai khi Y bị đổi tên; user thấy "phá logic"]`. **Đúng**: tách 2 mục đích — (a) UNIQUE chống trùng = theo định danh OUTPUT (vd target_column, 1 table không cho trùng tên cột); (b) FIND/idempotency = theo định danh SOURCE (vd mapping_v2_id = field nguồn). Khi drop UNIQUE-source để cho 1→N, GIỮ "tìm theo source" bằng `WHERE NOT EXISTS(... source_id=...)` (không cần unique index) thay vì đổi ON CONFLICT sang output.
+- **Bối cảnh (Trigger)**: mapping_rule_master cần "1 shadow field → nhiều master column". Drop unique (mbid,mapping_v2_id) + giữ unique (mbid,target_column) = ĐÚNG. Nhưng đổi LUÔN 3 auto-populate ON CONFLICT(mapping_v2_id)→(target_column) → mất idempotency theo shadow field (sync tạo lại cột default khi field đã map dưới tên khác).
+- **Root Cause**: gộp 2 khái niệm — `target_column` là tên cột OUTPUT (chống trùng), KHÔNG phải định danh nguồn để "tìm". 1→N "lòi ra" tự nhiên vì bỏ unique trên source, không cần source_path (source_path chỉ phục vụ flatten a.x→ax/axx).
+- **Fix/Correct Flow**: unique=(mbid,target_column); manual upsert ON CONFLICT(target_column) [cho a→b, a→c]; auto-populate `AND NOT EXISTS(mm.master_binding_id=? AND mm.mapping_v2_id=v2.id)` + giữ ON CONFLICT(target_column) safety. Verify red→green: insert cột-đổi-tên (v2 đã map) → sync → default KHÔNG tạo lại (count=0).
+- **Phạm vi (≥3 dự án?)**: Có — mọi ETL/mapping/sync "N output từ 1 source", auto-populate idempotent, table dedup có cả khoá source lẫn output.
+- **Tags**: #unique-constraint #idempotency #on-conflict #not-exists #data-model #etl-mapping #root-cause #sql
+- **Nguồn**: lessons.md [2026-06-09]
 
 ### [2026-06-03] Regex kiểm tra identifier quá chặt làm rơi cột hợp lệ khi sinh DDL động
 - **Global Pattern**: `[Regex filter R kiểm tra định danh X (tên bảng/cột) để sinh SQL/DDL động bị quá chặt — vd thiếu A-Z, thiếu ký tự được quote]` → `[các định danh hợp lệ (camelCase userId/createdAt) bị lọc bỏ THẦM LẶNG → bảng vật lý thiếu cột, rò rỉ/mất dữ liệu nghiệp vụ, schema drift trên storage]`. **Đúng**: (1) regex định danh SQL phải cover case-sensitive `^[a-zA-Z_][a-zA-Z0-9_]{0,62}$` (Postgres cho phép chữ hoa nếu được quote); (2) khi đổi validator schema, BẮT BUỘC cập nhật song song unit test liên quan để khớp thông báo lỗi động; (3) viết test case bao trùm cả định danh chữ hoa lẫn chữ thường.
@@ -1280,7 +1308,16 @@ _Bài học về tiến hoá schema: thứ tự DDL/migration, search_path, drif
 
 ## 4. CDC / Data Pipeline — Kafka, Debezium, Snapshot, Connection-Registry, Masking
 
-_Bài học miền CDC/ETL: Kafka/Debezium, snapshot, connection-registry, masking, DLQ, reconcile, shadow tables._ — **34 pattern**
+_Bài học miền CDC/ETL: Kafka/Debezium, snapshot, connection-registry, masking, DLQ, reconcile, shadow tables._ — **35 pattern**
+
+### [2026-06-10] Module M viết cho topology cũ chết im lặng khi data plane đổi topology — gate introspect nil → skip 100% + "success 0"
+- **Global Pattern**: `[Module M (recon/sync/audit) hardcode topology T1 (single-DB, schema mặc định S) ở 3 tầng: registry-entry không mang schema, gate introspect GetSchema(S), query không schema-qualify]` + `[data plane migrate sang T2 (DB/schema riêng)]` → `[gate trả nil cho MỌI bảng → skip 100% → M báo "success items=0" mãi mãi; bảng state/report của M = 0 rows mà không ai biết M chết]`. **Đúng**: (1) registry entry phải mang đủ định vị vật lý (db-role + schema + table), synthesize từ nguồn metadata mới; (2) mọi consumer (gate introspect, SQL builder, DB handle) nhận topology từ entry — fallback giá trị cũ khi rỗng để backward-compat; (3) "0 items processed" PHẢI là warning có fix_hint, không bao giờ là success im lặng; (4) smoke-check sau migrate topology: bảng run-state của M phải có rows.
+- **Bối cảnh (Trigger)**: User yêu cầu review/nâng cấp Reconcile. Verify DB: recon_runs=0, report=0 từ trước tới nay; trigger NATS → activity "success tables_checked=0". Root cause 3 lớp: synthesize thiếu shadow_schema; CheckAll GetSchema("public"@5433) nil → skip hết; DestAgent nhận control-plane db + FROM "table" trần — trong khi shadow đã ở shadow_*@5436 (hybrid Path B).
+- **Root Cause**: Recon module không được nâng cấp khi hệ chuyển Path B; gate "table not materialised" biến thành cửa chặn 100% âm thầm; status success không phân biệt "checked OK" vs "không check gì".
+- **Fix/Correct Flow**: +ShadowSchema synthetic vào registry entry → GetSchemaInSchema(shadow|public) → quoteRelation("schema"."table") → DestAgent nhận shadowDB; 0-checked → warning + Warn log fix_hint. E2E: recon_runs 4 rows, phát hiện drift thật.
+- **Phạm vi (≥3 dự án?)**: Có — mọi hệ có module nền (recon/backup/audit/metrics) viết trước một cuộc migrate topology DB (split DB, multi-schema, multi-tenant).
+- **Tags**: reconcile, topology-migration, silent-skip, false-positive-success, schema-qualify
+- **Nguồn**: workspace `reconcile-overhaul-2026-06-10`
 
 ### [2026-06-03] UI bảng đích (Master/DW) phải render theo business mapping, không bê raw/system columns của Shadow
 - **Global Pattern**: `[Agent A thiết kế UI detail cho bảng ĐÍCH (Master/DW) nhưng bê nguyên/duplicate cấu trúc bảng NGUỒN trung gian (Shadow) gồm cả raw/system columns (_raw_data, _synced_at) thay vì map theo business rules]` → `[UI dư cột hệ thống vô nghĩa, không phản ánh đúng cấu trúc bảng đích, operator khó đối chiếu schema]`. **Đúng**: (1) UI chi tiết bảng đích phải dựng từ Business Mappings (`mapping_rules` nghiệp vụ): Source Field → Target Column → Target Type; (2) loại bỏ cột internal/system khỏi detail view; (3) tận dụng component ánh xạ có sẵn (vd `MappingFieldsPage`) để reuse hiển thị mapping đồng bộ toàn hệ thống.
@@ -1742,7 +1779,16 @@ _Bài học về cấu hình & môi trường: env vars, resolve DSN/secret, fal
 
 ## 6. Serialization & Type — BSON/Extended-JSON, Cast, Type/Form Drift, Identifier
 
-_Bài học về serialize/kiểu dữ liệu: BSON/Extended-JSON, cast expression, form drift, dual-stack routing, migrate identifier._ — **12 pattern**
+_Bài học về serialize/kiểu dữ liệu: BSON/Extended-JSON, cast expression, form drift, dual-stack routing, migrate identifier._ — **13 pattern**
+
+### [2026-06-05] Transform MongoDB→relational không coerce theo kiểu cột → upsert chết (chỉ lộ khi chạy data thật)
+- **Global Pattern**: `[Transform A đọc dữ liệu nguồn MongoDB đã lưu Extended-JSON ở shadow X]` rồi `[ghi thẳng giá trị vào cột relational Y mà không coerce theo kiểu đích]` → `[upsert chết: {"$date":..}→22007 timestamp, {"$oid":..}/sub-doc vào jsonb→22P02 invalid json, epoch-ms số trần→"cannot find encode plan" int→timestamp]`. **Đúng**: TRƯỚC khi bind, (1) unwrap ext-JSON scalar (`$date/$oid/$numberLong/$numberInt/$numberDouble/$numberDecimal`); (2) coerce THEO `target.data_type`: json/jsonb→`json.Marshal` ra JSON text hợp lệ (kể cả scalar→quoted), timestamp+number→`time.UnixMilli/Unix` (auto ms/s theo độ lớn), composite vào cột scalar→JSON text.
+- **Bối cảnh (Trigger)**: End-to-end sync b3 (Mongo source) Shadow→Master: build=0 + unit cũ PASS nhưng RunNow thật fail từng đợt 22007→22P02→encode-plan; mỗi lần chỉ lộ 1 lớp lỗi tiếp theo. Degraded guard (scanned>0 & ghi 0 → failed) bắt đúng cả 3, không báo success giả.
+- **Root Cause**: `extractColumns` lấy value qua gjson rồi gán thẳng; ext-JSON & epoch number không khớp encode-plan của pgx cho cột timestamp/jsonb. Path batch khác (SQL `_raw_data->...`) đã unwrap nhưng path transmuter (Go) thì chưa — **fix 1 path không tự lan sang path khác**.
+- **Fix/Correct Flow**: `unwrapMongoExtJSON` + `coerceForColumn` type-aware (mirror logic SQL-side); unit test 16 case (ext-json/oid/number/epoch ms+s/jsonb/composite) + **exercise** đối soát count nguồn=đích (454=454, distinct chống trùng) + spot-check row epoch-ms ra timestamp thật. **Meta**: build/unit PASS ≠ đúng; chỉ data thật end-to-end mới lộ type-drift → luôn chạy 1 happy-path thật với dữ liệu nguồn thật trước khi báo Done (Rule 16 G3/G6).
+- **Phạm vi (≥3 dự án?)**: Có — mọi pipeline MongoDB→SQL (CDC, ETL, sync), Debezium Mongo, BigQuery/Snowflake loader đọc BSON ext-JSON.
+- **Tags**: #serialization #type #extended-json #mongodb #pgx #cast #exercise-driven #root-cause #type-coercion
+- **Nguồn**: lessons.md [2026-06-05]
 
 ### [2026-06-02] Mất fallback behavior khi chuyển identifier từ string sang integer trong môi trường test
 - **Global Pattern**: `[Shared service tiện ích A] chuyển identifier lookup từ [string X] sang [int Y]` → `[short-circuit nil khi ID<=0 phá hủy default/fallback policy; test suite fail do DB==nil]`. **Đúng**: khi ID không hợp lệ hoặc bằng 0, vẫn khởi tạo map và nạp default masks/fallback rules thay vì return nil ngay.
@@ -1856,7 +1902,34 @@ _Bài học về serialize/kiểu dữ liệu: BSON/Extended-JSON, cast expressi
 
 ## 7. Testing & Verification — Exercise-driven, PASS criteria, Test uplift, Build≠Test
 
-_Bài học về kiểm thử & xác minh: exercise-driven, tiêu chí PASS thực chất, nâng cấp test, build pass ≠ test pass._ — **21 pattern**
+_Bài học về kiểm thử & xác minh: exercise-driven, tiêu chí PASS thực chất, nâng cấp test, build pass ≠ test pass._ — **24 pattern**
+
+### [2026-06-08] Verify/demo KHÔNG được đẩy hệ thống vào trạng thái approved/applied (phá workflow duyệt)
+- **Global Pattern**: `[Để chứng minh feature A chạy, tự thực hiện bước cuối B (approve + apply DDL/ghi cột) thay user]` → `[hệ thống bị pollute: 1 field tự duyệt+vào bảng trong khi thiết kế yêu cầu PENDING-chờ-duyệt → user thấy state sai + mất niềm tin]`. **Đúng**: verify TÔN TRỌNG workflow — chỉ kiểm tới bước mà cơ chế cho phép (vd: rule tạo ra ở trạng thái pending đúng), HOẶC nếu phải chạy bước approve để chứng minh thì **revert ngay sau demo** + disclose; không để lại trạng thái user chưa đồng ý.
+- **Bối cảnh (Trigger)**: chứng minh scan-array object → tự POST master-mapping-rule status='approved' + DDL cột `param_exportType` vào master aaa. User phản ứng "sao tự approve+DDL, phải pending chờ duyệt chứ".
+- **Root Cause**: nhầm "end-to-end proof" = phải đẩy data tới đích, quên rằng đích cần HÀNH ĐỘNG DUYỆT của user (approval gate là 1 phần của đặc tả, không phải chướng ngại để bypass khi test).
+- **Fix/Correct Flow**: revert (xoá master rule + DROP COLUMN), đưa mọi field về pending; verify dừng ở "rule tạo đúng + pending" + (nếu cần) demo extraction trên bản nháp rồi revert.
+- **Phạm vi (≥3 dự án?)**: Có — mọi hệ có approval/review gate (CMS duyệt, feature-flag, IaC plan/apply, content moderation): test không được auto-approve/apply.
+- **Tags**: #testing #verification #governance #approval-workflow #side-effect #revert-demo
+- **Nguồn**: lessons.md [2026-06-08]
+
+### [2026-06-08] Test mà PASS không phân biệt được với no-op → "verify" giả; phải dùng DELTA
+- **Global Pattern**: `[Khẳng định feature A chạy được dựa trên đọc code + 1 test mà kết quả thành công TRÙNG với kết quả no-op (vd OCC idempotent → count không đổi dù transmute fan-out trả 0 row)]` → `[false-confidence: feature thực ra CHƯA BAO GIỜ chạy, user phát hiện khi dùng thật]`. **Đúng**: test phải tạo **DELTA chỉ xảy ra nếu feature thật sự hoạt động** — set giá trị SENTINEL/STALE ở đích rồi kích hoạt, kiểm tra nó BỊ THAY ĐỔI; và đọc log đếm `scanned/affected` (0 = không làm gì), KHÔNG chỉ đọc count tổng.
+- **Bối cảnh (Trigger)**: Báo "realtime/post_ingest code-đúng" nhưng nó chết âm thầm 2 bug: (A) `HandleTransmuteShadow` match `connection_code='default'` trong khi connection thật `default_shadow` → fan-out 0 master; (B) gorm `_source_id = ANY(?)` với []string → `ANY('id')` chuỗi trần → `malformed array literal 22P02` → fetch fail. Test cũ publish transmute-shadow rồi check count đích = không đổi → tưởng OK (thực ra 0 master / fetch fail).
+- **Root Cause**: tiêu chí PASS = "count không đổi" trùng với cả 2 trạng thái (đã-đồng-bộ và hoàn-toàn-không-chạy). Verify-by-reading không thay được exercise có delta.
+- **Fix/Correct Flow**: (1) connection match coi `''`/`'default'` là wildcard; (2) `ANY(?)`→`IN (?)` (gorm expand []string đúng); (3) verify delta: set master.params='STALE' → trigger → quan sát `scanned=1 updated=1` + params về giá trị nguồn.
+- **Phạm vi (≥3 dự án?)**: Có — mọi feature idempotent/upsert/sync (CDC, ETL, cache-warm, reconcile) nơi "không đổi" là kết quả hợp lệ.
+- **Tags**: #testing #verification #false-positive #delta-test #idempotent #gorm #postgres-array #root-cause
+- **Nguồn**: lessons.md [2026-06-08]
+
+### [2026-06-05] "Live-verify" chạy nhầm binary CŨ vì tiến trình zombie giữ port → false-positive
+- **Global Pattern**: `[Restart service A để verify code mới X]` nhưng `[tiến trình cũ chưa chết hẳn vẫn giữ port → binary mới fatal "bind: address already in use" rồi thoát, request kiểm thử rơi vào binary CŨ Y]` → `[verify chạy trên code cũ = báo PASS giả]`. **Đúng**: TRƯỚC khi exercise, xác nhận (i) PID MỚI sở hữu port (`lsof -iTCP:PORT -sTCP:LISTEN`), (ii) log KHÔNG có `fatal`/`address already in use`, (iii) có dòng "started" của lần khởi động mới — rồi mới publish/gọi.
+- **Bối cảnh (Trigger)**: Verify SAFE-2 (invalidate cache): `kill`+restart worker rồi `nats pub cdc.cmd.master-create`, grep log không thấy dòng invalidate. Hóa ra worker mới crash bind 8082 (tiến trình cũ chưa free port trong 2s), health=200 là của binary CŨ, message bị worker cũ (chưa có SAFE-2) xử lý.
+- **Root Cause**: Giả định "kill xong + health=200 = binary mới đang chạy". Health 200 chỉ chứng minh *một* tiến trình sống trên port, KHÔNG chứng minh đó là tiến trình MỚI. `go run` con có thể chưa chết / port còn TIME_WAIT.
+- **Fix/Correct Flow**: Diệt sạch (parent go-run + child binary), chờ port free thật, restart, **grep `fatal` (phải rỗng) + lsof PID mới + dòng "started" mới** TRƯỚC khi exercise. Publish lại → log invalidate xuất hiện đúng (master_binding_id=10, had_entry=false).
+- **Phạm vi (≥3 dự án?)**: Có — mọi service restart-rồi-test (Go/Node/Python/Java), CI smoke test, container redeploy.
+- **Tags**: #testing #verification #process #zombie-process #port-binding #false-positive #root-cause
+- **Nguồn**: lessons.md [2026-06-05]
 
 ### [2026-05-26] Integration test drop bảng shared gây crash service khác trong môi trường dev
 - **Global Pattern**: `[Integration test suite A thực hiện DROP TABLE CASCADE trên bảng X dùng chung]` trong `[môi trường dev chia sẻ database]` → `[bảng thật bị xóa, downstream service crash với relation-not-exist error]`. **Đúng**: Dùng bảng có hậu tố `_test` hoặc database sandbox hoàn toàn độc lập (kết thúc bằng `_test`), không bao giờ DROP TABLE trên bảng cốt lõi của DB dùng chung.
@@ -2188,3 +2261,13 @@ _Bài học về quản trị tri thức: workspace-first, audit-log bất biế
 3. File này là *read-optimized view* để tra cứu nhanh theo nhóm; KHÔNG phải nguồn sự thật.
 
 <!-- generated: 229 patterns from lessons.md; malformed_blocks=0 -->
+
+---
+
+## [2026-06-05] Báo "Done" non-adversarial → user thành QA → vòng lặp done/audit/bug/fix
+- **Global Pattern**: `[Agent A báo DONE cho task X dựa trên build-OK + happy-path, KHÔNG tự chạy audit đối kháng trước khi báo]` → `[user phải audit → bug lộ → fix → lặp nhiều vòng → user mệt + mất niềm tin]`. **Đúng**: TRƯỚC khi báo done, agent TỰ chạy đúng cái audit user sẽ làm (Rule 16 G1–G8) + adversarial "tìm cách phá": reproduce red→green, edge/negative, cross-caller/consumer, đúng flow user-facing E2E; re-read file ngay trước khi claim. "Done" = "đã tự audit như user và pass".
+- **Bối cảnh (Trigger)**: User: "cứ làm xong báo done, tao kêu audit lại ra bug, audit nữa lại bug, fix, rất mệt với mày".
+- **Root Cause**: tiêu chí done quá yếu (build≠test, chỉ happy-path); đẩy QA sang user; parallel-edit (Brain sửa cùng file) → verify nhầm state cũ; claim fix chưa verify literal/E2E (vd clone status vẫn 'approved').
+- **Fix/Correct Flow**: sắp báo done → "user audit bây giờ thấy bug gì?" → chạy đúng audit đó TRƯỚC; codebase đa-agent → re-read file trước khi claim.
+- **Phạm vi (≥3 dự án?)**: Có — mọi fix/feature có người review sau.
+- **Tags**: #process-governance #definition-of-done #adversarial-self-review #premature-done #verification #trust

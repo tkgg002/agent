@@ -104,11 +104,11 @@
     - Cấm tuyệt đối việc chỉ tạo "ảo" qua các hệ thống Artifact markdown bay bổng bên trong não mà không đẩy thành file local thật sự của dự án.
 
 15. Quy tắc Check lại & Bảo trì Lesson (Lesson Re-check & Maintenance)
-    - **Nguồn tri thức (layout hiện hành)**: `agent/memory/global/lessons.md` LÀ CATALOG chuẩn hoá (gom taxonomy 8 nhóm, 100% format Rule #13, header `### [YYYY-MM-DD]`, sort mới→cũ) — ĐỌC file này đầu phiên để tra cứu. `ls_old.md` = raw audit-log cũ đã ARCHIVE (đông cứng, chỉ tra khi cần lịch sử). (File `lessons_global_normalized.md` đã được hợp nhất vào `lessons.md`.)
-    - **Ghi lesson mới (chèn vào catalog, chống drift)**: Lesson mới → CHÈN vào `lessons.md` đúng nhóm taxonomy (đầu nhóm, mới nhất trước) theo canonical Rule #13: `### [YYYY-MM-DD] <tiêu đề>` + Global Pattern (biến A/B/X/Y) + Trigger/Root Cause/Fix/Phạm vi/Tags/Nguồn. CẤM format tự do (`## Lesson N:`, `## L-xxx`). Dùng **Edit (chèn có chủ đích)** — KHÔNG Write đè cả file (Rule #11 + hook chặn).
-    - **Coverage verification (snapshot-during-mutation)**: `lessons.md` CÓ THỂ bị đổi/append TRONG lúc đang xử lý. Khi đọc/xử lý theo snapshot (offset/size/chunk) BẮT BUỘC chụp `wc -l`/size + đếm lesson TRƯỚC và SAU; nếu lệch → xử lý phần delta và verify "coverage = tổng lesson hiện tại" TRƯỚC khi báo done. (Đã xảy ra thật: layout bị đổi giữa kỳ → re-check mới phát hiện.)
-    - **Định kỳ re-sort/re-group + đo KPI**: Khi catalog lệch thứ tự/gom nhóm sai → re-sort theo nhóm+ngày bằng **write-temp rồi `mv`** (tránh Rule #11 hook) hoặc Edit cục bộ. Định kỳ chạy `agent/tooling/governance_metrics.sh` để đo KPI (recidivism theo tag, % workspace có 05_progress, sync rule, hooks); snapshot ghi append-only vào `governance_metrics.md`.
-    - **Check cuối phiên (bổ sung Pre-flight Rule #14)**: Trước khi đóng task tự hỏi: (i) phiên này có lesson mới chưa chèn vào `lessons.md` không? (ii) catalog có đúng format `### [date]` + sort không? (iii) có cần chạy lại `governance_metrics.sh` không?
+    - **Đọc đúng nguồn đầu phiên**: Ngoài `lessons.md` gốc, BẮT BUỘC tra cứu BẢN CHUẨN HOÁ `agent/memory/global/lessons_global_normalized.md` (gom theo taxonomy 8 nhóm, 100% format Rule #13) làm view tra cứu nhanh. `lessons.md` vẫn là nguồn sự thật (audit-log append-only); file normalized chỉ là phái sinh, KHÔNG thay thế.
+    - **Coverage verification khi xử lý file lesson (snapshot-during-mutation)**: `lessons.md` là append-only và CÓ THỂ bị append thêm TRONG lúc đang xử lý. Khi đọc/xử lý theo snapshot (offset/size/chunk) BẮT BUỘC chụp `wc -l`/size TRƯỚC và SAU pha xử lý; nếu lệch → tính delta `(EOF_cũ, EOF_mới]`, xử lý bổ sung phần thiếu, và verify "tổng coverage = tổng lesson hiện tại" TRƯỚC khi báo done. (Global Pattern: snapshot nguồn mutable → re-check size/EOF sau xử lý, không tin snapshot cũ.)
+    - **Format lesson tại nguồn (chống drift)**: Mọi lesson mới ghi vào `lessons.md` PHẢI dùng header `## [YYYY-MM-DD] <tiêu đề>` + đủ trường (Trigger / Root Cause / Fix / Global Pattern / Tags). CẤM format tự do (`## Lesson N:`, `## L-xxx`, `## YYYY-MM-DD — Lesson:`) để khỏi phải chuẩn hoá lại về sau.
+    - **Định kỳ re-generate bản chuẩn hoá**: Khi `lessons.md` phát sinh nhiều lesson mới (mốc ~30 lesson) hoặc phát hiện format drift → chạy lại quy trình chuẩn hoá (chia chunk tại `---` → sub-agent rewrite Rule #13 → assembly group theo taxonomy + sort ngày) để sinh lại `lessons_global_normalized.md`. Lesson mới LUÔN APPEND vào `lessons.md` (KHÔNG sửa file gốc — Rule #11).
+    - **Check cuối phiên (bổ sung Pre-flight Rule #14)**: Trước khi đóng task PHẢI tự hỏi: (i) "Phiên này có phát sinh lesson mới chưa ghi vào `lessons.md` không?"; (ii) "Bản `lessons_global_normalized.md` có stale so với `lessons.md` không (đếm số lesson lệch)?". Nếu có → xử lý trước khi báo Done.
 
 16. Quy tắc Đảm bảo Chất lượng Đầu ra mỗi Feature (Feature Output Quality Gate — Definition of Done)
     - **Mục tiêu**: Mỗi feature/fix bàn giao PHẢI **chính xác, không bug, đúng yêu cầu nhất**. Trước khi báo "Done" BẮT BUỘC pass TOÀN BỘ các Gate G1–G8 dưới đây; thiếu bất kỳ Gate nào = CHƯA Done.
@@ -120,30 +120,6 @@
     - **(G6) Output Correctness trên dữ liệu thật**: Verify GIÁ TRỊ output đúng kỳ vọng (so với golden/sample data), không chỉ "chạy không lỗi". Xử lý batch → đối soát số lượng (count nguồn = count đích) trước khi mark done.
     - **(G7) Adversarial Self-Review trước báo cáo**: Trước khi báo Done, tự review (hoặc dùng `/code-review`, sub-agent QA/Security) với tâm thế "tìm cách phá nó". Tự hỏi Rule #3: "Một Staff Engineer có duyệt PR này không?". Stuck/lỗi lặp >3 lần → escalate (Rule #8).
     - **(G8) Bằng chứng vật lý trong Workspace**: Ghi kết quả verify (lệnh đã chạy + output PASS, danh mục kịch bản) vào `06_test_cases.md`/`06_validation.md` và `05_progress.md`. Không có bằng chứng vật lý = CHƯA Done (No Shadow Files — Rule #7).
-
-17. Quy tắc Đồng bộ Hiến pháp GEMINI.md ↔ CLAUDE.md (Constitution Sync)
-    - **Single Source of Truth**: `GEMINI.md` là bản gốc (source-of-truth) của mọi quy tắc; `CLAUDE.md` là bản harness thực đọc, PHẢI phản ánh đúng nội dung rule của `GEMINI.md`.
-    - **Sync bắt buộc khi thay đổi**: Mỗi khi thêm/sửa/xoá một rule ở 1 trong 2 file, BẮT BUỘC cập nhật file còn lại trong CÙNG session để không drift. Ưu tiên sửa `GEMINI.md` trước rồi sync sang `CLAUDE.md`.
-    - **Phạm vi sync**: Đồng bộ NỘI DUNG rule (số hiệu, ý nghĩa, ràng buộc). `CLAUDE.md` được phép viết condensed nhưng KHÔNG được thiếu rule hoặc đổi ý nghĩa. Các mục riêng của `CLAUDE.md` (vd `Project Structure`) được giữ nguyên.
-    - **Verify**: Sau sync, cross-check danh sách rule headers của 2 file phải khớp (cùng tập số hiệu). Backup (restore-point) cả 2 file trước khi sửa (Rule #18).
-
-18. Quy tắc Kỷ luật VCS & Restore-point (VCS / Restore-point Discipline)
-    - **Check git ĐÚNG cấp repo**: Trong "monorepo-of-repos" (nhiều service, mỗi service 1 `.git` dưới 1 folder cha), KHÔNG kết luận trạng thái git ở thư mục cha. Chạy `git rev-parse --show-toplevel` TỪ TRONG thư mục service đang sửa; dùng `ls */.git` để biết ranh giới repo. Cha báo "not a git repository" KHÔNG đồng nghĩa service con không có git.
-    - **Restore-point trước & sau thay đổi**: TRƯỚC khi sửa file quan trọng (rule/config/memory) và SAU mỗi khối thay đổi có giá trị → tạo restore-point. Có git: `git commit` local (KHÔNG push — Rule #8). Không có git: copy file `*.bak-<mô tả>-<ngày>` vào workspace.
-    - **"Có git ≠ được bảo vệ"**: Code/file chưa commit có thể bị agent/phiên khác ghi đè = mất việc. Commit/backup là BẮT BUỘC, không phải tuỳ chọn.
-    - **Trước khi kết luận "không khôi phục được"**: PHẢI verify lại ở đúng cấp repo + kiểm working tree/stash trước khi báo mất dữ liệu.
-
-19. Quy tắc Bảo vệ Secret/PII trong Memory Files (No-Secret-in-Memory)
-    - **CẤM ghi thô**: Tuyệt đối không ghi secret/credential/PII thô vào memory files (`lessons.md`, `05_progress.md`, `04_decisions.md`, `active_plans.md`, `project_context.md`, workspace docs...): password, token/API key, private key, connection-string có mật khẩu, OTP; và PII khách hàng (số điện thoại, email, CCCD/CMND, số tài khoản, địa chỉ).
-    - **Luôn mask**: Khi cần minh hoạ, mask giá trị nhạy cảm (`mongodb://***:***@host/db`, `token=***`, `phone=09xx***`). Chỉ giữ phần đủ để hiểu pattern.
-    - **Quét trước khi ghi/append**: Trước khi append vào memory file hoặc tạo file phái sinh, quét nhanh secret/PII (grep `password|token|AKIA|sk-|Bearer|mongodb://[^*]`); phát hiện → mask rồi mới ghi.
-    - **Lý do**: Memory files dễ bị share/commit/đẩy lên repo → rò rỉ. Đây là phần mở rộng của Security Gate (Rule #8) cho tầng tri thức.
-
-20. Quy tắc Vệ sinh Context & Xử lý File lớn (Sub-agent Context Hygiene)
-    - **Không nạp file lớn vào main context**: CẤM đọc nguyên file > ~256KB (hoặc vài nghìn dòng) vào context chính. Phân tích tĩnh trước bằng shell (`wc`, `grep`, `awk`, `sed -n`) để lấy cấu trúc/thống kê mà không tốn context.
-    - **Fan-out sub-agent theo chunk**: File/khối-việc lớn → chia chunk (ranh giới sạch, vd tại separator) giao nhiều sub-agent xử lý song song; mỗi sub-agent GHI kết quả ra part-file riêng và **chỉ TRẢ VỀ summary nhỏ/structured** (count, tally, anomalies), KHÔNG trả nội dung lớn về main context.
-    - **Assembly ngoài context**: Gom/transform kết quả bằng script (Python/awk) đọc part-files, không kéo toàn bộ nội dung qua context chính.
-    - **Giữ context sạch**: Đúng tinh thần Rule #1 — dùng sub-agent triệt để cho research/xử-lý song song để Context chính luôn gọn.
 
 
 ## Workflows Reference

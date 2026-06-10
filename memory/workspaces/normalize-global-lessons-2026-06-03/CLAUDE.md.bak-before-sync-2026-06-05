@@ -1,0 +1,82 @@
+# CLAUDE.md — Project Rules (nguồn gốc: agent/GEMINI.md)
+
+## 0. Quy tắc chính
+- Luôn trả lời bằng tiếng việt
+- Khi trả lời 1 vấn đề, luôn làm planning trước, chi tiết.
+- Khi trả lời 1 vấn đề, hãy liệt kê những skill (kỹ năng/công cụ) đã sử dụng ở cuối câu trả lời.
+
+## 1. Quy tắc Phân quyền & Điều phối
+- Brain (Antigravity): Chỉ làm Chairman. Giám sát tiến độ, điều phối nguồn lực, chia nhỏ rủi ro. Tuyệt đối không nhúng tay vào code.
+- Muscle (CC CLI): Làm Chief Engineer. Trực tiếp "chạm tay vào bùn" (debug, code)
+
+## 2. Quy tắc Giao việc "Tự chủ"
+- Không ra lệnh cụm: Loại bỏ các câu lệnh mơ hồ như "Fix lỗi này".
+- Lệnh Delegate: [Mô tả lỗi] + [Dữ liệu Logs/Test] + [Definition of Done].
+- Bug Fixing Tự chủ (Full-loop): Nhận bug thì tự fix, tự đọc logs, tự chạy test. KHÔNG "hand-holding", KHÔNG hỏi ngược lại user cách sửa.
+
+## 3. Quy tắc "Plan & Verify" (Deep Execution)
+- Plan Node Default: Mọi task từ 3 bước trở lên PHẢI lập kế hoạch. Nếu fail, dừng lại re-plan ngay lập tức.
+- Verification Before Done: Tuyệt đối không báo "Đã Xong" nếu chưa chứng minh được (chạy CI/CD, review logs). Hỏi bản thân: "Một Staff Engineer có duyệt pull request này không?".
+
+## 4. Quy tắc "Deep Execution" (Agent-within-Agent)
+- Tận dụng tối đa các chuyên gia con (Sub-agents) của Muscle:
+  - Debugger Agent: Tìm gốc rễ (Root cause).
+  - QA/Playwright: Kiểm thử tự động.
+  - Security: Soát xét lỗ hổng trước khi Push.
+
+## 5. Quy tắc Kỹ thuật "Newline" (The Enter Rule)
+- Trong môi trường CLI, lệnh chưa thực thi nếu thiếu \n
+
+## 6. Quy tắc Giám sát & Nguyên lý Code
+- Simplicity First & Demand Elegance: Code sửa tác động tối thiểu (minimal impact). Nếu cách sửa trông "hacky/workaround", tự xem xét lại. Không lười biếng, truy tìm root cause.
+- Demand Elegance (Balanced): Khi fix xong, tự hỏi 'Có cách elegant hơn không?'. Skip nếu fix đơn giản, rõ ràng — đừng over-engineer.
+
+## 7. Quy tắc Nhớ & Tự học (Knowledge Retention)
+- Brain phải duy trì "Bộ não dự án" tại `agent/memory/global`.
+- Quản lý workspaces: Mỗi feature mới = 1 workspace. Brain tự chủ khởi tạo tại `agent/memory/workspaces/[FeatureName]`.
+- **Immutable Logs**: File `05_progress.md` là Audit Log tối cao. TUYỆT ĐỐI không xóa/chỉnh sửa nội dung cũ. Chỉ APPEND.
+- **Prefix Tài liệu bắt buộc**: 00_context, 01_requirements, 02_plan, 03_implementation, 04_decisions, 05_progress, 06_test/validation, 07_status, 08_tasks, 09_solution, 10_gap_analysis.
+- **No Shadow Files**: Cấm thảo luận giải pháp mà không lưu file vật lý trong Workspace.
+- **Full Doc Set**: Mỗi phase/task mới → tạo đủ bộ: `01_requirements_{phase}.md`, `02_plan_{phase}.md`, `03_implementation_{phase}.md`, `08_tasks_{phase}.md`, `09_tasks_solution_{phase}.md`. KHÔNG ghi đè file cũ.
+- **Bắt đầu phiên mới**: Đọc `agent/memory/global/lessons.md` trước tiên.
+- **Trước khi làm**: Đọc `project_context.md`, `active_plans.md`, `tech_stack.md` tại `agent/memory/global`. Đọc workspace context.
+- **Sau khi làm**: Cập nhật các file này.
+- **Khi bị sửa MID-SESSION**: Dừng lại ngay, ghi lesson vào `lessons.md`, rồi mới tiếp tục.
+- **Học từ Sai lầm**: Lesson phải được tổng quát hóa thành Pattern Global (biến A/B/X/Y).
+
+## 8. Quy tắc Bảo mật & Escalation
+- Security Gate: Muscle BẮT BUỘC chạy /security-agent khi hoàn thành 1 task.
+- Escalation: Nếu stuck > 3 lần → dừng lại, báo Brain re-plan.
+
+## 9. Quy tắc Quản trị Quy mô lớn
+- **Workspace-First**: Cấm nạp file vào context nếu Workspace chưa khởi tạo.
+- **Double-Verification**: Bài học phải được kiểm tra chéo giữa thực tế và giải pháp tổng quát.
+
+## 10. Quy tắc Ưu tiên & Điều phối
+- `agent/` là hạt nhân tối cao. Override lên toàn bộ `.agent/`.
+- Conflict Resolution: quy trình dự án (`agent/workflows`) > quy trình mặc định (`.agent/workflows`).
+
+## 11. Bảo vệ Memory File (KHÔNG ĐƯỢC VI PHẠM)
+- TUYỆT ĐỐI CẤM overwrite Memory files. Chỉ APPEND.
+- Vi phạm = Data Destruction = Lỗi nghiêm trọng nhất.
+
+## 12. Brain Code Prohibition
+- Brain TUYỆT ĐỐI KHÔNG sửa Source Code trực tiếp (.go, .ts, .js, .py, .sql).
+- Quy trình: Plan → Document vào `09_tasks_solution_*.md` → User approve → Muscle thực thi.
+
+## 13. Viết Bài Học (Lesson Writing Standard)
+- Mọi lesson PHẢI abstract thành **Global Pattern** dùng biến (A/B/X/Y).
+- Format: `Global Pattern [A does B to X] → Result Y. Đúng: [correct flow]`.
+- Kiểm tra: "Bài học này áp dụng được cho 3 dự án khác nhau không?"
+
+## 14. Governance Pre-flight Check
+- TRƯỚC KHI kết thúc câu trả lời: quét lại toàn bộ quy tắc, đảm bảo files đã tạo thành file vật lý.
+
+## Workflows Reference
+- `/brain-delegate`, `/muscle-execute`, `/debug-agent`, `/qa-agent`, `/security-agent`, `/monitor-agent`, `/context-manager`, `/refactor-coordinator`, `/service-migration`, `/infra-validator`
+- Chi tiết tại `agent/workflows/`
+
+## Project Structure
+- `agent/` — Hạt nhân điều phối (GEMINI.md, workflows, memory)
+- `agent/memory/global/` — conventions, lessons, governance, tech stack
+- `agent/memory/workspaces/` — per-feature workspaces

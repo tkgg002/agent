@@ -32,6 +32,7 @@
 | bug-snapshot-cache-latency-binding-66 | Giải quyết stale cache masking khi snapshot v2 | ✅ Done | 2026-06-02 |
 | feature-masters-page-audit-2026-06-02 | Masters Page Audit & Enhancements | ✅ Done | 2026-06-03 |
 | feature-sync-shadow-master-bindings-2026-06-04 | Syncing Shadow And Master Bindings | ✅ Done | 2026-06-04 |
+| feature-table-registry-ui-enhancement-2026-06-09 | Table Registry UI Enhancement | ✅ Done | 2026-06-09 |
 
 
 
@@ -321,3 +322,10 @@
 - **Path**: `agent/memory/workspaces/feature-sync-shadow-master-bindings-2026-06-04/`
 - **Mục tiêu**: Đồng bộ tự động các mapping rules từ shadow sang master và tự động duyệt (approve) rules khi Approve Master Binding để giải quyết triệt để lỗi sinh ra empty table (chỉ có default columns) ở destination.
 - **Kết quả**: Implement transactional logic trong cdc-cms-service (`approve_master.go`) để sync/approve 100% các rules tự động. Đã verify bảng vật lý `b3` được tạo ra đầy đủ tất cả các business columns và database rules đồng bộ thành công.
+
+### 2026-06-08 — Workspace `feature-cdc-cms-file-inventory-2026-06-08` (ANALYSIS, ✅ DONE)
+- **Mục tiêu**: inventory cấu trúc + chức năng 213 file `cdc-cms-service` + đề xuất reorg + dò file chưa dùng.
+- **Phương pháp**: go reachability + deadcode tool (75 hàm) + 7 sub-agent grep-analysis.
+- **Kết quả**: `11_current_structure.md` (toàn bộ file + status), `12_unused_files.md` (8 file dead/575 LOC + 2 nghi + categories), `13_proposed_structure.md` (vertical slice 8 BC + DEAD bucket).
+- **Nối tiếp**: v1 restructure + v2 hexagonal-refactor (đều pending review). 0 code change.
+- **Next**: user duyệt danh sách dead → 1 PR remove (~575 LOC) verify go build+deadcode.
