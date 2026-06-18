@@ -1,0 +1,1120 @@
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Table, Tag, Button, Space, Switch, message, Spin, Typography, Card, Descriptions, Alert, Modal, Input, Tooltip, Select, InputNumber } from 'antd';
+import { ArrowLeftOutlined, ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, LockOutlined, SyncOutlined, SearchOutlined, PlusOutlined } from '@ant-design/icons';
+import type { ColumnsType } from 'antd/es/table';
+import { cmsApi } from '../services/api';
+import { humanizeApiError } from '../utils/apiError';
+
+const { Title, Text } = Typography;
+
+interface MasterRule {
+  id: number;
+  master_binding_id: number;
+  mapping_v2_id: number;
+  target_column: string;
+  is_active: boolean;
+  status: 'pending' | 'approved' | 'rejected';
+  in_master?: boolean;
+  notes?: string | null;
+  // joined (read-only)
+  source_field: string;
+  source_path?: string | null;
+  data_type: string;
+  shadow_data_type?: string | null;
+  source_data_type?: string | null;
+  source_format: string;
+  transform_fn?: string | null;
+  is_nullable: boolean;
+  default_value?: string | null;
+  shadow_status?: 'pending' | 'approved' | 'rejected' | null;
+  created_by?: string | null;
+  // staging DDL: edit target_column/data_type của rule in_master chờ Approve mới apply.
+  pending_rename_from?: string | null;
+  pending_type_change?: boolean;
+  children?: MasterRule[];
+}
+
+interface MasterBinding {
+  id: number;
+  binding_code: string;
+  master_name: string;
+  master_schema: string;
+  shadow_schema?: string | null;
+  shadow_table?: string | null;
+  shadow_binding_id?: number | null;
+  transform_type: string;
+  is_active: boolean;
+  schema_status: 'pending_review' | 'approved' | 'rejected' | 'failed';
+}
+
+export default function MasterMappingFieldsPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  const masterBindingID = useMemo(() => {
+    const raw = searchParams.get('binding_id');
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [searchParams]);
+
+  const [binding, setBinding] = useState<MasterBinding | null>(null);
+  const [rules, setRules] = useState<MasterRule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  // I6: "In Master" lấy từ flag worker-maintained `record.in_master` (worker set khi
+  // Apply DDL — chỉ worker chạm dest 5434). KHÔNG query master-columns ở CMS control
+  // plane (5433) vì master table KHÔNG nằm ở đó → trước đây cột luôn rỗng + lỗi 404.
+  const [shadowColumns, setShadowColumns] = useState<Set<string>>(new Set());
+
+  // Create Manual Mapping
+  const [createOpen, setCreateOpen] = useState(false);
+  const [shadowRules, setShadowRules] = useState<any[]>([]);
+  const [selectedMappingV2ID, setSelectedMappingV2ID] = useState<number | undefined>(undefined);
+  const [targetColumnName, setTargetColumnName] = useState('');
+  // Manual nested mapping: aa.bbb -> aa_bbb (self-contained, mapping_v2_id=0)
+  const [nestedPath, setNestedPath] = useState('');
+  const [nestedDataType, setNestedDataType] = useState('TEXT');
+  const [creatingRule, setCreatingRule] = useState(false);
+
+  // Scan Array (Flatten)
+  const [flattenOpen, setFlattenOpen] = useState(false);
+  const [explodePath, setExplodePath] = useState('');
+  const [scanningArray, setScanningArray] = useState(false);
+  const [scanningAll, setScanningAll] = useState(false);
+
+  // [DISABLED] Scan Review Modal — backend đã tự tạo pending records trong scan-array API,
+  // không cần promote thêm. Comment lại để tham khảo sau.
+  // interface ScannedRule {
+  //   id: number;
+  //   sourceField: string;
+  //   sourcePath?: string | null;
+  //   dataType: string;
+  //   selected: boolean;
+  //   children?: ScannedRule[];
+  // }
+  // const [scanReviewOpen, setScanReviewOpen] = useState(false);
+  // const [scannedRules, setScannedRules] = useState<ScannedRule[]>([]);
+  // const [promoting, setPromoting] = useState(false);
+
+  const isSystemColumn = (col: string): boolean => {
+    const sysCols = [
+      '_gpay_id', '_source_id', '_raw_data', '_source', '_source_ts',
+      '_synced_at', '_version', '_hash', '_deleted', '_created_at', '_updated_at'
+    ];
+    return sysCols.includes(col.toLowerCase().trim());
+  };
+
+  const fetchBinding = useCallback(async () => {
+    if (!masterBindingID) return;
+    try {
+      const { data: res } = await cmsApi.get<{ data: MasterBinding[] }>('/api/v1/masters');
+      const found = (res.data || []).find((b) => b.id === masterBindingID);
+      if (found) setBinding(found);
+      else message.error('Không tìm thấy Master Binding với ID này.');
+    } catch {
+      message.error('Lỗi khi tải thông tin Master Binding.');
+    }
+  }, [masterBindingID]);
+
+  const fetchRules = useCallback(async () => {
+    if (!masterBindingID) return;
+    setLoading(true);
+    try {
+      const { data: res } = await cmsApi.get<{ data: MasterRule[] }>('/api/v1/master-mapping-rules', {
+        params: { master_binding_id: masterBindingID },
+      });
+      // Sắp xếp: nhóm theo source_field (field shadow gốc), trong mỗi nhóm field cha
+      // (không source_path) lên trước, rồi các field flatten (params.x) xếp dưới theo path.
+      const sorted = (res.data || []).slice().sort((a, b) => {
+        const sf = (a.source_field || '').localeCompare(b.source_field || '');
+        if (sf !== 0) return sf;
+        return (a.source_path || '').localeCompare(b.source_path || '');
+      });
+      setRules(sorted);
+    } catch {
+      message.error('Không tải được Master mapping rules.');
+    } finally {
+      setLoading(false);
+    }
+  }, [masterBindingID]);
+
+  const fetchShadowColumns = useCallback(async () => {
+    if (!binding?.shadow_table || !binding?.shadow_schema) return;
+    try {
+      const { data } = await cmsApi.get('/api/introspection/shadow-columns/' + binding.shadow_table, {
+        params: { schema: binding.shadow_schema },
+      });
+      const cols: string[] = data?.columns || [];
+      setShadowColumns(new Set(cols.map(c => c.toLowerCase())));
+    } catch {
+      setShadowColumns(new Set());
+    }
+  }, [binding]);
+
+  const fetchShadowRules = useCallback(async () => {
+    if (!binding?.shadow_binding_id) return;
+    try {
+      const { data } = await cmsApi.get('/api/v1/mapping-rules', {
+        params: { binding_id: binding.shadow_binding_id }
+      });
+      setShadowRules(data?.data || []);
+    } catch {
+      message.error('Không tải được shadow mapping rules.');
+    }
+  }, [binding]);
+
+  useEffect(() => { fetchBinding(); }, [fetchBinding]);
+  useEffect(() => {
+    if (binding) {
+      fetchRules();
+      fetchShadowColumns();
+    }
+  }, [binding, fetchRules, fetchShadowColumns]);
+
+  const handleToggleActive = async (rule: MasterRule) => {
+    setTogglingId(rule.id);
+    try {
+      await cmsApi.post('/api/v1/master-mapping-rules', {
+        id: rule.id,
+        master_binding_id: rule.master_binding_id,
+        mapping_v2_id: rule.mapping_v2_id,
+        target_column: rule.target_column,
+        is_active: !rule.is_active,
+        status: rule.status,
+      });
+      setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, is_active: !r.is_active } : r)));
+      message.success(`Mapping ${rule.target_column} → ${rule.is_active ? 'tắt' : 'bật'}`);
+    } catch (err) {
+      message.error(humanizeApiError(err, 'Bật/tắt mapping thất bại'));
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const handleDeleteRule = async (id: number) => {
+    try {
+      await cmsApi.delete(`/api/v1/master-mapping-rules/${id}`);
+      message.success('Xoá mapping rule thành công');
+      fetchRules();
+    } catch (err) {
+      message.error(humanizeApiError(err, 'Xoá mapping rule thất bại'));
+    }
+  };
+
+  const handleUpdateTargetColumn = async (id: number, newName: string) => {
+    const name = (newName || '').trim();
+    if (!name) { message.warning('Tên cột không được rỗng'); return; }
+    try {
+      await cmsApi.put(`/api/v1/master-mapping-rules/${id}/target-column`, { target_column: name });
+      message.success('Đổi tên cột đích → ' + name);
+      fetchRules();
+    } catch (err) {
+      message.error(humanizeApiError(err, 'Đổi target column thất bại'));
+    }
+  };
+
+  const handleApproveDDL = async (id: number) => {
+    try {
+      const { data } = await cmsApi.post(`/api/v1/master-mapping-rules/${id}/approve-ddl`, {});
+      message.success(data?.applied ? 'Đã áp dụng DDL (rename/đổi type) vào bảng master' : 'Không có thay đổi DDL nào đang chờ');
+      fetchRules();
+    } catch (err) {
+      message.error(humanizeApiError(err, 'Approve DDL thất bại'));
+    }
+  };
+
+  const handleApproveDDLAll = async () => {
+    if (!masterBindingID) return;
+    try {
+      const { data } = await cmsApi.post(`/api/v1/master-mapping-rules/approve-ddl-all?master_binding_id=${masterBindingID}`, {});
+      const failed = data?.failed || 0;
+      if (failed > 0) message.warning(`Áp dụng ${data?.applied || 0} DDL, ${failed} lỗi: ${(data?.errors || []).join('; ')}`);
+      else message.success(`Đã áp dụng ${data?.applied || 0} thay đổi DDL vào bảng master`);
+      fetchRules();
+    } catch (err) {
+      message.error(humanizeApiError(err, 'Approve all DDL thất bại'));
+    }
+  };
+
+  const handleBatchUpdate = async (status: string) => {
+    if (selectedRowKeys.length === 0) { message.warning('Chọn field trước'); return; }
+    setBatchLoading(true);
+    try {
+      await cmsApi.put('/api/v1/master-mapping-rules/batch', {
+        ids: selectedRowKeys.map(Number),
+        status,
+      });
+      message.success(`${selectedRowKeys.length} field đã ${status === 'approved' ? 'duyệt' : 'từ chối'}`);
+      setSelectedRowKeys([]);
+      fetchRules();
+    } catch (err) {
+      message.error(humanizeApiError(err, 'Cập nhật thất bại'));
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
+  const handleSyncFromShadow = async () => {
+    if (!masterBindingID) return;
+    setSyncing(true);
+    try {
+      const { data: res } = await cmsApi.post<{ status: string; synced_new: number }>(
+        '/api/v1/master-mapping-rules/sync-from-shadow',
+        null,
+        { params: { master_binding_id: masterBindingID } }
+      );
+      const count = res.synced_new ?? 0;
+      if (count > 0) {
+        message.success(`Sync thành công: ${count} rule mới từ shadow (status pending, cần duyệt)`);
+      } else {
+        message.info('Không có rule mới — master đã đồng bộ với shadow');
+      }
+      fetchRules();
+    } catch (err) {
+      message.error(humanizeApiError(err, 'Sync từ shadow thất bại'));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Scan Array (Flatten): bóc field bên trong array JSON tại explode_path,
+  // tạo mapping rule PENDING trong shadow (mapping_rule_v2) để duyệt.
+  // Master CẦN flatten (schema-enforced) — Shadow raw sink không cần.
+  const handleScanArray = async () => {
+    if (!binding?.shadow_table) {
+      message.warning('Binding chưa có shadow_table');
+      return;
+    }
+    const path = explodePath.trim();
+    if (!path) {
+      message.warning('Nhập explode_path (vd: after.items[*])');
+      return;
+    }
+    setScanningArray(true);
+    try {
+      const { data: res } = await cmsApi.post(
+        `/api/introspection/scan-array/${binding.shadow_table}`,
+        { explode_path: path, master_binding_id: masterBindingID },
+      );
+      const newCount = (res.new_rules || []).length;
+      const total = Number(res.total_keys ?? 0);
+      if (newCount === 0) {
+        if (total > 0) {
+          message.info(`Đã quét ${total} field trong "${path}" — tất cả đã được map rồi (không có field mới). Muốn map lại thì xoá field cũ trước.`);
+        } else {
+          message.warning(`Không tìm thấy field nào trong "${path}" — shadow table chưa có data, hoặc field không phải JSON object. Kiểm tra shadow đã ingest data chưa.`);
+        }
+      } else {
+        message.success(`Quét xong: đã tạo ${newCount} mapping rule mới (status pending) — vào bảng để review và Approve DDL.`);
+        setFlattenOpen(false);
+      }
+      setExplodePath('');
+      fetchRules();
+    } catch (err) {
+      message.error(humanizeApiError(err, 'Scan array thất bại'));
+    } finally {
+      setScanningArray(false);
+    }
+  };
+
+
+  // Scan Array ALL: quét mọi field shadow (approved + in-shadow) của master như
+  // mảng tiềm năng, tự tạo rule flatten PENDING cho field nào là array. 1 nút thay
+  // vì nhập explode_path từng field.
+  const handleScanArrayAll = async () => {
+    setScanningAll(true);
+    try {
+      const { data: res } = await cmsApi.post<{
+        scanned: number; array_fields: number; total_new_fields: number;
+        results: { field: string; status: string; new_fields?: string[] }[];
+      }>('/api/introspection/scan-array-all', { master_binding_id: masterBindingID });
+      const arrays = (res.results || []).filter((r) => r.status === 'ok');
+      if (res.array_fields === 0) {
+        message.info(`Đã quét ${res.scanned} field — không field nào là array để flatten.`);
+      } else {
+        message.success(
+          `Quét ${res.scanned} field: ${res.array_fields} field là array, tạo ${res.total_new_fields} rule flatten mới (PENDING). ` +
+          `Array: ${arrays.map((r) => r.field).join(', ')}`,
+        );
+      }
+      fetchRules();
+    } catch (err) {
+      message.error(humanizeApiError(err, 'Scan array all thất bại'));
+    } finally {
+      setScanningAll(false);
+    }
+  };
+
+  const handleCreateMapping = async () => {
+    // Nested mode: nhập aa.bbb -> tạo cột master aa_bbb (self-contained, mapping_v2_id=0).
+    // source_field = field cha (trước dấu . đầu), source_path = full path, transmute bóc.
+    const nested = nestedPath.trim();
+    if (nested) {
+      if (!nested.includes('.')) {
+        message.warning('Nested path phải dạng cha.con, vd: params.channelId');
+        return;
+      }
+      const target = (targetColumnName.trim() || nested.replace(/\./g, '_'));
+      if (isSystemColumn(target)) {
+        message.error('Target column không được trùng tên cột hệ thống: ' + target);
+        return;
+      }
+      // mapping_v2_id = id field CHA ở shadow (segment đầu, vd 'params') — đồng nhất với scan.
+      // Nếu shadow chưa có rule cho field cha → 0 (self-contained, backend để NULL).
+      const parentField = nested.split('.')[0];
+      const parentRule = shadowRules.find((r) => r.source_field === parentField);
+      setCreatingRule(true);
+      try {
+        await cmsApi.post('/api/v1/master-mapping-rules', {
+          master_binding_id: masterBindingID,
+          mapping_v2_id: parentRule ? parentRule.id : 0,
+          source_field: parentField,
+          source_path: nested,
+          data_type: nestedDataType || 'TEXT',
+          target_column: target,
+          status: 'pending',
+          is_active: true,
+        });
+        message.success(`Đã tạo nested mapping ${nested} → ${target} (pending)`);
+        setCreateOpen(false);
+        setNestedPath('');
+        setNestedDataType('TEXT');
+        setTargetColumnName('');
+        setSelectedMappingV2ID(undefined);
+        fetchRules();
+      } catch (err) {
+        message.error(humanizeApiError(err, 'Tạo nested mapping thất bại'));
+      } finally {
+        setCreatingRule(false);
+      }
+      return;
+    }
+    if (!selectedMappingV2ID) {
+      message.warning('Chọn shadow mapping rule, hoặc nhập Nested path (aa.bbb)');
+      return;
+    }
+    const colName = targetColumnName.trim();
+    if (!colName) {
+      message.warning('Nhập target column name');
+      return;
+    }
+    if (isSystemColumn(colName)) {
+      message.error('Target column không được trùng tên cột hệ thống: ' + colName);
+      return;
+    }
+    setCreatingRule(true);
+    try {
+      await cmsApi.post('/api/v1/master-mapping-rules', {
+        master_binding_id: masterBindingID,
+        mapping_v2_id: selectedMappingV2ID,
+        target_column: colName,
+        status: 'pending',
+        is_active: true,
+      });
+      message.success('Đã tạo master mapping rule mới (status pending)');
+      setCreateOpen(false);
+      setSelectedMappingV2ID(undefined);
+      setTargetColumnName('');
+      fetchRules();
+    } catch (err) {
+      message.error(humanizeApiError(err, 'Tạo mapping thất bại'));
+    } finally {
+      setCreatingRule(false);
+    }
+  };
+
+  // [DISABLED] handlePromoteScannedRules — backend scan-array đã tự tạo mapping_rule_master PENDING.
+  // Việc gọi thêm API này sẽ gây FK violation (mapping_v2_id trong new_rules là master rule ID, không phải shadow mapping_v2).
+  // Flow đúng: quét xong → success toast → user review trực tiếp trong bảng chính → Approve DDL.
+  //
+  // const handlePromoteScannedRules = async () => {
+  //   const toPromote = scannedRules.filter(r => r.selected);
+  //   if (toPromote.length === 0) { message.warning('Chọn ít nhất một field.'); return; }
+  //   setPromoting(true);
+  //   try {
+  //     await Promise.all(toPromote.map(async (rule) => {
+  //       await cmsApi.patch(`/api/v1/mapping-rules/${rule.id}`, { status: 'approved' });
+  //       await cmsApi.post('/api/v1/master-mapping-rules', {
+  //         master_binding_id: masterBindingID,
+  //         mapping_v2_id: rule.id,   // ← SAI: đây là ID của master rule, không phải shadow mapping_v2
+  //         target_column: rule.sourceField,
+  //         status: 'pending',
+  //       });
+  //     }));
+  //     message.success('Done');
+  //     setScanReviewOpen(false);
+  //     fetchRules();
+  //   } catch (err) {
+  //     message.error(humanizeApiError(err, 'Thất bại'));
+  //   } finally { setPromoting(false); }
+  // };
+
+  const treeData = useMemo(() => {
+    let virtualId = -1;
+
+    // Group rules by source_field (shadow column gốc)
+    const groups = new Map<string, MasterRule[]>();
+    rules.forEach(rule => {
+      const k = rule.source_field || '';
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k)!.push(rule);
+    });
+
+    const rootNodes: MasterRule[] = [];
+
+    groups.forEach((groupRules, sourceField) => {
+      const hasNested = groupRules.some(r => !!r.source_path);
+      const directRule = groupRules.find(r => !r.source_path);
+
+      if (!hasNested) {
+        // Không có nested → push thẳng ra root (flat fields như amount, name, ...)
+        groupRules.forEach(r => rootNodes.push({ ...r, children: undefined }));
+        return;
+      }
+
+      // Có nested fields → tạo root node cho source_field này
+      const rootNode: MasterRule = directRule
+        ? { ...directRule, children: [] }
+        : {
+          id: virtualId--,
+          master_binding_id: groupRules[0].master_binding_id,
+          mapping_v2_id: 0,
+          target_column: sourceField,
+          is_active: false,
+          status: 'pending',
+          source_field: sourceField,
+          source_path: null,
+          data_type: 'JSONB',
+          shadow_data_type: 'JSONB',
+          source_format: 'raw',
+          is_nullable: true,
+          children: [],
+        };
+
+      // pathMap: prefix → node để tìm parent nhanh
+      const pathMap = new Map<string, MasterRule>();
+      pathMap.set('', rootNode);
+
+      // Sort nested rules theo source_path để parent luôn được tạo trước child
+      const nestedRules = groupRules
+        .filter(r => !!r.source_path)
+        .sort((a, b) => (a.source_path || '').localeCompare(b.source_path || ''));
+
+      nestedRules.forEach(rule => {
+        // Normalize path: "$.params.amount" → ["params", "amount"]
+        const rawPath = (rule.source_path || '').replace(/^\$\.?/, '');
+        const parts = rawPath.split('.').filter(Boolean);
+
+        // Đảm bảo các node cha trung gian tồn tại
+        for (let i = 0; i < parts.length - 1; i++) {
+          const intermediatePath = parts.slice(0, i + 1).join('.');
+          if (!pathMap.has(intermediatePath)) {
+            const parentPath = parts.slice(0, i).join('.');
+            const parent = pathMap.get(parentPath) || rootNode;
+            const virtualNode: MasterRule = {
+              id: virtualId--,
+              master_binding_id: rule.master_binding_id,
+              mapping_v2_id: 0,
+              target_column: parts[i],
+              is_active: false,
+              status: 'pending',
+              source_field: sourceField,
+              source_path: intermediatePath,
+              data_type: 'JSONB',
+              shadow_data_type: 'JSONB',
+              source_format: 'raw',
+              is_nullable: true,
+              children: [],
+            };
+            if (!parent.children) parent.children = [];
+            parent.children.push(virtualNode);
+            pathMap.set(intermediatePath, virtualNode);
+          }
+        }
+
+        // Thêm leaf node vào đúng parent
+        const leafParentPath = parts.slice(0, -1).join('.');
+        const leafParent = pathMap.get(leafParentPath) || rootNode;
+        const leafNode = { ...rule, children: undefined };
+        if (!leafParent.children) leafParent.children = [];
+        leafParent.children.push(leafNode);
+      });
+
+      rootNodes.push(rootNode);
+    });
+
+    rootNodes.sort((a, b) => (a.source_field || '').localeCompare(b.source_field || ''));
+    return rootNodes;
+  }, [rules]);
+
+
+  const columns: ColumnsType<MasterRule> = [
+    {
+      title: 'Shadow Field',
+      dataIndex: 'source_field',
+      render: (text: string, r) => {
+        let displayName: string;
+        let tooltipText: string;
+        if (r.source_path) {
+          // Nested field — hiển thị phần cuối của source_path
+          const parts = r.source_path.replace(/^\$\.?/, '').split('.').filter(Boolean);
+          displayName = parts[parts.length - 1] || text;
+          tooltipText = `${text} → ${r.source_path}`;
+        } else {
+          // Root/flat field — hiển thị source_field
+          displayName = text;
+          tooltipText = text;
+        }
+        return (
+          <Tooltip title={tooltipText}>
+            <code>{displayName}</code>
+          </Tooltip>
+        );
+      },
+      sorter: (a, b) => a.source_field.localeCompare(b.source_field),
+    },
+
+    {
+      title: 'Shadow Data Type',
+      dataIndex: 'shadow_data_type',
+      render: (t, record) => {
+        if (record.id < 0) return <Tag color="orange">OBJECT</Tag>;
+        return t ? <Tag>{t}</Tag> : <Text type="secondary">-</Text>;
+      },
+    },
+    {
+      title: 'Master Column',
+      dataIndex: 'target_column',
+      render: (t: string, r) => {
+        if (r.id < 0) return <Text type="secondary">—</Text>;
+        return (
+          <Text strong editable={{ tooltip: 'Sửa tên cột đích', onChange: (val) => handleUpdateTargetColumn(r.id, val) }}>{t}</Text>
+        );
+      },
+    },
+    {
+      title: 'Master Data Type',
+      dataIndex: 'data_type',
+      width: 210,
+      render: (t: string, record) => {
+        if (record.id < 0) return <Tag color="orange">OBJECT</Tag>;
+        const types = ['VARCHAR', 'CHAR', 'TEXT', 'INTEGER', 'BIGINT', 'NUMERIC', 'BOOLEAN', 'TIMESTAMP', 'JSONB'];
+        const matched = (t || '').toUpperCase().match(/^([A-Z]+)(?:\((\d+)\))?$/);
+        const baseType = matched ? matched[1] : (t || '').toUpperCase();
+        const length = matched && matched[2] ? Number(matched[2]) : undefined;
+
+        const handleTypeChange = async (newBaseType: string, newLength?: number) => {
+          let updatedType = newBaseType;
+          if ((newBaseType === 'VARCHAR' || newBaseType === 'CHAR') && newLength) {
+            updatedType = `${newBaseType}(${newLength})`;
+          }
+          try {
+            await cmsApi.put(`/api/v1/master-mapping-rules/${record.id}/data-type`, {
+              data_type: updatedType,
+            });
+            message.success(`Cập nhật kiểu dữ liệu thành ${updatedType}`);
+            fetchRules();
+          } catch (err) {
+            message.error(humanizeApiError(err, 'Cập nhật kiểu dữ liệu thất bại'));
+          }
+        };
+
+        return (
+          <Space>
+            <Select
+              size="small"
+              value={baseType || 'TEXT'}
+              style={{ width: 110 }}
+              onChange={(val) => {
+                if (val === 'VARCHAR' || val === 'CHAR') {
+                  handleTypeChange(val, length || 255);
+                } else {
+                  handleTypeChange(val);
+                }
+              }}
+              options={types.map(type => ({ label: type, value: type }))}
+            />
+            {(baseType === 'VARCHAR' || baseType === 'CHAR') && (
+              <InputNumber
+                size="small"
+                style={{ width: 60 }}
+                min={1}
+                max={65535}
+                value={length || 255}
+                onChange={(val) => {
+                  if (val) {
+                    handleTypeChange(baseType, val);
+                  }
+                }}
+              />
+            )}
+          </Space>
+        );
+      }
+    },
+    {
+      title: 'Status of Shadow',
+      dataIndex: 'shadow_status',
+      render: (status: string, record) => {
+        if (record.id < 0) return <Text type="secondary">—</Text>;
+        const colors: Record<string, string> = { approved: 'green', pending: 'orange', rejected: 'red' };
+        return <Tag color={colors[status] || 'default'}>{status || 'pending'}</Tag>;
+      },
+    },
+    {
+      title: (
+        <Tooltip title="Cột đã tồn tại trên shadow table chưa? Đối chiếu information_schema.columns.">
+          <span>In Shadow</span>
+        </Tooltip>
+      ),
+      key: 'in_shadow',
+      width: 100,
+      render: (_, record) => {
+        if (record.id < 0) return <Text type="secondary">—</Text>;
+        const present = shadowColumns.has((record.source_field || '').toLowerCase());
+        return present
+          ? <Tag color="green">in shadow</Tag>
+          : <Tag color="default">not yet</Tag>;
+      },
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      render: (status: string, record) => {
+        if (record.id < 0) return <Text type="secondary">—</Text>;
+        const colors: Record<string, string> = { approved: 'green', pending: 'orange', rejected: 'red' };
+        return <Tag color={colors[status] || 'default'}>{status}</Tag>;
+      },
+    },
+    {
+      title: (
+        <Tooltip title="Cột đã tồn tại trên master table chưa? Đối chiếu information_schema.columns.">
+          <span>In Master</span>
+        </Tooltip>
+      ),
+      key: 'in_master',
+      width: 100,
+      render: (_, record) => {
+        if (record.id < 0) return <Text type="secondary">—</Text>;
+        const present = !!record.in_master;
+        return present
+          ? <Tag color="green">in master</Tag>
+          : <Tag color="default">not yet</Tag>;
+      },
+    },
+    {
+      title: 'Active',
+      dataIndex: 'is_active',
+      width: 80,
+      render: (active: boolean, record) => {
+        if (record.id < 0) return <Text type="secondary">—</Text>;
+        return (
+          <Switch checked={active} loading={togglingId === record.id} onChange={() => handleToggleActive(record)} size="small" />
+        );
+      },
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 90,
+      render: (_, r) => {
+        if (r.id < 0) return null;
+        const ddlPending = !!r.pending_rename_from || !!r.pending_type_change;
+        return (
+          <Space size={4}>
+            {ddlPending && (
+              <Tooltip title="Áp dụng thay đổi cột (rename / đổi type) vào bảng master">
+                <Button size="small" type="primary" onClick={() => handleApproveDDL(r.id)}>Approve</Button>
+              </Tooltip>
+            )}
+            {r.created_by === 'shadow-sync'
+              ? <Tooltip title="Field sync từ shadow — không xoá được (chỉ field scan-flatten & admin thêm mới xoá được)"><Button size="small" disabled>Xoá</Button></Tooltip>
+              : <Button size="small" danger onClick={() => handleDeleteRule(r.id)}>Xoá</Button>}
+          </Space>
+        );
+      },
+    },
+  ];
+
+  if (!binding) {
+    return <div style={{ textAlign: 'center', padding: 100 }}><Spin size="large" tip="Loading master registry..." /></div>;
+  }
+
+  return (
+    <div>
+      <Space style={{ marginBottom: 16 }}>
+        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/masters')}>Back to Master Registry</Button>
+      </Space>
+
+      <Title level={4}>
+        Master Mapping Rules: <code>{binding.shadow_table}</code> → <code>{binding.master_name}</code>
+      </Title>
+
+      <Card size="small" style={{ marginBottom: 16 }}>
+        <Descriptions size="small" column={4}>
+          <Descriptions.Item label="Master Table"><Text code>{binding.master_schema}.{binding.master_name}</Text></Descriptions.Item>
+          <Descriptions.Item label="Shadow Source"><Text code>{binding.shadow_schema}.{binding.shadow_table}</Text></Descriptions.Item>
+          <Descriptions.Item label="Transform Type"><Tag color="blue">{binding.transform_type}</Tag></Descriptions.Item>
+          <Descriptions.Item label="Status"><Tag>{binding.schema_status}</Tag></Descriptions.Item>
+        </Descriptions>
+      </Card>
+
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        message="Mapping của Master lấy từ business rules của Shadow (mapping_rule_v2)"
+        description={<span><LockOutlined /> Source Field / Data Type / Rule Type là read-only (đến từ mapping_rule_v2). Master CẦN Scan Array (Flatten) để normalize JSON arrays thành cột riêng. Shadow là raw data sink — không flatten.</span>}
+      />
+
+      <Space style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between' }}>
+        <Text strong>Mapping Rules ({rules.length})</Text>
+        <Space>
+          {selectedRowKeys.length > 0 && (
+            <>
+              <Text strong>{selectedRowKeys.length} đã chọn</Text>
+              <Button type="primary" icon={<CheckCircleOutlined />} loading={batchLoading} onClick={() => handleBatchUpdate('approved')}>Duyệt</Button>
+              <Button danger icon={<CloseCircleOutlined />} loading={batchLoading} onClick={() => handleBatchUpdate('rejected')}>Từ chối</Button>
+              <Button onClick={() => setSelectedRowKeys([])}>Bỏ chọn</Button>
+            </>
+          )}
+          <Button
+            size="small"
+            icon={<CheckCircleOutlined />}
+            onClick={handleApproveDDLAll}
+            title="Áp dụng TẤT CẢ thay đổi cột (rename/đổi type) đang chờ vào bảng master"
+          >Approve All DDL</Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            size="small"
+            onClick={() => {
+              fetchShadowRules();
+              setCreateOpen(true);
+            }}
+          >Create Mapping</Button>
+          <Button
+            icon={<SearchOutlined />}
+            size="small"
+            onClick={() => { fetchShadowRules(); setExplodePath(''); setFlattenOpen(true); }}
+            loading={scanningArray}
+            title="Chọn 1 field JSON → quét nested → tạo rule PENDING để duyệt trước khi thêm vào master"
+          >Scan Array (Flatten)</Button>
+          <Button
+            icon={<SearchOutlined />}
+            size="small"
+            onClick={handleScanArrayAll}
+            loading={scanningAll}
+            title="Quét TẤT CẢ field shadow (Status of Shadow=approved & In Shadow) như mảng → tự tạo rule flatten PENDING cho field nào là array"
+          >Scan Array All (Flatten)</Button>
+          <Button
+            icon={<SyncOutlined spin={syncing} />}
+            size="small"
+            onClick={handleSyncFromShadow}
+            loading={syncing}
+            title="Pull các mapping rule mới từ shadow vào master (rule mới sẽ có status pending)"
+          >Sync từ Shadow</Button>
+          <Button icon={<ReloadOutlined />} size="small" onClick={() => fetchRules()}>Refresh</Button>
+        </Space>
+      </Space>
+
+      <Table
+        columns={columns}
+        dataSource={treeData}
+        rowKey="id"
+        loading={loading}
+        pagination={false}
+        size="small"
+        expandable={{
+          defaultExpandAllRows: true,
+        }}
+        rowClassName={(record) => {
+          if (record.id < 0) return '';
+          const inShadow = shadowColumns.has((record.source_field || '').toLowerCase());
+          const shadowApproved = record.shadow_status === 'approved';
+          const disabled = !inShadow || !shadowApproved;
+          return disabled ? 'disabled-row' : '';
+        }}
+        rowSelection={{
+          checkStrictly: true,
+          selectedRowKeys,
+          onChange: setSelectedRowKeys,
+          getCheckboxProps: (record: MasterRule) => {
+            if (record.id < 0) {
+              return { disabled: true, style: { display: 'none' } };
+            }
+            const inShadow = shadowColumns.has((record.source_field || '').toLowerCase());
+            const shadowApproved = record.shadow_status === 'approved';
+            const disabled = !inShadow || !shadowApproved;
+            return {
+              disabled: disabled,
+              name: record.target_column,
+            };
+          }
+        }}
+        locale={{ emptyText: 'Chưa có mapping rules cho master table này.' }}
+      />
+
+      {/* Manual Mapping Creation Modal */}
+      <Modal
+        open={createOpen}
+        title="Tạo Master Mapping Rule thủ công"
+        okText="Tạo"
+        cancelText="Huỷ"
+        confirmLoading={creatingRule}
+        onOk={handleCreateMapping}
+        onCancel={() => {
+          setCreateOpen(false);
+          setSelectedMappingV2ID(undefined);
+          setTargetColumnName('');
+          setNestedPath('');
+          setNestedDataType('TEXT');
+        }}
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+          <div>
+            <span style={{ display: 'inline-block', width: 140, fontWeight: 'bold' }}>Shadow Rule (v2):</span>
+            <Select
+              style={{ width: 'calc(100% - 140px)' }}
+              placeholder="Chọn shadow rule"
+              value={selectedMappingV2ID}
+              onChange={(val) => {
+                setSelectedMappingV2ID(val);
+                const found = shadowRules.find(r => r.id === val);
+                if (found) {
+                  setTargetColumnName(found.source_field);
+                }
+              }}
+              options={shadowRules.map(r => ({
+                label: `${r.source_field} (${r.data_type}) [${r.status}]`,
+                value: r.id
+              }))}
+            />
+          </div>
+          <Text type="secondary" style={{ display: 'block', textAlign: 'center' }}>— HOẶC bóc field con (nested) → cột dạng aa_bbb —</Text>
+          <div>
+            <span style={{ display: 'inline-block', width: 140, fontWeight: 'bold' }}>Nested path:</span>
+            <Input
+              style={{ width: 'calc(100% - 140px)' }}
+              placeholder="vd: params.channelId (→ cột params_channelId)"
+              value={nestedPath}
+              onChange={(e) => {
+                const v = e.target.value;
+                setNestedPath(v);
+                setTargetColumnName(v.trim() ? v.trim().replace(/\./g, '_') : '');
+              }}
+            />
+          </div>
+          <div>
+            <span style={{ display: 'inline-block', width: 140, fontWeight: 'bold' }}>Data type (nested):</span>
+            <Select
+              style={{ width: 'calc(100% - 140px)' }}
+              value={nestedDataType}
+              onChange={setNestedDataType}
+              options={['TEXT', 'VARCHAR(255)', 'INTEGER', 'BIGINT', 'NUMERIC', 'BOOLEAN', 'TIMESTAMP', 'JSONB'].map((t) => ({ label: t, value: t }))}
+            />
+          </div>
+          <div>
+            <span style={{ display: 'inline-block', width: 140, fontWeight: 'bold' }}>Target Column Name:</span>
+            <Input
+              style={{ width: 'calc(100% - 140px)' }}
+              placeholder="vd: user_id (nested tự điền aa_bbb)"
+              value={targetColumnName}
+              onChange={e => setTargetColumnName(e.target.value)}
+            />
+          </div>
+        </Space>
+      </Modal>
+
+      {/* Flatten discovery modal — Master CẦN flatten để normalize JSON arrays → cột riêng */}
+      <Modal
+        open={flattenOpen}
+        title="Scan Array (Flatten) → Tạo rules PENDING để duyệt"
+        okText="Scan"
+        cancelText="Huỷ"
+        confirmLoading={scanningArray}
+        onOk={handleScanArray}
+        onCancel={() => { setFlattenOpen(false); setExplodePath(''); }}
+      >
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="Master cần Flatten để normalize JSON thành cột riêng biệt."
+          description="Chọn 1 field JSON (chỉ field JSONB mới flatten được). Tool sẽ quét các field nested bên trong → tạo mapping rule PENDING để duyệt. Sau đó bạn có thể promote vào master mapping."
+        />
+        <Typography.Text strong style={{ display: 'block', marginBottom: 4 }}>Chọn nhanh field JSON</Typography.Text>
+        <Select
+          style={{ width: '100%' }}
+          showSearch
+          allowClear
+          placeholder="Chọn field JSON để flatten"
+          value={shadowRules.some((r) => `${r.source_field}[*]` === explodePath || (r.target_column && `${r.target_column}[*]` === explodePath)) ? explodePath : undefined}
+          onChange={(val) => setExplodePath(val || '')}
+          optionFilterProp="label"
+          notFoundContent="Không có field JSON nào (chỉ field JSONB mới flatten được)"
+          options={(() => {
+            const seen = new Set<string>();
+            return shadowRules
+              // Chỉ field JSON ĐÃ APPROVED trên shadow (chưa approve thì chưa nên flatten sang master).
+              .filter((r) => (r.data_type || '').toUpperCase().includes('JSON') && r.status === 'approved')
+              .map((r) => {
+                const hasRename = r.target_column && r.target_column !== r.source_field;
+                const labelText = hasRename
+                  ? `${r.target_column} (gốc: ${r.source_field}) (${r.data_type})`
+                  : `${r.source_field} (${r.data_type})`;
+                return {
+                  label: labelText,
+                  value: `${r.source_field}[*]`,
+                };
+              })
+              .filter((opt) => {
+                if (seen.has(opt.value)) {
+                  return false;
+                }
+                seen.add(opt.value);
+                return true;
+              });
+          })()}
+        />
+        <Typography.Text strong style={{ display: 'block', margin: '12px 0 4px' }}>Hoặc tự nhập explode_path (lồng sâu)</Typography.Text>
+        <Input
+          placeholder="vd: params.items[*]  hoặc  after.orders[*].lines[*]"
+          value={explodePath}
+          onChange={(e) => setExplodePath(e.target.value)}
+        />
+        <Typography.Text type="secondary" style={{ display: 'block', marginTop: 4, fontSize: 12 }}>
+          Dùng <Typography.Text code>[*]</Typography.Text> để bung mảng. Có thể nối nhiều cấp để bóc array lồng nhau, vd <Typography.Text code>params.items[*].sub[*]</Typography.Text>.
+        </Typography.Text>
+      </Modal>
+
+      {/* [DISABLED] Scan Review Modal — xảy ra FK violation vì mapping_v2_id sai.
+          Backend đã tự tạo pending records trong scan-array API rồi.
+          Flow mới: quét xong → success toast → user review trong bảng chính.
+      <Modal
+        open={scanReviewOpen}
+        title="Scan Review — Chọn fields thêm vào Master Mapping"
+        width={760}
+        okText="Thêm vào Mapping (Pending)"
+        cancelText="Huỷ"
+        confirmLoading={promoting}
+        onOk={handlePromoteScannedRules}
+        onCancel={() => {
+          setScanReviewOpen(false);
+          setScannedRules([]);
+        }}
+      >
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="Chọn fields để thêm vào mapping"
+          description={
+            <span>
+              Các field được chọn sẽ được thêm vào <strong>mapping_rule_master</strong> với trạng thái <strong>pending</strong>.
+              Sau đó vào bảng chính để review, chỉnh sửa target column / data type, rồi mới click <strong>Approve DDL</strong> để áp dụng vào bảng master.
+            </span>
+          }
+        />
+        <Table
+          dataSource={(() => {
+            let vid = -9000;
+            const groups = new Map();
+            scannedRules.forEach(r => {
+              if (!groups.has(r.sourceField)) groups.set(r.sourceField, []);
+              groups.get(r.sourceField).push(r);
+            });
+            const roots = [];
+            groups.forEach((gRules, sf) => {
+              const hasNested = gRules.some(r => !!r.sourcePath);
+              if (!hasNested) {
+                gRules.forEach(r => roots.push({ ...r, children: undefined }));
+                return;
+              }
+              const rootNode = { id: vid--, sourceField: sf, sourcePath: null, dataType: 'JSONB', selected: false, children: [] };
+              const pathMap = new Map();
+              pathMap.set('', rootNode);
+              gRules
+                .filter(r => !!r.sourcePath)
+                .sort((a, b) => (a.sourcePath || '').localeCompare(b.sourcePath || ''))
+                .forEach(rule => {
+                  const parts = (rule.sourcePath || '').replace(/^\$\.?/, '').split('.').filter(Boolean);
+                  for (let i = 0; i < parts.length - 1; i++) {
+                    const iPath = parts.slice(0, i + 1).join('.');
+                    if (!pathMap.has(iPath)) {
+                      const par = pathMap.get(parts.slice(0, i).join('.')) || rootNode;
+                      const vn = { id: vid--, sourceField: sf, sourcePath: iPath, dataType: 'JSONB', selected: false, children: [] };
+                      if (!par.children) par.children = [];
+                      par.children.push(vn);
+                      pathMap.set(iPath, vn);
+                    }
+                  }
+                  const leafPPath = parts.slice(0, -1).join('.');
+                  const leafPar = pathMap.get(leafPPath) || rootNode;
+                  const leaf = { ...rule, children: undefined };
+                  if (!leafPar.children) leafPar.children = [];
+                  leafPar.children.push(leaf);
+                });
+              roots.push(rootNode);
+            });
+            roots.sort((a, b) => a.sourceField.localeCompare(b.sourceField));
+            return roots;
+          })()}
+          rowKey="id"
+          size="small"
+          pagination={false}
+          expandable={{ defaultExpandAllRows: true }}
+          columns={[
+            {
+              title: 'Field',
+              dataIndex: 'sourceField',
+              render: (_, r) => {
+                if (r.sourcePath) {
+                  const parts = r.sourcePath.replace(/^\$\.?/, '').split('.').filter(Boolean);
+                  const leaf = parts[parts.length - 1] || r.sourceField;
+                  return (<Tooltip title={`${r.sourceField} → ${r.sourcePath}`}><code>{leaf}</code></Tooltip>);
+                }
+                return <code>{r.sourceField}</code>;
+              }
+            },
+            {
+              title: 'Path',
+              dataIndex: 'sourcePath',
+              render: (t, r) => {
+                if (r.id < -8999) return <Tag color="orange">OBJECT</Tag>;
+                return t ? <Text type="secondary" style={{ fontSize: 12 }}>{t}</Text> : <Text type="secondary">—</Text>;
+              }
+            },
+            {
+              title: 'Data Type',
+              dataIndex: 'dataType',
+              render: (t, r) => {
+                if (r.id < -8999) return null;
+                return <Tag color="blue">{t}</Tag>;
+              }
+            }
+          ]}
+          rowSelection={{
+            checkStrictly: true,
+            selectedRowKeys: scannedRules.filter(r => r.selected).map(r => r.id),
+            onChange: (keys) => {
+              const keySet = new Set(keys);
+              setScannedRules(prev => prev.map(r => ({ ...r, selected: keySet.has(r.id) })));
+            },
+            getCheckboxProps: (record) => {
+              if (record.id < -8999) return { disabled: true, style: { display: 'none' } };
+              return {};
+            }
+          }}
+        />
+      </Modal>
+      */}
+
+    </div>
+  );
+}

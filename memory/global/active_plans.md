@@ -33,9 +33,16 @@
 | feature-masters-page-audit-2026-06-02 | Masters Page Audit & Enhancements | ✅ Done | 2026-06-03 |
 | feature-sync-shadow-master-bindings-2026-06-04 | Syncing Shadow And Master Bindings | ✅ Done | 2026-06-04 |
 | feature-table-registry-ui-enhancement-2026-06-09 | Table Registry UI Enhancement | ✅ Done | 2026-06-09 |
-
-
-
+| feature-system-health-recon-removal-2026-06-11 | System Health Reconciliation Removal | ✅ Done | 2026-06-11 |
+| feature-recon-pipeline-grid-ui-2026-06-11 | Recon Pipeline Grid UI Enhancement | ✅ Done | 2026-06-12 |
+| feature-data-integrity-overview-ui-2026-06-12 | Data Integrity Overview UI Tách Cột | ✅ Done | 2026-06-12 |
+| bug-recon-pipeline-duplicate-rows-2026-06-12 | Sửa lỗi trùng lặp dòng trong ReconPipelineGrid | ✅ Done | 2026-06-12 |
+| feat-recon-no-select-count-star-2026-06-16 | Tối ưu hóa hiệu năng Recon (loại bỏ full-collection scan) | ✅ Done | 2026-06-16 |
+| feat-refactor-master-mapping-rule-2026-06-16 | Tái cấu trúc master mapping rule handler theo Hexagonal/CQRS | ✅ Done | 2026-06-16 |
+| feat-screaming-architecture-refactor-2026-06-16 | Phân chia code commands/queries theo nhóm chức năng | ✅ Done | 2026-06-16 |
+| feat-api-handlers-hexagonal-refactor-2026-06-16 | Tái cấu trúc toàn bộ API Handlers sang chuẩn Hexagonal Architecture | ✅ Done | 2026-06-17 |
+| bug-master-connection-not-found-2026-06-17 | Điều tra lỗi master_connection_not_found | ⏸ Paused | 2026-06-17 |
+| feat-infra-drainage-refactor-2026-06-17 | Di chuyển h.db và nats client về internal/infra và audit SQL/NATS | 🟡 Active | 2026-06-17 |
 
 ---
 

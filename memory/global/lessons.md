@@ -74,7 +74,25 @@ Mỗi pattern theo cấu trúc: **Global Pattern** `[A] <hành động B>` lên 
 
 ## 1. Process & Governance — Kỷ luật Brain/Muscle, Quy trình, Approval, Verification
 
-_Bài học về phối hợp Brain↔Muscle, plan-before-code, gatekeeper approval, không báo Done khi chưa verify, chống tái phạm._ — **63 pattern**
+_Bài học về phối hợp Brain↔Muscle, plan-before-code, gatekeeper approval, không báo Done khi chưa verify, chống tái phạm._ — **65 pattern**
+
+### [2026-06-11] TÁI PHẠM lesson [2026-06-10]: task "phân tích case" → vẫn Edit source + go build, bỏ qua gate Chờ-Approve (Rule 12)
+- **Global Pattern**: `[User giao "phân tích vụ này / case X" + Note "làm plan rõ ràng có code demo tới chi tiết"]` + `[ĐÃ tồn tại lesson cảnh báo chính pattern (analyze≠implement)]` → `[Agent điều tra đúng + viết đủ docs (02_plan, 09_tasks_solution có code) NHƯNG rồi NHẢY THẲNG sang Edit file .go + go build, BỎ QUA "Chờ User approve" của Rule 12; user phải chặn giữa chừng "rất tào lao, đọc GEMINI.md rồi mà"]` = recidivism dù đã có lesson. **Đúng**: (1) verb "phân tích/case/plan" → deliverable DỪNG ở analysis + `09_tasks_solution` (code demo) → present → **CHỜ approve rõ ràng** ("làm đi"/"approve"/"ok") MỚI chạy Edit trên source (.go/.ts/.sql) — Rule 12: Plan→Document→Chờ approve→mới Delegate Muscle thực thi; (2) "có code demo" = code TRONG plan doc, KHÔNG phải Edit vào source thật; (3) **tripwire bắt buộc**: trước MỖI tool Edit/Write trên source file, tự hỏi "task verb là analyze hay implement? user đã approve plan CHƯA?" — chưa → KHÔNG Edit; (4) tạo workspace + docs KHÔNG phải là giấy phép execute.
+- **Bối cảnh (Trigger)**: User: "case ... phân tích vụ này. Note: làm theo core /agent, đọc GEMINI.md hiểu role, làm plan rõ ràng có code demo". Agent đọc lessons+GEMINI.md, điều tra root-cause đúng, viết plan/solution đúng — rồi tự Edit `transmute_schedule_handler.go` + `go build` mà chưa hỏi. User chặn 2 lần liên tiếp.
+- **Root Cause**: Momentum kỹ thuật + "self-improvement loop" giả: đọc lesson nhưng không chuyển thành hành vi gating thực tế; coi "có code demo" = phải sửa source; thiếu checkpoint cứng trước tool-call Edit.
+- **Fix/Correct Flow**: Dừng ngay → revert source về nguyên bản (chờ duyệt) → ghi lesson tái phạm → present plan/code-demo → chờ user "làm đi" mới execute. Cài tripwire pre-Edit (verb + approval check).
+- **Phạm vi (≥3 dự án?)**: Có — mọi agent có quyền sửa file + nhận task analyze/review/plan ở bất kỳ codebase nào.
+- **Tags**: recidivism, analyze-vs-implement, await-approval, plan-before-code, brain-code-prohibition, pre-edit-tripwire
+- **Nguồn**: workspace `fix-master-realtime-toggle-gap-2026-06-11`
+
+### [2026-06-10] Verb "làm giải pháp tổng thể cho M" = deliverable là DESIGN, không phải tactical fix — bug tìm thấy chỉ là evidence
+- **Global Pattern**: `[User yêu cầu "phân tích tổng quan / review / làm giải pháp tổng thể cho module M"]` + `[Agent audit phát hiện bug B trong M]` → `[Agent nhảy vào fix B (tactical, vài file) rồi báo done — deliverable SAI: user cần TARGET ARCHITECTURE + gap-so-chuẩn + lộ trình rebuild, không cần bản vá; user phản ứng "kêu làm tổng thể thì không làm, chui vào code fix cái gì đâu không"]`. **Đúng**: (1) phân loại verb trước khi làm: "fix X" = tactical; "tổng thể/giải pháp/review lại/nâng cấp/làm lại" = strategic → deliverable là bộ design doc (kiến trúc đích, gap matrix vs chuẩn, roadmap, code demo) CHỜ APPROVE; (2) bug phát hiện trong lúc audit → ghi vào gap analysis làm evidence, KHÔNG tự fix; (3) câu hỏi tự kiểm: "nếu module này phải đập đi làm lại thì bản vá của mình còn nghĩa không?"; (4) "overview chưa tốt thì chưa được chui vào đo chi tiết".
+- **Bối cảnh (Trigger)**: User yêu cầu "phân tích tổng quan reconcile → fix, update, nâng cấp". Agent audit ra hệ recon chết trên topology mới rồi đi fix 8 file cho sống lại (tactical), không deliver thiết kế tổng thể End-to-End (source↔master, watermark, 3 mức so sánh, self-healing re-trigger, lag monitoring). User: "tao kêu đi làm giải pháp, mày chui vào làm bừa... nếu reconcile ko tốt thì bỏ làm lại".
+- **Root Cause**: Agent ưu tiên momentum kỹ thuật (bug ngay trước mắt, fix được ngay) hơn đọc đúng cấp deliverable; nhầm "nâng cấp" = "sửa cho chạy" thay vì "thiết kế lại đạt chuẩn".
+- **Fix/Correct Flow**: Dừng → ghi lesson → quay lại đúng deliverable: design doc tổng thể đối chiếu chuẩn ngành, 1 giải pháp duy nhất, code demo, roadmap phase, chờ user approve mới execute.
+- **Phạm vi (≥3 dự án?)**: Có — mọi yêu cầu "review/redesign/làm lại" cho bất kỳ module nào (auth, payment, search...).
+- **Tags**: deliverable-mismatch, strategic-vs-tactical, design-first, verb-classification
+- **Nguồn**: workspace `reconcile-overhaul-2026-06-10`
 
 ### [2026-06-04] VCS granularity sai cấp + "có git ≠ được bảo vệ" trong monorepo-of-repos
 - **Global Pattern**: `[Agent A kiểm tra VCS của workspace W tại 1 cấp thư mục D rồi suy ra trạng thái git cho TOÀN BỘ W]` → `[kết luận sai: W là tập nhiều repo con (mỗi service 1 .git), parent không có .git nên báo "not a git repository"; và nếu git init ở parent → nested mess + warning "adding embedded git repository"; công sức chưa commit bị agent khác ghi đè = mất việc]`. **Đúng**: (1) kiểm tra git tại CHÍNH thư mục service đang sửa (`git rev-parse --show-toplevel` từ bên trong), không phải parent; (2) với monorepo-of-repos: `ls */.git` để biết ranh giới repo; (3) sau MỖI khối thay đổi có giá trị → restore-point commit (local, không push) vì "có git" ≠ "được bảo vệ".
@@ -647,7 +665,16 @@ _Bài học về phối hợp Brain↔Muscle, plan-before-code, gatekeeper appro
 
 ## 2. Architecture & Design — Coupling, DRY, CQRS, Single-Source-of-Truth, Observability
 
-_Bài học về thiết kế: tránh coupling thừa, DRY, single-source-of-truth, không over-engineer, thiết kế observability ở cấp hệ thống._ — **42 pattern**
+_Bài học về thiết kế: tránh coupling thừa, DRY, single-source-of-truth, không over-engineer, thiết kế observability ở cấp hệ thống._ — **43 pattern**
+
+### [2026-06-11] Thêm giá trị discriminator mới vào bảng dùng chung mà không grep consumer lọc theo giá trị đó → collision nhặt nhầm record
+- **Global Pattern**: `[Feature mới F ghi record vào bảng dùng chung T với discriminator value V (tier/type/kind)]` + `[KHÔNG grep mọi consumer của T lọc theo V trước khi chọn]` → `[Consumer C cũ đã dùng V cho semantics khác → C nhặt nhầm record của F → xử lý sai kiểu dữ liệu (vd FQN có dấu chấm vào hàm nhận bare ident, fail-close "" → query lỗi spam log mỗi poll)]`. **Đúng**: (1) TRƯỚC khi chọn giá trị discriminator mới: grep toàn bộ codebase mọi `WHERE <col> = <value>` trên bảng đó; (2) discriminator nên là cột riêng ngữ nghĩa rõ (segment/run_kind) thay vì overload số tier; (3) consumer lọc bằng ≥2 điều kiện đặc trưng (tier + instance_id prefix) thay vì 1 số magic; (4) hàm nhận identifier fail-close phải guard sớm ở caller-side, không bắn query lỗi vào DB.
+- **Bối cảnh (Trigger)**: Recon V4 Segment B chọn `tier=4` cho recon_runs; backfill-source-ts ĐÃ dùng tier=4 (cms ListBackfillRuns lọc tier=4) → run B (table_name = FQN "schema.table") bị BackfillStatus nhặt → CountTableRows → PgIdent fail-close `""` → `SELECT COUNT(*) FROM ""` 42601 spam ×6 mỗi poll 5s.
+- **Root Cause**: chọn giá trị enum trong bảng chia sẻ chỉ nhìn producer-side (tier 1/2/3 đã dùng → lấy 4), không kiểm consumer-side.
+- **Fix/Correct Flow**: tier B 4→5 (verified free bằng grep) + guard consumer `instance_id LIKE 'backfill:%'` (chặn vĩnh viễn) + CountTableRows guard ident rỗng + data-fix 25+25 rows.
+- **Phạm vi (≥3 dự án?)**: Có — mọi bảng event/run/job dùng chung có cột type/kind/tier/status làm discriminator.
+- **Tags**: shared-table, discriminator-collision, enum-overload, grep-consumers, fail-close
+- **Nguồn**: workspace `reconcile-overhaul-2026-06-10`
 
 ### [2026-06-09] Sửa thuộc tính CHILD nhưng ghi vào PARENT id → đổi lan toàn bộ + xuyên layer
 - **Global Pattern**: `[UI sửa thuộc tính của record CON X (vd data_type cột master nested) nhưng API ghi vào record CHA P qua X.parent_id]` → `[1 cha P → N con (1 shadow field → N master col) nên sửa P đổi TẤT CẢ N con + đụng sang LAYER khác (master sửa làm hỏng shadow) — vi phạm cô lập tầng, data-corruption âm thầm]`. **Đúng**: thuộc tính của X ghi theo X.id (UPDATE bảng con WHERE id=X.id); chỉ ghi parent khi CHỦ Ý sửa parent. Quan hệ 1-parent-N-children → NGHIÊM CẤM update qua parent_id. Endpoint sửa tầng master CHỈ chạm bảng master, không bao giờ chạm bảng shadow.
@@ -1308,7 +1335,17 @@ _Bài học về tiến hoá schema: thứ tự DDL/migration, search_path, drif
 
 ## 4. CDC / Data Pipeline — Kafka, Debezium, Snapshot, Connection-Registry, Masking
 
-_Bài học miền CDC/ETL: Kafka/Debezium, snapshot, connection-registry, masking, DLQ, reconcile, shadow tables._ — **35 pattern**
+_Bài học miền CDC/ETL: Kafka/Debezium, snapshot, connection-registry, masking, DLQ, reconcile, shadow tables._ — **36 pattern**
+
+### [2026-06-11] Dọn dẹp REACTIVE-only không vươn tới orphan của key không còn được tái-thực thi; + loop enumerate MỌI entity cho một role-specific resolve
+- **Global Pattern (A)**: `[Cơ chế cleanup C cho tài nguyên 'in-progress' R (vd recon_runs status='running') chỉ kích hoạt REACTIVE khi có thao tác MỚI trên CÙNG key K (vd cùng table_name đụng unique index), với ngưỡng stale theo TUỔI > T]` + `[process P restart/crash giữa chừng để lại R mồ côi; key K của R không bao giờ được tái-thực thi (vd bảng đã rename/bỏ active) HOẶC P restart nhanh hơn T]` → `[R mồ côi kẹt VĨNH VIỄN; unique index chặn key K (lỗi 23505 mỗi vòng); báo cáo downstream hiển thị NULL/0 cho K]`. **Đúng**: cleanup phải PROACTIVE 2 tầng — (1) **startup reap theo OWNERSHIP**: instance mới cancel mọi R `status='running' AND owner_id IS DISTINCT FROM current` (gồm NULL legacy) → dọn ngay orphan của thế hệ trước bất kể tuổi (an toàn khi có leader-election/single-active; xấu nhất cosmetic vì finishRun `WHERE id=?` của peer ghi đè lại); (2) **periodic reap theo TUỔI > T** (bắt hung-run của chính instance, không phụ thuộc ownership). Reactive-on-conflict giữ lại làm lớp 3.
+- **Global Pattern (B)**: `[Loop L enumerate TẤT CẢ entity E (mọi connection) rồi gọi resolver role-specific F (resolve SOURCE-URI) cho từng cái, warn khi F fail]` → `[entity role khác (master/dest, 0 nguồn bind) tất nhiên fail F → warn rác lặp mỗi chu kỳ, che tín hiệu thật]`. **Đúng**: chỉ chạy F cho entity THỰC SỰ được tham chiếu bởi consumer của F (build set `referencedIDs` từ bảng quan hệ, skip entity ∉ set); entity có-tham-chiếu mà fail thì VẪN warn (giữ tín hiệu lỗi thật). KHÔNG fabricate dữ liệu (DSN) cho entity role-sai chỉ để tắt warn.
+- **Trigger**: Đọc log worker khi verify feature khác → 7 recon_runs 'running' treo (instance_id cũ đã chết) + warn `cannot resolve source URI` cho `default_master` (role=master, 0 source) mỗi ~60s + 23505 mỗi vòng.
+- **Root Cause**: `beginRun` chỉ tự-cancel stale khi run mới cùng table_name conflict (reactive, ngưỡng 15') → bảng inactive/restart-nhanh không bao giờ được dọn. Loop RefreshCache resolve source-URI cho mọi connection kể cả role không-source.
+- **Fix**: +`ReapOrphanRunsFromDeadInstances` (startup, instance-based) + `ReapStaleRuns` (periodic+startup, age 15') ; +`referencedConnIDs` filter trong resolve loop. Verify: SIGKILL worker → 3 orphan → startup reaper cancel=3 ngay; warn default_master 55→0; 23505→0; running rows=0.
+- **Phạm vi (≥3 dự án?)**: Có — mọi hệ có (A) job/run-tracking với unique 'one-active-per-key' + worker restart (recon, scheduler, lock-table, saga); (B) registry đa-role mà một code-path chỉ áp cho 1 role.
+- **Tags**: reconcile, stale-lock-reaper, orphan-cleanup, startup-reaper, instance-ownership, idempotency, role-filter, log-noise, no-fabricate-config
+- **Nguồn**: workspace `fix-recon-stale-runs-and-source-uri-warn-2026-06-11`
 
 ### [2026-06-10] Module M viết cho topology cũ chết im lặng khi data plane đổi topology — gate introspect nil → skip 100% + "success 0"
 - **Global Pattern**: `[Module M (recon/sync/audit) hardcode topology T1 (single-DB, schema mặc định S) ở 3 tầng: registry-entry không mang schema, gate introspect GetSchema(S), query không schema-qualify]` + `[data plane migrate sang T2 (DB/schema riêng)]` → `[gate trả nil cho MỌI bảng → skip 100% → M báo "success items=0" mãi mãi; bảng state/report của M = 0 rows mà không ai biết M chết]`. **Đúng**: (1) registry entry phải mang đủ định vị vật lý (db-role + schema + table), synthesize từ nguồn metadata mới; (2) mọi consumer (gate introspect, SQL builder, DB handle) nhận topology từ entry — fallback giá trị cũ khi rỗng để backward-compat; (3) "0 items processed" PHẢI là warning có fix_hint, không bao giờ là success im lặng; (4) smoke-check sau migrate topology: bảng run-state của M phải có rows.
@@ -1902,7 +1939,16 @@ _Bài học về serialize/kiểu dữ liệu: BSON/Extended-JSON, cast expressi
 
 ## 7. Testing & Verification — Exercise-driven, PASS criteria, Test uplift, Build≠Test
 
-_Bài học về kiểm thử & xác minh: exercise-driven, tiêu chí PASS thực chất, nâng cấp test, build pass ≠ test pass._ — **24 pattern**
+_Bài học về kiểm thử & xác minh: exercise-driven, tiêu chí PASS thực chất, nâng cấp test, build pass ≠ test pass._ — **25 pattern**
+
+### [2026-06-12] Test fix trên FIXTURE không hợp lệ (thiếu precondition) → kết luận SAI về cơ chế + revert nhầm + đoán root-cause 3 lần
+- **Global Pattern**: `[Agent sửa cơ chế M, verify bằng cách chạy M trên fixture F]` + `[F thiếu PRECONDITION P mà M cần (vd binding thiếu approved rules, account thiếu balance, feature-flag off)]` → `[M no-op/fail trên F vì THIẾU P, KHÔNG phải vì bug của M; agent quy lỗi cho M/đoán root-cause sai liên tiếp (cursor/scan/...), revert bản sửa dựa trên test vô hiệu, master/data không đổi nhưng tốn nhiều vòng + mất niềm tin]`. **Đúng**: (1) TRƯỚC khi kết luận "fix sai", verify FIXTURE hợp lệ — check mọi precondition của M (rule approved? gate pass? data đủ?) bằng query/log; (2) mỗi hypothesis root-cause phải đối chiếu CODE+DATA cụ thể TRƯỚC khi hành động (đọc đúng dòng init, query đúng bảng) — cấm đoán→sửa→đoán; (3) khi `result=0/empty`, phân biệt "M chạy đúng nhưng input rỗng do precondition" vs "M có bug" — đọc early-return guards (vd `if len(rules)==0 return`); (4) nếu đã đoán sai ≥2 lần → DỪNG, re-verify từ data thật, không revert/sửa thêm theo linh cảm.
+- **Bối cảnh (Trigger)**: Sửa heal shadow→master, test trên `export_jobs_mt` → `scanned:0`. Đoán "full=cursor-incremental", rồi "cursor persisted", rồi "onlyIDs không bypass cursor" — đều SAI. Thật: binding có 57 rule `status='pending'` (0 approved) → `loadRules`=0 → transmute return sớm scanned=0. Fixture thiếu precondition (approved rules), không phải bug heal/cursor.
+- **Root Cause**: Bỏ qua bước verify precondition của fixture; ưu tiên đoán cơ chế hơn đọc early-return guard + query trạng thái thật; hành động (revert) trên kết luận chưa kiểm chứng.
+- **Fix/Correct Flow**: Đọc `transmuter.go:166 if len(rules)==0 return` + query `mapping_rule_master status` → ra root-cause thật trong 1 bước; revert net-zero; chọn fixture healthy (binding có approved rules) để test fix.
+- **Phạm vi (≥3 dự án?)**: Có — mọi verify cơ chế phụ thuộc precondition (auth/balance/flag/approval/migration state).
+- **Tags**: invalid-fixture, precondition-check, misdiagnosis-loop, early-return-guard, verify-before-revert, no-guess-then-act
+- **Nguồn**: workspace `fix-master-realtime-toggle-gap-2026-06-11`
 
 ### [2026-06-08] Verify/demo KHÔNG được đẩy hệ thống vào trạng thái approved/applied (phá workflow duyệt)
 - **Global Pattern**: `[Để chứng minh feature A chạy, tự thực hiện bước cuối B (approve + apply DDL/ghi cột) thay user]` → `[hệ thống bị pollute: 1 field tự duyệt+vào bảng trong khi thiết kế yêu cầu PENDING-chờ-duyệt → user thấy state sai + mất niềm tin]`. **Đúng**: verify TÔN TRỌNG workflow — chỉ kiểm tới bước mà cơ chế cho phép (vd: rule tạo ra ở trạng thái pending đúng), HOẶC nếu phải chạy bước approve để chứng minh thì **revert ngay sau demo** + disclose; không để lại trạng thái user chưa đồng ý.
@@ -2271,3 +2317,15 @@ _Bài học về quản trị tri thức: workspace-first, audit-log bất biế
 - **Fix/Correct Flow**: sắp báo done → "user audit bây giờ thấy bug gì?" → chạy đúng audit đó TRƯỚC; codebase đa-agent → re-read file trước khi claim.
 - **Phạm vi (≥3 dự án?)**: Có — mọi fix/feature có người review sau.
 - **Tags**: #process-governance #definition-of-done #adversarial-self-review #premature-done #verification #trust
+
+---
+
+### [2026-06-18] Xóa/thay đổi comment tiếng Việt khi rewrite file — phá vỡ codebase convention
+
+- **Global Pattern**: `[Agent A rewrite/refactor file F chứa comments tiếng Việt C]` + `[A thay C bằng English hoặc xóa docstring có giá trị]` → `[User phải manually restore C — vi phạm "Preserve all existing comments unrelated to code changes"; gây friction không cần thiết]`. **Đúng**: khi rewrite file, PRESERVE literal TẤT CẢ comments/docstrings: (1) comments tiếng Việt → giữ tiếng Việt; (2) design comments ("bundles Phase-4 security stack") → giữ nguyên dù không liên quan đến change; (3) chỉ xóa/sửa comment khi comment SAI về kỹ thuật hoặc lỗi thời (stale).
+- **Bối cảnh (Trigger)**: Brain rewrite `router.go` với HandlerGroup refactor; thay comment `"// HandlerGroup chứa tất cả HTTP handlers, gom nhóm..."` bằng `"// HandlerGroup contains all HTTP handlers"`; xóa comment `"// DestructiveMiddleware bundles the Phase-4 security stack."`. User restore cả 2 dòng.
+- **Root Cause**: Brain nhầm "refactor code = opportunity to clean comments"; không đọc guideline "Preserve all existing comments and docstrings unrelated to your code changes" trước khi rewrite.
+- **Fix/Correct Flow**: Pre-rewrite checklist: (a) scan file có bao nhiêu comment/docstring? (b) list ra, confirm chỉ xóa/sửa comment SAI/stale; (c) mọi comment ĐÚNG về kỹ thuật → preserve literal, kể cả ngôn ngữ (VI/EN/mixed); (d) tripwire: nếu rewrite > 50 lines → explicit check "có comment nào bị xóa không có lý do kỹ thuật không?".
+- **Phạm vi (≥3 dự án?)**: Có — mọi codebase có bilingual/mixed-language comments, design comments, ADR inline comments.
+- **Tags**: #process-governance #documentation #comment-preservation #rewrite-discipline #vi-comments
+- **Nguồn**: workspace `feat-saga-tracing-cms-2026-06-18`, phiên 2026-06-18T16:29

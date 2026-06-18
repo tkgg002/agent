@@ -1,0 +1,328 @@
+package handler
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"centralized-data-service/internal/model"
+
+	"github.com/nats-io/nats.go"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+)
+
+// ============================================================
+// Recon V4 P2 — Self-healing RE-TRIGGER (thay heal bypass)
+// ============================================================
+//
+// Triết lý (09_tasks_solution_recon_v4 §2.3): dữ liệu sửa lỗi phải đi lại
+// ĐÚNG pipeline chuẩn — không upsert tắt qua masking/mapping:
+//   - Segment A (source↔shadow) thiếu → Debezium incremental snapshot signal
+//     theo key-list → connector re-emit → Kafka → sinkworker → shadow.
+//   - Segment B (shadow↔master) thiếu/stale → cdc.cmd.transmute với
+//     _source_ids → transmute re-run đúng row, OCC tự bảo vệ.
+//   - KHÔNG dummy-update vào source DB (không xâm phạm dữ liệu nguồn).
+//
+// Ngưỡng an toàn (chống heal-bão khi sự cố hệ thống): vượt → KHÔNG tự heal,
+// chỉ alert + chờ operator.
+
+const (
+	healAutoMaxIDs      = 5000 // trần số ID heal tự động / 1 lệnh
+	healAutoMaxDriftPct = 5.0  // trần drift % heal tự động
+	healSmallTableFloor = 100  // ≤ floor ID → cho heal bất kể % (bảng nhỏ % luôn cao)
+	healChunkSize       = 1000 // chunk ID mỗi message re-trigger
+)
+
+// WithShadowDB wires shadow-plane DB (map _gpay_id → _source_id cho heal-B).
+func (h *ReconHandler) WithShadowDB(db *gorm.DB) *ReconHandler {
+	h.shadowDB = db
+	return h
+}
+
+// WithNatsPublisher wires NATS publisher ĐỘC LẬP với WithBackfill — heal
+// re-trigger cần publish kể cả khi backfill service disabled (V2 không có
+// default Mongo client). Không ghi đè nếu đã set.
+func (h *ReconHandler) WithNatsPublisher(pub NatsPublisher) *ReconHandler {
+	if h.natsPub == nil {
+		h.natsPub = pub
+	}
+	return h
+}
+
+// healThresholdBlocked — gate an toàn chung cho cả 2 segment.
+// Trả true (đã respond + log) khi mismatch vượt ngưỡng tự động.
+func (h *ReconHandler) healThresholdBlocked(msg *nats.Msg, op, table string, mismatch int, srcCount int64, diff int64) bool {
+	driftPct := 0.0
+	if srcCount > 0 {
+		driftPct = float64(abs64(diff)) / float64(srcCount) * 100
+	}
+	// Small-table escape: số ID tuyệt đối nhỏ → heal an toàn bất kể %
+	// (bảng bé drift% luôn cao; blast radius thực = số ID).
+	if mismatch <= healSmallTableFloor {
+		return false
+	}
+	if mismatch <= healAutoMaxIDs && driftPct <= healAutoMaxDriftPct {
+		return false
+	}
+	reason := fmt.Sprintf("mismatch=%d (max %d) drift_pct=%.2f%% (max %.1f%%) — auto-heal blocked, cần operator duyệt",
+		mismatch, healAutoMaxIDs, driftPct, healAutoMaxDriftPct)
+	h.logger.Error("recon heal BLOCKED by safety threshold",
+		zap.String("op", op), zap.String("table", table),
+		zap.Int("mismatch", mismatch), zap.Float64("drift_pct", driftPct),
+		zap.String("fix_hint", "kiểm tra sự cố pipeline trước; heal thủ công theo lô nhỏ nếu chủ đích"))
+	h.logActivity(op, table, "blocked_threshold", int64(mismatch), fmt.Errorf("%s", reason))
+	// P4: alert vào cdc_alerts → FE banner (operator phải thấy heal bị chặn).
+	if h.reconCore != nil {
+		h.reconCore.FireAlert(context.Background(), "ReconHealBlocked", "warning", reason,
+			map[string]string{"table": table, "op": op})
+	}
+	if msg.Reply != "" {
+		res, _ := json.Marshal(map[string]any{"status": "blocked_threshold", "reason": reason})
+		msg.Respond(res)
+	}
+	return true
+}
+
+func abs64(v int64) int64 {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+// ------------------------------------------------------------
+// Heal Segment B — shadow↔master: re-trigger transmute SourceIDs
+// ------------------------------------------------------------
+
+func (h *ReconHandler) healSegmentB(ctx context.Context, msg *nats.Msg, table string) {
+	const op = "recon-heal-b"
+	if h.natsPub == nil || h.shadowDB == nil {
+		err := fmt.Errorf("heal-b not wired (natsPub=%t shadowDB=%t)", h.natsPub != nil, h.shadowDB != nil)
+		h.logger.Error("recon heal-b rejected", zap.Error(err))
+		h.logActivity(op, table, "error", 0, err)
+		h.respondErr(msg, err)
+		return
+	}
+
+	// Report Segment B mới nhất của bảng (do RunSegmentB ghi).
+	var report model.ReconciliationReport
+	if err := h.db.Where("target_table = ? AND segment = ?", table, "shadow_master").
+		Order("checked_at DESC").First(&report).Error; err != nil {
+		err = fmt.Errorf("chưa có report segment B cho %s — chạy recon-check segment=shadow_master trước", table)
+		h.logActivity(op, table, "error", 0, err)
+		h.respondErr(msg, err)
+		return
+	}
+
+	var missingGpayIDs, orphanIDs []string
+	json.Unmarshal(report.MissingIDs, &missingGpayIDs)
+	json.Unmarshal(report.StaleIDs, &orphanIDs) // segment B: stale_ids = orphan-in-master
+
+	if len(missingGpayIDs) == 0 && report.StaleCount == 0 {
+		h.logActivity(op, table, "noop", 0, nil)
+		if msg.Reply != "" {
+			res, _ := json.Marshal(map[string]any{"status": "noop", "note": "report mới nhất không có missing/stale; orphan (nếu có) cần operator xử lý"})
+			msg.Respond(res)
+		}
+		return
+	}
+
+	srcCount := int64(0)
+	if report.SourceCount != nil {
+		srcCount = *report.SourceCount
+	}
+	if h.healThresholdBlocked(msg, op, table, len(missingGpayIDs)+len(orphanIDs), srcCount, report.Diff) {
+		return
+	}
+
+	// Map _gpay_id (Segment B key) → _source_id (transmute onlySourceIDs filter).
+	sourceIDs, err := h.mapGpayToSourceIDs(ctx, report.SourceDB /* = shadow FQN */, missingGpayIDs)
+	if err != nil {
+		h.logActivity(op, table, "error", 0, err)
+		h.respondErr(msg, err)
+		return
+	}
+
+	// Re-trigger transmute theo chunk — đi đúng pipeline chuẩn, OCC bảo vệ.
+	dispatched := 0
+	for start := 0; start < len(sourceIDs); start += healChunkSize {
+		end := start + healChunkSize
+		if end > len(sourceIDs) {
+			end = len(sourceIDs)
+		}
+		payload, _ := json.Marshal(map[string]any{
+			"master_table": table,
+			"_source_ids":  sourceIDs[start:end],
+			"triggered_by": "recon-heal-b",
+		})
+		if err := h.natsPub.Publish("cdc.cmd.transmute", payload); err != nil {
+			h.logActivity(op, table, "error", int64(dispatched), err)
+			h.respondErr(msg, fmt.Errorf("publish transmute chunk: %w", err))
+			return
+		}
+		dispatched += end - start
+	}
+
+	// Đánh dấu đã dispatch (healed thực sự xác nhận ở lần recon B kế tiếp).
+	now := time.Now().UTC()
+	h.db.Model(&model.ReconciliationReport{}).Where("id = ?", report.ID).
+		Updates(map[string]any{"healed_at": now, "healed_count": dispatched})
+
+	h.logger.Info("recon heal-b dispatched re-transmute",
+		zap.String("master_table", table), zap.Int("source_ids", dispatched),
+		zap.Int("orphan_in_master_pending_operator", len(orphanIDs)))
+	h.logActivity(op, table, "dispatched", int64(dispatched), nil)
+	if msg.Reply != "" {
+		res, _ := json.Marshal(map[string]any{
+			"status": "dispatched", "segment": "shadow_master",
+			"retransmute_ids": dispatched,
+			// Orphan ở master KHÔNG tự xoá (an toàn dữ liệu) — surface cho operator.
+			"orphan_in_master": len(orphanIDs),
+			"note":             "verify bằng recon-check segment=shadow_master sau khi transmute chạy xong",
+		})
+		msg.Respond(res)
+	}
+}
+
+// mapGpayToSourceIDs — đổi _gpay_id list (Segment B) sang _source_id list
+// (transmute filter). Query trên shadow plane, chunk để né limit binds.
+func (h *ReconHandler) mapGpayToSourceIDs(ctx context.Context, shadowRel string, gpayIDs []string) ([]string, error) {
+	if shadowRel == "" || !strings.Contains(shadowRel, ".") {
+		return nil, fmt.Errorf("invalid shadow relation %q in report.source_db", shadowRel)
+	}
+	parts := strings.SplitN(shadowRel, ".", 2)
+	qualified := fmt.Sprintf("%q.%q", parts[0], parts[1])
+	out := make([]string, 0, len(gpayIDs))
+	for start := 0; start < len(gpayIDs); start += healChunkSize {
+		end := start + healChunkSize
+		if end > len(gpayIDs) {
+			end = len(gpayIDs)
+		}
+		var chunk []string
+		err := h.shadowDB.WithContext(ctx).
+			Raw(fmt.Sprintf(`SELECT _source_id FROM %s WHERE _gpay_id IN (?)`, qualified), gpayIDs[start:end]).
+			Scan(&chunk).Error
+		if err != nil {
+			return nil, fmt.Errorf("map _gpay_id→_source_id: %w", err)
+		}
+		out = append(out, chunk...)
+	}
+	return out, nil
+}
+
+// ------------------------------------------------------------
+// Heal Segment A — source↔shadow: re-trigger Debezium snapshot signal
+// ------------------------------------------------------------
+
+func (h *ReconHandler) healSegmentA(ctx context.Context, msg *nats.Msg, table string) {
+	const op = "recon-heal-a"
+	if h.natsPub == nil {
+		err := fmt.Errorf("heal-a not wired (natsPub nil)")
+		h.logActivity(op, table, "error", 0, err)
+		h.respondErr(msg, err)
+		return
+	}
+	entry := h.resolveTargetTableConfig(table)
+	if entry == nil {
+		err := fmt.Errorf("registry not found: %s", table)
+		h.logActivity(op, table, "error", 0, err)
+		h.respondErr(msg, err)
+		return
+	}
+
+	// Cần missing IDs đích danh → report Tier 2 (segment A). Chưa có → chạy Tier 2.
+	var report model.ReconciliationReport
+	if err := h.db.Where("target_table = ? AND segment = ? AND tier = 2 AND missing_count > 0", table, "source_shadow").
+		Order("checked_at DESC").First(&report).Error; err != nil {
+		h.logger.Info("heal-a: no tier-2 report, running tier 2 first", zap.String("table", table))
+		newReport := h.reconCore.RunTier2(ctx, *entry)
+		if newReport == nil || newReport.MissingCount == 0 {
+			h.logActivity(op, table, "noop", 0, nil)
+			if msg.Reply != "" {
+				res, _ := json.Marshal(map[string]any{"status": "noop", "note": "tier-2 không thấy missing ID"})
+				msg.Respond(res)
+			}
+			return
+		}
+		report = *newReport
+	}
+
+	var missingIDs []string
+	json.Unmarshal(report.MissingIDs, &missingIDs)
+	srcCount := int64(0)
+	if report.SourceCount != nil {
+		srcCount = *report.SourceCount
+	}
+	if h.healThresholdBlocked(msg, op, table, len(missingIDs), srcCount, report.Diff) {
+		return
+	}
+
+	// Re-trigger qua Debezium incremental snapshot signal theo PK chunk —
+	// event re-emit chảy lại FULL pipeline (masking/mapping/shadow/post_ingest).
+	dispatched := 0
+	for start := 0; start < len(missingIDs); start += healChunkSize {
+		end := start + healChunkSize
+		if end > len(missingIDs) {
+			end = len(missingIDs)
+		}
+		payload, _ := json.Marshal(map[string]any{
+			"type":   "incremental",
+			"table":  table,
+			"filter": buildSnapshotIDFilter(entry.SourceType, entry.PrimaryKeyField, missingIDs[start:end]),
+			"action": "recon-heal-a",
+			"origin": "recon",
+		})
+		if err := h.natsPub.Publish("cdc.cmd.debezium-signal", payload); err != nil {
+			h.logActivity(op, table, "error", int64(dispatched), err)
+			h.respondErr(msg, fmt.Errorf("publish debezium-signal chunk: %w", err))
+			return
+		}
+		dispatched += end - start
+	}
+
+	now := time.Now().UTC()
+	h.db.Model(&model.ReconciliationReport{}).Where("id = ?", report.ID).
+		Updates(map[string]any{"healed_at": now, "healed_count": dispatched})
+
+	h.logger.Info("recon heal-a dispatched snapshot signal",
+		zap.String("table", table), zap.Int("ids", dispatched))
+	h.logActivity(op, table, "dispatched", int64(dispatched), nil)
+	if msg.Reply != "" {
+		res, _ := json.Marshal(map[string]any{
+			"status": "dispatched", "segment": "source_shadow", "signal_ids": dispatched,
+			"note": "connector sẽ re-emit qua Kafka; verify bằng recon-check sau khi ingest xong",
+		})
+		msg.Respond(res)
+	}
+}
+
+// buildSnapshotIDFilter — filter additional-conditions theo engine.
+// SQL engines: `pk IN ('a','b')`. MongoDB: JSON $in (format theo Debezium
+// MongoDB incremental snapshot; verify thực tế khi môi trường có Kafka Connect).
+func buildSnapshotIDFilter(engine, pkField string, ids []string) string {
+	if pkField == "" {
+		pkField = "_id"
+	}
+	quoted := make([]string, len(ids))
+	if strings.EqualFold(engine, "mongodb") {
+		for i, id := range ids {
+			quoted[i] = `"` + strings.ReplaceAll(id, `"`, ``) + `"`
+		}
+		return fmt.Sprintf(`{"%s": {"$in": [%s]}}`, pkField, strings.Join(quoted, ","))
+	}
+	for i, id := range ids {
+		quoted[i] = "'" + strings.ReplaceAll(id, "'", "''") + "'"
+	}
+	return fmt.Sprintf("%s IN (%s)", pkField, strings.Join(quoted, ","))
+}
+
+func (h *ReconHandler) respondErr(msg *nats.Msg, err error) {
+	if msg.Reply == "" {
+		return
+	}
+	res, _ := json.Marshal(map[string]string{"status": "error", "error": err.Error()})
+	msg.Respond(res)
+}

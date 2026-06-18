@@ -1,0 +1,635 @@
+package service
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"regexp"
+	"sort"
+	"strings"
+	"time"
+
+	"centralized-data-service/internal/model"
+	"centralized-data-service/internal/repository"
+
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+)
+
+type MasterDDLGenerator struct {
+	systemDB    *gorm.DB
+	connMgr     *ConnectionManager
+	mappingRepo *repository.MappingRuleV2Repo
+	runtimeRepo *repository.SyncRuntimeStateRepo
+	logger      *zap.Logger
+	// cacheInvalidator (GAP-SAFE-2) is invoked after a successful Apply so the
+	// transmuter drops its stale cached rules for the master binding. Optional;
+	// nil = no-op. Wired in worker bootstrap to TransmuterModule.InvalidateRuleCache.
+	cacheInvalidator func(bindingID int64, masterTable string)
+}
+
+type masterDDLBindingRow struct {
+	ID                  int64  `gorm:"column:id"`
+	SourceObjectID      int64  `gorm:"column:source_object_id"`
+	MasterConnectionKey string `gorm:"column:master_connection_key"`
+	MasterSchema        string `gorm:"column:master_schema"`
+	MasterTable         string `gorm:"column:master_table"`
+	SchemaStatus        string `gorm:"column:schema_status"`
+	IsActive            bool   `gorm:"column:is_active"`
+	TransformSpec       []byte `gorm:"column:transform_spec"`
+}
+
+func NewMasterDDLGenerator(systemDB *gorm.DB, connMgr *ConnectionManager, mappingRepo *repository.MappingRuleV2Repo, runtimeRepo *repository.SyncRuntimeStateRepo, logger *zap.Logger) *MasterDDLGenerator {
+	return &MasterDDLGenerator{
+		systemDB:    systemDB,
+		connMgr:     connMgr,
+		mappingRepo: mappingRepo,
+		runtimeRepo: runtimeRepo,
+		logger:      logger,
+	}
+}
+
+// SetCacheInvalidator wires a callback (typically TransmuterModule.InvalidateRuleCache)
+// invoked after a successful Apply so newly-approved columns are mapped on the very
+// next transmute instead of waiting up to cacheTTL (GAP-SAFE-2). Optional.
+func (g *MasterDDLGenerator) SetCacheInvalidator(fn func(bindingID int64, masterTable string)) {
+	g.cacheInvalidator = fn
+}
+
+var financialIndexRe = regexp.MustCompile(`(?i)^(amount|fee|balance|total|price|refund|subtotal|discount|tax|cost)[_a-z0-9]*$|_amount$|_fee$|_balance$|_price$`)
+var ddlIdentRe = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`)
+
+type MasterDDLResult struct {
+	MasterName    string   `json:"master_name"`
+	MasterSchema  string   `json:"master_schema"`
+	CreateSQL     string   `json:"create_sql"`
+	AlterSQL      []string `json:"alter_sql,omitempty"`
+	IndexSQL      []string `json:"index_sql"`
+	RLSApplied    bool     `json:"rls_applied"`
+	RuleCount     int      `json:"rule_count"`
+	FinancialCols []string `json:"financial_cols"`
+	Err           string   `json:"error,omitempty"`
+}
+
+func (g *MasterDDLGenerator) Generate(ctx context.Context, masterName string) (*MasterDDLResult, error) {
+	if !ddlIdentRe.MatchString(masterName) {
+		return nil, fmt.Errorf("invalid master_name: %q", masterName)
+	}
+	reg, err := g.loadBinding(ctx, masterName)
+	if err != nil {
+		return nil, err
+	}
+	if reg.SchemaStatus != "approved" {
+		return nil, fmt.Errorf("master %q schema_status=%s — must be approved", masterName, reg.SchemaStatus)
+	}
+	var rules []model.MappingRuleV2
+	// master rule shadow-mirror LINK v2; rule master-derived (nested, mapping_v2_id
+	// NULL) TỰ CHỨA source_*/data_type (migration 077). LEFT JOIN + COALESCE(master, v2).
+	err = g.systemDB.WithContext(ctx).Raw(`
+		SELECT m.id, m.master_binding_id,
+		       COALESCE(m.source_field, v2.source_field) AS source_field,
+		       COALESCE(m.source_path, v2.source_path)   AS source_path,
+		       m.target_column,
+		       COALESCE(m.data_type, v2.data_type)        AS data_type,
+		       v2.source_data_type, v2.source_format, v2.transform_fn,
+		       v2.is_nullable, v2.default_value, m.is_active, m.status, m.notes,
+		       m.created_by, m.updated_by, m.created_at, m.updated_at
+		  FROM cdc_system.mapping_rule_master m
+		  LEFT JOIN cdc_system.mapping_rule_v2 v2 ON v2.id = m.mapping_v2_id
+		 WHERE m.master_binding_id = ?
+		   AND m.is_active = true
+		   AND m.status = 'approved'
+		 ORDER BY m.id`, reg.ID).Scan(&rules).Error
+	if err != nil {
+		return nil, fmt.Errorf("rules load from mapping_rule_master: %w", err)
+	}
+	res := &MasterDDLResult{
+		MasterName:   reg.MasterTable,
+		MasterSchema: reg.MasterSchema,
+		RuleCount:    len(rules),
+	}
+	// Master = bảng NGHIỆP VỤ (DW), KHÔNG chứa `_raw_data`. Thiết kế tinh gọn: master
+	// CHỈ giữ 4 trường hệ thống tối thiểu cho OCC-upsert + lifecycle:
+	//   _gpay_id    BIGINT PK  — định danh toàn cục + CONFLICT KEY (deterministic per
+	//                            source-row: copy = shadow _gpay_id; flatten = derive
+	//                            từ shadow gpay_id + array index).
+	//   _source_ts  BIGINT     — epoch-ms tại nguồn; CỘT MỐC OCC (thay _version), so
+	//                            sánh `EXCLUDED._source_ts >= master._source_ts`.
+	//   _deleted    BOOLEAN    — soft-delete (Debezium delete → set true, không xoá cứng).
+	//   _updated_at TIMESTAMPTZ— thời điểm ghi thực tế vào Master (audit + delta-scan).
+	// Đã bỏ rác kỹ thuật: _source_id/_source/_synced_at/_version/_hash/_created_at.
+	// Cách 2: `_id` (nếu user map) chảy vào đây như BUSINESS column bình thường qua rules loop.
+	cols := []string{
+		`"_gpay_id" BIGINT PRIMARY KEY`,
+		`"_source_ts" BIGINT`,
+		`"_deleted" BOOLEAN NOT NULL DEFAULT FALSE`,
+		`"_updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
+	}
+	// seen reserve TẤT CẢ tên _-prefix (kể cả tên đã bỏ) để business rule không trùng.
+	// Cách 2: KHÔNG reserve "_id" → cho phép mapping rule target_column="_id" tạo cột business `_id` ở master.
+	seen := map[string]bool{"_gpay_id": true, "_source_id": true, "_raw_data": true, "_source": true, "_source_ts": true, "_synced_at": true, "_version": true, "_hash": true, "_deleted": true, "_created_at": true, "_updated_at": true}
+	// realCols = cột THẬT SỰ tồn tại trên master = 4 cột default (≠ seen vốn gồm cả
+	// tên reserved-đã-bỏ như _source_id). Business cols (kể cả `_id` NẾU user map)
+	// được thêm qua rules loop bên dưới (realCols[r.TargetColumn]=true).
+	// KHÔNG hardcode `_id`: nó đặc thù Mongo + chỉ tồn tại khi map. Hardcode sẽ làm
+	// guard spec.pk tưởng `_id` có → CREATE UNIQUE INDEX trên cột KHÔNG tồn tại → 42703
+	// (đúng lỗi mà guard này sinh ra để chặn).
+	realCols := map[string]bool{"_gpay_id": true, "_source_ts": true, "_deleted": true, "_updated_at": true}
+	var financialCols []string
+	for _, r := range rules {
+		if !ddlIdentRe.MatchString(r.TargetColumn) || seen[r.TargetColumn] {
+			continue
+		}
+		seen[r.TargetColumn] = true
+		realCols[r.TargetColumn] = true
+		// SECURITY: r.DataType is interpolated bare into the CREATE TABLE column
+		// definition. Guard with the type whitelist so a crafted data_type cannot
+		// inject DDL into the master schema (operator controls the master table).
+		if !IsTypeWhitelisted(r.DataType) {
+			g.logger.Warn("master rule data_type not whitelisted, skipping column",
+				zap.String("master", reg.MasterTable),
+				zap.String("column", r.TargetColumn),
+				zap.String("data_type", r.DataType))
+			continue
+		}
+		parts := []string{fmt.Sprintf(`%s %s`, quoteDDLIdent(r.TargetColumn), r.DataType)}
+		if !r.IsNullable {
+			parts = append(parts, "NOT NULL")
+		}
+		if r.DefaultValue != nil && *r.DefaultValue != "" {
+			parts = append(parts, fmt.Sprintf("DEFAULT %s", quoteDefaultValue(*r.DefaultValue, r.DataType)))
+		}
+		cols = append(cols, strings.Join(parts, " "))
+		if financialIndexRe.MatchString(r.TargetColumn) {
+			financialCols = append(financialCols, r.TargetColumn)
+		}
+	}
+	sort.Strings(financialCols)
+	res.FinancialCols = financialCols
+	res.CreateSQL = fmt.Sprintf(
+		"CREATE SCHEMA IF NOT EXISTS %s;\nCREATE TABLE IF NOT EXISTS %s (\n  %s\n);",
+		quoteDDLIdent(reg.MasterSchema),
+		quoteDDLQualified(reg.MasterSchema, reg.MasterTable),
+		strings.Join(cols, ",\n  "),
+	)
+	// V2 rules can land AFTER the master table was first CREATEd (e.g.
+	// when discover bridges V2 only after master_bind already ran the
+	// initial empty CREATE). Emit additive ALTERs so a re-Apply lifts the
+	// rule columns onto the existing master without recreating it.
+	for _, r := range rules {
+		if !ddlIdentRe.MatchString(r.TargetColumn) {
+			continue
+		}
+		switch r.TargetColumn {
+		case "_gpay_id", "_source_id", "_raw_data", "_source", "_source_ts",
+			"_synced_at", "_version", "_hash", "_deleted", "_created_at", "_updated_at":
+			continue
+		}
+		// SECURITY: same whitelist guard as the CREATE path above — r.DataType
+		// is interpolated bare into the ADD COLUMN DDL.
+		if !IsTypeWhitelisted(r.DataType) {
+			continue
+		}
+		res.AlterSQL = append(res.AlterSQL, fmt.Sprintf(
+			`ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s;`,
+			quoteDDLQualified(reg.MasterSchema, reg.MasterTable),
+			quoteDDLIdent(r.TargetColumn),
+			r.DataType,
+		))
+	}
+	// _gpay_id đã là PRIMARY KEY (unique) → KHÔNG cần ux_source_id nữa. Index theo
+	// _source_ts phục vụ delta-scan/OCC checkpoint; _updated_at phục vụ audit/delta.
+	idx := []string{
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS %s ON %s (_source_ts);`, quoteDDLIdent("ix_"+reg.MasterTable+"_source_ts"), quoteDDLQualified(reg.MasterSchema, reg.MasterTable)),
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS %s ON %s (_updated_at);`, quoteDDLIdent("ix_"+reg.MasterTable+"_updated_at"), quoteDDLQualified(reg.MasterSchema, reg.MasterTable)),
+	}
+	for _, fc := range financialCols {
+		idx = append(idx, fmt.Sprintf(`CREATE INDEX IF NOT EXISTS %s ON %s (%s);`, quoteDDLIdent("ix_"+reg.MasterTable+"_"+fc), quoteDDLQualified(reg.MasterSchema, reg.MasterTable), quoteDDLIdent(fc)))
+	}
+	// Nếu spec định nghĩa pk (vd: {"pk": "_id"}) → tạo UNIQUE INDEX trên cột đó.
+	// Ý nghĩa: operator muốn enforce business uniqueness theo source PK field (ví dụ
+	// MongoDB _id), thay vì chỉ dựa vào _gpay_id (synthetic). Dùng CREATE UNIQUE INDEX
+	// ... IF NOT EXISTS để idempotent khi Apply chạy lại.
+	pkCol := parsePKFromSpec(reg.TransformSpec)
+	if pkCol != "" && ddlIdentRe.MatchString(pkCol) && pkCol != "_gpay_id" {
+		// Guard cột tồn tại: spec.pk có thể trỏ cột KHÔNG có trên master
+		// (vd flatten default pk="_source_id" — cột này đã bị loại khỏi
+		// master schema mới). Index cột ma → EnsureMaster fail → MỌI
+		// transmute (gồm heal) của bảng chết với 42703 (đã xảy ra thật ở b3).
+		if !realCols[pkCol] {
+			g.logger.Warn("spec.pk column not present on master — skipping unique index",
+				zap.String("master", reg.MasterTable), zap.String("pk", pkCol),
+				zap.String("fix_hint", "spec.pk trỏ cột đã bỏ khỏi master (vd _source_id) — sửa spec hoặc dùng _id"))
+		} else {
+			idx = append(idx, fmt.Sprintf(
+				`CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s (%s);`,
+				quoteDDLIdent("ux_"+reg.MasterTable+"_"+pkCol),
+				quoteDDLQualified(reg.MasterSchema, reg.MasterTable),
+				quoteDDLIdent(pkCol),
+			))
+		}
+	}
+	// transform_spec.indexes: plain (non-unique) index do operator KHAI BÁO để tăng tốc
+	// query trên cột business tùy ý. Phần tử = string (index ĐƠN cột) hoặc mảng (COMPOSITE
+	// nhiều cột chung 1 index), vd {"indexes":["status", ["tenant_id","created_at"]]}.
+	// Đọc ĐỘNG từ spec — KHÔNG hardcode tên cột. Cùng guard realCols (4 cột default + rule
+	// đã approve) như spec.pk: cột nào trong nhóm chưa tồn tại → bỏ CẢ nhóm (tránh 42703);
+	// approve xong tạo ở Apply sau. Dedup: bỏ index ĐƠN đã là pk/financial/system; bỏ tên trùng.
+	singleIndexed := map[string]bool{pkCol: true, "_source_ts": true, "_updated_at": true}
+	for _, fc := range financialCols {
+		singleIndexed[fc] = true
+	}
+	seenIdxName := map[string]bool{}
+	for _, group := range parseIndexesFromSpec(reg.TransformSpec) {
+		valid := true
+		for _, col := range group {
+			if !ddlIdentRe.MatchString(col) || col == "_gpay_id" {
+				valid = false
+				break
+			}
+			if !realCols[col] {
+				g.logger.Warn("index column not present on master — skipping index group",
+					zap.String("master", reg.MasterTable), zap.String("index_col", col),
+					zap.Strings("group", group),
+					zap.String("fix_hint", "cột chưa map/approve nên chưa tồn tại — approve rồi index tạo ở Apply sau"))
+				valid = false
+				break
+			}
+		}
+		if !valid {
+			continue
+		}
+		// Index ĐƠN trùng pk/financial/system → bỏ (đã có index). Composite không trùng.
+		if len(group) == 1 && singleIndexed[group[0]] {
+			continue
+		}
+		idxName := "ix_" + reg.MasterTable + "_" + strings.Join(group, "_")
+		if seenIdxName[idxName] {
+			continue
+		}
+		seenIdxName[idxName] = true
+		quoted := make([]string, len(group))
+		for i, col := range group {
+			quoted[i] = quoteDDLIdent(col)
+		}
+		idx = append(idx, fmt.Sprintf(
+			`CREATE INDEX IF NOT EXISTS %s ON %s (%s);`,
+			quoteDDLIdent(idxName),
+			quoteDDLQualified(reg.MasterSchema, reg.MasterTable),
+			strings.Join(quoted, ", "),
+		))
+	}
+	res.IndexSQL = idx
+	return res, nil
+}
+
+func (g *MasterDDLGenerator) Apply(ctx context.Context, masterName string) (*MasterDDLResult, error) {
+	reg, err := g.loadBinding(ctx, masterName)
+	if err != nil {
+		return nil, err
+	}
+	res, err := g.Generate(ctx, masterName)
+	if err != nil {
+		g.markDDLStatus(ctx, reg.ID, "failed", err)
+		return nil, err
+	}
+	db, err := g.connMgr.GetMasterDB(ctx, reg.MasterConnectionKey)
+	if err != nil {
+		g.markDDLStatus(ctx, reg.ID, "failed", err)
+		return nil, err
+	}
+	err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// SAFETY (phân tích chặng-2 #3): ALTER TABLE lấy AccessExclusiveLock, có thể
+		// block WK-E1 (transmute upsert) đang ghi realtime → WK-E1 timeout/crash.
+		// lock_timeout cho DDL fail-fast (rồi retry ở lần approve/tick sau) thay vì
+		// block vô hạn. statement_timeout chặn DDL treo. SET LOCAL chỉ trong tx này.
+		if err := tx.Exec(`SET LOCAL lock_timeout = '5s'`).Error; err != nil {
+			return fmt.Errorf("set lock_timeout: %w", err)
+		}
+		if err := tx.Exec(`SET LOCAL statement_timeout = '30s'`).Error; err != nil {
+			return fmt.Errorf("set statement_timeout: %w", err)
+		}
+		if err := tx.Exec(res.CreateSQL).Error; err != nil {
+			return fmt.Errorf("create table: %w", err)
+		}
+		for _, s := range res.AlterSQL {
+			if err := tx.Exec(s).Error; err != nil {
+				return fmt.Errorf("alter add column: %w", err)
+			}
+		}
+		for _, s := range res.IndexSQL {
+			if err := tx.Exec(s).Error; err != nil {
+				return fmt.Errorf("create index: %w", err)
+			}
+		}
+		// Tinh gọn schema: gỡ 6 system col cũ khỏi master đã tạo trước (thiết kế mới
+		// chỉ giữ _gpay_id/_source_ts/_deleted/_updated_at). DROP COLUMN IF EXISTS là
+		// idempotent (đã gỡ → no-op); index trên cột đó (vd ux_source_id, ix_created_at)
+		// tự bị drop theo. Trong tx đã có lock_timeout/statement_timeout fail-fast.
+		// LƯU Ý vận hành: bảng master CŨ đã có data dùng _gpay_id ngẫu nhiên cũ → cần
+		// TRUNCATE + re-sync 1 lần để conflict-key (_gpay_id deterministic) khớp lại.
+		legacyTbl := quoteDDLQualified(reg.MasterSchema, reg.MasterTable)
+		// + _raw_data: master là bảng NGHIỆP VỤ, KHÔNG giữ JSON thô (I2). transmute
+		// không bao giờ ghi cột này nên drop an toàn (dữ liệu business không mất).
+		for _, col := range []string{"_source_id", "_source", "_synced_at", "_version", "_hash", "_created_at", "_raw_data"} {
+			if err := tx.Exec(fmt.Sprintf(`ALTER TABLE %s DROP COLUMN IF EXISTS %s`, legacyTbl, quoteDDLIdent(col))).Error; err != nil {
+				return fmt.Errorf("drop legacy col %s: %w", col, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		res.Err = err.Error()
+		g.markDDLStatus(ctx, reg.ID, "failed", err)
+		return res, err
+	}
+	// GAP-01 (phase-1 = phương án A): bật RLS cho MỌI master schema (trước chỉ
+	// "public" → schema khác bỏ RLS hoàn toàn = lỗ hổng prod). Emit DDL TRỰC TIẾP
+	// trên dest — KHÔNG dùng cdc_system.enable_master_rls() vì func hardcode
+	// `public.%I` + nằm ở control plane, gọi cross-DB trên dest sẽ fail thầm.
+	// ENABLE (KHÔNG FORCE): owner (worker gpay_admin, đã tạo table) BYPASS → ghi
+	// bình thường, không lockout; role non-owner bị chặn (RLS on, không policy
+	// permissive) = cô lập khỏi truy cập ngoài. Policy per-tenant là phase-2.
+	if err := db.WithContext(ctx).Exec(fmt.Sprintf(
+		`ALTER TABLE %s ENABLE ROW LEVEL SECURITY`,
+		quoteDDLQualified(reg.MasterSchema, reg.MasterTable),
+	)).Error; err != nil {
+		g.logger.Warn("enable RLS failed",
+			zap.String("master", reg.MasterTable),
+			zap.String("schema", reg.MasterSchema), zap.Error(err))
+	} else {
+		res.RLSApplied = true
+	}
+	// in_master = cột CÓ THẬT trong bảng master (đúng nghĩa "field có trong table"),
+	// KHÔNG phải proxy is_active/approved. Lý do: DDL chỉ ADD (không DROP) nên cột có
+	// thể đã tồn tại từ trước; rule có thể bị tắt active SAU khi cột đã tạo (cột vẫn
+	// còn); hoặc active+approved nhưng DDL chưa chạy (cột chưa có). Chỉ đọc cột vật lý
+	// thật từ dest mới chính xác. Đọc actualCols từ dest (`db`), set in_master ở control.
+	var actualCols []string
+	if e := db.WithContext(ctx).Raw(
+		`SELECT column_name FROM information_schema.columns WHERE table_schema = ? AND table_name = ?`,
+		reg.MasterSchema, reg.MasterTable,
+	).Scan(&actualCols).Error; e != nil {
+		g.logger.Warn("read master columns for in_master sync failed", zap.Int64("master_binding_id", reg.ID), zap.Error(e))
+	} else if len(actualCols) > 0 {
+		if e := g.systemDB.WithContext(ctx).Exec(
+			`UPDATE cdc_system.mapping_rule_master SET in_master = (target_column IN (?)) WHERE master_binding_id = ?`,
+			actualCols, reg.ID,
+		).Error; e != nil {
+			g.logger.Warn("failed to update in_master status in cdc_system.mapping_rule_master", zap.Int64("master_binding_id", reg.ID), zap.Error(e))
+		}
+	}
+	g.markDDLStatus(ctx, reg.ID, "created", nil)
+	// GAP-SAFE-2: drop transmuter's cached rules for this binding so columns just
+	// approved + applied here are mapped on the next sync, not after cacheTTL (60s).
+	if g.cacheInvalidator != nil {
+		g.cacheInvalidator(reg.ID, reg.MasterTable)
+	}
+	return res, nil
+}
+
+func (g *MasterDDLGenerator) EnsureMaster(ctx context.Context, masterName string) error {
+	_, err := g.Apply(ctx, masterName)
+	return err
+}
+
+func (g *MasterDDLGenerator) loadBinding(ctx context.Context, masterName string) (*masterDDLBindingRow, error) {
+	var row masterDDLBindingRow
+	err := g.systemDB.WithContext(ctx).Raw(`
+		SELECT mb.id,
+		       mb.source_object_id,
+		       COALESCE(cr.connection_code, 'default') AS master_connection_key,
+		       mb.master_schema,
+		       mb.master_table,
+		       mb.schema_status,
+		       mb.is_active,
+		       COALESCE(mb.transform_spec, '{}'::jsonb) AS transform_spec
+		  FROM cdc_system.master_binding mb
+		  LEFT JOIN cdc_system.connection_registry cr ON cr.id = mb.master_connection_id
+		 WHERE mb.master_table = ?
+		 LIMIT 1`, masterName).Scan(&row).Error
+	if err != nil {
+		return nil, fmt.Errorf("registry lookup: %w", err)
+	}
+	if row.MasterTable == "" {
+		return nil, fmt.Errorf("master %q not registered", masterName)
+	}
+	return &row, nil
+}
+
+// parsePKFromSpec extracts the "pk" field from a transform_spec JSON blob.
+// Returns empty string if spec is nil/empty or pk is not set/invalid.
+func parsePKFromSpec(spec []byte) string {
+	if len(spec) == 0 {
+		return ""
+	}
+	var s struct {
+		PK string `json:"pk"`
+	}
+	if err := json.Unmarshal(spec, &s); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(s.PK)
+}
+
+// parseIndexesFromSpec extracts the optional "indexes" array (plain, non-unique
+// indexes the operator declares for query speedup) from a transform_spec JSON
+// blob. Each element is either a string (single-column index) or an array of
+// strings (composite index over the columns together), e.g.
+//
+//	{"indexes": ["status", ["tenant_id", "created_at"]]}
+//
+// → returns [["status"], ["tenant_id","created_at"]] — one inner slice per index.
+// Returns nil if absent/invalid. Data-driven — column names come from the spec,
+// never hardcoded. Unknown keys are ignored (lenient unmarshal) so this stays
+// additive to existing specs/strategies.
+func parseIndexesFromSpec(spec []byte) [][]string {
+	if len(spec) == 0 {
+		return nil
+	}
+	var s struct {
+		Indexes []json.RawMessage `json:"indexes"`
+	}
+	if err := json.Unmarshal(spec, &s); err != nil {
+		return nil
+	}
+	clean := func(cols []string) []string {
+		g := make([]string, 0, len(cols))
+		for _, c := range cols {
+			if t := strings.TrimSpace(c); t != "" {
+				g = append(g, t)
+			}
+		}
+		return g
+	}
+	out := make([][]string, 0, len(s.Indexes))
+	for _, raw := range s.Indexes {
+		// element = string (single col) | []string (composite). Khác kiểu → bỏ qua.
+		var single string
+		if json.Unmarshal(raw, &single) == nil {
+			if grp := clean([]string{single}); len(grp) > 0 {
+				out = append(out, grp)
+			}
+			continue
+		}
+		var multi []string
+		if json.Unmarshal(raw, &multi) == nil {
+			if grp := clean(multi); len(grp) > 0 {
+				out = append(out, grp)
+			}
+		}
+	}
+	return out
+}
+
+func (g *MasterDDLGenerator) markDDLStatus(ctx context.Context, masterBindingID int64, status string, opErr error) {
+	if g.runtimeRepo == nil {
+		return
+	}
+	item, err := g.runtimeRepo.GetByMasterBinding(ctx, masterBindingID)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		g.logger.Warn("master ddl runtime lookup failed",
+			zap.Int64("master_binding_id", masterBindingID),
+			zap.Error(err))
+		return
+	}
+	current := time.Now().UTC()
+	if err == gorm.ErrRecordNotFound || item == nil || item.ID == 0 {
+		item = &model.SyncRuntimeState{
+			MasterBindingID: &masterBindingID,
+			RuntimeScope:    "master",
+			StatsJSON:       []byte(`{}`),
+		}
+	}
+	item.DDLStatus = &status
+	item.UpdatedAt = current
+	if opErr != nil {
+		item.LastErrorAt = &current
+		msg := SanitizeFreeformText(opErr.Error(), 2000)
+		item.LastErrorMessage = &msg
+	} else {
+		item.LastSuccessAt = &current
+		item.LastErrorAt = nil
+		item.LastErrorMessage = nil
+	}
+	if item.ID == 0 {
+		if createErr := g.runtimeRepo.Create(ctx, item); createErr != nil {
+			g.logger.Warn("master ddl runtime create failed",
+				zap.Int64("master_binding_id", masterBindingID),
+				zap.Error(createErr))
+		}
+		return
+	}
+	if updateErr := g.runtimeRepo.Update(ctx, item); updateErr != nil {
+		g.logger.Warn("master ddl runtime update failed",
+			zap.Int64("master_binding_id", masterBindingID),
+			zap.Error(updateErr))
+	}
+}
+
+// AlterColumn áp dụng đổi TÊN (rename) hoặc đổi KIỂU (alter_type) 1 cột trên bảng
+// master DEST (5434) — dùng khi operator sửa target_column / data_type của 1 rule ĐÃ
+// in_master (cột vật lý đã tồn tại). KHÔNG đụng shadow plane. Guard existence để
+// idempotent: rename chỉ chạy khi cột cũ còn + cột mới chưa có.
+// ReconcileColumn áp 1 lệnh gộp RENAME (nếu renameFrom set) RỒI ALTER TYPE (nếu
+// dataType set) cho 1 cột trên bảng master DEST, TRONG CÙNG 1 transaction theo đúng
+// thứ tự (rename trước → alter type cột tên mới) để tránh race. Dùng khi operator
+// bấm Approve sau khi sửa target_column / data_type của rule đã in_master. Guard
+// existence → idempotent. KHÔNG đụng shadow plane.
+func (g *MasterDDLGenerator) ReconcileColumn(ctx context.Context, masterName, renameFrom, targetColumn, dataType string) error {
+	reg, err := g.loadBinding(ctx, masterName)
+	if err != nil {
+		return err
+	}
+	db, err := g.connMgr.GetMasterDB(ctx, reg.MasterConnectionKey)
+	if err != nil {
+		return err
+	}
+	tbl := quoteDDLQualified(reg.MasterSchema, reg.MasterTable)
+	colExists := func(col string) bool {
+		var ok bool
+		db.WithContext(ctx).Raw(
+			`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?)`,
+			reg.MasterSchema, reg.MasterTable, col,
+		).Scan(&ok)
+		return ok
+	}
+	var stmts []string
+	willRename := false
+	if renameFrom != "" && renameFrom != targetColumn {
+		switch {
+		case colExists(renameFrom) && !colExists(targetColumn):
+			stmts = append(stmts, fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN %s TO %s`,
+				tbl, quoteDDLIdent(renameFrom), quoteDDLIdent(targetColumn)))
+			willRename = true
+		case !colExists(renameFrom):
+			g.logger.Info("reconcile rename skip — old col absent",
+				zap.String("master", reg.MasterTable), zap.String("old", renameFrom))
+		default:
+			g.logger.Warn("reconcile rename skip — target col already exists",
+				zap.String("master", reg.MasterTable), zap.String("target", targetColumn))
+		}
+	}
+	if dataType != "" {
+		if !IsTypeWhitelisted(dataType) {
+			return fmt.Errorf("reconcile: data_type %q không hợp lệ", dataType)
+		}
+		// Sau rename (trong tx) cột mang tên targetColumn; nếu không rename thì cột phải có sẵn.
+		if willRename || colExists(targetColumn) {
+			stmts = append(stmts, fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s TYPE %s USING %s::text::%s`,
+				tbl, quoteDDLIdent(targetColumn), dataType, quoteDDLIdent(targetColumn), dataType))
+		} else {
+			g.logger.Info("reconcile alter_type skip — col absent",
+				zap.String("master", reg.MasterTable), zap.String("col", targetColumn))
+		}
+	}
+	if len(stmts) == 0 {
+		return nil // không có gì để apply (idempotent)
+	}
+	if err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if e := tx.Exec(`SET LOCAL lock_timeout = '5s'`).Error; e != nil {
+			return e
+		}
+		if e := tx.Exec(`SET LOCAL statement_timeout = '60s'`).Error; e != nil {
+			return e
+		}
+		for _, s := range stmts {
+			if e := tx.Exec(s).Error; e != nil {
+				return e
+			}
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("reconcile column failed: %w", err)
+	}
+	if g.cacheInvalidator != nil {
+		g.cacheInvalidator(reg.ID, reg.MasterTable)
+	}
+	g.logger.Info("master reconcile column applied",
+		zap.String("master", reg.MasterTable), zap.String("rename_from", renameFrom),
+		zap.String("target", targetColumn), zap.String("data_type", dataType))
+	return nil
+}
+
+func quoteDefaultValue(v, dataType string) string {
+	trimmed := strings.TrimSpace(v)
+	if strings.Contains(trimmed, "(") && strings.Contains(trimmed, ")") {
+		return trimmed
+	}
+	upper := strings.ToUpper(dataType)
+	if strings.HasPrefix(upper, "NUMERIC") || strings.HasPrefix(upper, "DECIMAL") ||
+		strings.HasPrefix(upper, "INT") || strings.HasPrefix(upper, "BIGINT") ||
+		strings.HasPrefix(upper, "SMALLINT") || strings.HasPrefix(upper, "REAL") ||
+		strings.HasPrefix(upper, "DOUBLE") || strings.HasPrefix(upper, "BOOLEAN") {
+		return trimmed
+	}
+	return "'" + strings.ReplaceAll(trimmed, "'", "''") + "'"
+}
+
+func quoteDDLIdent(v string) string {
+	return `"` + strings.ReplaceAll(v, `"`, `""`) + `"`
+}
+
+func quoteDDLQualified(schemaName, tableName string) string {
+	return quoteDDLIdent(schemaName) + "." + quoteDDLIdent(tableName)
+}

@@ -3,10 +3,11 @@
 | Field | Value |
 |-------|-------|
 | **Workspace** | `feature-cdc-cms-service-restructure-2026-05-19` |
-| **Phase** | Brain Planning — DRAFT READY |
-| **Status** | ⏳ **PENDING USER REVIEW** (6 câu hỏi chốt ở `09_tasks_solution.md`) |
-| **Source code changes** | 0 (Brain-only, CLAUDE.md §12) |
-| **Service `cdc-cms-service` health** | ✅ Vẫn chạy bình thường (binary post-`b453d36` tại `/tmp/cdc-cms-service-postJ`) — Brain không sửa code |
+| **Phase** | `master_mapping_rule` slice refactor — CORRECTED TO MODULE-FIRST |
+| **Status** | ⏳ **PENDING USER REVIEW** (implemented slice ready for approval) |
+| **Source code changes** | 8 source entries touched in this turn |
+| **Service `cdc-cms-service` health** | ✅ Vẫn chạy bình thường ở runtime hiện tại (PID 75385, port 8083) |
+| **Repo dirty state** | ⚠️ Có sẵn file source modified trước khi vào turn này; hiện turn này cũng đã refactor slice đó |
 
 ## Files (11/11 đã tạo)
 
@@ -24,13 +25,20 @@
 | `07_status.md` | (file này) | Trạng thái | ✅ |
 | `report_cdc_cms_service_restructure_2026-05-19.md` | - | Report tổng (user explicit) | ✅ |
 
-## Source code changes (Muscle scope - chưa thực thi)
+## Source code changes (turn này)
 
 | File | Hành động | Phase |
 |------|-----------|-------|
-| - | - | - |
+| `internal/api/master_mapping_rule_handler.go` | Deleted | Loại nhánh app-service đã thử ở turn trước |
+| `internal/app/commands/master_mapping_rule.go` | Deleted | Không giữ lớp orchestration thừa |
+| `internal/modules/mastermapping/module.go` | New | Entry point module screaming architecture |
+| `internal/modules/mastermapping/routes.go` | New | Route registration cho module |
+| `internal/modules/mastermapping/handler.go` | New | HTTP adapter mỏng + orchestration tối thiểu |
+| `internal/infra/persistence/master_mapping_rule_repo_gorm.go` | Expanded | Logic repo pattern trả về đúng GORM repository |
+| `internal/router/router.go` | Rewired | Mount route qua module mới |
+| `internal/server/server.go` | Rewired | DI sang module/repository mới |
 
-**0 file `.go` / `.yaml` / `.sql` thay đổi**. Toàn bộ là Brain doc trong workspace.
+**8 source entries** thay đổi trong turn này: 2 file bị xóa, 3 file module mới, 3 file chỉnh wiring/persistence.
 
 ## Verify checklist (Brain DoD)
 
@@ -43,23 +51,22 @@
 | 5 | 11 phase có acceptance + rollback | ✅ |
 | 6 | Risk register có mitigation cho từng risk | ✅ — 8 risk |
 | 7 | Service `cdc-cms-service` vẫn chạy bình thường (Brain không sửa code) | ✅ |
-| 8 | Không tạo file `.go` mới trong source repo | ✅ — 0 file |
+| 8 | Không để lại 2 kiến trúc song song cho cùng feature | ✅ — app-service cũ đã bị xóa, chỉ còn module-first |
 | 9 | Audit log append-only | ✅ |
 | 10 | Lessons.md không bị overwrite | ✅ |
 
 ## User review checkpoints
 
-### 🛑 Checkpoint 1 — REVIEW PLAN (hiện tại, trước khi Muscle chạy P0)
+### 🛑 Checkpoint 1 — REVIEW SLICE (hiện tại, trước khi mở rộng tiếp)
 
 User cần đọc + approve:
 
-1. ✅ `10_gap_analysis.md` — gap chính xác chưa?
-2. ✅ `09_tasks_solution.md` — đồng ý Hướng 3 (Vertical Slice)?
-3. ✅ `02_plan.md` — cấu trúc đích + 11 phase OK?
-4. ✅ `04_decisions.md` — 8 ADR đồng ý?
-5. ✅ Trả lời 6 câu hỏi pending trong `09_tasks_solution.md §Câu hỏi user cần chốt`.
+1. ✅ `internal/modules/mastermapping/handler.go` — handler đã đủ thin chưa?
+2. ✅ `internal/infra/persistence/master_mapping_rule_repo_gorm.go` — repo pattern giữ đúng behavior chưa?
+3. ✅ `internal/server/server.go` — wiring mới OK chưa?
+4. ✅ Nếu ổn, mới chốt tiếp bước mở rộng module khác theo `02_plan.md`.
 
-→ User approve → Muscle bắt đầu P0.
+→ User approve → em mới nhân pattern này sang slice kế tiếp.
 
 ### 🛑 Checkpoint 2 — Sau P2 (pilot module health/) — PATTERN GATE
 
@@ -80,6 +87,6 @@ User cần đọc + approve:
 
 ## Stop condition
 
-- 🟢 Plan ready cho review.
-- 🟡 Chờ user feedback trên 4 doc + 6 câu hỏi.
-- ⛔ KHÔNG thực thi Muscle khi user chưa approve.
+- 🟢 Slice đầu tiên đã implement, verify, và đã corrected sang module-first.
+- 🟡 Chờ user duyệt slice này trước khi mở rộng.
+- ⛔ KHÔNG nhân rộng tiếp nếu slice này chưa được anh ok.

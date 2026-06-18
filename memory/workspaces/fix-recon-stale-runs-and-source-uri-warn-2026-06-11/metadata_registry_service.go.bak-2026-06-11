@@ -1,0 +1,913 @@
+package service
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"sync"
+
+	"centralized-data-service/internal/model"
+	"centralized-data-service/internal/repository"
+	"centralized-data-service/pkgs/crypto"
+
+	"go.uber.org/zap"
+)
+
+type MetadataRegistry interface {
+	ReloadAll(ctx context.Context) error
+	GetTableConfigByID(id uint) *model.TableRegistry
+	GetTableConfig(targetTable string) *model.TableRegistry
+	GetTableConfigBySource(sourceTable string) *model.TableRegistry
+	ListTableConfigs() []model.TableRegistry
+	GetMappingRules(bindingID int64) []model.MappingRule
+	GetDebeziumTables() []string
+	ResolveSourceRoute(sourceDB, sourceTable string) *ResolvedSourceRoute
+	// ResolveSourceRoutes returns master route + all logical-clone routes
+	// for the given (sourceDB, sourceTable). Used by B3 fan-out dispatch.
+	// Returns a slice of length >= 1 when the source is known, or nil.
+	ResolveSourceRoutes(sourceDB, sourceTable string) []*ResolvedSourceRoute
+	ResolveTargetRoute(targetTable string) *ResolvedSourceRoute
+	GetSourceDSN(ctx context.Context, connectionCode string) (string, error)
+	// GetMinFlushIntervalSeconds returns the minimum batch_flush_interval_seconds
+	// across all active table configs. Used by KafkaConsumer for the flush ticker.
+	// Returns 5 (default) when no configs set the field or all are zero/nil.
+	GetMinFlushIntervalSeconds() int
+	// GetChildBindings returns shadow bindings whose parent_binding_id matches
+	// the given parent. Empty when the parent has no array-flatten children.
+	// Worker iterates the result after each parent upsert (V3 explode flow).
+	GetChildBindings(parentBindingID int64) []*model.ShadowBinding
+	GetMaskMap(bindingID int64) map[string]string
+}
+
+type ResolvedSourceRoute struct {
+	SourceObject        *model.SourceObjectRegistry
+	ShadowBinding       *model.ShadowBinding
+	TableConfig         *model.TableRegistry
+	ShadowConnectionKey string
+}
+
+// MetadataRegistryService is the V2-aware registry/cache layer.
+//
+// Phase scope:
+//   - source/shadow routing is loaded from V2 tables
+//   - mapping rules remain compatibility-backed from legacy cdc_mapping_rules
+//     so the current shadow ingest path does not break while master-centric
+//     V2 rules settle in later phases
+type MetadataRegistryService struct {
+	connectionRepo *repository.ConnectionRegistryRepo
+	sourceRepo     *repository.SourceObjectRegistryRepo
+	shadowRepo     *repository.ShadowBindingRepo
+	mappingV2Repo  *repository.MappingRuleV2Repo
+
+	logger         *zap.Logger
+	masterKey      string
+	// connectionOverrides — worker-side overlay (lowercased keys).
+	// Hit short-circuits GetSourceDSN before secret_ref/host/port logic.
+	connectionOverrides map[string]string
+
+
+	mu             sync.RWMutex
+	idCache        map[uint]*model.TableRegistry
+	targetCache    map[string]*model.TableRegistry
+	sourceCache    map[string]*model.TableRegistry
+	routeCache     map[string][]*ResolvedSourceRoute
+	targetRouteMap map[string]*ResolvedSourceRoute
+	mappingCache   map[int64][]model.MappingRule
+	debeziumTables []string
+	// B3 fan-out: masterSourceID → clone routes (logical_clone_of key in source_locator_json).
+	// Populated during ReloadAll. ResolveSourceRoutes returns master route + cloneRoutes.
+	cloneRoutes           map[int64][]*ResolvedSourceRoute
+	// P3.3 V3 — child bindings keyed by parent_binding_id. Lookup happens
+	// per parent event so the event handler can fan out array-flatten rows
+	// into child shadow tables. Rules for a child binding sit in
+	// mappingCache under the child binding's target_table; no separate cache.
+	childBindings         map[int64][]*model.ShadowBinding
+	globalSensitiveFields map[string]string
+	maskMapCache          map[int64]map[string]string
+}
+
+func NewMetadataRegistryService(
+	connectionRepo *repository.ConnectionRegistryRepo,
+	sourceRepo *repository.SourceObjectRegistryRepo,
+	shadowRepo *repository.ShadowBindingRepo,
+	mappingV2Repo *repository.MappingRuleV2Repo,
+	logger *zap.Logger,
+	masterKey string,
+	connectionOverrides map[string]string,
+) *MetadataRegistryService {
+	rs := &MetadataRegistryService{
+		connectionRepo:        connectionRepo,
+		sourceRepo:            sourceRepo,
+		shadowRepo:            shadowRepo,
+		mappingV2Repo:         mappingV2Repo,
+		logger:                logger,
+		masterKey:             masterKey,
+		connectionOverrides:   NormalizeConnectionOverrides(connectionOverrides),
+		idCache:               make(map[uint]*model.TableRegistry),
+		targetCache:           make(map[string]*model.TableRegistry),
+		sourceCache:           make(map[string]*model.TableRegistry),
+		routeCache:            make(map[string][]*ResolvedSourceRoute),
+		targetRouteMap:        make(map[string]*ResolvedSourceRoute),
+		mappingCache:          make(map[int64][]model.MappingRule),
+		cloneRoutes:           make(map[int64][]*ResolvedSourceRoute),
+		childBindings:         make(map[int64][]*model.ShadowBinding),
+		globalSensitiveFields: make(map[string]string),
+		maskMapCache:          make(map[int64]map[string]string),
+	}
+	if err := rs.ReloadAll(context.Background()); err != nil {
+		logger.Error("failed to load initial V2 metadata registry", zap.Error(err))
+	}
+	return rs
+}
+
+
+
+func (rs *MetadataRegistryService) ReloadAll(ctx context.Context) error {
+	sources, err := rs.sourceRepo.GetActive(ctx)
+	if err != nil {
+		return err
+	}
+	connections, err := rs.connectionRepo.GetAll(ctx)
+	if err != nil {
+		return err
+	}
+
+	var allBindings []model.ShadowBinding
+	for _, src := range sources {
+		items, listErr := rs.shadowRepo.ListBySourceObject(ctx, src.ID)
+		if listErr != nil {
+			return listErr
+		}
+		for _, item := range items {
+			if item.IsActive {
+				allBindings = append(allBindings, item)
+			}
+		}
+	}
+
+	// V2 mapping rules: per source, fetch active+approved rules and convert
+	// to the legacy MappingRule shape DynamicMapper still consumes. V1
+	// table `cdc_mapping_rules` is deprecated — keep ONE source of truth
+	// at `cdc_system.mapping_rule_v2`.
+	rulesBySource := make(map[int64][]model.MappingRuleV2, len(sources))
+	totalRules := 0
+	for _, src := range sources {
+		v2Rules, listErr := rs.mappingV2Repo.ListActiveBySourceObject(ctx, src.ID)
+		if listErr != nil {
+			return listErr
+		}
+		if len(v2Rules) > 0 {
+			rulesBySource[src.ID] = v2Rules
+			totalRules += len(v2Rules)
+		}
+	}
+
+	var globalFields []model.SensitiveField
+	if rs.mappingV2Repo != nil {
+		var listErr error
+		globalFields, listErr = rs.mappingV2Repo.ListGlobalSensitiveFields(ctx)
+		if listErr != nil {
+			rs.logger.Warn("failed to load global sensitive fields (using empty fallback)", zap.Error(listErr))
+		}
+	}
+
+	globalSensitiveMap := make(map[string]string, len(globalFields))
+	for _, f := range globalFields {
+		strategy := strings.ToLower(strings.TrimSpace(f.MaskStrategy))
+		if strategy == "" {
+			strategy = "hmac"
+		}
+		if strategy == "none" {
+			continue
+		}
+		fieldName := strings.ToLower(strings.TrimSpace(f.FieldName))
+		if fieldName != "" {
+			globalSensitiveMap[fieldName] = strategy
+		}
+	}
+
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+
+	rs.idCache = make(map[uint]*model.TableRegistry)
+	rs.targetCache = make(map[string]*model.TableRegistry)
+	rs.sourceCache = make(map[string]*model.TableRegistry)
+	rs.routeCache = make(map[string][]*ResolvedSourceRoute)
+	rs.targetRouteMap = make(map[string]*ResolvedSourceRoute)
+	rs.mappingCache = make(map[int64][]model.MappingRule)
+	rs.debeziumTables = rs.debeziumTables[:0]
+	rs.cloneRoutes = make(map[int64][]*ResolvedSourceRoute)
+	rs.childBindings = make(map[int64][]*model.ShadowBinding)
+	rs.globalSensitiveFields = globalSensitiveMap
+	rs.maskMapCache = make(map[int64]map[string]string)
+
+	sourceByID := make(map[int64]*model.SourceObjectRegistry, len(sources))
+	connectionCodeByID := make(map[int64]string, len(connections))
+	sourceNameToTarget := make(map[string]string, len(sources))
+	routeBySourceID := make(map[int64][]*ResolvedSourceRoute, len(sources))
+
+	for i := range sources {
+		sourceByID[sources[i].ID] = &sources[i]
+	}
+	for i := range connections {
+		connectionCodeByID[connections[i].ID] = strings.TrimSpace(connections[i].ConnectionCode)
+	}
+
+	// Resolve a runtime source URI per connection_code so the synthetic
+	// TableRegistry rows below carry SourceURL — required for ReconCore /
+	// snapshot.v2 to lazy-create a Mongo client per source via
+	// ReconSourceAgent.getClient. Pre-V2 this came from cfg.MongoDB.URL only,
+	// which silently disabled reconciliation when the legacy field was empty
+	// even though connection_registry already held the right URI (lesson
+	// L3100 / L985, 2026-05-26).
+	connectionURIByCode := make(map[string]string, len(connections))
+	resolvedURIs := 0
+	for i := range connections {
+		code := strings.TrimSpace(connections[i].ConnectionCode)
+		if code == "" {
+			continue
+		}
+		uri, resErr := rs.resolveSourceURIFromConn(&connections[i])
+		if resErr != nil {
+			rs.logger.Warn("connection_registry: cannot resolve source URI; recon/snapshot will skip sources bound to this connection",
+				zap.String("connection_code", code),
+				zap.String("engine", connections[i].EngineType),
+				zap.Error(resErr),
+			)
+			continue
+		}
+		connectionURIByCode[code] = uri
+		resolvedURIs++
+	}
+
+	for i := range allBindings {
+		binding := &allBindings[i]
+		src := sourceByID[binding.SourceObjectID]
+		if src == nil {
+			rs.logger.Warn("shadow binding points to unknown source object",
+				zap.Int64("source_object_id", binding.SourceObjectID),
+				zap.String("binding_code", binding.BindingCode),
+			)
+			continue
+		}
+
+		sourceConnCode := connectionCodeByID[src.SourceConnectionID]
+		sourceURI := connectionURIByCode[sourceConnCode]
+		cfg := synthesizeLegacyTableRegistry(src, binding, sourceURI)
+		route := &ResolvedSourceRoute{
+			SourceObject:        src,
+			ShadowBinding:       binding,
+			TableConfig:         cfg,
+			ShadowConnectionKey: connectionCodeByID[binding.ShadowConnectionID],
+		}
+
+		rs.targetCache[cfg.TargetTable] = cfg
+		rs.targetRouteMap[cfg.TargetTable] = route
+		rs.idCache[cfg.ID] = cfg
+		routeBySourceID[src.ID] = append(routeBySourceID[src.ID], route)
+		sourceNameToTarget[strings.TrimSpace(src.SourceObjectName)] = cfg.TargetTable
+		for _, sourceKey := range buildSourceLookupKeys(src, sourceConnCode) {
+			if _, exists := rs.sourceCache[sourceKey]; !exists {
+				rs.sourceCache[sourceKey] = cfg
+			}
+			rs.routeCache[sourceKey] = append(rs.routeCache[sourceKey], route)
+		}
+
+		if strings.EqualFold(src.SyncEngine, "debezium") || strings.EqualFold(src.SyncEngine, "both") {
+			rs.debeziumTables = appendIfMissing(rs.debeziumTables, strings.TrimSpace(src.SourceObjectName))
+		}
+
+		// V3 — index child bindings under parent. A child binding inherits
+		// source_object_id from its parent (same upstream event); the worker
+		// uses ParentBindingID to fan out, not the source_object link.
+		if binding.ParentBindingID != nil && *binding.ParentBindingID > 0 {
+			rs.childBindings[*binding.ParentBindingID] = append(rs.childBindings[*binding.ParentBindingID], binding)
+		}
+	}
+
+	// B3 fan-out: build cloneRoutes index.
+	// For each source with logical_clone_of in source_locator_json, register its
+	// route under the master source ID. ResolveSourceRoutes then returns both.
+	for _, src := range sourceByID {
+		masterID := extractLogicalCloneOf(src.SourceLocatorJSON)
+		if masterID <= 0 {
+			continue
+		}
+		cloneRoutes := routeBySourceID[src.ID]
+		if len(cloneRoutes) == 0 {
+			continue // clone has no active shadow binding; skip
+		}
+		for _, cloneRoute := range cloneRoutes {
+			rs.cloneRoutes[masterID] = append(rs.cloneRoutes[masterID], cloneRoute)
+			rs.logger.Debug("B3 fan-out: registered clone route",
+				zap.Int64("master_source_id", masterID),
+				zap.Int64("clone_source_id", src.ID),
+				zap.Int64("clone_shadow_binding_id", cloneRoute.ShadowBinding.ID),
+				zap.String("clone_target_table", cloneRoute.TableConfig.TargetTable),
+			)
+		}
+	}
+
+	for sourceID, v2Rules := range rulesBySource {
+		src := sourceByID[sourceID]
+		if src == nil {
+			continue
+		}
+		routes := routeBySourceID[sourceID]
+		if len(routes) == 0 {
+			rs.logger.Warn("V2 mapping rules have no shadow route",
+				zap.Int64("source_object_id", sourceID),
+				zap.String("source_object_name", src.SourceObjectName),
+			)
+			continue
+		}
+		for _, route := range routes {
+			if route.ShadowBinding == nil {
+				continue
+			}
+			bindingID := route.ShadowBinding.ID
+			for _, v2 := range v2Rules {
+				rs.mappingCache[bindingID] = append(rs.mappingCache[bindingID], convertV2ToLegacyRule(v2, src.SourceObjectName))
+			}
+		}
+	}
+
+	// Build maskMapCache for each active binding
+	for i := range allBindings {
+		binding := &allBindings[i]
+		bindingID := binding.ID
+		src := sourceByID[binding.SourceObjectID]
+
+		maskMap := make(map[string]string)
+
+		// 1. Per-table mapping rules
+		if src != nil {
+			v2Rules := rulesBySource[src.ID]
+			for _, v2 := range v2Rules {
+				if v2.ShadowBindingID != nil && *v2.ShadowBindingID == bindingID {
+					strategy := "none"
+					if v2.IsSensitiveField {
+						strategy = strings.ToLower(strings.TrimSpace(v2.MaskStrategy))
+						if strategy == "" {
+							strategy = "hmac"
+						}
+					}
+					if k := strings.ToLower(strings.TrimSpace(v2.SourceField)); k != "" {
+						maskMap[k] = strategy
+					}
+					if k := strings.ToLower(strings.TrimSpace(v2.TargetColumn)); k != "" {
+						maskMap[k] = strategy
+					}
+				}
+			}
+		}
+
+		// 2. Global sensitive fields fallback
+		for fieldName, strategy := range globalSensitiveMap {
+			if _, exists := maskMap[fieldName]; !exists {
+				maskMap[fieldName] = strategy
+			}
+		}
+
+		rs.maskMapCache[bindingID] = maskMap
+	}
+
+	rs.logger.Info("V2 metadata registry reloaded",
+		zap.Int("sources", len(sources)),
+		zap.Int("connections", len(connections)),
+		zap.Int("connection_uris_resolved", resolvedURIs),
+		zap.Int("shadow_bindings", len(allBindings)),
+		zap.Int("v2_mapping_rules", totalRules),
+	)
+	return nil
+}
+
+// convertV2ToLegacyRule reshapes mapping_rule_v2 into the legacy MappingRule
+// struct DynamicMapper still consumes. ListActiveBySourceObject already
+// filters by is_active=true AND status='approved', so flags are preserved
+// as-is for downstream Type/Active gates.
+func convertV2ToLegacyRule(v2 model.MappingRuleV2, sourceObjectName string) model.MappingRule {
+	return model.MappingRule{
+		ID:               uint(v2.ID),
+		SourceTable:      sourceObjectName,
+		SourceField:      v2.SourceField,
+		TargetColumn:     v2.TargetColumn,
+		DataType:         v2.DataType,
+		IsActive:         v2.IsActive,
+		IsSensitiveField: v2.IsSensitiveField,
+		MaskStrategy:     v2.MaskStrategy,
+		Status:           v2.Status,
+		IsNullable:       v2.IsNullable,
+		DefaultValue:     v2.DefaultValue,
+	}
+}
+
+func (rs *MetadataRegistryService) GetTableConfigByID(id uint) *model.TableRegistry {
+	rs.mu.RLock()
+	defer rs.mu.RUnlock()
+	return rs.idCache[id]
+}
+
+// GetChildBindings returns the cached child bindings for a parent binding ID,
+// or nil when none. Returned slice is shared — callers must NOT mutate.
+func (rs *MetadataRegistryService) GetChildBindings(parentBindingID int64) []*model.ShadowBinding {
+	if parentBindingID <= 0 {
+		return nil
+	}
+	rs.mu.RLock()
+	defer rs.mu.RUnlock()
+	return rs.childBindings[parentBindingID]
+}
+
+func (rs *MetadataRegistryService) GetTableConfig(targetTable string) *model.TableRegistry {
+	rs.mu.RLock()
+	defer rs.mu.RUnlock()
+	return rs.targetCache[targetTable]
+}
+
+func (rs *MetadataRegistryService) GetTableConfigBySource(sourceTable string) *model.TableRegistry {
+	rs.mu.RLock()
+	defer rs.mu.RUnlock()
+	return rs.sourceCache[strings.TrimSpace(sourceTable)]
+}
+
+func (rs *MetadataRegistryService) ListTableConfigs() []model.TableRegistry {
+	rs.mu.RLock()
+	defer rs.mu.RUnlock()
+	out := make([]model.TableRegistry, 0, len(rs.targetCache))
+	for _, item := range rs.targetCache {
+		if item == nil {
+			continue
+		}
+		out = append(out, *item)
+	}
+	return out
+}
+
+func (rs *MetadataRegistryService) GetMappingRules(bindingID int64) []model.MappingRule {
+	rs.mu.RLock()
+	defer rs.mu.RUnlock()
+	return rs.mappingCache[bindingID]
+}
+
+func (rs *MetadataRegistryService) GetDebeziumTables() []string {
+	rs.mu.RLock()
+	defer rs.mu.RUnlock()
+	out := make([]string, len(rs.debeziumTables))
+	copy(out, rs.debeziumTables)
+	return out
+}
+
+func (rs *MetadataRegistryService) ResolveSourceRoute(sourceDB, sourceTable string) *ResolvedSourceRoute {
+	rs.mu.RLock()
+	defer rs.mu.RUnlock()
+
+	for _, key := range buildRouteLookupKeys(sourceDB, sourceTable) {
+		if routes, ok := rs.routeCache[key]; ok && len(routes) > 0 {
+			return routes[0]
+		}
+	}
+	return nil
+}
+
+// GetSourceDSN resolves a usable DSN for the connection registered under
+// connectionCode. The `secret_ref` column may carry one of several
+// conventions seen across seed data, the cdc-cms UI create flow, and
+// legacy mirroring — so the resolver tries them in order and falls back
+// to building a DSN from the registry's structured fields (host, port,
+// default_database, engine_type). The legacy AES ciphertext path stays
+// as a last resort for forward-compat with at-rest encryption.
+func (rs *MetadataRegistryService) GetSourceDSN(ctx context.Context, connectionCode string) (string, error) {
+	conn, err := rs.connectionRepo.GetByCode(ctx, connectionCode)
+	if err != nil {
+		return "", err
+	}
+	if conn == nil {
+		return "", fmt.Errorf("connection %q not found", connectionCode)
+	}
+	return rs.resolveSourceURIFromConn(conn)
+}
+
+// resolveSourceURIFromConn mirrors GetSourceDSN's resolution chain but
+// works against an already-fetched ConnectionRegistry row. Callers that
+// have iterated `connectionRepo.GetAll()` (e.g. ReloadAll) avoid the
+// extra GetByCode round-trip per connection.
+func (rs *MetadataRegistryService) resolveSourceURIFromConn(conn *model.ConnectionRegistry) (string, error) {
+	if conn == nil {
+		return "", fmt.Errorf("nil connection row")
+	}
+	if uri, ok := ApplyConnectionOverride(conn, rs.connectionOverrides, rs.logger); ok {
+		return uri, nil
+	}
+
+	// cdc-cms "create source" UI ghi full URI vào column `host` và để `port`
+	// NULL. Đối xứng với cách xử lý secret_ref bên dưới — tránh duplicate
+	// scheme-detect logic ở caller (xem command_handler.scanFieldsMongoSource).
+	if conn.Host != nil {
+		if dsn := tryPlainDSN(*conn.Host); dsn != "" {
+			return dsn, nil
+		}
+		if dsn := tryEnvPointer(*conn.Host); dsn != "" {
+			return dsn, nil
+		}
+	}
+
+	if dsn := tryPlainDSN(conn.SecretRef); dsn != "" {
+		return dsn, nil
+	}
+	if dsn := tryEnvPointer(conn.SecretRef); dsn != "" {
+		return dsn, nil
+	}
+	if dsn := buildDSNFromFields(conn); dsn != "" {
+		return dsn, nil
+	}
+	if conn.SecretRef != "" {
+		if dsn, decErr := crypto.DecryptAES(conn.SecretRef, rs.masterKey); decErr == nil && dsn != "" {
+			return dsn, nil
+		}
+	}
+	return "", fmt.Errorf("cannot resolve DSN for connection %q (engine=%s): no usable DSN in secret_ref nor host/port fields",
+		conn.ConnectionCode, conn.EngineType)
+}
+
+// MetadataRegistryServiceForTestOpts mirrors the in-memory caches a test
+// would otherwise poke via unexported struct fields. Any nil map is left
+// untouched so callers populate only the slices they need.
+type MetadataRegistryServiceForTestOpts struct {
+	SourceCache    map[string]*model.TableRegistry
+	RouteCache     map[string][]*ResolvedSourceRoute
+	TargetRouteMap map[string]*ResolvedSourceRoute
+	MappingCache   map[int64][]model.MappingRule
+	TargetCache    map[string]*model.TableRegistry
+	CloneRoutes    map[int64][]*ResolvedSourceRoute
+}
+
+// NewMetadataRegistryServiceForTest preloads a MetadataRegistryService
+// with the supplied cache snapshots. Used by external test/ files that
+// previously initialized the struct's private fields directly.
+func NewMetadataRegistryServiceForTest(opts MetadataRegistryServiceForTestOpts) *MetadataRegistryService {
+	rs := &MetadataRegistryService{
+		logger:         zap.NewNop(),
+		sourceCache:    opts.SourceCache,
+		routeCache:     opts.RouteCache,
+		targetRouteMap: opts.TargetRouteMap,
+		mappingCache:   opts.MappingCache,
+		targetCache:    opts.TargetCache,
+		cloneRoutes:    opts.CloneRoutes,
+	}
+	if rs.mappingCache == nil {
+		rs.mappingCache = make(map[int64][]model.MappingRule)
+	}
+	return rs
+}
+
+// SynthesizeLegacyTableRegistryForTest exposes synthesizeLegacyTableRegistry for tests.
+func SynthesizeLegacyTableRegistryForTest(src *model.SourceObjectRegistry, binding *model.ShadowBinding, sourceURI string) *model.TableRegistry {
+	return synthesizeLegacyTableRegistry(src, binding, sourceURI)
+}
+
+// TryPlainDSNForTest exposes tryPlainDSN for tests in the external
+// test/ tree. See internal/service/metadata_registry_service.go.
+func TryPlainDSNForTest(s string) string { return tryPlainDSN(s) }
+
+// TryEnvPointerForTest exposes tryEnvPointer for tests in the external test/ tree.
+func TryEnvPointerForTest(s string) string { return tryEnvPointer(s) }
+
+// BuildDSNFromFieldsForTest exposes buildDSNFromFields for tests in the external test/ tree.
+func BuildDSNFromFieldsForTest(conn *model.ConnectionRegistry) string { return buildDSNFromFields(conn) }
+
+// tryPlainDSN returns s when s already looks like a connection URI for a
+// supported engine (mongodb / postgres / mysql). Empty string otherwise.
+func tryPlainDSN(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	for _, prefix := range []string{
+		"mongodb://", "mongodb+srv://",
+		"postgres://", "postgresql://",
+		"mysql://", "mariadb://",
+	} {
+		if strings.HasPrefix(s, prefix) {
+			return s
+		}
+	}
+	return ""
+}
+
+// tryEnvPointer resolves the `env://namespace.key` and `env:VAR_NAME`
+// schemes used by bootstrap seed data and the cdc-cms shadow bootstrap.
+// `env://mongodb.url` → os.Getenv("MONGODB_URL").
+// `env:MONGO_URI`     → os.Getenv("MONGO_URI").
+// Returns empty when the scheme does not match or the env var is unset.
+func tryEnvPointer(s string) string {
+	s = strings.TrimSpace(s)
+	switch {
+	case strings.HasPrefix(s, "env://"):
+		key := strings.TrimPrefix(s, "env://")
+		key = strings.ReplaceAll(key, ".", "_")
+		return os.Getenv(strings.ToUpper(key))
+	case strings.HasPrefix(s, "env:"):
+		key := strings.TrimSpace(strings.TrimPrefix(s, "env:"))
+		if key == "" {
+			return ""
+		}
+		return os.Getenv(key)
+	}
+	return ""
+}
+
+// buildDSNFromFields composes a DSN from the structured connection_registry
+// columns. Used when secret_ref is empty, a legacy pointer (`v1:...`), or
+// any unknown scheme — i.e., the path the cdc-cms UI "create source" flow
+// hits because it writes `secret_ref='v1:'+name` without storing a DSN.
+//
+// MongoDB:    mongodb://host:port/                (auth deferred to client)
+// Postgres:   postgres://host:port/<db>?sslmode=<options_json.sslmode|disable>
+// Returns "" when required fields (host, port for Mongo; host+port+db for PG)
+// are missing.
+func buildDSNFromFields(conn *model.ConnectionRegistry) string {
+	if conn == nil {
+		return ""
+	}
+	if conn.Host == nil || strings.TrimSpace(*conn.Host) == "" {
+		return ""
+	}
+	if conn.Port == nil || *conn.Port <= 0 {
+		return ""
+	}
+	host := strings.TrimSpace(*conn.Host)
+	port := *conn.Port
+	db := ""
+	if conn.DefaultDatabase != nil {
+		db = strings.TrimSpace(*conn.DefaultDatabase)
+	}
+
+	switch strings.ToLower(strings.TrimSpace(conn.EngineType)) {
+	case "mongodb", "mongo":
+		return fmt.Sprintf("mongodb://%s:%d/", host, port)
+	case "postgres", "postgresql":
+		if db == "" {
+			return ""
+		}
+		sslmode := "disable"
+		if len(conn.OptionsJSON) > 0 {
+			var opts map[string]interface{}
+			if err := json.Unmarshal(conn.OptionsJSON, &opts); err == nil {
+				if v, ok := opts["sslmode"].(string); ok && strings.TrimSpace(v) != "" {
+					sslmode = strings.TrimSpace(v)
+				}
+			}
+		}
+		return fmt.Sprintf("postgres://%s:%d/%s?sslmode=%s", host, port, db, sslmode)
+	}
+	return ""
+}
+
+// ResolveSourceRoutes returns the master route for (sourceDB, sourceTable) plus
+// all logical-clone routes registered via source_locator_json.logical_clone_of.
+// Returns nil when the source is not in the registry.
+func (rs *MetadataRegistryService) ResolveSourceRoutes(sourceDB, sourceTable string) []*ResolvedSourceRoute {
+	rs.mu.RLock()
+	defer rs.mu.RUnlock()
+
+	var masterRoutes []*ResolvedSourceRoute
+	for _, key := range buildRouteLookupKeys(sourceDB, sourceTable) {
+		if routes, ok := rs.routeCache[key]; ok {
+			masterRoutes = routes
+			break
+		}
+	}
+	if len(masterRoutes) == 0 {
+		return nil
+	}
+
+	routes := append([]*ResolvedSourceRoute(nil), masterRoutes...)
+
+	// Append logical-clone routes keyed by this master's source ID.
+	if masterRoutes[0].SourceObject != nil {
+		clones := rs.cloneRoutes[masterRoutes[0].SourceObject.ID]
+		routes = append(routes, clones...)
+	}
+	return routes
+}
+
+func (rs *MetadataRegistryService) ResolveTargetRoute(targetTable string) *ResolvedSourceRoute {
+	rs.mu.RLock()
+	defer rs.mu.RUnlock()
+	return rs.targetRouteMap[strings.TrimSpace(targetTable)]
+}
+
+func (rs *MetadataRegistryService) GetMinFlushIntervalSeconds() int {
+	rs.mu.RLock()
+	defer rs.mu.RUnlock()
+	minVal := 0
+	for _, cfg := range rs.targetCache {
+		if cfg == nil || cfg.BatchFlushIntervalSeconds == nil {
+			continue
+		}
+		v := *cfg.BatchFlushIntervalSeconds
+		if v > 0 && (minVal == 0 || v < minVal) {
+			minVal = v
+		}
+	}
+	if minVal <= 0 {
+		return 5 // default
+	}
+	return minVal
+}
+
+func synthesizeLegacyTableRegistry(src *model.SourceObjectRegistry, binding *model.ShadowBinding, sourceURI string) *model.TableRegistry {
+	sourceDB := ""
+	if src.SourceDatabase != nil {
+		sourceDB = strings.TrimSpace(*src.SourceDatabase)
+	}
+
+	sourceTable := strings.TrimSpace(src.SourceObjectName)
+	if src.SourceSchema != nil && strings.TrimSpace(*src.SourceSchema) != "" {
+		sourceTable = strings.TrimSpace(*src.SourceSchema) + "." + sourceTable
+	}
+
+	cfg := &model.TableRegistry{
+		ID:              uint(src.ID),
+		SourceDB:        sourceDB,
+		SourceType:      normalizeEngineType(src.SourceEngineType),
+		SourceTable:     sourceTable,
+		SourceURL:       strings.TrimSpace(sourceURI),
+		TargetTable:     strings.TrimSpace(binding.ShadowTable),
+		ShadowSchema:    strings.TrimSpace(binding.ShadowSchema),
+		SyncEngine:      strings.TrimSpace(src.SyncEngine),
+		PrimaryKeyField: strings.TrimSpace(src.PrimaryKeyField),
+		IsActive:        src.IsActive && binding.IsActive,
+		IsTableCreated:  strings.EqualFold(binding.DDLStatus, "created"),
+		SyncStatus:      strings.TrimSpace(src.ProfileStatus),
+		Notes:           src.Notes,
+	}
+
+	if cfg.PrimaryKeyField == "" {
+		cfg.PrimaryKeyField = "id"
+	}
+	if src.PrimaryKeyType != nil {
+		cfg.PrimaryKeyType = *src.PrimaryKeyType
+	}
+	if src.TimestampField != nil {
+		cfg.TimestampField = src.TimestampField
+	}
+	if len(src.TimestampCandidatesJSON) > 0 {
+		cfg.TimestampFieldCandidates = src.TimestampCandidatesJSON
+	}
+	cfg.BatchFlushIntervalSeconds = src.BatchFlushIntervalSeconds
+	return cfg
+}
+
+// buildSourceLookupKeys emits the cache keys under which a source_object_registry
+// row registers itself. Legacy keys (object_name, db|object_name) keep
+// backwards-compat for lookups that don't know the connection — first-wins
+// applies via the defensive `if !exists` guard at the cache write site.
+// Connection-aware keys (connection_code:..., connection_code:db|...) are
+// additive so a caller that DOES know the connector can resolve precisely
+// when two connectors share (db, collection). connectionCode may be empty
+// — in that case only legacy keys are emitted (graceful degradation).
+func buildSourceLookupKeys(src *model.SourceObjectRegistry, connectionCode string) []string {
+	objectName := strings.TrimSpace(src.SourceObjectName)
+	sourceDB := optionalString(src.SourceDatabase)
+	connCode := strings.TrimSpace(connectionCode)
+
+	keys := []string{
+		objectName,
+		fmt.Sprintf("%s|%s", sourceDB, objectName),
+	}
+	if connCode != "" {
+		keys = append(keys,
+			fmt.Sprintf("%s:%s", connCode, objectName),
+			fmt.Sprintf("%s:%s|%s", connCode, sourceDB, objectName),
+		)
+	}
+	if src.SourceSchema != nil && strings.TrimSpace(*src.SourceSchema) != "" {
+		qualified := strings.TrimSpace(*src.SourceSchema) + "." + objectName
+		keys = append(keys, qualified)
+		keys = append(keys, fmt.Sprintf("%s|%s", sourceDB, qualified))
+		if connCode != "" {
+			keys = append(keys,
+				fmt.Sprintf("%s:%s", connCode, qualified),
+				fmt.Sprintf("%s:%s|%s", connCode, sourceDB, qualified),
+			)
+		}
+	}
+	return dedupeStrings(keys)
+}
+
+func buildRouteLookupKeys(sourceDB, sourceTable string) []string {
+	sourceDB = strings.TrimSpace(sourceDB)
+	sourceTable = strings.TrimSpace(sourceTable)
+	// Specific key MUST come first: when two source_object_registry rows
+	// share the same source_object_name (collection) but live under
+	// different databases/connections, the unqualified "table" key in
+	// routeCache is first-wins and points at whichever row loaded first.
+	// A subject-driven lookup carries the source DB, so try the
+	// "db|table" form before falling back to the legacy unqualified key.
+	return dedupeStrings([]string{
+		fmt.Sprintf("%s|%s", sourceDB, sourceTable),
+		sourceTable,
+	})
+}
+
+func optionalString(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return strings.TrimSpace(*v)
+}
+
+func dedupeStrings(items []string) []string {
+	out := make([]string, 0, len(items))
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		out = append(out, item)
+	}
+	return out
+}
+
+func appendIfMissing(items []string, item string) []string {
+	item = strings.TrimSpace(item)
+	if item == "" {
+		return items
+	}
+	for _, existing := range items {
+		if existing == item {
+			return items
+		}
+	}
+	return append(items, item)
+}
+
+func normalizeEngineType(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "postgresql":
+		return "postgresql"
+	case "mariadb":
+		return "mariadb"
+	case "mysql":
+		return "mysql"
+	case "mongodb":
+		return "mongodb"
+	default:
+		return strings.ToLower(strings.TrimSpace(v))
+	}
+}
+
+func decodeJSONToMap(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+	return out
+}
+
+// extractLogicalCloneOf reads the `logical_clone_of` integer from a
+// source_locator_json JSONB blob. Returns 0 when not present or invalid.
+// B3 fan-out: clone sources declare their master ID via this key.
+func extractLogicalCloneOf(raw json.RawMessage) int64 {
+	m := decodeJSONToMap(raw)
+	if m == nil {
+		return 0
+	}
+	v, ok := m["logical_clone_of"]
+	if !ok {
+		return 0
+	}
+	switch val := v.(type) {
+	case float64:
+		return int64(val)
+	case int64:
+		return val
+	case int:
+		return int64(val)
+	case json.Number:
+		n, _ := val.Int64()
+		return n
+	}
+	return 0
+}
+
+func (rs *MetadataRegistryService) GetMaskMap(bindingID int64) map[string]string {
+	rs.mu.RLock()
+	defer rs.mu.RUnlock()
+	if rs.maskMapCache == nil {
+		return nil
+	}
+	return rs.maskMapCache[bindingID]
+}

@@ -1,0 +1,1670 @@
+package service
+
+import (
+	"context"
+	"crypto/md5"
+	"encoding/json"
+	"fmt"
+	"hash/crc32"
+	"hash/fnv"
+	"math/rand"
+	"os"
+	"strings"
+	"time"
+
+	"centralized-data-service/internal/model"
+	"centralized-data-service/internal/repository"
+	"centralized-data-service/pkgs/metrics"
+	"centralized-data-service/pkgs/rediscache"
+
+	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+)
+
+// ReconCoreConfig groups tunables for the v3 window-based orchestrator.
+// All fields optional — sensible defaults applied at construction.
+type ReconCoreConfig struct {
+	// Window sizing
+	WindowSize         time.Duration // default 15m
+	WindowLookback     time.Duration // default 7 * 24h
+	WindowFreezeMargin time.Duration // default 5m (don't scan t > now - margin)
+
+	// Thresholds
+	CountDriftThreshold int64 // default 1 document
+
+	// Tier 3 budget
+	Tier3MaxDocsPerRun int64 // default 10_000_000
+	Tier3OffPeakStart  int   // hour 0-23, default 2
+	Tier3OffPeakEnd    int   // hour 0-23, default 5
+
+	// Scheduling
+	JitterMaxSeconds int // default 30
+
+	// Leader election (Redis). When nil — scheduled recon runs on every
+	// instance. Still per-table advisory-locked so there is no duplicate
+	// work, but allocating work across instances is more efficient.
+	LeaderLockTTL   time.Duration // default 60s
+	LeaderHeartbeat time.Duration // default 20s
+	LeaderLockKey   string        // default "recon:leader"
+
+	// Instance identity for recon_runs.instance_id.
+	InstanceID string
+}
+
+func (c *ReconCoreConfig) applyDefaults() {
+	if c.WindowSize <= 0 {
+		c.WindowSize = 15 * time.Minute
+	}
+	if c.WindowLookback <= 0 {
+		c.WindowLookback = 7 * 24 * time.Hour
+	}
+	if c.WindowFreezeMargin <= 0 {
+		c.WindowFreezeMargin = 5 * time.Minute
+	}
+	if c.CountDriftThreshold <= 0 {
+		c.CountDriftThreshold = 1
+	}
+	if c.Tier3MaxDocsPerRun <= 0 {
+		c.Tier3MaxDocsPerRun = 10_000_000
+	}
+	if c.Tier3OffPeakStart == 0 && c.Tier3OffPeakEnd == 0 {
+		c.Tier3OffPeakStart = 2
+		c.Tier3OffPeakEnd = 5
+	}
+	if c.JitterMaxSeconds <= 0 {
+		c.JitterMaxSeconds = 30
+	}
+	if c.LeaderLockTTL <= 0 {
+		c.LeaderLockTTL = 60 * time.Second
+	}
+	if c.LeaderHeartbeat <= 0 {
+		c.LeaderHeartbeat = 20 * time.Second
+	}
+	if c.LeaderLockKey == "" {
+		c.LeaderLockKey = "recon:leader"
+	}
+	if c.InstanceID == "" {
+		host, _ := os.Hostname()
+		c.InstanceID = fmt.Sprintf("%s-%s", host, uuid.NewString()[:8])
+	}
+}
+
+// ReconCore orchestrates tiered reconciliation.
+//
+// v3 design (plan_data_integrity_v3 §2-§10):
+//   - Tier 1: per-window count compare. No full-table COUNT.
+//   - Tier 2: XOR-hash compare only on windows drifted by Tier 1.
+//   - Tier 3: 256-bucket whole-table hash, budget-gated off-peak.
+//   - Advisory lock `pg_try_advisory_lock(hashtext('recon_'||table))`
+//     prevents double-runs within a single worker instance.
+//   - Optional Redis leader election — scheduled recon only runs on
+//     the leader; NATS-command-triggered recon runs on any instance
+//     because the advisory lock still serialises per table.
+//   - Every run is tracked in `recon_runs` (migration 011) with state
+//     transitions running→success|failed|cancelled, plus metrics.
+type ReconCore struct {
+	sourceAgent *ReconSourceAgent
+	destAgent   *ReconDestAgent
+	// masterAgent — dest-plane (master DB 5434) cho Segment B (Recon V4).
+	// nil = Segment B chưa wired (RunSegmentB từ chối chạy với fix_hint).
+	masterAgent *ReconDestAgent
+	// shadowPlane/masterPlane — raw handles cho L3-B row-diff (P4).
+	shadowPlane   *gorm.DB
+	masterPlane   *gorm.DB
+	db            *gorm.DB
+	mongoClient   *mongo.Client
+	schemaAdapter *SchemaAdapter
+	registryRepo  *repository.RegistryRepo
+	metadata      MetadataRegistry
+	redis         *rediscache.RedisCache
+	cfg           ReconCoreConfig
+	logger        *zap.Logger
+}
+
+// NewReconCore keeps the original constructor signature for backward
+// compatibility. Uses default config and no Redis leader election.
+func NewReconCore(
+	sourceAgent *ReconSourceAgent,
+	destAgent *ReconDestAgent,
+	db *gorm.DB,
+	mongoClient *mongo.Client,
+	schemaAdapter *SchemaAdapter,
+	registryRepo *repository.RegistryRepo,
+	logger *zap.Logger,
+) *ReconCore {
+	return NewReconCoreWithConfig(sourceAgent, destAgent, db, mongoClient, schemaAdapter, registryRepo, nil, ReconCoreConfig{}, logger)
+}
+
+func (rc *ReconCore) SetMetadataRegistry(metadata MetadataRegistry) {
+	rc.metadata = metadata
+}
+
+// NewReconCoreWithConfig gives callers full control — used by the
+// worker_server wiring when Redis + explicit instance ID are available.
+func NewReconCoreWithConfig(
+	sourceAgent *ReconSourceAgent,
+	destAgent *ReconDestAgent,
+	db *gorm.DB,
+	mongoClient *mongo.Client,
+	schemaAdapter *SchemaAdapter,
+	registryRepo *repository.RegistryRepo,
+	redis *rediscache.RedisCache,
+	cfg ReconCoreConfig,
+	logger *zap.Logger,
+) *ReconCore {
+	cfg.applyDefaults()
+	return &ReconCore{
+		sourceAgent:   sourceAgent,
+		destAgent:     destAgent,
+		db:            db,
+		mongoClient:   mongoClient,
+		schemaAdapter: schemaAdapter,
+		registryRepo:  registryRepo,
+		redis:         redis,
+		cfg:           cfg,
+		logger:        logger,
+	}
+}
+
+// ============================================================
+// Per-table locking
+// ============================================================
+
+// withTableLock acquires `pg_try_advisory_lock(key)` with a stable
+// CRC32-derived 32-bit key. This avoids per-cluster hashtext drift and
+// reduces accidental collisions between different table names.
+// Returns (acquired, unlock). Caller MUST call unlock() whether acquired
+// or not (unlock is a no-op when not acquired). A non-acquired lock
+// means a previous run is still in flight; the caller should skip.
+func (rc *ReconCore) withTableLock(ctx context.Context, table string) (bool, func()) {
+	key := advisoryLockKey("recon_" + table)
+	var acquired bool
+	if err := rc.db.WithContext(ctx).Raw(
+		"SELECT pg_try_advisory_lock(?)", key,
+	).Scan(&acquired).Error; err != nil {
+		rc.logger.Warn("advisory lock acquire failed — assuming NOT acquired",
+			zap.String("table", table), zap.Error(err))
+		return false, func() {}
+	}
+	if !acquired {
+		return false, func() {}
+	}
+	unlock := func() {
+		rc.db.Exec("SELECT pg_advisory_unlock(?)", key)
+	}
+	return true, unlock
+}
+
+// ============================================================
+// Leader election
+// ============================================================
+
+// AcquireLeader attempts to become the scheduled-recon leader. Returns a
+// cancel func that releases the lock + stops the heartbeat. Safe to call
+// when Redis is not configured — in that case it always returns
+// (true, noop) so single-instance deployments work unchanged.
+func (rc *ReconCore) AcquireLeader(ctx context.Context) (bool, func()) {
+	if rc.redis == nil {
+		return true, func() {}
+	}
+	client := rc.redis.RawClient()
+	if client == nil {
+		return true, func() {}
+	}
+
+	ok, err := client.SetNX(ctx, rc.cfg.LeaderLockKey, rc.cfg.InstanceID, rc.cfg.LeaderLockTTL).Result()
+	if err != nil {
+		rc.logger.Warn("leader acquire failed — skipping scheduled run",
+			zap.Error(err))
+		return false, func() {}
+	}
+	if !ok {
+		return false, func() {}
+	}
+
+	hbCtx, cancel := context.WithCancel(ctx)
+	go func() {
+		ticker := time.NewTicker(rc.cfg.LeaderHeartbeat)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-hbCtx.Done():
+				return
+			case <-ticker.C:
+				// Refresh TTL using an ownership-guarded Lua script so we
+				// don't accidentally extend a stolen lock.
+				script := `if redis.call("get", KEYS[1]) == ARGV[1] then
+					return redis.call("pexpire", KEYS[1], ARGV[2])
+				else return 0 end`
+				_, _ = client.Eval(hbCtx, script,
+					[]string{rc.cfg.LeaderLockKey},
+					rc.cfg.InstanceID, int64(rc.cfg.LeaderLockTTL/time.Millisecond),
+				).Result()
+			}
+		}
+	}()
+
+	release := func() {
+		cancel()
+		// Release lock only if still ours.
+		script := `if redis.call("get", KEYS[1]) == ARGV[1] then
+			return redis.call("del", KEYS[1])
+		else return 0 end`
+		_, _ = client.Eval(context.Background(), script,
+			[]string{rc.cfg.LeaderLockKey}, rc.cfg.InstanceID).Result()
+	}
+	return true, release
+}
+
+// ============================================================
+// Run-state tracking
+// ============================================================
+
+type reconRunHandle struct {
+	id           string
+	table        string
+	tier         int
+	started      time.Time
+	docsScanned  int64
+	windowsCount int
+	mismatches   int
+	healActions  int
+}
+
+// beginRun inserts a running row into recon_runs. The unique index
+// `recon_runs_one_running` (table_name WHERE status='running') enforces
+// a single in-flight row per table; the advisory lock above is the
+// Go-side gate, this is the DB-side safety net.
+func (rc *ReconCore) beginRun(ctx context.Context, table string, tier int) (*reconRunHandle, error) {
+	h := &reconRunHandle{
+		id:      uuid.NewString(),
+		table:   table,
+		tier:    tier,
+		started: time.Now().UTC(),
+	}
+	insert := func() error {
+		return rc.db.WithContext(ctx).Exec(
+			`INSERT INTO cdc_system.recon_runs
+				(id, table_name, tier, status, started_at, instance_id)
+			 VALUES (?, ?, ?, 'running', ?, ?)`,
+			h.id, table, tier, h.started, rc.cfg.InstanceID,
+		).Error
+	}
+	err := insert()
+	if err != nil && strings.Contains(err.Error(), "recon_runs_one_running") {
+		// Tự hồi phục stale-running: worker crash/kill giữa vòng để lại run
+		// 'running' mồ côi → unique index chặn bảng đó recon VĨNH VIỄN
+		// (đã xảy ra thật: 6 bảng kẹt, error 23505 mỗi vòng → Source=NULL
+		// trên dashboard). Run 'running' > 15' chắc chắn chết (1 vòng/bảng
+		// chỉ vài chục giây) → cancel rồi retry 1 lần. Run đang chạy THẬT
+		// (<15') thì giữ nguyên semantics cũ: trả lỗi, caller skip.
+		res := rc.db.WithContext(ctx).Exec(
+			`UPDATE cdc_system.recon_runs
+			    SET status='cancelled', finished_at=NOW(),
+			        error_message='stale running auto-cancelled by beginRun (worker restart?)'
+			  WHERE table_name = ? AND status = 'running'
+			    AND started_at < NOW() - interval '15 minutes'`,
+			table,
+		)
+		if res.Error == nil && res.RowsAffected > 0 {
+			rc.logger.Warn("recon beginRun: auto-cancelled stale running run",
+				zap.String("table", table), zap.Int64("cancelled", res.RowsAffected))
+			err = insert()
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	return h, nil
+}
+
+// finishRun marks the row terminal (success|failed|cancelled) and
+// writes the Prometheus metrics. errMsg may be empty for success.
+func (rc *ReconCore) finishRun(ctx context.Context, h *reconRunHandle, status, errMsg string) {
+	finished := time.Now().UTC()
+	dur := finished.Sub(h.started).Seconds()
+	errMsg = SanitizeFreeformText(errMsg, 2000)
+
+	updates := map[string]interface{}{
+		"status":           status,
+		"finished_at":      finished,
+		"docs_scanned":     h.docsScanned,
+		"windows_checked":  h.windowsCount,
+		"mismatches_found": h.mismatches,
+		"heal_actions":     h.healActions,
+	}
+	if errMsg != "" {
+		updates["error_message"] = errMsg
+	}
+	if err := rc.db.WithContext(ctx).Exec(
+		`UPDATE cdc_system.recon_runs
+		 SET status=?, finished_at=?, docs_scanned=?, windows_checked=?,
+		     mismatches_found=?, heal_actions=?, error_message=?
+		 WHERE id=?`,
+		updates["status"], updates["finished_at"], updates["docs_scanned"],
+		updates["windows_checked"], updates["mismatches_found"],
+		updates["heal_actions"], errMsg, h.id,
+	).Error; err != nil {
+		rc.logger.Warn("finish recon_runs row failed", zap.Error(err))
+	}
+
+	// Prometheus emit. Tier 3 tables can be huge → bucket by
+	// `table_group` (prefix before first underscore or "other") to
+	// avoid cardinality blow-up. Top-level `table` label kept only
+	// for a manually curated allow-list — here we always emit
+	// `table_group` and the explicit `table` is left for the
+	// legacy ReconDrift gauge which already has per-table cardinality.
+	group := tableGroup(h.table)
+	metrics.ReconRunDuration.WithLabelValues(group, fmt.Sprintf("%d", h.tier)).Observe(dur)
+	metrics.ReconMismatchCount.WithLabelValues(h.table, fmt.Sprintf("%d", h.tier)).Set(float64(h.mismatches))
+	if status == "success" {
+		metrics.ReconLastSuccessTs.WithLabelValues(h.table, fmt.Sprintf("%d", h.tier)).Set(float64(finished.Unix()))
+	}
+}
+
+// tableGroup returns a low-cardinality group label for a table name.
+// Strategy: take the portion before the first underscore; if absent,
+// "other". Callers that want per-table metrics should use the
+// explicit `table` label on mismatch gauges instead.
+// TableGroupForTest exposes tableGroup for tests in the external test/ tree.
+func TableGroupForTest(table string) string { return tableGroup(table) }
+
+// DiffIDsForTest exposes diffIDs for tests in the external test/ tree.
+func DiffIDsForTest(a, b []string) ([]string, []string) { return diffIDs(a, b) }
+
+func tableGroup(table string) string {
+	idx := strings.Index(table, "_")
+	if idx <= 0 {
+		return "other"
+	}
+	return table[:idx]
+}
+
+// ============================================================
+// Windowing
+// ============================================================
+
+// window is a half-open interval [Lo, Hi).
+type window struct {
+	Lo time.Time
+	Hi time.Time
+}
+
+// buildWindows slices [from, to) into N windows of size cfg.WindowSize.
+// If the range is not a clean multiple of WindowSize the last window
+// ends exactly at `to`.
+func (rc *ReconCore) buildWindows(from, to time.Time) []window {
+	var ws []window
+	if to.Before(from) {
+		return ws
+	}
+	cur := from
+	for cur.Before(to) {
+		next := cur.Add(rc.cfg.WindowSize)
+		if next.After(to) {
+			next = to
+		}
+		ws = append(ws, window{Lo: cur, Hi: next})
+		cur = next
+	}
+	return ws
+}
+
+// pickScanRange resolves the upper watermark (min of both sides' max
+// source ts, clamped to now − freeze margin) and the lower watermark
+// (upper − lookback).
+// tsField returns the entry's Mongo timestamp field (Bug B). Helper
+// keeps the nil-pointer dereference in one place + lets us unit-test
+// the default fallback behaviour when registry value is not set.
+func tsField(entry model.TableRegistry) string {
+	if entry.TimestampField == nil {
+		return ""
+	}
+	return *entry.TimestampField
+}
+
+// ============================================================
+// Recon V4 P3 — Watermark adaptive + Lag monitoring
+// ============================================================
+
+// adaptiveFreeze — freeze margin theo lag THỰC đo được (trụ 1 chuẩn:
+// moving-target). Lag cao → margin giãn → không false-positive khi
+// pipeline đang đuổi; kẹp [WindowFreezeMargin, 60m].
+func (rc *ReconCore) adaptiveFreeze(lagMs int64) time.Duration {
+	base := rc.cfg.WindowFreezeMargin // default 5m
+	m := base + time.Duration(lagMs)*time.Millisecond
+	if m < base {
+		m = base
+	}
+	if m > 60*time.Minute {
+		m = 60 * time.Minute
+	}
+	return m
+}
+
+// lagBetween — chênh watermark giữa 2 max-ts (>=0; vế nào zero → 0,
+// không đo được thì không phạt margin).
+func lagBetween(upstream, downstream time.Time) int64 {
+	if upstream.IsZero() || downstream.IsZero() {
+		return 0
+	}
+	d := upstream.Sub(downstream).Milliseconds()
+	if d < 0 {
+		return 0
+	}
+	return d
+}
+
+// upsertReconLag — ghi 1 cột đo (ingest_lag_ms | transmute_lag_ms) cho bảng.
+// col được whitelist cứng — KHÔNG nhận từ input ngoài.
+func (rc *ReconCore) upsertReconLag(ctx context.Context, table, col string, lagMs int64) {
+	if col != "ingest_lag_ms" && col != "transmute_lag_ms" {
+		return
+	}
+	if err := rc.db.WithContext(ctx).Exec(fmt.Sprintf(
+		`INSERT INTO cdc_system.recon_lag (table_name, %s, measured_at)
+		 VALUES (?, ?, NOW())
+		 ON CONFLICT (table_name) DO UPDATE SET %s = EXCLUDED.%s, measured_at = NOW()`,
+		col, col, col), table, lagMs).Error; err != nil {
+		rc.logger.Warn("recon_lag upsert failed", zap.String("table", table), zap.Error(err))
+	}
+}
+
+func (rc *ReconCore) pickScanRange(ctx context.Context, entry model.TableRegistry) (time.Time, time.Time, error) {
+	srcMax, err := rc.sourceAgent.MaxWindowTs(ctx, entry.SourceURL, entry.SourceDB, entry.SourceTable, tsField(entry))
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("source max ts: %w", err)
+	}
+	dstMax, err := rc.destAgent.MaxWindowTs(ctx, entry.QualifiedTarget())
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("dest max ts: %w", err)
+	}
+
+	// P3: ingest lag = chênh watermark source↔shadow; ghi recon_lag +
+	// nuôi adaptive freeze (lag cao → scan lùi xa hơn, tránh false-positive).
+	ingestLagMs := lagBetween(srcMax, dstMax)
+	rc.upsertReconLag(ctx, entry.TargetTable, "ingest_lag_ms", ingestLagMs)
+
+	// Upper watermark = min(max(src), max(dst), now - adaptiveFreeze)
+	nowFreeze := time.Now().UTC().Add(-rc.adaptiveFreeze(ingestLagMs))
+	upper := nowFreeze
+	// +1ms khi kẹp theo max-ts: window `ts < upper` là EXCLUSIVE — upper đúng
+	// bằng max sẽ loại ROW MỚI NHẤT vĩnh viễn khi bảng idle (cùng edge đã
+	// bắt được ở Segment B: missing row cuối không bao giờ vào window check).
+	if !srcMax.IsZero() && srcMax.Before(upper) {
+		upper = srcMax.Add(time.Millisecond)
+	}
+	if !dstMax.IsZero() && dstMax.Before(upper) {
+		upper = dstMax.Add(time.Millisecond)
+	}
+	lower := upper.Add(-rc.cfg.WindowLookback)
+	return lower, upper, nil
+}
+
+// ============================================================
+// Tier 1 — count per window
+// ============================================================
+
+// RunTier1 performs window-based count comparison for a single table.
+// No full-table COUNT is issued — we count each 15-minute slice in a
+// range-indexed query on both sides. Returns a drift snapshot that
+// Tier 2 can drill into.
+func (rc *ReconCore) RunTier1(ctx context.Context, entry model.TableRegistry) *model.ReconciliationReport {
+	acquired, unlock := rc.withTableLock(ctx, entry.TargetTable)
+	defer unlock()
+	if !acquired {
+		rc.logger.Info("tier1 skipped — previous run ongoing",
+			zap.String("table", entry.TargetTable))
+		return rc.errorReport(entry, "count", 1, fmt.Errorf("previous run ongoing"))
+	}
+
+	handle, err := rc.beginRun(ctx, entry.TargetTable, 1)
+	if err != nil {
+		rc.logger.Error("tier1 beginRun failed", zap.Error(err))
+		return rc.errorReport(entry, "count", 1, err)
+	}
+
+	status := "success"
+	defer func() {
+		rc.finishRun(ctx, handle, status, "")
+	}()
+
+	lo, hi, err := rc.pickScanRange(ctx, entry)
+	if err != nil {
+		status = "failed"
+		return rc.errorReport(entry, "count", 1, err)
+	}
+	windows := rc.buildWindows(lo, hi)
+	handle.windowsCount = len(windows)
+
+	type winDrift struct {
+		Lo          time.Time `json:"lo"`
+		Hi          time.Time `json:"hi"`
+		SourceCount int64     `json:"source_count"`
+		DestCount   int64     `json:"dest_count"`
+	}
+	var drifted []winDrift
+	var totalSrc, totalDst int64
+
+	// Migration 017: CountInWindowWithFallback probes candidate fields
+	// when the primary returns 0 — prevents silent drift reports when
+	// registry `timestamp_field` is stale relative to actual collection
+	// schema (discovered runtime, auto-correcting).
+	fallbacks := entry.GetCandidates()
+	for _, w := range windows {
+		srcCount, fieldUsed, err := rc.sourceAgent.CountInWindowWithFallback(
+			ctx, entry.SourceURL, entry.SourceDB, entry.SourceTable,
+			tsField(entry), w.Lo, w.Hi, fallbacks,
+		)
+		if err != nil {
+			status = "failed"
+			return rc.errorReport(entry, "count", 1, fmt.Errorf("src count window %v: %w", w.Lo, err))
+		}
+		_ = fieldUsed // future: persist per-window fieldUsed for audit
+		dstCount, err := rc.destAgent.CountInWindow(ctx, entry.QualifiedTarget(), w.Lo, w.Hi)
+		if err != nil {
+			status = "failed"
+			return rc.errorReport(entry, "count", 1, fmt.Errorf("dst count window %v: %w", w.Lo, err))
+		}
+		totalSrc += srcCount
+		totalDst += dstCount
+		handle.docsScanned += srcCount + dstCount
+
+		if abs(srcCount-dstCount) >= rc.cfg.CountDriftThreshold {
+			drifted = append(drifted, winDrift{Lo: w.Lo, Hi: w.Hi, SourceCount: srcCount, DestCount: dstCount})
+		}
+	}
+
+	handle.mismatches = len(drifted)
+
+	statusStr := "ok"
+	if len(drifted) > 0 {
+		statusStr = "drift"
+	}
+
+	driftJSON, _ := json.Marshal(drifted)
+
+	// Migration 084 (dashboard): TỔNG record thật 2 trạm tại thời điểm recon
+	// — khác totalSrc/totalDst (chỉ đếm trong window 7d). Lỗi đếm → NULL,
+	// không fail run (counts là phụ trợ hiển thị).
+	var totalSrcFull, totalDstFull *int64
+	if v, err := rc.sourceAgent.CountDocuments(ctx, entry.SourceURL, entry.SourceDB, entry.SourceTable); err == nil {
+		totalSrcFull = &v
+	}
+	if v, err := rc.destAgent.CountRows(ctx, entry.QualifiedTarget(), entry.PrimaryKeyField); err == nil {
+		totalDstFull = &v
+	}
+
+	duration := int(time.Since(handle.started).Milliseconds())
+	srcTotal := totalSrc
+	report := &model.ReconciliationReport{
+		TargetTable:      entry.TargetTable,
+		SourceDB:         entry.SourceDB,
+		SourceCount:      &srcTotal,
+		TotalSourceCount: totalSrcFull,
+		TotalDestCount:   totalDstFull,
+		DestCount:        totalDst,
+		Diff:             totalSrc - totalDst,
+		StaleCount:       len(drifted),
+		StaleIDs:         driftJSON, // reuse stale_ids column as drifted-windows payload for tier 1/2
+		CheckType:        "count_windowed",
+		Status:           statusStr,
+		Tier:             1,
+		DurationMs:       &duration,
+		CheckedAt:        time.Now().UTC(),
+	}
+	rc.db.Create(report)
+	// P4: alert ngưỡng (Segment A) vào cdc_alerts.
+	rc.alertOnReport(ctx, "source_shadow", entry.TargetTable, statusStr, 0, report.Diff)
+
+	metrics.ReconDrift.WithLabelValues(entry.TargetTable, "1").Set(float64(len(drifted)))
+
+	rc.logger.Info("tier1 count_windowed",
+		zap.String("table", entry.TargetTable),
+		zap.Int("windows", len(windows)),
+		zap.Int("drifted_windows", len(drifted)),
+		zap.Int64("total_src", totalSrc),
+		zap.Int64("total_dst", totalDst),
+	)
+	return report
+}
+
+// ============================================================
+// Tier 2 — XOR-hash per drifted window + drill-down ID diff
+// ============================================================
+
+// RunTier2 picks up drifted windows detected by Tier 1 (or scans the
+// same range if Tier 1 has not run yet) and for each such window:
+//  1. HashWindow on both sides (count + xor)
+//  2. If count / xor mismatch → ListIDsInWindow on both sides, diff.
+//
+// Writes mismatches to cdc_reconciliation_report with status=drift.
+func (rc *ReconCore) RunTier2(ctx context.Context, entry model.TableRegistry) *model.ReconciliationReport {
+	acquired, unlock := rc.withTableLock(ctx, entry.TargetTable)
+	defer unlock()
+	if !acquired {
+		rc.logger.Info("tier2 skipped — previous run ongoing",
+			zap.String("table", entry.TargetTable))
+		return rc.errorReport(entry, "hash_window", 2, fmt.Errorf("previous run ongoing"))
+	}
+
+	handle, err := rc.beginRun(ctx, entry.TargetTable, 2)
+	if err != nil {
+		return rc.errorReport(entry, "hash_window", 2, err)
+	}
+	status := "success"
+	defer func() { rc.finishRun(ctx, handle, status, "") }()
+
+	lo, hi, err := rc.pickScanRange(ctx, entry)
+	if err != nil {
+		status = "failed"
+		return rc.errorReport(entry, "hash_window", 2, err)
+	}
+	windows := rc.buildWindows(lo, hi)
+	handle.windowsCount = len(windows)
+
+	var missingFromDest []string
+	var missingFromSrc []string
+	var driftedWindows int
+
+	for _, w := range windows {
+		srcRes, err := rc.sourceAgent.HashWindow(ctx, entry.SourceURL, entry.SourceDB, entry.SourceTable, tsField(entry), w.Lo, w.Hi)
+		if err != nil {
+			status = "failed"
+			return rc.errorReport(entry, "hash_window", 2, fmt.Errorf("src hash window %v: %w", w.Lo, err))
+		}
+		dstRes, err := rc.destAgent.HashWindow(ctx, entry.QualifiedTarget(), entry.PrimaryKeyField, w.Lo, w.Hi)
+		if err != nil {
+			status = "failed"
+			return rc.errorReport(entry, "hash_window", 2, fmt.Errorf("dst hash window %v: %w", w.Lo, err))
+		}
+		handle.docsScanned += srcRes.Count + dstRes.Count
+
+		if srcRes.Count == dstRes.Count && srcRes.XorHash == dstRes.XorHash {
+			continue // window clean
+		}
+		driftedWindows++
+
+		// Drill-down: collect IDs on both sides.
+		srcIDs, err := rc.sourceAgent.ListIDsInWindow(ctx, entry.SourceURL, entry.SourceDB, entry.SourceTable, tsField(entry), w.Lo, w.Hi)
+		if err != nil {
+			rc.logger.Warn("src list ids failed", zap.Error(err))
+			continue
+		}
+		dstIDs, err := rc.destAgent.ListIDsInWindow(ctx, entry.QualifiedTarget(), entry.PrimaryKeyField, w.Lo, w.Hi)
+		if err != nil {
+			rc.logger.Warn("dst list ids failed", zap.Error(err))
+			continue
+		}
+		mFromDst, mFromSrc := diffIDs(srcIDs, dstIDs)
+		missingFromDest = append(missingFromDest, mFromDst...)
+		missingFromSrc = append(missingFromSrc, mFromSrc...)
+	}
+
+	handle.mismatches = len(missingFromDest) + len(missingFromSrc)
+
+	missingJSON, _ := json.Marshal(missingFromDest)
+	staleJSON, _ := json.Marshal(map[string][]string{
+		"missing_from_dest": missingFromDest,
+		"missing_from_src":  missingFromSrc,
+	})
+
+	statusStr := "ok"
+	if driftedWindows > 0 {
+		statusStr = "drift"
+	}
+
+	duration := int(time.Since(handle.started).Milliseconds())
+	report := &model.ReconciliationReport{
+		TargetTable:  entry.TargetTable,
+		SourceDB:     entry.SourceDB,
+		MissingCount: len(missingFromDest),
+		MissingIDs:   missingJSON,
+		StaleCount:   driftedWindows,
+		StaleIDs:     staleJSON,
+		CheckType:    "hash_window",
+		Status:       statusStr,
+		Tier:         2,
+		DurationMs:   &duration,
+		CheckedAt:    time.Now().UTC(),
+	}
+	rc.db.Create(report)
+
+	metrics.ReconDrift.WithLabelValues(entry.TargetTable, "2").Set(float64(handle.mismatches))
+
+	rc.logger.Info("tier2 hash_window",
+		zap.String("table", entry.TargetTable),
+		zap.Int("windows", len(windows)),
+		zap.Int("drifted_windows", driftedWindows),
+		zap.Int("missing_from_dest", len(missingFromDest)),
+		zap.Int("missing_from_src", len(missingFromSrc)),
+	)
+	return report
+}
+
+// ============================================================
+// Orphan prune (Segment A) — soft-delete ghost (shadow có / source không)
+// ============================================================
+
+// RunOrphanPrune soft-delete các shadow row có `_source_id` KHÔNG còn trong source
+// (ghost/orphan). Xử lý case source bị DROP/RE-SEED collection mà Mongo-Debezium
+// KHÔNG emit per-doc delete → shadow tích luỹ ghost vượt source. Dùng FULL-table id
+// diff (window [epoch, now] → list mọi id 2 phía) để bắt cả ghost cũ (ngoài window
+// recon thường). Soft-delete (_deleted=TRUE) — KHÔNG hard-delete (giữ audit + để
+// transmute lan delete sang master). Idempotent (chỉ đụng row chưa _deleted).
+func (rc *ReconCore) RunOrphanPrune(ctx context.Context, entry model.TableRegistry) *model.ReconciliationReport {
+	acquired, unlock := rc.withTableLock(ctx, entry.TargetTable)
+	defer unlock()
+	if !acquired {
+		rc.logger.Info("orphan_prune skipped — previous run ongoing", zap.String("table", entry.TargetTable))
+		return rc.errorReport(entry, "orphan_prune", 2, fmt.Errorf("previous run ongoing"))
+	}
+	handle, err := rc.beginRun(ctx, entry.TargetTable, 2)
+	if err != nil {
+		return rc.errorReport(entry, "orphan_prune", 2, err)
+	}
+	status := "success"
+	defer func() { rc.finishRun(ctx, handle, status, "") }()
+
+	if rc.shadowPlane == nil {
+		status = "failed"
+		return rc.errorReport(entry, "orphan_prune", 2, fmt.Errorf("shadowPlane not wired"))
+	}
+
+	// Source: TẤT CẢ _id (KHÔNG lọc timestamp → tránh false-prune doc thiếu/ts lệch,
+	// vd registry timestamp_field sai). diff theo identity _id, không theo time-window.
+	srcIDs, err := rc.sourceAgent.ListAllIDs(ctx, entry.SourceURL, entry.SourceDB, entry.SourceTable)
+	if err != nil {
+		status = "failed"
+		return rc.errorReport(entry, "orphan_prune", 2, fmt.Errorf("src list ids: %w", err))
+	}
+	// Shadow: TẤT CẢ _source_id chưa _deleted (đọc trực tiếp shadowPlane, không phụ thuộc _source_ts).
+	var dstIDs []string
+	if e := rc.shadowPlane.WithContext(ctx).Raw(
+		fmt.Sprintf(`SELECT "_source_id"::text FROM %s WHERE NOT "_deleted" AND "_source_id" IS NOT NULL`,
+			quoteRelation(entry.QualifiedTarget())),
+	).Scan(&dstIDs).Error; e != nil {
+		status = "failed"
+		return rc.errorReport(entry, "orphan_prune", 2, fmt.Errorf("dst list ids: %w", e))
+	}
+	handle.docsScanned += int64(len(srcIDs) + len(dstIDs))
+
+	// SAFETY: source rỗng (0 id) thường là lỗi đọc source / collection bị drop tạm —
+	// KHÔNG prune toàn bộ shadow (tránh xoá nhầm khi source tạm trống). Bỏ qua, log.
+	if len(srcIDs) == 0 && len(dstIDs) > 0 {
+		rc.logger.Warn("orphan_prune skip — source returned 0 ids (refuse to prune entire shadow)",
+			zap.String("table", entry.TargetTable), zap.Int("shadow_ids", len(dstIDs)))
+		duration := int(time.Since(handle.started).Milliseconds())
+		report := &model.ReconciliationReport{
+			TargetTable: entry.TargetTable, SourceDB: entry.SourceDB,
+			MissingCount: 0, StaleCount: 0, CheckType: "orphan_prune",
+			Status: "warning", Tier: 2, DurationMs: &duration, CheckedAt: time.Now().UTC(),
+		}
+		rc.db.Create(report)
+		return report
+	}
+
+	// orphan = id ở shadow (dst) KHÔNG có ở source (src).
+	_, orphans := diffIDs(srcIDs, dstIDs)
+
+	pruned := 0
+	if len(orphans) > 0 {
+		updSQL := fmt.Sprintf(
+			`UPDATE %s SET "_deleted" = TRUE, "_updated_at" = NOW() WHERE "_source_id" IN (?) AND NOT "_deleted"`,
+			quoteRelation(entry.QualifiedTarget()),
+		)
+		const batch = 1000
+		for i := 0; i < len(orphans); i += batch {
+			end := i + batch
+			if end > len(orphans) {
+				end = len(orphans)
+			}
+			res := rc.shadowPlane.WithContext(ctx).Exec(updSQL, orphans[i:end])
+			if res.Error != nil {
+				status = "failed"
+				return rc.errorReport(entry, "orphan_prune", 2, fmt.Errorf("soft-delete orphans: %w", res.Error))
+			}
+			pruned += int(res.RowsAffected)
+		}
+	}
+	handle.mismatches = len(orphans)
+
+	orphJSON, _ := json.Marshal(orphans)
+	statusStr := "ok"
+	if pruned > 0 {
+		statusStr = "drift"
+	}
+	duration := int(time.Since(handle.started).Milliseconds())
+	report := &model.ReconciliationReport{
+		TargetTable:  entry.TargetTable,
+		SourceDB:     entry.SourceDB,
+		MissingCount: 0,
+		StaleCount:   pruned, // số ghost đã soft-delete
+		StaleIDs:     orphJSON,
+		CheckType:    "orphan_prune",
+		Status:       statusStr,
+		Tier:         2,
+		DurationMs:   &duration,
+		CheckedAt:    time.Now().UTC(),
+	}
+	rc.db.Create(report)
+	metrics.ReconDrift.WithLabelValues(entry.TargetTable, "prune").Set(float64(len(orphans)))
+	rc.logger.Info("orphan_prune",
+		zap.String("table", entry.TargetTable),
+		zap.Int("src_ids", len(srcIDs)),
+		zap.Int("shadow_ids", len(dstIDs)),
+		zap.Int("orphans", len(orphans)),
+		zap.Int("pruned", pruned))
+	return report
+}
+
+// PruneAllOrphans chạy RunOrphanPrune cho mọi active table (mirror CheckAll).
+func (rc *ReconCore) PruneAllOrphans(ctx context.Context) []*model.ReconciliationReport {
+	entries := rc.listActiveTableConfigs(ctx)
+	reports := make([]*model.ReconciliationReport, 0, len(entries))
+	for _, e := range entries {
+		reports = append(reports, rc.RunOrphanPrune(ctx, e))
+	}
+	return reports
+}
+
+// ============================================================
+// Tier 3 — 256-bucket whole-table hash with budget + off-peak
+// ============================================================
+
+// RunTier3 computes the 256-bucket fingerprint on both sides and diffs
+// them. Budget: skip historical (full scan) when estimated rows exceed
+// Tier3MaxDocsPerRun; in that case fall back to the 7-day window scan
+// (delegates to RunTier2 for the drifted buckets). Respects off-peak
+// window [Tier3OffPeakStart, Tier3OffPeakEnd] unless the caller passes
+// force=true via the Force field in the handle.
+func (rc *ReconCore) RunTier3(ctx context.Context, entry model.TableRegistry) *model.ReconciliationReport {
+	acquired, unlock := rc.withTableLock(ctx, entry.TargetTable)
+	defer unlock()
+	if !acquired {
+		return rc.errorReport(entry, "bucket_hash", 3, fmt.Errorf("previous run ongoing"))
+	}
+
+	handle, err := rc.beginRun(ctx, entry.TargetTable, 3)
+	if err != nil {
+		return rc.errorReport(entry, "bucket_hash", 3, err)
+	}
+	status := "success"
+	defer func() { rc.finishRun(ctx, handle, status, "") }()
+
+	if !rc.isOffPeak(time.Now().UTC()) {
+		rc.logger.Info("tier3 skipped — outside off-peak window",
+			zap.String("table", entry.TargetTable),
+			zap.Int("off_peak_start", rc.cfg.Tier3OffPeakStart),
+			zap.Int("off_peak_end", rc.cfg.Tier3OffPeakEnd),
+		)
+		status = "cancelled"
+		return rc.errorReport(entry, "bucket_hash", 3, fmt.Errorf("outside off-peak window"))
+	}
+
+	// Budget check: peek at dest count to estimate cost.
+	destCount, err := rc.destAgent.CountRows(ctx, entry.QualifiedTarget(), entry.PrimaryKeyField)
+	if err != nil {
+		status = "failed"
+		return rc.errorReport(entry, "bucket_hash", 3, err)
+	}
+	if destCount > rc.cfg.Tier3MaxDocsPerRun {
+		rc.logger.Warn("tier3 budget exceeded — falling back to 7-day window scan",
+			zap.String("table", entry.TargetTable),
+			zap.Int64("dest_count", destCount),
+			zap.Int64("budget", rc.cfg.Tier3MaxDocsPerRun),
+		)
+		// Degrade gracefully into tier 2 for recent windows — this keeps
+		// the budget while still catching fresh drift.
+		handle.mismatches = 0
+		return rc.RunTier2(ctx, entry)
+	}
+
+	srcBuckets, err := rc.sourceAgent.BucketHash(ctx, entry.SourceURL, entry.SourceDB, entry.SourceTable, tsField(entry))
+	if err != nil {
+		status = "failed"
+		return rc.errorReport(entry, "bucket_hash", 3, err)
+	}
+	dstBuckets, err := rc.destAgent.BucketHash(ctx, entry.QualifiedTarget(), entry.PrimaryKeyField)
+	if err != nil {
+		status = "failed"
+		return rc.errorReport(entry, "bucket_hash", 3, err)
+	}
+	handle.docsScanned = srcBuckets.Total + dstBuckets.Total
+
+	var driftedBuckets []int
+	for i := 0; i < 256; i++ {
+		if srcBuckets.Buckets[i] != dstBuckets.Buckets[i] {
+			driftedBuckets = append(driftedBuckets, i)
+		}
+	}
+	handle.mismatches = len(driftedBuckets)
+
+	statusStr := "ok"
+	if len(driftedBuckets) > 0 {
+		statusStr = "drift"
+	}
+
+	payload := map[string]interface{}{
+		"drifted_buckets": driftedBuckets,
+		"src_total":       srcBuckets.Total,
+		"dst_total":       dstBuckets.Total,
+	}
+	staleJSON, _ := json.Marshal(payload)
+	duration := int(time.Since(handle.started).Milliseconds())
+	srcBucketTotal := srcBuckets.Total
+	report := &model.ReconciliationReport{
+		TargetTable: entry.TargetTable,
+		SourceDB:    entry.SourceDB,
+		SourceCount: &srcBucketTotal,
+		DestCount:   dstBuckets.Total,
+		Diff:        srcBuckets.Total - dstBuckets.Total,
+		StaleCount:  len(driftedBuckets),
+		StaleIDs:    staleJSON,
+		CheckType:   "bucket_hash",
+		Status:      statusStr,
+		Tier:        3,
+		DurationMs:  &duration,
+		CheckedAt:   time.Now().UTC(),
+	}
+	rc.db.Create(report)
+
+	metrics.ReconDrift.WithLabelValues(entry.TargetTable, "3").Set(float64(len(driftedBuckets)))
+
+	rc.logger.Info("tier3 bucket_hash",
+		zap.String("table", entry.TargetTable),
+		zap.Int("drifted_buckets", len(driftedBuckets)),
+		zap.Int64("src_total", srcBuckets.Total),
+		zap.Int64("dst_total", dstBuckets.Total),
+	)
+	return report
+}
+
+// IsOffPeakForTest exposes the cross-midnight window check via a synthesized
+// ReconCore with only the off-peak config populated. External-package tests use
+// this; production paths keep calling the unexported (rc).isOffPeak.
+func IsOffPeakForTest(start, end int, now time.Time) bool {
+	rc := &ReconCore{cfg: ReconCoreConfig{Tier3OffPeakStart: start, Tier3OffPeakEnd: end}}
+	return rc.isOffPeak(now)
+}
+
+// isOffPeak returns true when `now` falls inside the [start, end]
+// hour window. Cross-midnight windows supported.
+func (rc *ReconCore) isOffPeak(now time.Time) bool {
+	h := now.Hour()
+	if rc.cfg.Tier3OffPeakStart <= rc.cfg.Tier3OffPeakEnd {
+		return h >= rc.cfg.Tier3OffPeakStart && h < rc.cfg.Tier3OffPeakEnd
+	}
+	// cross-midnight
+	return h >= rc.cfg.Tier3OffPeakStart || h < rc.cfg.Tier3OffPeakEnd
+}
+
+// ============================================================
+// CheckAll — scheduled entry point
+// ============================================================
+
+// CheckAll iterates every active registry entry, applies jitter +
+// staggered spacing, and runs Tier 1 per table. Returns the list of
+// produced reports. Leader election is applied at the top level: if
+// another worker holds the leader lock, this call returns nil.
+func (rc *ReconCore) CheckAll(ctx context.Context) []*model.ReconciliationReport {
+	isLeader, release := rc.AcquireLeader(ctx)
+	defer release()
+	if !isLeader {
+		rc.logger.Info("recon CheckAll — not leader, skipping")
+		return nil
+	}
+
+	entries := rc.listActiveTableConfigs(ctx)
+	if len(entries) == 0 {
+		rc.logger.Error("recon CheckAll: registry load failed", zap.String("reason", "no active table configs"))
+		return nil
+	}
+
+	// Stagger 200 tables over 5 minutes → ~1.5s apart. Plus per-table
+	// random jitter up to cfg.JitterMaxSeconds.
+	spread := 5 * time.Minute
+	step := time.Duration(0)
+	if len(entries) > 0 {
+		step = spread / time.Duration(len(entries))
+	}
+
+	var reports []*model.ReconciliationReport
+	now := time.Now()
+	skippedNoSchema := 0
+	for i, entry := range entries {
+		// V2 hybrid: shadow table nằm ở schema riêng (shadow_*) trên shadow
+		// plane — introspect đúng schema thay vì hardcode "public" (vốn làm
+		// CheckAll skip TOÀN BỘ bảng V2 → tables_checked=0 mà vẫn "success").
+		schemaName := entry.ShadowSchema
+		if schemaName == "" {
+			schemaName = "public" // V1 legacy
+		}
+		if rc.schemaAdapter.GetSchemaInSchema(schemaName, entry.TargetTable) == nil {
+			skippedNoSchema++
+			rc.logger.Warn("recon CheckAll: skip table — schema introspect nil (not materialised?)",
+				zap.String("schema", schemaName), zap.String("table", entry.TargetTable))
+			continue // table not materialised yet
+		}
+		// Stagger + jitter
+		if i > 0 && step > 0 {
+			time.Sleep(step)
+		}
+		jitter := time.Duration(rand.Intn(rc.cfg.JitterMaxSeconds+1)) * time.Second
+		time.Sleep(jitter)
+
+		// Per-table timeout (45s): 1 bảng có source hang (vd export_jobs khi source DB
+		// unreachable) KHÔNG được block cả CheckAll → freeze poller scheduler đơn-luồng
+		// (đây là root của "reconcile ko tự chạy"). ctx được RunTier1 truyền xuống
+		// sourceAgent.CountDocuments/CountInWindowWithFallback; Mongo/PG driver tôn trọng
+		// deadline → cắt được hang. cancel ngay sau mỗi bảng (không defer trong loop).
+		tableCtx, cancelTable := context.WithTimeout(ctx, 45*time.Second)
+		report := rc.RunTier1(tableCtx, entry)
+		cancelTable()
+		if report == nil {
+			continue
+		}
+		reports = append(reports, report)
+
+		// Feedback loop — update registry sync_status.
+		updates := map[string]interface{}{"last_recon_at": now}
+		switch report.Status {
+		case "ok":
+			updates["sync_status"] = "healthy"
+			updates["recon_drift"] = 0
+		case "drift":
+			updates["sync_status"] = "drift"
+			updates["recon_drift"] = report.Diff
+		case "error":
+			updates["sync_status"] = "source_error"
+		}
+		rc.db.Model(&model.TableRegistry{}).Where("target_table = ?", report.TargetTable).Updates(updates)
+	}
+	// Visibility (lesson silent-skip): 0 bảng được check là tín hiệu wiring/
+	// materialise hỏng, KHÔNG phải thành công. Warn to + đủ ngữ cảnh để operator
+	// thấy ngay thay vì "success tables_checked=0" câm lặng.
+	if len(reports) == 0 {
+		rc.logger.Warn("recon CheckAll: 0 tables checked — toàn bộ entries bị skip",
+			zap.Int("entries", len(entries)),
+			zap.Int("skipped_no_schema", skippedNoSchema),
+			zap.String("fix_hint", "kiểm tra shadow_binding.shadow_schema + shadowDB wiring + bảng đã materialise chưa"))
+	}
+	return reports
+}
+
+func (rc *ReconCore) listActiveTableConfigs(ctx context.Context) []model.TableRegistry {
+	if rc.metadata != nil {
+		if items := rc.metadata.ListTableConfigs(); len(items) > 0 {
+			return items
+		}
+	}
+	if rc.registryRepo == nil {
+		return nil
+	}
+	items, err := rc.registryRepo.GetAllActive(ctx)
+	if err != nil {
+		return nil
+	}
+	return items
+}
+
+// ============================================================
+// Segment B (Recon V4 P1) — shadow ↔ master (transmute path)
+// ============================================================
+//
+// E2E integrity = Segment A (source↔shadow, Tier 1-3 ở trên) ∧ Segment B.
+// B so sánh theo (_gpay_id, _source_ts) — cả 2 cột tồn tại ở shadow lẫn
+// master (transmuter upsert conflict trên _gpay_id, OCC theo _source_ts).
+// Tái dùng ReconDestAgent (PG-generic sau quoteRelation) cho CẢ 2 phía:
+// rc.destAgent = shadow plane (5436), rc.masterAgent = dest plane (5434).
+
+// tier=5: tier 4 ĐÃ bị backfill-source-ts chiếm trong recon_runs (cms
+// ListBackfillRuns lọc tier=4) — Segment B từng dùng 4 → run B (table FQN
+// có dấu chấm) bị nhặt nhầm làm backfill-run → CountTableRows(PgIdent fail-
+// close "") → `SELECT COUNT(*) FROM ""` spam log mỗi poll. Tier 5 free.
+const tierSegmentB = 5
+const segmentShadowMaster = "shadow_master"
+
+// segBPKColumn — join key đối soát transmute path.
+const segBPKColumn = "_gpay_id"
+
+// segBDiffIDCap — trần số ID lệch persist vào report (chống OOM/JSONB phình;
+// vượt trần → report vẫn drift, heal sẽ chạy theo window thay vì ID list).
+const segBDiffIDCap = 50_000
+
+// SetMasterAgent wires the dest-plane (master DB) agent. Optional — khi nil
+// RunSegmentB từ chối chạy với error rõ ràng (visibility, không silent-skip).
+func (rc *ReconCore) SetMasterAgent(agent *ReconDestAgent) { rc.masterAgent = agent }
+
+// MasterBindingRef — định vị 1 cặp shadow→master cần đối soát.
+type MasterBindingRef struct {
+	ID           int64  `gorm:"column:id"` // master_binding_id (P4: load rules cho row-diff)
+	MasterSchema string `gorm:"column:master_schema"`
+	MasterTable  string `gorm:"column:master_table"`
+	ShadowSchema string `gorm:"column:shadow_schema"`
+	ShadowTable  string `gorm:"column:shadow_table"`
+}
+
+func (r MasterBindingRef) ShadowRel() string { return r.ShadowSchema + "." + r.ShadowTable }
+func (r MasterBindingRef) MasterRel() string { return r.MasterSchema + "." + r.MasterTable }
+
+// runName phân biệt run Segment B với Segment A trong recon_runs (unique
+// index `one_running` theo table_name: A dùng shadow-table trần, B dùng
+// FQN master → không đụng nhau kể cả khi trùng tên bảng).
+func (r MasterBindingRef) runName() string { return r.MasterRel() }
+
+// listActiveMasterBindings — các cặp đủ điều kiện đối soát B: master đã
+// approved + active, có shadow binding. Đọc từ control plane (rc.db).
+func (rc *ReconCore) listActiveMasterBindings(ctx context.Context) []MasterBindingRef {
+	var out []MasterBindingRef
+	err := rc.db.WithContext(ctx).Raw(`
+		SELECT mb.id, mb.master_schema, mb.master_table, sb.shadow_schema, sb.shadow_table
+		  FROM cdc_system.master_binding mb
+		  JOIN cdc_system.shadow_binding sb ON sb.id = mb.shadow_binding_id
+		 WHERE mb.is_active = true AND mb.schema_status = 'approved'
+		 ORDER BY mb.master_schema, mb.master_table`).Scan(&out).Error
+	if err != nil {
+		rc.logger.Error("recon segment B: list master bindings failed", zap.Error(err))
+		return nil
+	}
+	return out
+}
+
+// RunSegmentB — L1-B+L2-B gộp 1 pass: HashWindow (count + XOR(_gpay_id|ts))
+// trên cả 2 phía per window; lệch → drill-down diff ID. Window nào id-set
+// bằng nhau nhưng XOR lệch = stale (master chưa đuổi kịp ts) — đếm window,
+// đích danh field để L3-B (P4).
+// deep=true → chạy thêm L3-B row/field-diff trên các ID lệch (P4).
+func (rc *ReconCore) RunSegmentB(ctx context.Context, ref MasterBindingRef, deep bool) *model.ReconciliationReport {
+	if rc.masterAgent == nil {
+		rc.logger.Error("recon segment B: masterAgent not wired — skip",
+			zap.String("table", ref.runName()),
+			zap.String("fix_hint", "worker_server phải SetMasterAgent(NewReconDestAgentWithConfig(masterDB,...))"))
+		return nil
+	}
+	acquired, unlock := rc.withTableLock(ctx, "reconB_"+ref.runName())
+	defer unlock()
+	if !acquired {
+		rc.logger.Info("recon segment B: lock busy, skip", zap.String("table", ref.runName()))
+		return nil
+	}
+	handle, err := rc.beginRun(ctx, ref.runName(), tierSegmentB)
+	if err != nil {
+		rc.logger.Error("recon segment B: beginRun failed", zap.String("table", ref.runName()), zap.Error(err))
+		return nil
+	}
+
+	shadowRel, masterRel := ref.ShadowRel(), ref.MasterRel()
+
+	// P3: transmute lag = chênh watermark shadow↔master → recon_lag +
+	// adaptive freeze (master đang đuổi → margin giãn, không false-positive).
+	shMax, shErr := rc.destAgent.MaxWindowTs(ctx, shadowRel)
+	msMax, _ := rc.masterAgent.MaxWindowTs(ctx, masterRel)
+	transmuteLagMs := lagBetween(shMax, msMax)
+	rc.upsertReconLag(ctx, ref.MasterTable, "transmute_lag_ms", transmuteLagMs)
+
+	// Watermark: chuẩn theo shadow (upstream của B). upper kẹp now-adaptiveFreeze.
+	upper := time.Now().Add(-rc.adaptiveFreeze(transmuteLagMs))
+	if shErr == nil && !shMax.IsZero() && shMax.Before(upper) {
+		// +1ms: window WHERE ts < upper là EXCLUSIVE — nếu upper = shadowMax
+		// thì ROW MỚI NHẤT vĩnh viễn ngoài window khi bảng idle → missing
+		// row cuối không bao giờ bị bắt (đã xảy ra thật: b3 465/464 nhưng
+		// window 11=11 "ok"). Row max đã qua freeze nên +1ms an toàn.
+		upper = shMax.Add(time.Millisecond)
+	}
+	lower := upper.Add(-rc.cfg.WindowLookback)
+	windows := rc.buildWindows(lower, upper)
+
+	var (
+		totalShadow, totalMaster int64
+		missingFromMaster        []string
+		orphanInMaster           []string
+		staleIDs                 []string // P4: đích danh row stale (id trùng, ts lệch)
+		windowErrs               int
+	)
+	for _, w := range windows {
+		shRes, errS := rc.destAgent.HashWindow(ctx, shadowRel, segBPKColumn, w.Lo, w.Hi)
+		msRes, errM := rc.masterAgent.HashWindow(ctx, masterRel, segBPKColumn, w.Lo, w.Hi)
+		if errS != nil || errM != nil {
+			// KHÔNG nuốt lỗi thành "khớp" (lesson false-negative): đếm window
+			// lỗi, phản ánh vào status cuối.
+			windowErrs++
+			rc.logger.Warn("recon segment B: window scan error",
+				zap.String("table", ref.runName()), zap.Error(errS), zap.NamedError("master_err", errM))
+			continue
+		}
+		totalShadow += shRes.Count
+		totalMaster += msRes.Count
+		if shRes.Count == msRes.Count && shRes.XorHash == msRes.XorHash {
+			continue // window khớp
+		}
+		// Drill-down đích danh (id, ts) 2 phía (cap chống OOM).
+		shIDTs, errS := rc.destAgent.ListIDTsInWindow(ctx, shadowRel, segBPKColumn, w.Lo, w.Hi)
+		msIDTs, errM := rc.masterAgent.ListIDTsInWindow(ctx, masterRel, segBPKColumn, w.Lo, w.Hi)
+		if errS != nil || errM != nil {
+			windowErrs++
+			continue
+		}
+		missB, orphB, staleB := diffIDTs(shIDTs, msIDTs)
+		if len(missingFromMaster) < segBDiffIDCap {
+			missingFromMaster = append(missingFromMaster, missB...)
+		}
+		if len(orphanInMaster) < segBDiffIDCap {
+			orphanInMaster = append(orphanInMaster, orphB...)
+		}
+		if len(staleIDs) < segBDiffIDCap {
+			staleIDs = append(staleIDs, staleB...)
+		}
+	}
+
+	handle.windowsCount = len(windows)
+	handle.mismatches = len(missingFromMaster) + len(orphanInMaster) + len(staleIDs)
+
+	statusStr := "ok"
+	if handle.mismatches > 0 {
+		statusStr = "drift"
+	}
+	if windowErrs > 0 && handle.mismatches == 0 {
+		statusStr = "error" // không khẳng định "ok" khi có window không scan được
+	}
+
+	missJSON, _ := json.Marshal(missingFromMaster)
+	orphJSON, _ := json.Marshal(orphanInMaster)
+
+	// P4 L3-B: deep row/field-diff trên ID lệch (missing + stale, cap) —
+	// re-derive expected từ shadow._raw_data qua CHÍNH mapping rules approved.
+	var fieldDiffsJSON json.RawMessage
+	if deep {
+		deepIDs := append(append([]string{}, missingFromMaster...), staleIDs...)
+		if diffs := rc.RunRowDiffB(ctx, ref, deepIDs); len(diffs) > 0 {
+			fieldDiffsJSON, _ = json.Marshal(diffs)
+		}
+	}
+
+	// Migration 084 (dashboard): TỔNG record thật shadow + master (COUNT(*)
+	// exact trên PG). Lỗi đếm → NULL, không fail run.
+	var totalShadowFull, totalMasterFull *int64
+	if v, err := rc.destAgent.CountRows(ctx, shadowRel, segBPKColumn); err == nil {
+		totalShadowFull = &v
+	}
+	if v, err := rc.masterAgent.CountRows(ctx, masterRel, segBPKColumn); err == nil {
+		totalMasterFull = &v
+	}
+
+	duration := int(time.Since(handle.started).Milliseconds())
+	report := &model.ReconciliationReport{
+		TargetTable:      ref.MasterTable,
+		SourceDB:         shadowRel, // phía "nguồn" của segment B là shadow relation
+		SourceCount:      &totalShadow,
+		TotalSourceCount: totalShadowFull,
+		TotalDestCount:   totalMasterFull,
+		DestCount:        totalMaster,
+		Diff:             totalShadow - totalMaster,
+		MissingCount:     len(missingFromMaster),
+		MissingIDs:       missJSON,
+		StaleCount:       len(staleIDs),
+		StaleIDs:         orphJSON, // reuse cột: orphan-in-master payload (đã làm vậy ở Tier1 với drifted windows)
+		FieldDiffs:       fieldDiffsJSON,
+		CheckType:        "segment_b_window",
+		Status:           statusStr,
+		Tier:             tierSegmentB,
+		Segment:          segmentShadowMaster,
+		DurationMs:       &duration,
+		CheckedAt:        time.Now().UTC(),
+	}
+	rc.db.Create(report)
+	// P4: alert ngưỡng vào cdc_alerts (FE banner sẵn có đọc /api/alerts/active).
+	rc.alertOnReport(ctx, segmentShadowMaster, ref.MasterTable, statusStr, len(missingFromMaster), report.Diff)
+	metrics.ReconDrift.WithLabelValues(ref.MasterTable, "4").Set(float64(handle.mismatches))
+
+	finishStatus := "success"
+	errMsg := ""
+	if windowErrs > 0 {
+		finishStatus = "failed"
+		errMsg = fmt.Sprintf("%d/%d windows failed to scan", windowErrs, len(windows))
+	}
+	rc.finishRun(ctx, handle, finishStatus, errMsg)
+
+	rc.logger.Info("segment B shadow↔master",
+		zap.String("shadow", shadowRel), zap.String("master", masterRel),
+		zap.Int("windows", len(windows)), zap.Int("window_errs", windowErrs),
+		zap.Int64("shadow_rows", totalShadow), zap.Int64("master_rows", totalMaster),
+		zap.Int("missing_from_master", len(missingFromMaster)),
+		zap.Int("orphan_in_master", len(orphanInMaster)),
+		zap.Int("stale_ids", len(staleIDs)),
+		zap.Bool("deep", deep),
+	)
+	return report
+}
+
+// diffIDTs — so 2 tập (id, ts): missing (shadow có master thiếu), orphan
+// (master thừa), stale (id trùng nhưng ts lệch — master giữ bản khác).
+func diffIDTs(shadow, master []IDTs) (missing, orphan, stale []string) {
+	ms := make(map[string]int64, len(master))
+	for _, it := range master {
+		ms[it.ID] = it.Ts
+	}
+	sh := make(map[string]int64, len(shadow))
+	for _, it := range shadow {
+		sh[it.ID] = it.Ts
+		if mts, ok := ms[it.ID]; !ok {
+			missing = append(missing, it.ID)
+		} else if mts != it.Ts {
+			stale = append(stale, it.ID)
+		}
+	}
+	for _, it := range master {
+		if _, ok := sh[it.ID]; !ok {
+			orphan = append(orphan, it.ID)
+		}
+	}
+	return missing, orphan, stale
+}
+
+// SetPlaneDBs — raw handles cho L3-B row-diff (fetch _raw_data + master row).
+func (rc *ReconCore) SetPlaneDBs(shadowDB, masterDB *gorm.DB) {
+	rc.shadowPlane = shadowDB
+	rc.masterPlane = masterDB
+}
+
+// FieldDiff — 1 ô lệch đích danh: expected (re-derive từ shadow) vs actual (master).
+type FieldDiff struct {
+	GpayID   string `json:"gpay_id"`
+	Column   string `json:"column"`
+	Expected string `json:"expected"`
+	Actual   string `json:"actual"`
+}
+
+const rowDiffMaxIDs = 200     // trần ID deep-diff mỗi run
+const rowDiffMaxEntries = 200 // trần ô lệch persist
+
+// RunRowDiffB — L3-B: re-derive expected value từ shadow._raw_data qua CHÍNH
+// mapping rules approved (gjson + ApplyTransform — không nhân đôi logic
+// transmute) rồi so từng cột với master row. Trả các ô lệch đích danh.
+func (rc *ReconCore) RunRowDiffB(ctx context.Context, ref MasterBindingRef, ids []string) []FieldDiff {
+	if rc.shadowPlane == nil || rc.masterPlane == nil || len(ids) == 0 {
+		return nil
+	}
+	if len(ids) > rowDiffMaxIDs {
+		rc.logger.Warn("row-diff B: ids capped", zap.Int("total", len(ids)), zap.Int("cap", rowDiffMaxIDs))
+		ids = ids[:rowDiffMaxIDs]
+	}
+
+	// Rules approved của binding — mirror query MasterDDLGenerator (077 self-contained).
+	type ruleRow struct {
+		SourceField  string  `gorm:"column:source_field"`
+		SourcePath   *string `gorm:"column:source_path"`
+		TargetColumn string  `gorm:"column:target_column"`
+		TransformFn  *string `gorm:"column:transform_fn"`
+	}
+	var rules []ruleRow
+	if err := rc.db.WithContext(ctx).Raw(`
+		SELECT COALESCE(m.source_field, v2.source_field) AS source_field,
+		       COALESCE(m.source_path, v2.source_path)   AS source_path,
+		       m.target_column,
+		       v2.transform_fn
+		  FROM cdc_system.mapping_rule_master m
+		  LEFT JOIN cdc_system.mapping_rule_v2 v2 ON v2.id = m.mapping_v2_id
+		 WHERE m.master_binding_id = ? AND m.status = 'approved' AND m.is_active = true`,
+		ref.ID).Scan(&rules).Error; err != nil || len(rules) == 0 {
+		return nil
+	}
+
+	shadowRel := fmt.Sprintf("%q.%q", ref.ShadowSchema, ref.ShadowTable)
+	masterRel := fmt.Sprintf("%q.%q", ref.MasterSchema, ref.MasterTable)
+
+	// Fetch 2 phía theo _gpay_id (1 round-trip mỗi phía).
+	type shadowRow struct {
+		GpayID  string `gorm:"column:_gpay_id"`
+		RawData []byte `gorm:"column:_raw_data"`
+	}
+	var shRows []shadowRow
+	if err := rc.shadowPlane.WithContext(ctx).Raw(fmt.Sprintf(
+		`SELECT _gpay_id::text AS _gpay_id, _raw_data FROM %s WHERE _gpay_id IN (?)`, shadowRel),
+		ids).Scan(&shRows).Error; err != nil {
+		rc.logger.Warn("row-diff B: shadow fetch failed", zap.Error(err))
+		return nil
+	}
+	var msRows []map[string]any
+	if err := rc.masterPlane.WithContext(ctx).Raw(fmt.Sprintf(
+		`SELECT * FROM %s WHERE _gpay_id IN (?)`, masterRel), ids).Scan(&msRows).Error; err != nil {
+		rc.logger.Warn("row-diff B: master fetch failed", zap.Error(err))
+		return nil
+	}
+	masterByID := make(map[string]map[string]any, len(msRows))
+	for _, r := range msRows {
+		masterByID[fmt.Sprint(r["_gpay_id"])] = r
+	}
+
+	var diffs []FieldDiff
+	for _, sr := range shRows {
+		mrow, inMaster := masterByID[sr.GpayID]
+		for _, rule := range rules {
+			path := rule.SourceField
+			if rule.SourcePath != nil && *rule.SourcePath != "" {
+				path = *rule.SourcePath
+			}
+			val := gjson.GetBytes(sr.RawData, path)
+			expected := any(nil)
+			if val.Exists() {
+				expected = val.Value()
+			}
+			if rule.TransformFn != nil && *rule.TransformFn != "" && IsTransformWhitelisted(*rule.TransformFn) {
+				if tv, err := ApplyTransform(*rule.TransformFn, expected); err == nil {
+					expected = tv
+				}
+			}
+			expStr := normalizeDiffVal(expected)
+			actStr := "<ROW MISSING>"
+			if inMaster {
+				actStr = normalizeDiffVal(mrow[rule.TargetColumn])
+			}
+			if expStr != actStr {
+				diffs = append(diffs, FieldDiff{GpayID: sr.GpayID, Column: rule.TargetColumn, Expected: expStr, Actual: actStr})
+				if len(diffs) >= rowDiffMaxEntries {
+					rc.logger.Warn("row-diff B: entries capped", zap.Int("cap", rowDiffMaxEntries))
+					return diffs
+				}
+			}
+		}
+	}
+	return diffs
+}
+
+// normalizeDiffVal — chuỗi hoá loose để so 2 hệ kiểu (PG trả time.Time/decimal,
+// gjson trả float64/string): trim + fmt.Sprint; nil/empty → "<NULL>".
+func normalizeDiffVal(v any) string {
+	if v == nil {
+		return "<NULL>"
+	}
+	s := strings.TrimSpace(fmt.Sprint(v))
+	if s == "" {
+		return "<NULL>"
+	}
+	return s
+}
+
+// RunSegmentBFor — resolve master binding theo master_table rồi chạy Segment B.
+// Trả nil khi không tìm thấy binding hợp lệ (caller log/respond error).
+func (rc *ReconCore) RunSegmentBFor(ctx context.Context, masterTable string, deep bool) *model.ReconciliationReport {
+	for _, ref := range rc.listActiveMasterBindings(ctx) {
+		if ref.MasterTable == masterTable || ref.MasterRel() == masterTable {
+			return rc.RunSegmentB(ctx, ref, deep)
+		}
+	}
+	rc.logger.Warn("recon segment B: master binding not found/eligible",
+		zap.String("master_table", masterTable))
+	return nil
+}
+
+// CheckAllSegmentB — đối soát B cho mọi master binding active+approved.
+// Leader-gated như CheckAll (A); per-binding advisory lock vẫn serialize.
+func (rc *ReconCore) CheckAllSegmentB(ctx context.Context) []*model.ReconciliationReport {
+	isLeader, release := rc.AcquireLeader(ctx)
+	defer release()
+	if !isLeader {
+		rc.logger.Info("recon CheckAllSegmentB — not leader, skipping")
+		return nil
+	}
+	refs := rc.listActiveMasterBindings(ctx)
+	if len(refs) == 0 {
+		rc.logger.Warn("recon CheckAllSegmentB: 0 active master bindings — nothing to reconcile",
+			zap.String("fix_hint", "cần master_binding is_active=true + schema_status='approved'"))
+		return nil
+	}
+	var reports []*model.ReconciliationReport
+	for _, ref := range refs {
+		if r := rc.RunSegmentB(ctx, ref, false); r != nil { // CheckAll: deep=false (row-diff theo yêu cầu per-table)
+			reports = append(reports, r)
+		}
+	}
+	if len(reports) == 0 {
+		rc.logger.Warn("recon CheckAllSegmentB: 0 bindings checked — toàn bộ bị skip",
+			zap.Int("bindings", len(refs)))
+	}
+	return reports
+}
+
+// ============================================================
+// Heal — REMOVED in v3 root-cause fix (2026-04-17)
+// ============================================================
+//
+// The legacy `ReconCore.Heal(ctx, entry, missingIDs)` walked `missingIDs`
+// one row at a time, issued a Mongo FindOne + PG upsert per record AND
+// wrote one `cdc_activity_log` row per record. On a corrupted Tier 2
+// report that listed e.g. 1,713 rows the audit table exploded by 1,713
+// rows per heal trigger, which made the CMS audit view unreadable.
+//
+// The v3 `ReconHealer.HealWindow` pathway supersedes it entirely:
+//   - Audit batching (run_started + run_completed = 2 rows, regardless
+//     of record count; plus at most a sample of per-record rows when
+//     the `AuditSampleRate` is set).
+//   - Batched `$in` Mongo reads instead of FindOne loops.
+//   - OCC guard on `_source_ts` + per-table sensitive-field masking.
+//   - Optional Debezium incremental snapshot signal (Phase A).
+//
+// Callsites audited on 2026-04-17: only `recon_handler.HandleReconHeal`
+// referenced `rc.Heal`, and that fallback was deleted in the same
+// commit. `rc.mongoClient` remains on the struct for future uses (e.g.
+// source sampling) and to preserve the NewReconCore constructor
+// signature.
+
+// ============================================================
+// Helpers
+// ============================================================
+
+// errorReport writes a `status='error'` row with structured ErrorCode
+// classification (Migration 017 / ADR v4 §2.3). SourceCount is left NULL
+// so FE can distinguish "query failed" from "query OK, 0 rows". Legacy
+// error rows created before migration 017 will have NULL error_code
+// and continue to render as generic "Lỗi nguồn" — intentional, no
+// backfill needed.
+func (rc *ReconCore) errorReport(entry model.TableRegistry, checkType string, tier int, err error) *model.ReconciliationReport {
+	errMsg := SanitizeFreeformText(err.Error(), 2000)
+	code := classifyMongoError(err)
+	if code == "" {
+		code = ErrCodeUnknown
+	}
+	report := &model.ReconciliationReport{
+		TargetTable:  entry.TargetTable,
+		SourceDB:     entry.SourceDB,
+		CheckType:    checkType,
+		Status:       "error",
+		Tier:         tier,
+		ErrorMessage: &errMsg,
+		ErrorCode:    code,
+		CheckedAt:    time.Now().UTC(),
+	}
+	rc.db.Create(report)
+	return report
+}
+
+// diffIDs returns (missingFromB, missingFromA).
+func diffIDs(a, b []string) ([]string, []string) {
+	setA := make(map[string]struct{}, len(a))
+	for _, s := range a {
+		setA[s] = struct{}{}
+	}
+	setB := make(map[string]struct{}, len(b))
+	for _, s := range b {
+		setB[s] = struct{}{}
+	}
+	var fromB, fromA []string
+	for s := range setA {
+		if _, ok := setB[s]; !ok {
+			fromB = append(fromB, s)
+		}
+	}
+	for s := range setB {
+		if _, ok := setA[s]; !ok {
+			fromA = append(fromA, s)
+		}
+	}
+	return fromB, fromA
+}
+
+func abs(x int64) int64 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+func md5Hex(data []byte) string {
+	return fmt.Sprintf("%x", md5.Sum(data))
+}
+
+// unwrapBSONValue converts BSON native types to Go/JSON-friendly types.
+func unwrapBSONValue(v interface{}) interface{} {
+	switch val := v.(type) {
+	case primitive.ObjectID:
+		return val.Hex()
+	case primitive.DateTime:
+		return val.Time().Format(time.RFC3339Nano)
+	case primitive.A:
+		result := make([]interface{}, len(val))
+		for i, item := range val {
+			result[i] = unwrapBSONValue(item)
+		}
+		return result
+	case bson.M:
+		result := make(map[string]interface{}, len(val))
+		for k, item := range val {
+			result[k] = unwrapBSONValue(item)
+		}
+		return result
+	case bson.D:
+		result := make(map[string]interface{}, len(val))
+		for _, elem := range val {
+			result[elem.Key] = unwrapBSONValue(elem.Value)
+		}
+		return result
+	case int32:
+		return int64(val)
+	case primitive.Decimal128:
+		return val.String()
+	default:
+		return v
+	}
+}
+
+// fnvHash32 — utility used by a legacy helper that needs a deterministic
+// small fingerprint; kept for completeness.
+func fnvHash32(s string) uint32 {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(s))
+	return h.Sum32()
+}
+
+func advisoryLockKey(name string) int64 {
+	return int64(crc32.ChecksumIEEE([]byte(name)))
+}
+
+// ensure we use the helper (prevents goimports from removing the import
+// in the tight loop above).
+var _ = fnvHash32

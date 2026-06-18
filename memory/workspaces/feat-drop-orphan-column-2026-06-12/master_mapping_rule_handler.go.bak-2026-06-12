@@ -1,0 +1,586 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"cdc-cms-service/internal/domain/mapping"
+	"cdc-cms-service/pkgs/natsconn"
+
+	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
+)
+
+// MasterMappingRuleHandler — master mapping rules link to mapping_rule_v2 (business
+// rules of the shadow) via mapping_v2_id. NO shadow DB access here (master must not
+// touch shadow data plane); flatten/scan-array belongs to the shadow mapping layer.
+type MasterMappingRuleHandler struct {
+	db         *gorm.DB
+	repo       mapping.MasterRuleRepository
+	natsClient *natsconn.NatsClient
+}
+
+func NewMasterMappingRuleHandler(db *gorm.DB, repo mapping.MasterRuleRepository, natsClient *natsconn.NatsClient) *MasterMappingRuleHandler {
+	return &MasterMappingRuleHandler{db: db, repo: repo, natsClient: natsClient}
+}
+
+// List handles GET /api/v1/master-mapping-rules?master_binding_id=X
+// Returns master rules JOINed with mapping_rule_v2 (source_field/data_type come from v2).
+func (h *MasterMappingRuleHandler) List(c *fiber.Ctx) error {
+	masterBindingID, _ := strconv.ParseInt(c.Query("master_binding_id"), 10, 64)
+	if masterBindingID == 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "master_binding_id is required"})
+	}
+
+	filter := mapping.MasterFilter{
+		MasterBindingID: masterBindingID,
+		Status:          mapping.Status(c.Query("status")),
+	}
+	if active := c.Query("is_active"); active != "" {
+		isActive := active == "true"
+		filter.IsActive = &isActive
+	}
+
+	rules, err := h.repo.List(c.Context(), filter)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "failed to list master rules: " + err.Error()})
+	}
+	return c.JSON(fiber.Map{"data": rules, "count": len(rules)})
+}
+
+// CreateOrUpdateMasterRuleRequest — master rule chỉ chọn mapping_v2_id + target_column
+// + trạng thái. source_field/data_type/... lấy qua JOIN mapping_rule_v2 (không gửi).
+type CreateOrUpdateMasterRuleRequest struct {
+	ID              int64   `json:"id"`
+	MasterBindingID int64   `json:"master_binding_id"`
+	MappingV2ID     int64   `json:"mapping_v2_id"`
+	TargetColumn    string  `json:"target_column"`
+	IsActive        *bool   `json:"is_active"`
+	Status          string  `json:"status"`
+	Notes           *string `json:"notes"`
+	// Self-contained (nested/derived): khi KHÔNG link v2 (mapping_v2_id=0) — vd field
+	// bóc từ params (1 shadow field → nhiều master field). source_field='params',
+	// source_path='params.dateFr', data_type của field nested.
+	SourceField string  `json:"source_field"`
+	SourcePath  *string `json:"source_path"`
+	DataType    string  `json:"data_type"`
+}
+
+// Save handles POST /api/v1/master-mapping-rules (create/update upsert by mapping_v2_id)
+func (h *MasterMappingRuleHandler) Save(c *fiber.Ctx) error {
+	var req CreateOrUpdateMasterRuleRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+	}
+	if req.MasterBindingID == 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "master_binding_id is required"})
+	}
+	// Cho phép 2 dạng: (a) shadow-mirror → cần mapping_v2_id (link 1 shadow field);
+	// (b) self-contained nested/derived → mapping_v2_id=0 NHƯNG phải có source_path
+	// (vd 'params.dateFr') để transmute bóc. 1 shadow field → nhiều master field.
+	selfContained := req.MappingV2ID == 0
+	if selfContained && (req.SourcePath == nil || strings.TrimSpace(*req.SourcePath) == "") {
+		return c.Status(400).JSON(fiber.Map{"error": "cần mapping_v2_id (link shadow field) HOẶC source_path (field nested self-contained)"})
+	}
+	if req.TargetColumn == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "target_column is required"})
+	}
+	if isSystemColumn(req.TargetColumn) {
+		return c.Status(400).JSON(fiber.Map{"error": "target_column cannot be a system column: " + req.TargetColumn})
+	}
+
+	status := req.Status
+	if status == "" {
+		status = "pending"
+	}
+	isActive := true
+	if req.IsActive != nil {
+		isActive = *req.IsActive
+	}
+	actor, _ := c.Locals("username").(string) // G3: audit trail (hết NULL created_by/updated_by)
+	if actor == "" {
+		actor = "api"
+	}
+
+	rule := &mapping.MasterRule{
+		ID:              req.ID,
+		MasterBindingID: req.MasterBindingID,
+		MappingV2ID:     req.MappingV2ID,
+		TargetColumn:    req.TargetColumn,
+		IsActive:        isActive,
+		Status:          mapping.Status(status),
+		Notes:           req.Notes,
+		CreatedBy:       &actor,
+		UpdatedBy:       &actor,
+		// self-contained nested (mapping_v2_id=0): master tự chứa source_*/data_type.
+		SourceField: req.SourceField,
+		SourcePath:  req.SourcePath,
+		DataType:    req.DataType,
+	}
+	if err := h.repo.Save(c.Context(), rule); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "failed to save master rule: " + err.Error()})
+	}
+	if rule.Status == "approved" {
+		username, _ := c.Locals("username").(string)
+		if username == "" {
+			username = "api-save"
+		}
+		h.triggerMasterDDL(c.Context(), rule.MasterBindingID, username)
+	}
+	return c.JSON(fiber.Map{"status": "saved", "rule": rule})
+}
+
+// Delete handles DELETE /api/v1/master-mapping-rules/:id
+func (h *MasterMappingRuleHandler) Delete(c *fiber.Ctx) error {
+	id, _ := strconv.ParseInt(c.Params("id"), 10, 64)
+	if id == 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "id parameter required"})
+	}
+	// Field sync từ shadow (created_by='shadow-sync') là bản sao 1:1 shadow field do
+	// sync quản lý → KHÔNG cho xoá (xoá cũng bị sync tạo lại; muốn bỏ phải sửa tầng
+	// shadow). Chỉ xoá được field scan-flatten (system-scan-array) & field admin thêm.
+	existing, err := h.repo.GetByID(c.Context(), id)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "master rule not found"})
+	}
+	if existing.CreatedBy != nil && *existing.CreatedBy == "shadow-sync" {
+		return c.Status(403).JSON(fiber.Map{"error": "field này sync từ shadow, không được xoá (sửa/xoá ở tầng shadow)"})
+	}
+	if err := h.repo.Delete(c.Context(), id); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "failed to delete master rule: " + err.Error()})
+	}
+	return c.JSON(fiber.Map{"status": "deleted"})
+}
+
+// UpdateTargetColumn handles PUT /api/v1/master-mapping-rules/:id/target-column
+// — đổi tên cột đích (target_column). target_column là tên cột trên bảng master nên
+// phải là identifier hợp lệ + unique theo (master_binding_id, target_column).
+func (h *MasterMappingRuleHandler) UpdateTargetColumn(c *fiber.Ctx) error {
+	id, _ := strconv.ParseInt(c.Params("id"), 10, 64)
+	if id == 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "id parameter required"})
+	}
+	var req struct {
+		TargetColumn string `json:"target_column"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
+	}
+	req.TargetColumn = strings.TrimSpace(req.TargetColumn)
+	if !isValidColumnName(req.TargetColumn) {
+		return c.Status(400).JSON(fiber.Map{"error": "target_column không hợp lệ (chỉ chữ/số/_ , bắt đầu bằng chữ hoặc _, ≤63 ký tự)"})
+	}
+	// Lấy rule cũ TRƯỚC update: cần old target_column (để rename cột dest) + in_master.
+	existing, gerr := h.repo.GetByID(c.Context(), id)
+	if gerr != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "master rule not found"})
+	}
+	oldCol := existing.TargetColumn
+	// STAGING (migration 080): chỉ LƯU rule + đánh dấu pending (nếu cột đã in_master &
+	// đổi tên). KHÔNG apply DDL ngay (rủi ro với data lớn). Operator Approve mới rename
+	// cột dest. pending_rename_from giữ tên dest GỐC qua nhiều lần sửa (COALESCE);
+	// rename về đúng tên gốc → NULLIF clear (khỏi rename thừa).
+	stageRename := existing.InMaster && oldCol != req.TargetColumn
+	var err error
+	if stageRename {
+		err = h.db.WithContext(c.Context()).Exec(
+			`UPDATE cdc_system.mapping_rule_master
+			    SET target_column = ?, pending_rename_from = NULLIF(COALESCE(pending_rename_from, ?), ?), updated_at = NOW()
+			  WHERE id = ?`,
+			req.TargetColumn, oldCol, req.TargetColumn, id,
+		).Error
+	} else {
+		err = h.db.WithContext(c.Context()).Exec(
+			`UPDATE cdc_system.mapping_rule_master SET target_column = ?, updated_at = NOW() WHERE id = ?`,
+			req.TargetColumn, id,
+		).Error
+	}
+	if err != nil {
+		if strings.Contains(err.Error(), "23505") || strings.Contains(err.Error(), "duplicate") {
+			return c.Status(409).JSON(fiber.Map{"error": "target_column đã tồn tại trong master binding này"})
+		}
+		return c.Status(500).JSON(fiber.Map{"error": "update failed: " + err.Error()})
+	}
+	return c.JSON(fiber.Map{"status": "updated", "target_column": req.TargetColumn, "ddl_pending": stageRename})
+}
+
+// UpdateDataType handles PUT /api/v1/master-mapping-rules/:id/data-type
+// — đổi kiểu dữ liệu CỦA CỘT MASTER (mapping_rule_master.data_type) theo id.
+// QUAN TRỌNG: TUYỆT ĐỐI không ghi sang mapping_rule_v2 (tầng shadow) — field nested
+// nhiều cột master cùng trỏ 1 v2 cha; sửa v2 sẽ đổi type của TẤT CẢ + đụng Shadow.
+// COALESCE(m.data_type, v2.data_type) trong List/DDL nên set m.data_type là override
+// tại tầng master, shadow giữ nguyên.
+func (h *MasterMappingRuleHandler) UpdateDataType(c *fiber.Ctx) error {
+	id, _ := strconv.ParseInt(c.Params("id"), 10, 64)
+	if id == 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "id parameter required"})
+	}
+	var req struct {
+		DataType string `json:"data_type"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
+	}
+	dt := strings.ToUpper(strings.TrimSpace(req.DataType))
+	if !isValidDataType(dt) {
+		return c.Status(400).JSON(fiber.Map{"error": "data_type không hợp lệ (chỉ VARCHAR/CHAR/TEXT/INTEGER/BIGINT/NUMERIC/BOOLEAN/TIMESTAMP/JSONB...)"})
+	}
+	existing, gerr := h.repo.GetByID(c.Context(), id)
+	if gerr != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "master rule not found"})
+	}
+	// STAGING: lưu data_type + đánh dấu pending_type_change nếu cột đã in_master. KHÔNG
+	// ALTER ngay (data lớn ALTER TYPE rewrite bảng — rủi ro). Operator Approve mới ALTER.
+	stageType := existing.InMaster && existing.TargetColumn != ""
+	var uerr error
+	if stageType {
+		uerr = h.db.WithContext(c.Context()).Exec(
+			`UPDATE cdc_system.mapping_rule_master SET data_type = ?, pending_type_change = TRUE, updated_at = NOW() WHERE id = ?`,
+			dt, id,
+		).Error
+	} else {
+		uerr = h.db.WithContext(c.Context()).Exec(
+			`UPDATE cdc_system.mapping_rule_master SET data_type = ?, updated_at = NOW() WHERE id = ?`,
+			dt, id,
+		).Error
+	}
+	if uerr != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "update failed: " + uerr.Error()})
+	}
+	return c.JSON(fiber.Map{"status": "updated", "data_type": dt, "ddl_pending": stageType})
+}
+
+// publishMasterReconcile gửi lệnh reconcile cột master DEST (rename + alter_type) tới
+// worker VÀ chờ reply (sync, 60s) — caller clear pending CHỈ khi worker báo ok. DDL
+// thật do worker chạy (control-plane CMS không có connection tới dest 5434).
+func (h *MasterMappingRuleHandler) publishMasterReconcile(ctx context.Context, masterTable, renameFrom, targetColumn, dataType string) error {
+	if h.natsClient == nil || h.natsClient.Conn == nil {
+		return fmt.Errorf("nats not available")
+	}
+	replySubj := fmt.Sprintf("cdc.evt.master-alter.%d", time.Now().UnixNano())
+	sub, err := h.natsClient.Conn.SubscribeSync(replySubj)
+	if err != nil {
+		return err
+	}
+	defer sub.Unsubscribe()
+	payload, _ := json.Marshal(map[string]any{
+		"master_table":  masterTable,
+		"rename_from":   renameFrom,
+		"target_column": targetColumn,
+		"data_type":     dataType,
+		"reply_to":      replySubj,
+	})
+	if e := h.natsClient.Conn.Publish("cdc.cmd.master-alter-column", payload); e != nil {
+		return e
+	}
+	msg, e := sub.NextMsg(60 * time.Second)
+	if e != nil {
+		return fmt.Errorf("worker timeout (reconcile %s)", targetColumn)
+	}
+	var res struct {
+		Status string `json:"status"`
+		Error  string `json:"error"`
+	}
+	_ = json.Unmarshal(msg.Data, &res)
+	if res.Status != "ok" {
+		if res.Error != "" {
+			return fmt.Errorf("%s", res.Error)
+		}
+		return fmt.Errorf("reconcile failed")
+	}
+	return nil
+}
+
+// applyPendingDDL apply pending DDL (rename + alter_type) của 1 rule lên dest qua worker;
+// clear pending flag CHỈ khi worker ok. Trả (applied, err). applied=false nếu rule
+// không có gì pending.
+func (h *MasterMappingRuleHandler) applyPendingDDL(ctx context.Context, rule *mapping.MasterRule) (bool, error) {
+	hasRename := rule.PendingRenameFrom != nil && *rule.PendingRenameFrom != "" && *rule.PendingRenameFrom != rule.TargetColumn
+	if !hasRename && !rule.PendingTypeChange {
+		return false, nil
+	}
+	var masterTable string
+	if e := h.db.WithContext(ctx).Raw(
+		`SELECT master_table FROM cdc_system.master_binding WHERE id = ? LIMIT 1`, rule.MasterBindingID,
+	).Scan(&masterTable).Error; e != nil || masterTable == "" {
+		return false, fmt.Errorf("master_table not found")
+	}
+	renameFrom := ""
+	if hasRename {
+		renameFrom = *rule.PendingRenameFrom
+	}
+	dataType := ""
+	if rule.PendingTypeChange {
+		dataType = rule.DataType
+	}
+	if e := h.publishMasterReconcile(ctx, masterTable, renameFrom, rule.TargetColumn, dataType); e != nil {
+		return false, e
+	}
+	_ = h.db.WithContext(ctx).Exec(
+		`UPDATE cdc_system.mapping_rule_master SET pending_rename_from = NULL, pending_type_change = FALSE, updated_at = NOW() WHERE id = ?`,
+		rule.ID,
+	).Error
+	return true, nil
+}
+
+// ApproveDDL handles POST /api/v1/master-mapping-rules/:id/approve-ddl — apply pending
+// DDL (rename/alter_type) của 1 rule lên bảng master dest.
+func (h *MasterMappingRuleHandler) ApproveDDL(c *fiber.Ctx) error {
+	id, _ := strconv.ParseInt(c.Params("id"), 10, 64)
+	if id == 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "id parameter required"})
+	}
+	rule, err := h.repo.GetByID(c.Context(), id)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "master rule not found"})
+	}
+	applied, aerr := h.applyPendingDDL(c.Context(), rule)
+	if aerr != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "apply DDL thất bại: " + aerr.Error()})
+	}
+	return c.JSON(fiber.Map{"status": "ok", "applied": applied})
+}
+
+// ApproveDDLAll handles POST /api/v1/master-mapping-rules/approve-ddl-all?master_binding_id=X
+// — apply pending DDL cho TẤT CẢ rule có pending của 1 master binding.
+func (h *MasterMappingRuleHandler) ApproveDDLAll(c *fiber.Ctx) error {
+	masterBindingID, _ := strconv.ParseInt(c.Query("master_binding_id"), 10, 64)
+	if masterBindingID == 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "master_binding_id required"})
+	}
+	rules, err := h.repo.List(c.Context(), mapping.MasterFilter{MasterBindingID: masterBindingID})
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	applied, failed := 0, 0
+	var errs []string
+	for _, r := range rules {
+		ok, e := h.applyPendingDDL(c.Context(), r)
+		if e != nil {
+			failed++
+			errs = append(errs, fmt.Sprintf("%s: %s", r.TargetColumn, e.Error()))
+			continue
+		}
+		if ok {
+			applied++
+		}
+	}
+	return c.JSON(fiber.Map{"status": "ok", "applied": applied, "failed": failed, "errors": errs})
+}
+
+// isValidDataType: whitelist kiểu Postgres (kèm length/precision tuỳ chọn) để chống
+// injection qua data_type + đảm bảo DDL ALTER COLUMN sinh được.
+func isValidDataType(s string) bool {
+	s = strings.ToUpper(strings.TrimSpace(s))
+	if s == "" || len(s) > 50 {
+		return false
+	}
+	base := s
+	if i := strings.IndexByte(s, '('); i >= 0 {
+		if !strings.HasSuffix(s, ")") {
+			return false
+		}
+		base = strings.TrimSpace(s[:i])
+		inner := s[i+1 : len(s)-1]
+		if inner == "" {
+			return false
+		}
+		for _, r := range inner {
+			if !((r >= '0' && r <= '9') || r == ',' || r == ' ') {
+				return false
+			}
+		}
+	}
+	allowed := map[string]bool{
+		"VARCHAR": true, "CHAR": true, "TEXT": true, "INTEGER": true, "INT": true,
+		"BIGINT": true, "SMALLINT": true, "NUMERIC": true, "DECIMAL": true, "REAL": true,
+		"DOUBLE PRECISION": true, "BOOLEAN": true, "BOOL": true, "DATE": true,
+		"TIMESTAMP": true, "TIMESTAMPTZ": true, "JSONB": true, "JSON": true, "UUID": true,
+	}
+	return allowed[base]
+}
+
+// isValidColumnName: identifier Postgres an toàn (không cần quote) — chống injection
+// qua tên cột + đảm bảo DDL sinh được.
+func isValidColumnName(s string) bool {
+	if s == "" || len(s) > 63 {
+		return false
+	}
+	for i, r := range s {
+		isLetter := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_'
+		isDigit := r >= '0' && r <= '9'
+		if i == 0 && !isLetter {
+			return false
+		}
+		if i > 0 && !isLetter && !isDigit {
+			return false
+		}
+	}
+	return true
+}
+
+// SyncFromShadow handles POST /api/v1/master-mapping-rules/sync-from-shadow
+//
+// Pull các business rule mới của shadow (mapping_rule_v2) vào mapping_rule_master
+// cho master binding cụ thể. Chỉ thêm các rule chưa có (ON CONFLICT DO NOTHING).
+// Rule mới được thêm với status='pending' để operator review trước khi duyệt.
+//
+// Lý do tồn tại: clone trong create_master chỉ chạy 1 lần lúc tạo. Khi shadow
+// thêm field mới sau đó, cần gọi endpoint này để sync sang master.
+func (h *MasterMappingRuleHandler) SyncFromShadow(c *fiber.Ctx) error {
+	masterBindingID, _ := strconv.ParseInt(c.Query("master_binding_id"), 10, 64)
+	if masterBindingID == 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "master_binding_id is required"})
+	}
+
+	updatedBy := c.Query("updated_by")
+	if updatedBy == "" {
+		updatedBy = "sync-from-shadow"
+	}
+
+	// Lấy shadow_binding_id của master này để filter đúng source.
+	var shadowBindingID int64
+	if err := h.db.WithContext(c.Context()).Raw(
+		`SELECT shadow_binding_id FROM cdc_system.master_binding WHERE id = ? LIMIT 1`,
+		masterBindingID,
+	).Scan(&shadowBindingID).Error; err != nil || shadowBindingID == 0 {
+		return c.Status(404).JSON(fiber.Map{"error": "master binding not found or shadow_binding_id missing"})
+	}
+
+	// INSERT...SELECT: pull rule nghệp vụ từ shadow (mapping_rule_v2) chưa có
+	// trong mapping_rule_master. ON CONFLICT DO NOTHING → idempotent.
+	// Blacklist chỉ loại các shadow SYSTEM columns (các cột infrastructure của
+	// sinkworker tự tạo). KHÔNG loại business field trùng tên như status, progress...
+	result := h.db.WithContext(c.Context()).Exec(`
+		INSERT INTO cdc_system.mapping_rule_master
+		  (master_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by)
+		SELECT ?, v2.id, v2.target_column, true, 'pending', ?, ?
+		  FROM cdc_system.mapping_rule_v2 v2
+		 WHERE v2.shadow_binding_id = ?
+		   AND NOT EXISTS (
+		     SELECT 1 FROM cdc_system.mapping_rule_master mm
+		      WHERE mm.master_binding_id = ? AND mm.mapping_v2_id = v2.id)
+		   AND v2.is_active = true
+		   AND lower(v2.target_column) NOT IN (
+		     '_gpay_id','_source_id','_raw_data','_source','_source_ts','_synced_at','_version','_hash','_deleted','_created_at','_updated_at')
+		ON CONFLICT (master_binding_id, target_column) DO NOTHING`,
+		masterBindingID, "shadow-sync", updatedBy, shadowBindingID, masterBindingID,
+	)
+	if result.Error != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "sync failed: " + result.Error.Error()})
+	}
+
+	return c.JSON(fiber.Map{
+		"status":     "synced",
+		"synced_new": result.RowsAffected,
+	})
+}
+
+type BatchUpdateMasterRulesRequest struct {
+	IDs       []int64 `json:"ids"`
+	Status    string  `json:"status"` // 'approved', 'rejected'
+	IsActive  *bool   `json:"is_active,omitempty"`
+	UpdatedBy string  `json:"updated_by,omitempty"`
+}
+
+// BatchUpdate handles PUT /api/v1/master-mapping-rules/batch
+func (h *MasterMappingRuleHandler) BatchUpdate(c *fiber.Ctx) error {
+	var req BatchUpdateMasterRulesRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+	}
+	if len(req.IDs) == 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "no rule ids provided"})
+	}
+
+	var bindingIDs []int64
+	if req.Status == "approved" {
+		h.db.WithContext(c.Context()).Raw(
+			`SELECT DISTINCT master_binding_id FROM cdc_system.mapping_rule_master WHERE id IN (?)`,
+			req.IDs,
+		).Scan(&bindingIDs)
+	}
+
+	txErr := h.db.WithContext(c.Context()).Transaction(func(tx *gorm.DB) error {
+		query := `UPDATE cdc_system.mapping_rule_master SET updated_at = NOW()`
+		args := []interface{}{}
+		if req.Status != "" {
+			query += `, status = ?`
+			args = append(args, req.Status)
+		}
+		if req.IsActive != nil {
+			query += `, is_active = ?`
+			args = append(args, *req.IsActive)
+		}
+		if req.UpdatedBy != "" {
+			query += `, updated_by = ?`
+			args = append(args, req.UpdatedBy)
+		}
+		query += ` WHERE id IN (?)`
+		args = append(args, req.IDs)
+		return tx.Exec(query, args...).Error
+	})
+	if txErr != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "batch update failed: " + txErr.Error()})
+	}
+
+	if req.Status == "approved" && len(bindingIDs) > 0 {
+		username := req.UpdatedBy
+		if username == "" {
+			username, _ = c.Locals("username").(string)
+		}
+		if username == "" {
+			username = "api-batch"
+		}
+		for _, bid := range bindingIDs {
+			h.triggerMasterDDL(c.Context(), bid, username)
+		}
+	}
+
+	return c.JSON(fiber.Map{"status": "updated", "count": len(req.IDs)})
+}
+
+func (h *MasterMappingRuleHandler) triggerMasterDDL(ctx context.Context, masterBindingID int64, triggeredBy string) {
+	if h.natsClient == nil || h.natsClient.Conn == nil {
+		return
+	}
+	var masterTable string
+	if err := h.db.WithContext(ctx).Raw(
+		`SELECT master_table FROM cdc_system.master_binding WHERE id = ? LIMIT 1`,
+		masterBindingID,
+	).Scan(&masterTable).Error; err != nil || masterTable == "" {
+		return
+	}
+
+	payload, _ := json.Marshal(map[string]string{
+		"master_table":   masterTable,
+		"triggered_by":   triggeredBy,
+		"correlation_id": "rule-approve-" + masterTable + "-" + time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	_ = h.natsClient.Conn.Publish("cdc.cmd.master-create", payload)
+}
+
+// isSystemColumn guards target_column against shadow INFRASTRUCTURE column leakage.
+// Chỉ block các cột do sinkworker tự tạo (prefix _ của hạ tầng CDC).
+// KHÔNG block business field như status/progress/error/params dù trùng tên.
+func isSystemColumn(col string) bool {
+	blacklist := []string{
+		"_gpay_id", "_source_id", "_raw_data", "_source", "_source_ts", "_synced_at", "_version", "_hash", "_deleted", "_created_at", "_updated_at",
+	}
+	colLower := strings.ToLower(strings.TrimSpace(col))
+	for _, b := range blacklist {
+		if colLower == b {
+			return true
+		}
+	}
+	return false
+}
+
+// (G1) MasterColumns endpoint đã gỡ: nó query information_schema trên control-plane
+// (h.db = cdc_dw 5433) trong khi master table vật lý ở dest (5434) → luôn rỗng. "In
+// Master" giờ dùng flag worker-maintained `mapping_rule_master.in_master` (worker set
+// khi Apply DDL — chỉ worker chạm dest). FE đọc flag qua GET List, không cần endpoint này.

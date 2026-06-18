@@ -127,3 +127,74 @@ internal/
 - **Bash** `lsof` + `curl` + `ps` — verify service runtime.
 - **Edit** (`report_*.md`, `05_progress.md`) — đính chính + append truth.
 - **No-Lie principle** — user yêu cầu "không report láo". Báo cáo đúng port thực tế (8083) thay vì 8081 trong project_context outdated.
+
+## 2026-06-16 — Current-turn reconcile + dirty tree note
+
+- **User request**: "làm đi em" sau khi review plan.
+- **Reconcile thực tế**:
+  - Repo `cdc-cms-service` đang có sẵn 1 file modified trước đó: `internal/api/master_mapping_rule_handler.go`.
+  - Turn này **không** chạm vào source code; không `Edit/Write` bất kỳ file `.go` nào trong repo.
+  - Workspace plan/report hiện tại đã đủ để user review, không cần bung code trước khi có approve.
+- **Why this note exists**: để tránh report sai rằng working tree hoàn toàn sạch, trong khi git status thực tế đang dirty từ trước.
+
+## 2026-06-16 — Implement `master_mapping_rule` slice
+
+- **User request**: refactor `internal/api/master_mapping_rule_handler.go` trước, rồi mới duyệt.
+- **What changed**
+  - `internal/api/master_mapping_rule_handler.go` được bóc về thin HTTP adapter.
+  - `internal/app/commands/master_mapping_rule.go` mới, giữ toàn bộ orchestration DB/NATS cho master mapping rules.
+  - `internal/server/server.go` đổi wiring sang service mới.
+- **Behavior preserved**
+  - Route contracts và response shape chính vẫn giữ nguyên.
+  - Mapping-rule validation ở HTTP layer vẫn chạy.
+  - NATS publish/worker-trigger logic vẫn hoạt động, nhưng nằm ở app layer thay vì handler.
+- **Verify thực tế**
+  - `gofmt -w ...` chạy sạch.
+  - `GOCACHE=/private/tmp/cdc-gocache go test ./internal/api ./internal/app/commands ./internal/server` ✅ PASS.
+  - `GOCACHE=/private/tmp/cdc-gocache go test ./...` ✅ phần lớn PASS, chỉ fail ở 2 test `httptest`/listen port do sandbox chặn bind localhost:
+    - `test/internal/infra/http.TestPercentileFallbackScrape`
+    - `test/internal/infra/observability/probes.TestDebezium_RunningExtractsState`
+  - Runtime service verify:
+    - `lsof -nP -iTCP -sTCP:LISTEN` thấy PID `75385` listen `*:8083`.
+    - `/health` → `{"service":"cdc-cms","status":"ok"}`
+    - `/ready` → `{"status":"ready"}`
+    - `/api/system/health` vẫn trả snapshot runtime, `overall":"critical"` do infra warnings hiện hữu chứ không phải do turn này.
+- **Diff reality**
+  - `internal/api/master_mapping_rule_handler.go`: `141` insertions, `477` deletions so với HEAD.
+  - `internal/app/commands/master_mapping_rule.go`: file mới `580 LOC`.
+- `internal/server/server.go`: `2` insertions, `1` deletion.
+
+## 2026-06-16 — Verify after refactor
+
+- **Compile verify**
+  - `GOCACHE=/private/tmp/cdc-gocache go test ./internal/api ./internal/app/commands ./internal/server` ✅ PASS
+  - `GOCACHE=/private/tmp/cdc-gocache go test ./...` ✅ phần lớn PASS, fail ở 2 test `httptest`/port bind do sandbox:
+    - `test/internal/infra/http.TestPercentileFallbackScrape`
+    - `test/internal/infra/observability/probes.TestDebezium_RunningExtractsState`
+- **Runtime verify**
+  - `lsof -nP -iTCP -sTCP:LISTEN` thấy `*:8083` đang do PID `75385` listen.
+  - `curl 127.0.0.1:8083/health` → `{"service":"cdc-cms","status":"ok"}`
+  - `curl 127.0.0.1:8083/ready` → `{"status":"ready"}`
+  - `curl 127.0.0.1:8083/api/system/health` → snapshot vẫn trả về, `overall":"critical"` do infra warnings có sẵn trước turn này.
+- **Ghi chú report**
+  - `internal/api/master_mapping_rule_handler.go` đã được kéo xuống thin adapter.
+  - `internal/app/commands/master_mapping_rule.go` là slice app-layer mới.
+  - `internal/server/server.go` đã đổi wiring sang service mới.
+
+## 2026-06-16 — Corrected to screaming/module-first + repository pattern
+
+- **User correction**: anh yêu cầu trả logic về repository pattern và áp dụng screaming architecture, không giữ app-service trung gian.
+- **What changed in this turn**
+  - Xóa `internal/api/master_mapping_rule_handler.go`.
+  - Xóa `internal/app/commands/master_mapping_rule.go`.
+  - Thêm module `internal/modules/mastermapping/{module.go,routes.go,handler.go}`.
+  - Đẩy logic persistence liên quan `master_mapping_rule` vào `internal/infra/persistence/master_mapping_rule_repo_gorm.go`.
+  - Rewire `internal/router/router.go` và `internal/server/server.go` sang module mới.
+- **Verify thực tế**
+  - `go test ./...` ✅ PASS toàn repo.
+  - `curl 127.0.0.1:8083/health` ✅ `{"service":"cdc-cms","status":"ok"}`
+  - `curl 127.0.0.1:8083/ready` ✅ `{"status":"ready"}`
+- **Why this matters**
+  - Không để lại 2 kiến trúc song song cho cùng 1 feature.
+  - HTTP adapter còn mỏng hơn, business/persistence đi đúng nơi của nó.
+  - Tài liệu report đã được sync lại để phản ánh đúng trạng thái hiện tại, không kể nhầm nhánh cũ.

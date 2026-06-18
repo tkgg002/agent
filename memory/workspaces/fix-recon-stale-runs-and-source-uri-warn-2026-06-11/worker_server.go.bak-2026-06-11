@@ -1,0 +1,1195 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"centralized-data-service/config"
+	"centralized-data-service/internal/activity"
+	"centralized-data-service/internal/handler"
+	"centralized-data-service/internal/model"
+	"centralized-data-service/internal/repository"
+	"centralized-data-service/internal/service"
+	"centralized-data-service/pkgs/database"
+	"centralized-data-service/pkgs/mongodb"
+	"centralized-data-service/pkgs/natsconn"
+
+	"centralized-data-service/pkgs/rediscache"
+
+	"go.mongodb.org/mongo-driver/mongo"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/adaptor"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/nats-io/nats.go"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+)
+
+type WorkerServer struct {
+	cfg              *config.AppConfig
+	logger           *zap.Logger
+	db               *gorm.DB
+	dbReplica        *gorm.DB // may == db when no replica DSN configured
+	nats             *natsconn.NatsClient
+	redis            *rediscache.RedisCache
+	consumerPools    []*handler.ConsumerPool
+	batchBuffer      *handler.BatchBuffer
+	eventHandler     *handler.EventHandler
+	registrySvc      service.MetadataRegistry
+	registryRepo     *repository.RegistryRepo
+	maskingSvc       *service.MaskingService
+	activityLogger   *service.ActivityLogger
+	reconCore        *service.ReconCore
+	reconHealer      *service.ReconHealer
+	schemaValidator  *service.SchemaValidator
+	dlqHandler       *handler.DLQHandler
+	dlqWorker        *handler.DLQStateMachine
+	partitionDropper *service.PartitionDropper
+	tsDetector       *service.TimestampDetector   // Migration 017 — auto-detect
+	fullCountAgg     *service.FullCountAggregator // Migration 017 — full-count daily
+	mongoClient      *mongo.Client
+	app              *fiber.App
+}
+
+func NewWorkerServer(cfg *config.AppConfig, logger *zap.Logger) (*WorkerServer, error) {
+	// 1. Connect PostgreSQL — Phase 01 split E2E (T-C4) wires the
+	// physical-instance Registry first, then aliases the legacy `db`
+	// handle to the control-plane pool so existing repositories keep
+	// working without holding a duplicate pool against cdc_dw.
+	registry := database.NewRegistry(cfg)
+	pgStart := time.Now()
+	if err := registry.Init(context.Background()); err != nil {
+		return nil, fmt.Errorf("multi-pg registry init: %w", err)
+	}
+	db, err := registry.GetDB(database.RoleControlPlane)
+	if err != nil {
+		return nil, fmt.Errorf("control-plane db: %w", err)
+	}
+	shadowDB, err := registry.GetDB(database.RoleShadow)
+	if err != nil {
+		logger.Warn(fmt.Sprintf("shadow-plane db init failed falling back to control-plane component=worker_server op=pg_init phase=shadow_fallback err=%s",
+			err.Error()),
+			zap.String("component", "worker_server"),
+			zap.String("op", "pg_init"),
+			zap.String("phase", "shadow_fallback"),
+			zap.Error(err))
+		shadowDB = db
+	}
+
+	pgDurationMs := time.Since(pgStart).Milliseconds()
+	logger.Info(fmt.Sprintf("PostgreSQL connected component=worker_server op=pg_init init_duration_ms=%d control_plane=%s shadow_plane=%s destination=%s",
+		pgDurationMs, redactDSN(cfg.SystemDB.DSN()), redactDSN(cfg.ShadowDB.DSN()), redactDSN(cfg.MasterDB.DSN())),
+		zap.String("component", "worker_server"),
+		zap.String("op", "pg_init"),
+		zap.Int64("init_duration_ms", pgDurationMs),
+		zap.String("control_plane", redactDSN(cfg.SystemDB.DSN())),
+		zap.String("shadow_plane", redactDSN(cfg.ShadowDB.DSN())),
+		zap.String("destination", redactDSN(cfg.MasterDB.DSN())),
+	)
+
+	// 1b. Optional read-replica pool (plan WORKER task #2). When the
+	// replica DSN is not set we reuse the primary connection but the
+	// Recon dest agent still wraps every read in SET TRANSACTION
+	// READ ONLY as defence-in-depth.
+	dbReplica, err := database.NewPostgresReadReplica(cfg)
+	if err != nil {
+		logger.Warn(fmt.Sprintf("postgres read replica init failed reusing primary component=worker_server op=pg_replica_init err=%s", err.Error()),
+			zap.String("component", "worker_server"),
+			zap.String("op", "pg_replica_init"),
+			zap.Error(err),
+		)
+		dbReplica = nil
+	}
+	if dbReplica == nil {
+		dbReplica = db
+		logger.Info("postgres read-replica not configured reusing primary component=worker_server op=pg_replica_init phase=fallback replica_mode=primary_with_set_read_only",
+			zap.String("component", "worker_server"),
+			zap.String("op", "pg_replica_init"),
+			zap.String("phase", "fallback"),
+			zap.String("replica_mode", "primary_with_set_read_only"))
+	} else {
+		logger.Info(fmt.Sprintf("postgres read-replica connected component=worker_server op=pg_replica_init phase=ready replica_dsn=%s",
+			redactDSN(cfg.ReadReplica.DSN())),
+			zap.String("component", "worker_server"),
+			zap.String("op", "pg_replica_init"),
+			zap.String("phase", "ready"),
+			zap.String("replica_dsn", redactDSN(cfg.ReadReplica.DSN())))
+	}
+
+	// Schema managed via SQL migrations (migrations/001-013) — NOT auto-migrated.
+	// Reason: GORM AutoMigrate conflicts with partitioned tables (e.g. cdc_activity_log
+	// has composite PRIMARY KEY (created_at, id) for RANGE partitioning — GORM tries
+	// to DROP NOT NULL on created_at which Postgres rejects with SQLSTATE 42P16).
+	// Tables & owning migrations:
+	//   - cdc_table_registry      -> 001_init_schema.sql, 013_table_registry_expected_fields.sql
+	//   - cdc_mapping_rules       -> 001_init_schema.sql
+	//   - cdc_activity_log        -> 006_activity_log.sql, 010_partitioning.sql
+	//   - cdc_worker_schedule     -> 007_worker_schedule.sql
+	//   - cdc_reconciliation_*    -> 008_reconciliation.sql
+	//   - cdc_failed_sync_logs    -> 008_reconciliation.sql, 012_dlq_state_machine.sql
+	//   - cdc_recon_runs          -> 011_recon_runs.sql
+
+	// 2. Connect NATS
+	natsClient, err := natsconn.NewNatsClient(cfg, logger)
+	if err != nil {
+		return nil, fmt.Errorf("nats: %w", err)
+	}
+
+	// Build CDC subject list from kafka.topicPrefix once — reused below for
+	// both stream provisioning (EnsureStreams) and PullSubscribe (ConsumerPool).
+	if cfg.Kafka.GroupID == "" || len(cfg.Kafka.TopicPrefix) == 0 {
+		return nil, fmt.Errorf("kafka.groupId and kafka.topicPrefix are required to wire the NATS consumer pool")
+	}
+	cdcSubjects := make([]string, 0, len(cfg.Kafka.TopicPrefix))
+	cdcPrefixes := make([]string, 0, len(cfg.Kafka.TopicPrefix))
+	for _, p := range cfg.Kafka.TopicPrefix {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		cdcPrefixes = append(cdcPrefixes, p)
+		cdcSubjects = append(cdcSubjects, p+".>")
+	}
+	if len(cdcSubjects) == 0 {
+		return nil, fmt.Errorf("kafka.topicPrefix contained only empty entries")
+	}
+
+	// Ensure streams exist (CDC_EVENTS subjects sourced from kafka.topicPrefix)
+	if err := natsClient.EnsureStreams(cdcSubjects); err != nil {
+		return nil, fmt.Errorf("nats streams: %w", err)
+	}
+	logger.Info(fmt.Sprintf("NATS streams ready component=worker_server op=nats_streams_ensure subject_count=%d cdc_subjects=%v",
+		len(cdcSubjects), cdcSubjects),
+		zap.String("component", "worker_server"),
+		zap.String("op", "nats_streams_ensure"),
+		zap.Int("subject_count", len(cdcSubjects)),
+		zap.Strings("cdc_subjects", cdcSubjects))
+
+	// 3. Connect Redis
+	redisCache, err := rediscache.NewRedisCache(cfg, logger)
+	if err != nil {
+		return nil, fmt.Errorf("redis: %w", err)
+	}
+
+	// 4. Repositories
+	registryRepo := repository.NewRegistryRepo(db)
+	mappingRepo := repository.NewMappingRuleRepo(db)
+	pendingRepo := repository.NewPendingFieldRepo(db)
+	connectionRepo := repository.NewConnectionRegistryRepo(db)
+	sourceObjectRepo := repository.NewSourceObjectRegistryRepo(db)
+	shadowBindingRepo := repository.NewShadowBindingRepo(db)
+	mappingRuleV2Repo := repository.NewMappingRuleV2Repo(db)
+	syncRuntimeRepo := repository.NewSyncRuntimeStateRepo(db)
+
+	// 5. Services
+	// Worker-side URI overlay (cfg.ConnectionOverrides) is normalized once
+	// and shared with every site that turns a connection_registry row into
+	// a connection URI (GetSourceDSN, scanFieldsMongoSource,
+	// MetadataRegistryService.ApplyConnectionOverride). Empty map = production default.
+	connectionOverrides := service.NormalizeConnectionOverrides(cfg.ConnectionOverrides)
+	if len(connectionOverrides) > 0 {
+		codes := make([]string, 0, len(connectionOverrides))
+		for code := range connectionOverrides {
+			codes = append(codes, code)
+		}
+		logger.Info(fmt.Sprintf("connection overrides loaded connection_codes=%v", codes), zap.Strings("connection_codes", codes))
+	}
+	registrySvc := service.NewMetadataRegistryService(connectionRepo, sourceObjectRepo, shadowBindingRepo, mappingRuleV2Repo, logger, cfg.MasterKey, connectionOverrides)
+	maskingSvc := service.NewMaskingService(db, logger)
+	maskingSvc.SetHMACKey(cfg.MaskingHMACKey)
+	maskingSvc.SetAESKey(cfg.MaskingAESKey)
+	maskingSvc.SetMetadataRegistry(registrySvc)
+	// Share the physical-instance Registry so ConnectionManager and
+	// any direct GetDB("cdc")/GetDB("dest") callers hit the same pools.
+	connectionManager := service.NewConnectionManagerWithRegistry(cfg, logger, registry)
+	schemaInspector := service.NewSchemaInspector(pendingRepo, redisCache, natsClient, logger)
+	schemaInspector.SetMaskingService(maskingSvc)
+	schemaInspector.SetMetadataRegistry(registrySvc)
+
+	// 6. Batch buffer
+	schemaAdapter := service.NewSchemaAdapter(db, logger)
+	batchBuffer := handler.NewBatchBuffer(cfg.Worker.BatchSize, cfg.Worker.BatchTimeout, db, schemaAdapter, logger)
+	batchBuffer.SetConnectionManager(connectionManager)
+	batchBuffer.SetMaskingService(maskingSvc)
+	// Realtime post-ingest: sau khi batch ghi shadow OK → bắn cdc.cmd.transmute-shadow
+	// (gate theo post_ingest schedule) để materialise master ngay. Fire-and-forget.
+	batchBuffer.SetNatsConn(natsClient.Conn)
+
+	// 6b. MongoDB + Reconciliation Core (plan WORKER tasks #2, #3).
+	// - ReconDestAgent uses the dedicated replica pool when configured.
+	// - ReconCoreWithConfig + Redis client enables leader election so
+	//   scheduled CheckAll runs on exactly one worker instance.
+	//
+	// Refactor 2026-05-26 (lesson L3100 + L985): ReconCore is now initialized
+	// unconditionally so the scheduled reconcile tick stops short-circuiting
+	// with "skipped (MongoDB not configured)" when cfg.MongoDB.URL is empty.
+	// Per-source Mongo URIs are resolved at runtime from
+	// cdc_system.connection_registry via MetadataRegistryService — the legacy
+	// cfg.MongoDB.URL is kept only as an optional default client for
+	// downstream services that still require a shared handle
+	// (ReconHealer / Backfill / TimestampDetector / FullCountAgg, see below).
+	var mongoClientShared *mongo.Client
+	if cfg.MongoDB.URL != "" {
+		mongoStart := time.Now()
+		mc, err := mongodb.NewClient(context.Background(), mongodb.MongoConfig{URL: cfg.MongoDB.URL}, logger)
+		if err != nil {
+			logger.Warn(fmt.Sprintf("MongoDB default client connection failed component=worker_server op=mongo_init phase=fallback_to_v2_only mode=v2_only_per_source_uri err=%s",
+				err.Error()),
+				zap.String("component", "worker_server"),
+				zap.String("op", "mongo_init"),
+				zap.String("phase", "fallback_to_v2_only"),
+				zap.String("mode", "v2_only_per_source_uri"),
+				zap.Error(err))
+		} else {
+			mongoClientShared = mc
+			logger.Info(fmt.Sprintf("MongoDB default client connected component=worker_server op=mongo_init phase=ready mode=legacy_default init_duration_ms=%d",
+				time.Since(mongoStart).Milliseconds()),
+				zap.String("component", "worker_server"),
+				zap.String("op", "mongo_init"),
+				zap.String("phase", "ready"),
+				zap.String("mode", "legacy_default"),
+				zap.Int64("init_duration_ms", time.Since(mongoStart).Milliseconds()))
+		}
+	} else {
+		logger.Info("MongoDB default client not configured component=worker_server op=mongo_init phase=skipped mode=v2_only_per_source_uri features_disabled=recon_healer,backfill,ts_detector,full_count_agg",
+			zap.String("component", "worker_server"),
+			zap.String("op", "mongo_init"),
+			zap.String("phase", "skipped"),
+			zap.String("mode", "v2_only_per_source_uri"),
+			zap.String("features_disabled", "recon_healer,backfill,ts_detector,full_count_agg"))
+	}
+
+	sourceAgent := service.NewReconSourceAgent(mongoClientShared, logger)
+	// Recon dest-side phải nhắm SHADOW PLANE (V2 hybrid: 5436 cdc_shadow,
+	// schema shadow_*) — không phải control plane. shadowDB fallback = db
+	// khi không config (V1 single-db) nên hành vi legacy giữ nguyên.
+	// dbReplica là replica của control plane → không dùng cho shadow;
+	// truyền shadowDB cho cả primary lẫn replica.
+	destAgent := service.NewReconDestAgentWithConfig(
+		shadowDB,
+		shadowDB,
+		service.ReconDestAgentConfig{ReadReplicaDSN: cfg.ReadReplica.DSN()},
+		logger,
+	)
+	// SchemaAdapter riêng cho recon, introspect trên shadow plane. KHÔNG
+	// đụng `schemaAdapter` (control-plane) của batchBuffer/ingest — giữ cô
+	// lập luồng source→shadow.
+	reconSchemaAdapter := service.NewSchemaAdapter(shadowDB, logger)
+	reconCore := service.NewReconCoreWithConfig(
+		sourceAgent, destAgent, db, mongoClientShared, reconSchemaAdapter, registryRepo,
+		redisCache,
+		service.ReconCoreConfig{
+			Tier3OffPeakStart: cfg.Worker.Tier3OffPeakStart,
+			Tier3OffPeakEnd:   cfg.Worker.Tier3OffPeakEnd,
+		},
+		logger,
+	)
+	reconCore.SetMetadataRegistry(registrySvc)
+	// Recon V4 Segment B (shadow↔master): agent thứ 2 trỏ dest plane (5434).
+	// Lỗi lấy masterDB → KHÔNG wire, RunSegmentB tự từ chối với fix_hint
+	// (visibility, không chết cả recon A).
+	if masterDB, mErr := registry.GetDB(database.RoleDestination); mErr == nil {
+		reconCore.SetMasterAgent(service.NewReconDestAgentWithConfig(
+			masterDB, masterDB, service.ReconDestAgentConfig{}, logger))
+		// P4: raw handles cho L3-B row/field-diff.
+		reconCore.SetPlaneDBs(shadowDB, masterDB)
+	} else {
+		logger.Warn("recon segment B disabled — dest-plane db unavailable",
+			zap.Error(mErr), zap.String("fix_hint", "kiểm tra cfg masterDb / RoleDestination pool"))
+	}
+	logger.Info(fmt.Sprintf("Reconciliation Core initialized default_mongo_client=%t source_uri_resolution=%s",
+		mongoClientShared != nil, "per-source via connection_registry (V2)"),
+		zap.Bool("default_mongo_client", mongoClientShared != nil),
+		zap.String("source_uri_resolution", "per-source via connection_registry (V2)"),
+	)
+
+	// 6c. Schema validator (Phase A — JSON converter). Runs inside the
+	// Kafka consumer BEFORE message processing so drift rejects reach
+	// the DLQ via the write-before-ACK path.
+	schemaValidator := service.NewSchemaValidator(db, logger)
+	schemaValidator.SetMetadataRegistry(registrySvc)
+
+	// 6d. DLQ retry worker. Runs alongside the consumer, polling
+	// failed_sync_logs every 5m and applying exponential backoff.
+	dlqHandler := handler.NewDLQHandler(natsClient, logger, db)
+	dlqHandler.SetMaskingService(maskingSvc)
+	dlqWorker := handler.NewDLQStateMachine(db, natsClient, handler.DLQStateMachineConfig{}, logger)
+	// 7. Dynamic Mapper + Event handler
+	dynamicMapper := service.NewDynamicMapper(registrySvc, logger, schemaAdapter)
+	dynamicMapper.SetMaskingService(maskingSvc)
+	eventHandler := handler.NewEventHandler(db, connectionManager, registrySvc, dynamicMapper, schemaInspector, batchBuffer, logger)
+	eventHandler.SetChildExplodeService(service.NewChildExplodeService(registrySvc, dynamicMapper, logger))
+
+	// 8. Consumer pools — one JetStream PullSubscribe per cfg.Kafka.TopicPrefix
+	// = cfg.Kafka.GroupID is shared across pools so multi-instance workers
+	// cooperatively consume each prefix; durable consumer name is suffixed with
+	// the sanitised prefix so the prefixes do not clash on the JetStream broker.
+	consumerPools := make([]*handler.ConsumerPool, 0, len(cdcPrefixes))
+	for _, prefix := range cdcPrefixes {
+		subject := prefix + ".>"
+		consumerName := cfg.Kafka.GroupID + "-" + strings.ReplaceAll(prefix, ".", "-")
+		pool, err := handler.NewConsumerPool(
+			natsClient.JS,
+			subject,
+			consumerName,
+			eventHandler.Handle,
+			cfg.Worker.PoolSize,
+			logger,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("consumer pool subject=%s: %w", subject, err)
+		}
+		consumerPools = append(consumerPools, pool)
+		logger.Info(fmt.Sprintf("NATS consumer pool configured subject=%s queue_group=%s durable_consumer=%s pool_size=%d",
+			subject, cfg.Kafka.GroupID, consumerName, cfg.Worker.PoolSize),
+			zap.String("subject", subject),
+			zap.String("queue_group", cfg.Kafka.GroupID),
+			zap.String("durable_consumer", consumerName),
+			zap.Int("pool_size", cfg.Worker.PoolSize),
+		)
+	}
+
+	// 9. Config reload listener — parse user context from CMS
+	natsClient.Conn.Subscribe("schema.config.reload", func(msg *nats.Msg) {
+		var table string
+		var reloadEvent struct {
+			Table     string `json:"table"`
+			UserID    string `json:"user_id"`
+			Action    string `json:"action"`
+			Field     string `json:"field"`
+			Timestamp string `json:"timestamp"`
+		}
+		if err := json.Unmarshal(msg.Data, &reloadEvent); err != nil {
+			table = string(msg.Data)
+			logger.Info(fmt.Sprintf("config reload triggered table=%s", table), zap.String("table", table))
+		} else {
+			table = reloadEvent.Table
+			logger.Info(fmt.Sprintf("config reload triggered by user table=%s user_id=%s action=%s field=%s",
+				reloadEvent.Table, reloadEvent.UserID, reloadEvent.Action, reloadEvent.Field),
+				zap.String("table", reloadEvent.Table),
+				zap.String("user_id", reloadEvent.UserID),
+				zap.String("action", reloadEvent.Action),
+				zap.String("field", reloadEvent.Field),
+			)
+		}
+		registrySvc.ReloadAll(context.Background())
+
+		redisCache.DeletePattern(context.Background(), "schema:*")
+		batchBuffer.FlushSchemaCache()
+	})
+
+	// 10a. pgx pool for high-throughput operations — pulled from the
+	// shared Registry so we never hold two pgx pools against cdc_dw.
+	pgxPool, err := registry.GetPgxPool(context.Background(), database.RoleControlPlane)
+	if err != nil {
+		logger.Warn(fmt.Sprintf("pgx pool init failed batch bridge disabled err=%s", err.Error()), zap.Error(err))
+	}
+
+	// 10b. Command handler — handles DW operations relayed via NATS from the API.
+	cmdHandler := handler.NewCommandHandler(db, mappingRepo, mappingRuleV2Repo, registryRepo, pendingRepo, shadowDB, logger)
+	cmdHandler.SetMetadataRegistry(registrySvc)
+	cmdHandler.SetKafkaConnectURL(cfg.Debezium.KafkaConnectURL)
+	cmdHandler.SetNATSConn(natsClient.Conn)
+
+	mongoIntrospectSvc := service.NewMongoIntrospectionService()
+	cmdHandler.SetMongoService(mongoIntrospectSvc)
+	cmdHandler.SetMongoURL(cfg.MongoDB.URL)
+	cmdHandler.SetTransformChunkSize(cfg.Worker.TransformChunkSize)
+	cmdHandler.SetConnectionOverrides(connectionOverrides)
+
+	natsClient.Conn.Subscribe("cdc.cmd.standardize", cmdHandler.HandleStandardize)
+	natsClient.Conn.Subscribe("cdc.cmd.discover", cmdHandler.HandleDiscover)
+	natsClient.Conn.Subscribe("cdc.cmd.introspect", cmdHandler.HandleDiscover)
+	natsClient.Conn.Subscribe("cdc.cmd.backfill", cmdHandler.HandleBackfill)
+	natsClient.Conn.Subscribe("cdc.cmd.scan-raw-data", cmdHandler.HandleScanRawData)
+	natsClient.Conn.Subscribe("cdc.cmd.scan-array", cmdHandler.HandleScanArrayFields)
+	natsClient.Conn.Subscribe("cdc.cmd.batch-transform", cmdHandler.HandleBatchTransform)
+	natsClient.Conn.Subscribe("cdc.cmd.periodic-scan", cmdHandler.HandlePeriodicScan)
+	natsClient.Conn.Subscribe("cdc.cmd.drop-gin-index", cmdHandler.HandleDropGINIndex)
+	natsClient.Conn.Subscribe("cdc.cmd.create-default-columns", cmdHandler.HandleCreateDefaultColumns)
+
+	// MongoDB Discovery — Flow 1
+	natsClient.Conn.Subscribe("cdc.cmd.introspect.mongo.databases", cmdHandler.HandleDiscoverMongoDatabases)
+	natsClient.Conn.Subscribe("cdc.cmd.introspect.mongo.collections", cmdHandler.HandleDiscoverMongoCollections)
+
+	// Boundary-refactor handlers — kept for Debezium-native flows.
+	natsClient.Conn.Subscribe("cdc.cmd.scan-fields", cmdHandler.HandleScanFields)
+	natsClient.Conn.Subscribe("cdc.cmd.sync-register", cmdHandler.HandleSyncRegister)
+	natsClient.Conn.Subscribe("cdc.cmd.sync-state", cmdHandler.HandleSyncState)
+	natsClient.Conn.Subscribe("cdc.cmd.restart-debezium", cmdHandler.HandleRestartDebezium)
+	natsClient.Conn.Subscribe("cdc.cmd.alter-column", cmdHandler.HandleAlterColumn)
+	natsClient.Conn.Subscribe("cdc.cmd.master-swap", cmdHandler.HandleMasterSwap)
+
+	// Transmuter wiring (plan v2 §R6). TypeResolver + TransmuterModule +
+	// NATS handler. Subject cdc.cmd.transmute materialises 1 master;
+	// cdc.cmd.transmute-shadow fans out from post-ingest hook.
+	typeResolver := service.NewTypeResolver(db)
+	masterDDLGen := service.NewMasterDDLGenerator(db, connectionManager, mappingRuleV2Repo, syncRuntimeRepo, logger)
+	transmuter := service.NewTransmuterModule(db, connectionManager, syncRuntimeRepo, masterDDLGen, typeResolver, logger)
+	// GAP-SAFE-2: after a DDL Apply, drop the transmuter's stale rule cache for that
+	// binding so newly-approved columns are mapped on the next sync (not after 60s TTL).
+	masterDDLGen.SetCacheInvalidator(transmuter.InvalidateRuleCache)
+	activityLogger := service.NewActivityLogger(db, logger)
+	transmuteHandler := handler.NewTransmuteHandler(transmuter, db, natsClient.Conn, logger, activityLogger)
+	natsClient.Conn.Subscribe("cdc.cmd.transmute", transmuteHandler.HandleTransmute)
+	natsClient.Conn.Subscribe("cdc.cmd.transmute-shadow", transmuteHandler.HandleTransmuteShadow)
+	logger.Info(fmt.Sprintf("transmute handler registered subject_run=%s subject_shadow=%s",
+		"cdc.cmd.transmute", "cdc.cmd.transmute-shadow"),
+		zap.String("subject_run", "cdc.cmd.transmute"),
+		zap.String("subject_shadow", "cdc.cmd.transmute-shadow"))
+
+	// Transmute scheduler (plan v2 §R7). Cron-driven + fencing-guarded.
+	// machineID/fencingToken shared with sinkworker not strictly required
+	// here — worker binary claims its own pair via worker_registry. For
+	// local dev we reuse a 0/0 pair; production should wire distinct claim.
+	transmuteScheduler := service.NewTransmuteScheduler(db, natsClient.Conn, logger, 0, 0)
+	go transmuteScheduler.Start(context.Background())
+	logger.Info("transmute scheduler started (60s poll, cron + FOR UPDATE SKIP LOCKED + fencing)")
+
+	// Track D Hardening (P4 / D-39.A) — JobMonitor closes the loop on
+	// cdc_system.transmute_schedule by subscribing to the handler's
+	// completion event. Decoupled from TransmuteHandler so command
+	// execution and schedule-state writes evolve independently.
+	jobMonitor := service.NewJobMonitor(db, logger)
+	if _, err := natsClient.Conn.Subscribe(handler.SubjectTransmuteCompleted, jobMonitor.HandleCompleted); err != nil {
+		return nil, fmt.Errorf("subscribe %s: %w", handler.SubjectTransmuteCompleted, err)
+	}
+	logger.Info(fmt.Sprintf("job monitor registered subject=%s", handler.SubjectTransmuteCompleted), zap.String("subject", handler.SubjectTransmuteCompleted))
+
+	// Master DDL generator (Sprint 5 R8) — consumes cdc.cmd.master-create.
+	// Created BEFORE the provisioning gate so the Phase D Q2 alias
+	// `cdc.cmd.master.bind` (provisioning flow) can reuse the same
+	// HandleMasterCreate callback.
+	masterDDLHandler := handler.NewMasterDDLHandler(masterDDLGen, natsClient.Conn, logger)
+	natsClient.Conn.Subscribe("cdc.cmd.master-create", masterDDLHandler.HandleMasterCreate)
+	natsClient.Conn.Subscribe("cdc.cmd.master-alter-column", masterDDLHandler.HandleMasterAlterColumn)
+	logger.Info(fmt.Sprintf("master DDL handler registered subject=%s", "cdc.cmd.master-create + cdc.cmd.master-alter-column"), zap.String("subject", "cdc.cmd.master-create"))
+
+	// Source Provisioning Mode (workspace feature-cdc-integration / phase
+	// provisioning_mode). Architect rulings D1–D8 + Phase D Q1–Q5. Gated
+	// by PROVISIONING_ORCHESTRATOR_ENABLED so we can ship dark and turn
+	// on per-environment.
+	if os.Getenv("PROVISIONING_ORCHESTRATOR_ENABLED") == "1" {
+		provOrch := service.NewProvisioningOrchestrator(db, natsClient.Conn, logger)
+		provHandler := handler.NewProvisioningHandler(provOrch, logger)
+		if _, err := natsClient.Conn.Subscribe(handler.SubjectProvisioningStepCompleted, provHandler.HandleStepCompleted); err != nil {
+			return nil, fmt.Errorf("subscribe %s: %w", handler.SubjectProvisioningStepCompleted, err)
+		}
+		go provOrch.RecoveryLoop(context.Background())
+
+		// Phase D Q3 — JobMonitor bridges first successful transmute
+		// tick to a step_completed event for sources awaiting
+		// schedule_enable. SetNATSConn wires the bridge publisher;
+		// JobMonitor stays silent on this until enabled.
+		jobMonitor.SetNATSConn(natsClient.Conn)
+
+		// Phase D Q1+Q3 — step handlers for shadow_bind + schedule_enable.
+		// master_bind alias (Q2) reuses masterDDLHandler.HandleMasterCreate
+		// — the handler reads `provisioning=true` from the payload to
+		// switch on the defer-emit branch.
+		stepHandler := handler.NewProvisioningStepHandler(db, natsClient.Conn, schemaAdapter, mongoClientShared, shadowDB, registrySvc, logger)
+		if _, err := natsClient.Conn.Subscribe("cdc.cmd.shadow.bind", stepHandler.HandleShadowBind); err != nil {
+			return nil, fmt.Errorf("subscribe cdc.cmd.shadow.bind: %w", err)
+		}
+		if _, err := natsClient.Conn.Subscribe("cdc.cmd.schedule.enable", stepHandler.HandleScheduleEnable); err != nil {
+			return nil, fmt.Errorf("subscribe cdc.cmd.schedule.enable: %w", err)
+		}
+		if _, err := natsClient.Conn.Subscribe("cdc.cmd.master.bind", masterDDLHandler.HandleMasterCreate); err != nil {
+			return nil, fmt.Errorf("subscribe cdc.cmd.master.bind: %w", err)
+		}
+
+		stepSubjects := []string{
+			"cdc.cmd.shadow.bind",
+			"cdc.cmd.master.bind",
+			"cdc.cmd.schedule.enable",
+		}
+		logger.Info(fmt.Sprintf("provisioning orchestrator registered subject=%s step_subjects=%v pending_ttl=%s step_log_max=%d",
+			handler.SubjectProvisioningStepCompleted, stepSubjects, service.ProvisioningPendingTTL, service.ProvisioningStepLogMaxEntries),
+			zap.String("subject", handler.SubjectProvisioningStepCompleted),
+			zap.Strings("step_subjects", stepSubjects),
+			zap.Duration("pending_ttl", service.ProvisioningPendingTTL),
+			zap.Int("step_log_max", service.ProvisioningStepLogMaxEntries))
+	} else {
+		logger.Info("provisioning orchestrator DISABLED (set PROVISIONING_ORCHESTRATOR_ENABLED=1 to enable)")
+	}
+
+	// Sprint 4 4A.1. pgxPool remains available for future high-throughput
+	// Debezium-only consumers.
+	_ = pgxPool
+
+	// 10d. Reconciliation handlers (recon-check, recon-heal, retry-failed, debezium signals)
+	var reconHealerShared *service.ReconHealer
+	var tsDetectorShared *service.TimestampDetector
+	var fullCountAggShared *service.FullCountAggregator
+
+	// Debezium signal client — Kafka-based signaling (signal.enabled.channels=kafka).
+	// Source DB is never touched; signals are published onto cfg.Debezium.SignalKafkaTopic
+	// and consumed by Debezium connectors via signal.kafka.topic.
+	//
+	// Hoisted OUT of `reconCore != nil` gate: post-Kafka-signal-migration, the
+	// debezium-signal/snapshot dispatch path no longer touches Mongo, so it must
+	// run even when MongoDB.URL is empty (Kafka-only worker mode). Otherwise the
+	// 2 subjects are silently never subscribed and CMS jobs stay pending forever.
+	var signalClient *service.DebeziumSignalClient
+	if len(cfg.Kafka.Brokers) > 0 {
+		// Pass only the Kafka Connect BASE URL. Connector name is resolved
+		// per-signal at runtime from connection_registry — Kafka Connect
+		// provisions one connector per source connection (CMS uses
+		// connection_code as the connector name), so a static connector name
+		// in config would be wrong as soon as a second source is added.
+		signalClient = service.NewDebeziumSignalClient(
+			service.DebeziumSignalConfig{
+				SignalKafkaTopic:     cfg.Debezium.SignalKafkaTopic,
+				KafkaBrokers:         cfg.Kafka.Brokers,
+				KafkaConnectBaseURL:  cfg.Debezium.KafkaConnectURL,
+				IncrementalChunkSize: cfg.Debezium.IncrementalChunkSize,
+			},
+			logger,
+		)
+		// Ensure the signal topic exists before any publish. Fail-soft:
+		// transient Kafka outage at boot logs WARN but does not block
+		// worker startup — the first publish will surface a clear error
+		// if the topic is still missing.
+		ensureCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		if err := signalClient.EnsureTopic(ensureCtx); err != nil {
+			logger.Warn(fmt.Sprintf("failed to ensure debezium signal topic at startup; first publish may surface UnknownTopicOrPartition topic=%s err=%s",
+				cfg.Debezium.SignalKafkaTopic, err.Error()),
+				zap.String("topic", cfg.Debezium.SignalKafkaTopic),
+				zap.Error(err))
+		}
+		cancel()
+	}
+
+	// Minimal handler for debezium-signal/snapshot — only needs db + metadata +
+	// signalClient + logger. reconCore stays nil; the method body never
+	// dereferences it. Always subscribed so the Kafka-only worker path works.
+	signalOnlyHandler := handler.NewReconHandler(nil, db, schemaAdapter, logger).
+		WithMetadataRegistry(registrySvc).
+		WithSignalClient(signalClient)
+	natsClient.Conn.Subscribe("cdc.cmd.debezium-signal", signalOnlyHandler.HandleDebeziumSignal)
+	natsClient.Conn.Subscribe("cdc.cmd.debezium-snapshot", signalOnlyHandler.HandleDebeziumSignal)
+	logger.Info(fmt.Sprintf("debezium signal subscribers registered (Kafka-only path) kafka_configured=%t", signalClient != nil),
+		zap.Bool("kafka_configured", signalClient != nil))
+
+	// Path B — custom snapshot runner. Bypasses Debezium signal entirely so
+	// the source DB stays read-only (CDC golden rule). The runner reads the
+	// source MongoDB via Find ONLY and forwards each doc through the live
+	// shadow apply pipeline (eventHandler.HandleRaw → DynamicMapper →
+	// BatchBuffer → shadow upsert). Resumable via cdc_system.snapshot_progress
+	// (migration 058). Queue group ensures multi-worker dedup.
+	snapshotRunner := handler.NewSnapshotRunner(db, eventHandler, registrySvc, connectionRepo, sourceObjectRepo, shadowBindingRepo, natsClient.Conn, logger)
+	if _, err := natsClient.Conn.QueueSubscribe(
+		"cdc.cmd.snapshot.v2",
+		"cdc-snapshot-runner",
+		snapshotRunner.Handle,
+	); err != nil {
+		return nil, fmt.Errorf("subscribe cdc.cmd.snapshot.v2: %w", err)
+	}
+	logger.Info("snapshot.v2 runner registered (Mongo Find → eventHandler.HandleRaw, source DB read-only)")
+
+	// ReconCore is always wired now (V2-only mode supported). Healer /
+	// Backfill / TimestampDetector / FullCountAggregator still depend on
+	// the shared default Mongo client because they haven't been refactored
+	// to lazy-resolve per-source URIs yet — when mongoClientShared is nil
+	// we leave them unset and ReconHandler returns a structured error from
+	// its nil-checks (HandleReconHeal L154, HandleBackfillSourceTs L457,
+	// HandleDetectTimestampField L536). HandleReconCheck and
+	// HandleRetryFailed work with default client = nil because they go
+	// through ReconCore → ReconSourceAgent → per-source URI lookup.
+	var backfillSvc *service.BackfillSourceTsService
+	if mongoClientShared != nil {
+		reconHealerShared = service.NewReconHealer(
+			db, mongoClientShared, schemaAdapter, signalClient, maskingSvc,
+			service.ReconHealerConfig{}, // per-table masks loaded from registry
+			logger,
+		)
+		backfillSvc = service.NewBackfillSourceTsService(
+			db, mongoClientShared, registryRepo,
+			service.BackfillSourceTsConfig{}, logger,
+		)
+		backfillSvc.SetMetadataRegistry(registrySvc)
+		tsDetectorShared = service.NewTimestampDetector(mongoClientShared, logger)
+
+		// Migration 017 §2.7 — daily full-count aggregator. Captures
+		// Mongo EstimatedDocumentCount + PG COUNT(*) (or reltuples for
+		// tables >10M rows) into cdc_table_registry.full_*_count.
+		fullCountAggShared = service.NewFullCountAggregator(
+			db, dbReplica, mongoClientShared, registryRepo,
+			service.FullCountAggregatorConfig{}, logger,
+		)
+		fullCountAggShared.SetMetadataRegistry(registrySvc)
+	} else {
+		logger.Warn("ReconHealer / Backfill / TimestampDetector / FullCountAggregator DISABLED — these still require a shared default Mongo client (cfg.MongoDB.URL). ReconCore scheduled CheckAll + HandleReconCheck remain available via V2 connection_registry per-source URIs.")
+	}
+
+	reconHandler := handler.NewReconHandler(reconCore, db, schemaAdapter, logger).
+		WithHealer(reconHealerShared). // may be nil — handler returns structured error
+		WithMetadataRegistry(registrySvc).
+		WithMaskingService(maskingSvc).
+		WithSignalClient(signalClient).
+		// Recon V4 P2: heal-B map _gpay_id→_source_id trên shadow plane;
+		// NATS publisher độc lập backfill để heal re-trigger luôn hoạt động.
+		WithShadowDB(shadowDB).
+		WithNatsPublisher(natsClient.Conn)
+	if backfillSvc != nil {
+		reconHandler = reconHandler.WithBackfill(backfillSvc, natsClient.Conn)
+	}
+	if tsDetectorShared != nil {
+		reconHandler = reconHandler.WithTimestampDetector(tsDetectorShared)
+	}
+
+	natsClient.Conn.Subscribe("cdc.cmd.recon-check", reconHandler.HandleReconCheck)
+	natsClient.Conn.Subscribe("cdc.cmd.recon-heal", reconHandler.HandleReconHeal)
+	natsClient.Conn.Subscribe("cdc.cmd.retry-failed", reconHandler.HandleRetryFailed)
+	natsClient.Conn.Subscribe("cdc.cmd.recon-backfill-source-ts", reconHandler.HandleBackfillSourceTs)
+	natsClient.Conn.Subscribe("cdc.cmd.detect-timestamp-field", reconHandler.HandleDetectTimestampField)
+	logger.Info(fmt.Sprintf("reconciliation handlers registered recon_check_available=%t recon_heal_available=%t backfill_available=%t ts_detect_available=%t full_count_available=%t",
+		true, reconHealerShared != nil, backfillSvc != nil, tsDetectorShared != nil, fullCountAggShared != nil),
+		zap.Bool("recon_check_available", true),
+		zap.Bool("recon_heal_available", reconHealerShared != nil),
+		zap.Bool("backfill_available", backfillSvc != nil),
+		zap.Bool("ts_detect_available", tsDetectorShared != nil),
+		zap.Bool("full_count_available", fullCountAggShared != nil),
+	)
+
+	cmdSubjects := []string{
+		"cdc.cmd.standardize", "cdc.cmd.discover", "cdc.cmd.backfill",
+		"cdc.cmd.scan-raw-data", "cdc.cmd.batch-transform",
+		"cdc.cmd.recon-check", "cdc.cmd.recon-heal",
+		"cdc.cmd.retry-failed", "cdc.cmd.debezium-signal", "cdc.cmd.debezium-snapshot",
+		"cdc.cmd.scan-fields", "cdc.cmd.sync-register", "cdc.cmd.sync-state",
+		"cdc.cmd.restart-debezium", "cdc.cmd.alter-column",
+		"cdc.cmd.master-create",
+		"cdc.cmd.transmute", "cdc.cmd.transmute-shadow",
+	}
+	logger.Info(fmt.Sprintf("command listeners registered subjects_count=%d", len(cmdSubjects)), zap.Strings("subjects", cmdSubjects))
+
+	// 11. HTTP server (health + metrics)
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Use(cors.New())
+
+	app.Get("/health", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"status": "ok", "service": "cdc-worker"})
+	})
+	app.Get("/ready", func(c *fiber.Ctx) error {
+		sqlDB, _ := db.DB()
+		if err := sqlDB.Ping(); err != nil {
+			return c.Status(503).JSON(fiber.Map{"status": "not ready", "error": err.Error()})
+		}
+		return c.JSON(fiber.Map{"status": "ready"})
+	})
+	app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
+
+	// Internal monitoring API for CMS
+	app.Get("/api/v1/internal/stats", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"queue":  collectPoolStats(consumerPools),
+			"buffer": batchBuffer.GetStatus(),
+			"config": fiber.Map{
+				"pool_size":  cfg.Worker.PoolSize,
+				"batch_size": cfg.Worker.BatchSize,
+			},
+		})
+	})
+
+	// 10e. Partition retention job (plan WORKER task #5). Runs on a
+	// daily ticker; advisory-locked so multiple worker instances don't
+	// fight over the same DROP TABLE calls.
+	partitionDropper := service.NewPartitionDropper(db, service.PartitionDropperConfig{}, logger)
+
+	return &WorkerServer{
+		cfg:              cfg,
+		logger:           logger,
+		db:               db,
+		dbReplica:        dbReplica,
+		nats:             natsClient,
+		redis:            redisCache,
+		consumerPools:    consumerPools,
+		batchBuffer:      batchBuffer,
+		eventHandler:     eventHandler,
+		registrySvc:      registrySvc,
+		registryRepo:     registryRepo,
+		maskingSvc:       maskingSvc,
+		activityLogger:   activityLogger,
+		reconCore:        reconCore,
+		reconHealer:      reconHealerShared,
+		schemaValidator:  schemaValidator,
+		dlqHandler:       dlqHandler,
+		dlqWorker:        dlqWorker,
+		partitionDropper: partitionDropper,
+		tsDetector:       tsDetectorShared,
+		fullCountAgg:     fullCountAggShared,
+		mongoClient:      mongoClientShared,
+		app:              app,
+	}, nil
+}
+
+func (s *WorkerServer) Start() error {
+	// NATS consumer pools (for legacy CDC events, will phase out)
+	for _, p := range s.consumerPools {
+		p.Start()
+	}
+
+	if s.cfg.Kafka.Enabled && len(s.cfg.Kafka.Brokers) > 0 {
+		perSourcePool := database.NewPerSourcePool(s.db, 0) // default 10 per source
+		kafkaConsumer := handler.NewKafkaConsumer(
+			handler.KafkaConsumerConfig{
+				Brokers:           s.cfg.Kafka.Brokers,
+				GroupID:           s.cfg.Kafka.GroupID,
+				TopicPrefix:       s.cfg.Kafka.TopicPrefix,
+				SchemaRegistryURL: s.cfg.Kafka.SchemaRegistryURL,
+			},
+			s.eventHandler,
+			s.registrySvc,
+			s.db,
+			perSourcePool,
+			s.logger,
+		)
+		kafkaConsumer.SetSchemaValidator(s.schemaValidator)
+		kafkaConsumer.SetMaskingService(s.maskingSvc)
+		kafkaConsumer.SetBatchFlushSize(s.cfg.Worker.KafkaBatchFlushSize)
+		kafkaConsumer.SetAdaptiveBatchConfig(
+			s.cfg.Worker.AdaptiveBatchEnabled,
+			s.cfg.Worker.AdaptiveBatchLagThreshold,
+			s.cfg.Worker.AdaptiveBatchMaxMultiplier,
+		)
+		kafkaConsumer.SetFlushInterval(s.registrySvc.GetMinFlushIntervalSeconds())
+		go kafkaConsumer.Start(context.Background())
+		s.logger.Info(fmt.Sprintf("kafka consumer started component=worker_server op=kafka_consumer_start brokers=%v broker_count=%d group=%s prefix_count=%d adaptive_enabled=%t batch_flush_size=%d",
+			s.cfg.Kafka.Brokers, len(s.cfg.Kafka.Brokers), s.cfg.Kafka.GroupID, len(s.cfg.Kafka.TopicPrefix),
+			s.cfg.Worker.AdaptiveBatchEnabled, s.cfg.Worker.KafkaBatchFlushSize),
+			zap.String("component", "worker_server"),
+			zap.String("op", "kafka_consumer_start"),
+			zap.Strings("brokers", s.cfg.Kafka.Brokers),
+			zap.Int("broker_count", len(s.cfg.Kafka.Brokers)),
+			zap.String("group", s.cfg.Kafka.GroupID),
+			zap.Int("prefix_count", len(s.cfg.Kafka.TopicPrefix)),
+			zap.Bool("adaptive_enabled", s.cfg.Worker.AdaptiveBatchEnabled),
+			zap.Int("batch_flush_size", s.cfg.Worker.KafkaBatchFlushSize),
+		)
+
+		// P0.1 (G1) — kafka topic dynamic refresh trigger.
+		s.nats.Conn.Subscribe("cdc.cmd.kafka.refresh-topics", func(msg *nats.Msg) {
+			refreshStart := time.Now()
+			if err := kafkaConsumer.RefreshTopics(context.Background()); err != nil {
+				s.logger.Warn(fmt.Sprintf("nats-triggered topic refresh failed component=worker_server op=topic_refresh phase=nats_trigger refresh_duration_ms=%d err=%s",
+					time.Since(refreshStart).Milliseconds(), err.Error()),
+					zap.String("component", "worker_server"),
+					zap.String("op", "topic_refresh"),
+					zap.String("phase", "nats_trigger"),
+					zap.Int64("refresh_duration_ms", time.Since(refreshStart).Milliseconds()),
+					zap.Error(err))
+				return
+			}
+			s.logger.Info(fmt.Sprintf("nats-triggered topic refresh ok component=worker_server op=topic_refresh phase=nats_trigger refresh_duration_ms=%d",
+				time.Since(refreshStart).Milliseconds()),
+				zap.String("component", "worker_server"),
+				zap.String("op", "topic_refresh"),
+				zap.String("phase", "nats_trigger"),
+				zap.Int64("refresh_duration_ms", time.Since(refreshStart).Milliseconds()))
+		})
+	}
+
+	// DLQ retry worker — polls failed_sync_logs every 5 minutes via the
+	// handler-level state machine and replays due records over NATS.
+	if s.dlqWorker != nil {
+		go s.dlqWorker.Start(context.Background())
+	}
+
+	// Partition retention job (plan WORKER task #5). Runs once at boot
+	// + every 24h to DROP TABLE IF EXISTS on monthly partitions past
+	// their configured retention window.
+	if s.partitionDropper != nil {
+		go s.partitionDropper.Start(context.Background())
+	}
+
+	// Migration 017 §2.7 — daily full-count aggregator. Fires at the
+	// configured RunAt (default 03:00 UTC). Safe to run alongside
+	// recon because Mongo EstimatedDocumentCount is a metadata read.
+	if s.fullCountAgg != nil {
+		go s.fullCountAgg.Start(context.Background())
+	}
+
+	// Schedule-driven periodic executor — reads cdc_worker_schedule from DB
+	// Checks every 1 minute which operations are due
+	go func() {
+		time.Sleep(30 * time.Second) // Wait for services to initialize
+
+		// Seed default schedules if empty
+		var count int64
+		s.db.Model(&model.WorkerSchedule{}).Count(&count)
+		if count == 0 {
+			defaults := []model.WorkerSchedule{
+				{Operation: "transform", IntervalMinutes: 5, IsEnabled: true},
+				{Operation: "field-scan", IntervalMinutes: 60, IsEnabled: true},
+				{Operation: "partition-check", IntervalMinutes: 1440, IsEnabled: true},
+				{Operation: "reconcile", IntervalMinutes: 30, IsEnabled: true},
+			}
+			for _, d := range defaults {
+				s.db.Create(&d)
+			}
+			s.logger.Info(fmt.Sprintf("default schedules seeded count=%d", len(defaults)), zap.Int("count", len(defaults)))
+		} else {
+			// Ensure "reconcile" exists even if schedules were seeded before this feature
+			var reconCount int64
+			s.db.Model(&model.WorkerSchedule{}).Where("operation = ?", "reconcile").Count(&reconCount)
+			if reconCount == 0 {
+				s.db.Create(&model.WorkerSchedule{Operation: "reconcile", IntervalMinutes: 30, IsEnabled: true})
+				s.logger.Info("reconcile schedule added to existing schedules")
+			}
+		}
+
+		// Startup visibility — count enabled schedules so operators know
+		// the ticker is live and what it will do (Bug A diagnostic log).
+		var enabledSchedules []model.WorkerSchedule
+		s.db.Where("is_enabled = ?", true).Find(&enabledSchedules)
+		scheduleSummary := make([]string, 0, len(enabledSchedules))
+		for _, sc := range enabledSchedules {
+			scheduleSummary = append(scheduleSummary,
+				fmt.Sprintf("%s=%dm", sc.Operation, sc.IntervalMinutes))
+		}
+		s.logger.Info(fmt.Sprintf("schedule poller started component=worker_server op=schedule_poller_start enabled_count=%d tick_interval=60s recon_core_available=%t lock_backend=%s registered=%v",
+			len(enabledSchedules), s.reconCore != nil,
+			func() string {
+				if s.redis != nil && s.redis.RawClient() != nil {
+					return "redis"
+				}
+				return "none"
+			}(), scheduleSummary),
+			zap.String("component", "worker_server"),
+			zap.String("op", "schedule_poller_start"),
+			zap.Int("enabled_count", len(enabledSchedules)),
+			zap.Strings("registered", scheduleSummary),
+			zap.Duration("tick_interval", 60*time.Second),
+			zap.Bool("recon_core_available", s.reconCore != nil),
+		)
+
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			if s.redis != nil && s.redis.RawClient() != nil {
+				lockKey := "cdc:lock:scheduler_poll"
+				ctxTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				acquired, err := s.redis.RawClient().SetNX(ctxTimeout, lockKey, "locked", 50*time.Second).Result()
+				cancel()
+				if err != nil || !acquired {
+					s.logger.Debug("Scheduler lock acquired by another pod, skipping...")
+					continue
+				}
+				s.logger.Info("Acquired scheduler lock, running cycle")
+			}
+
+			var schedules []model.WorkerSchedule
+			s.db.Where("is_enabled = ?", true).Find(&schedules)
+
+			now := time.Now()
+			for _, sched := range schedules {
+				// Check if due. NULL last_run_at = first run since enable,
+				// fire immediately (no wait for interval cycle). This is
+				// intentional: user-visible "enable + expect run within 1
+				// minute" SLA.
+				// Slack nuốt jitter của time.NewTicker (5-50ms) + DB roundtrip
+				// (~20-100ms). Không có slack: tick fires tại T0+59.95s đo
+				// được now.Sub(last_run)=59.95s < 60s → skip → gap thực 120s.
+				// Slack 5s giữ ≥91% utilization cho interval 1m, không ảnh
+				// hưởng interval lớn hơn.
+				const tickSlack = 5 * time.Second
+				intervalDur := time.Duration(sched.IntervalMinutes) * time.Minute
+				if sched.LastRunAt != nil && now.Sub(*sched.LastRunAt) < intervalDur-tickSlack {
+					continue // Not due yet
+				}
+
+				firstRun := sched.LastRunAt == nil
+				s.logger.Info(fmt.Sprintf("executing scheduled operation component=worker_server op=schedule_exec operation=%s interval_min=%d first_run=%t target_table=%s run_count=%d",
+					sched.Operation, sched.IntervalMinutes, firstRun,
+					func() string {
+						if sched.TargetTable != nil {
+							return *sched.TargetTable
+						}
+						return "*"
+					}(), sched.RunCount),
+					zap.String("component", "worker_server"),
+					zap.String("op", "schedule_exec"),
+					zap.String("operation", sched.Operation),
+					zap.Int("interval_min", sched.IntervalMinutes),
+					zap.Bool("first_run", firstRun),
+					zap.Int64("run_count", sched.RunCount),
+				)
+
+				// target_table: nil = all, specific = only that table
+				targetTable := ""
+				if sched.TargetTable != nil {
+					targetTable = *sched.TargetTable
+				}
+
+				// recover() per-operation: 1 cycle panic (vd runReconcileCycle →
+				// reconCore.CheckAll) KHÔNG được giết goroutine poller. Trước đây thiếu
+				// recover → 1 panic ~2026-06-02 giết poller im lặng → mọi schedule auto
+				// (reconcile) đóng băng (last_run kẹt, run_count=3) dù worker vẫn sống.
+				// Giờ: log panic + stack để lộ root, scheduler chạy tiếp các op khác.
+				// Mark last_run_at TẠI START (không phải cuối vòng): vòng dài
+				// (reconcile CheckAll stagger 5-10') làm UI "Lần chạy cuối" đóng
+				// băng suốt lúc đang chạy → operator tưởng schedule chết. Cadence
+				// cũng chuẩn hơn: next = start + interval (không drift theo độ
+				// dài vòng như trước đây next = end + interval).
+				s.db.Model(&model.WorkerSchedule{}).Where("id = ?", sched.ID).Updates(map[string]interface{}{
+					"last_run_at": now,
+					"next_run_at": now.Add(intervalDur),
+					"run_count":   gorm.Expr("run_count + 1"),
+				})
+
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							s.logger.Error(fmt.Sprintf("schedule cycle PANIC recovered component=worker_server op=schedule_exec_panic operation=%s panic=%v", sched.Operation, r),
+								zap.String("component", "worker_server"),
+								zap.String("op", "schedule_exec_panic"),
+								zap.String("operation", sched.Operation),
+								zap.Any("panic", r),
+								zap.Stack("stacktrace"))
+						}
+					}()
+					switch sched.Operation {
+					case "bridge":
+						s.runBridgeCycle(now, targetTable)
+					case "transform":
+						s.runTransformCycle(now, targetTable)
+					case "field-scan":
+						if targetTable != "" {
+							s.nats.Conn.Publish("cdc.cmd.scan-raw-data", []byte(targetTable))
+							s.activityLogger.Quick("field-scan", targetTable, activity.TriggeredByScheduler.String(), "success", 0, nil, "")
+						} else {
+							s.nats.Conn.Publish("cdc.cmd.periodic-scan", []byte("auto"))
+							s.activityLogger.Quick("field-scan", "*", activity.TriggeredByScheduler.String(), "success", 0, nil, "")
+						}
+					case "partition-check":
+						s.runPartitionCheck(now)
+					case "reconcile":
+						s.runReconcileCycle(now)
+					}
+				}()
+			}
+		}
+	}()
+
+	s.logger.Info(fmt.Sprintf("CDC Worker started component=worker_server op=server_listen port=%s consumer_pools=%d kafka_enabled=%t dlq_worker_enabled=%t partition_dropper_enabled=%t full_count_agg_enabled=%t",
+		s.cfg.Server.Port, len(s.consumerPools), s.cfg.Kafka.Enabled,
+		s.dlqWorker != nil, s.partitionDropper != nil, s.fullCountAgg != nil),
+		zap.String("component", "worker_server"),
+		zap.String("op", "server_listen"),
+		zap.String("port", s.cfg.Server.Port),
+		zap.Int("consumer_pools", len(s.consumerPools)),
+		zap.Bool("kafka_enabled", s.cfg.Kafka.Enabled),
+		zap.Bool("dlq_worker_enabled", s.dlqWorker != nil),
+		zap.Bool("partition_dropper_enabled", s.partitionDropper != nil),
+		zap.Bool("full_count_agg_enabled", s.fullCountAgg != nil))
+	return s.app.Listen(s.cfg.Server.Port)
+}
+
+// runBridgeCycle is a no-op after Sprint 4 4A.1 retired the legacy bridge
+// pipeline. Kept so WorkerSchedule rows with operation="bridge" don't error
+// until an admin deletes them from cdc_worker_schedule. Future work: replace
+// with Transmuter trigger dispatch.
+func (s *WorkerServer) runBridgeCycle(_ time.Time, targetTable string) {
+	logTarget := targetTable
+	if logTarget == "" {
+		logTarget = "*"
+	}
+	s.activityLogger.Quick("bridge", logTarget, activity.TriggeredByScheduler.String(), "skipped", 0,
+		map[string]interface{}{"reason": "legacy bridge retired"}, "")
+}
+
+// runTransformCycle dispatches transform. targetTable="" = all, specific = only that table.
+func (s *WorkerServer) runTransformCycle(now time.Time, targetTable string) {
+	entries, err := s.registryRepo.GetAllActive(context.Background())
+	if err != nil {
+		s.activityLogger.Quick("transform", targetTable, activity.TriggeredByScheduler.String(), "error", 0, nil, err.Error())
+		return
+	}
+	dispatched := 0
+	for _, entry := range entries {
+		if targetTable != "" && entry.TargetTable != targetTable {
+			continue
+		}
+		s.nats.Conn.Publish("cdc.cmd.batch-transform", []byte(entry.TargetTable))
+		dispatched++
+	}
+	logTarget := targetTable
+	if logTarget == "" {
+		logTarget = "*"
+	}
+	s.activityLogger.Quick("transform", logTarget, activity.TriggeredByScheduler.String(), "success", int64(dispatched), map[string]interface{}{
+		"tables": dispatched,
+	}, "")
+}
+
+// runPartitionCheck ensures next month's partitions exist for partitioned tables
+func (s *WorkerServer) runPartitionCheck(now time.Time) {
+	entries, err := s.registryRepo.GetAllActive(context.Background())
+	if err != nil {
+		return
+	}
+	nextMonth := now.AddDate(0, 1, 0)
+	checked := 0
+	for _, entry := range entries {
+		if entry.IsPartitioned == nil || !*entry.IsPartitioned {
+			continue
+		}
+		s.db.Exec("SELECT ensure_cdc_partition($1, $2)", entry.TargetTable, nextMonth)
+		checked++
+	}
+	s.activityLogger.Quick("partition-check", "*", activity.TriggeredByScheduler.String(), "success", int64(checked), map[string]interface{}{
+		"tables_checked": checked,
+	}, "")
+}
+
+// runReconcileCycle runs reconciliation CheckAll via reconCore.
+//
+// Bug A fix (2026-04-20): when reconCore is nil the previous code wrote
+// a single "skipped" row to activity_log and returned silently — operators
+// monitoring worker.log never saw why their enabled schedule was effectively
+// dead. We now WARN-log on every skipped tick so the condition is visible
+// in the log stream, and keep writing the activity row for the UI.
+//
+// Refactor 2026-05-26: ReconCore is now wired unconditionally (per-source
+// Mongo URIs come from V2 connection_registry). The nil branch below is
+// kept as defensive code — if it triggers, the wiring in NewWorkerServer
+// has regressed and the issue is NOT a missing cfg.MongoDB.URL anymore.
+func (s *WorkerServer) runReconcileCycle(now time.Time) {
+	if s.reconCore == nil {
+		s.logger.Error(fmt.Sprintf("reconcile schedule tick SKIPPED component=worker_server op=reconcile_cycle phase=skipped reason=recon_core_nil err_type=wiring_regression fix_hint=%s",
+			"check NewWorkerServer init: ReconCore must be constructed regardless of cfg.MongoDB.URL"),
+			zap.String("component", "worker_server"),
+			zap.String("op", "reconcile_cycle"),
+			zap.String("phase", "skipped"),
+			zap.String("reason", "recon_core_nil"),
+			zap.String("err_type", "wiring_regression"),
+			zap.String("fix_hint", "check NewWorkerServer init: ReconCore must be constructed regardless of cfg.MongoDB.URL"),
+		)
+		s.activityLogger.Quick("reconcile", "*", activity.TriggeredByScheduler.String(), "skipped", 0, nil, "reconCore nil (wiring regression)")
+		return
+	}
+	s.logger.Info(fmt.Sprintf("reconcile cycle started component=worker_server op=reconcile_cycle phase=started started_at=%s",
+		now.Format(time.RFC3339)),
+		zap.String("component", "worker_server"),
+		zap.String("op", "reconcile_cycle"),
+		zap.String("phase", "started"),
+		zap.Time("started_at", now))
+	ctx := context.Background()
+	reports := s.reconCore.CheckAll(ctx)
+	// Recon V4: Segment B (shadow↔master) cũng chạy theo lịch — trước đây
+	// chỉ manual/NATS nên số liệu B trên dashboard stale tới khi operator
+	// tự trigger (đã gây hiểu nhầm: master count đứng ở giá trị đo cũ).
+	reports = append(reports, s.reconCore.CheckAllSegmentB(ctx)...)
+
+	driftCount := 0
+	errorCount := 0
+	for _, r := range reports {
+		switch r.Status {
+		case "drift":
+			driftCount++
+		case "error":
+			errorCount++
+		}
+	}
+	s.activityLogger.Quick("reconcile", "*", activity.TriggeredByScheduler.String(), "success", int64(len(reports)), map[string]interface{}{
+		"tables_checked": len(reports),
+		"drift_count":    driftCount,
+		"error_count":    errorCount,
+	}, "")
+	elapsed := time.Since(now)
+	s.logger.Info(fmt.Sprintf("reconcile cycle completed component=worker_server op=reconcile_cycle phase=completed tables_checked=%d drift_detected=%d error_count=%d cycle_duration_ms=%d",
+		len(reports), driftCount, errorCount, elapsed.Milliseconds()),
+		zap.String("component", "worker_server"),
+		zap.String("op", "reconcile_cycle"),
+		zap.String("phase", "completed"),
+		zap.Int("tables_checked", len(reports)),
+		zap.Int("drift_detected", driftCount),
+		zap.Int("error_count", errorCount),
+		zap.Int64("cycle_duration_ms", elapsed.Milliseconds()),
+		zap.Duration("elapsed", elapsed),
+	)
+}
+
+func (s *WorkerServer) Shutdown() {
+	shutdownStart := time.Now()
+	s.logger.Info(fmt.Sprintf("shutting down CDC Worker component=worker_server op=shutdown phase=start consumer_pools=%d",
+		len(s.consumerPools)),
+		zap.String("component", "worker_server"),
+		zap.String("op", "shutdown"),
+		zap.String("phase", "start"),
+		zap.Int("consumer_pools", len(s.consumerPools)))
+	for _, p := range s.consumerPools {
+		p.Stop()
+	}
+	s.batchBuffer.Stop()
+	s.app.Shutdown()
+	s.nats.Close()
+	s.redis.Close()
+	sqlDB, _ := s.db.DB()
+	sqlDB.Close()
+	s.logger.Info(fmt.Sprintf("CDC Worker stopped component=worker_server op=shutdown phase=complete shutdown_duration_ms=%d",
+		time.Since(shutdownStart).Milliseconds()),
+		zap.String("component", "worker_server"),
+		zap.String("op", "shutdown"),
+		zap.String("phase", "complete"),
+		zap.Int64("shutdown_duration_ms", time.Since(shutdownStart).Milliseconds()))
+}
+
+// collectPoolStats aggregates per-pool ConsumerStats so the /api/v1/internal/stats
+// endpoint reports a single counter set for the multi-prefix pool array.
+func collectPoolStats(pools []*handler.ConsumerPool) handler.ConsumerStats {
+	var agg handler.ConsumerStats
+	for _, p := range pools {
+		s := p.GetStats()
+		agg.Processed += s.Processed
+		agg.Failed += s.Failed
+		agg.ActiveWorkers += s.ActiveWorkers
+		agg.PoolSize += s.PoolSize
+	}
+	return agg
+}
+
+// redactDSN strips the password component of a libpq URL so it is
+// safe to log at boot. Returns "<unset>" when the DSN is empty.
+func redactDSN(dsn string) string {
+	if dsn == "" {
+		return "<unset>"
+	}
+	atIdx := -1
+	for i := 0; i < len(dsn); i++ {
+		if dsn[i] == '@' {
+			atIdx = i
+		}
+	}
+	if atIdx == -1 {
+		return dsn
+	}
+	prefixEnd := -1
+	for i := 0; i < atIdx; i++ {
+		if dsn[i] == ':' && i+2 < len(dsn) && dsn[i+1] == '/' && dsn[i+2] == '/' {
+			prefixEnd = i + 3
+			break
+		}
+	}
+	if prefixEnd == -1 {
+		return dsn
+	}
+	colonAfterUser := -1
+	for i := prefixEnd; i < atIdx; i++ {
+		if dsn[i] == ':' {
+			colonAfterUser = i
+			break
+		}
+	}
+	if colonAfterUser == -1 {
+		return dsn
+	}
+	return dsn[:colonAfterUser+1] + "***" + dsn[atIdx:]
+}
