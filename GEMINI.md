@@ -146,6 +146,331 @@
     - **Giữ context sạch**: Đúng tinh thần Rule #1 — dùng sub-agent triệt để cho research/xử-lý song song để Context chính luôn gọn.
 
 
+
+21. Quy tắc về Plan-before-code (Promoted from Lessons)
+- **Bối cảnh**: Tag 'plan-before-code' vi phạm lặp lại 4 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến plan-before-code, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+22. Quy tắc về Git (Promoted from Lessons)
+- **Bối cảnh**: Tag 'git' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến git, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+23. Quy tắc về Verification (Promoted from Lessons)
+- **Bối cảnh**: Tag 'verification' vi phạm lặp lại 75 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến verification, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+24. Quy tắc về Audit-log (Promoted from Lessons)
+- **Bối cảnh**: Tag 'audit-log' vi phạm lặp lại 26 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến audit-log, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+25. Quy tắc về Root-cause (Promoted from Lessons)
+- **Bối cảnh**: Tag 'root-cause' vi phạm lặp lại 80 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến root-cause, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+26. Quy tắc về Knowledge-retention (Promoted from Lessons)
+- **Bối cảnh**: Tag 'knowledge-retention' vi phạm lặp lại 6 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến knowledge-retention, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+27. Quy tắc về Over-engineering (Promoted from Lessons)
+- **Bối cảnh**: Tag 'over-engineering' vi phạm lặp lại 15 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến over-engineering, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+28. Quy tắc về Discipline (Promoted from Lessons)
+- **Bối cảnh**: Tag 'discipline' vi phạm lặp lại 10 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến discipline, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+29. Quy tắc về Observability (Promoted from Lessons)
+- **Bối cảnh**: Tag 'observability' vi phạm lặp lại 31 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến observability, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+30. Quy tắc về Kafka (Promoted from Lessons)
+- **Bối cảnh**: Tag 'kafka' vi phạm lặp lại 20 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến kafka, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+31. Quy tắc về False-positive (Promoted from Lessons)
+- **Bối cảnh**: Tag 'false-positive' vi phạm lặp lại 5 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến false-positive, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+32. Quy tắc về Autonomy (Promoted from Lessons)
+- **Bối cảnh**: Tag 'autonomy' vi phạm lặp lại 8 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến autonomy, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+33. Quy tắc về Migration (Promoted from Lessons)
+- **Bối cảnh**: Tag 'migration' vi phạm lặp lại 22 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến migration, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+34. Quy tắc về Session-handoff (Promoted from Lessons)
+- **Bối cảnh**: Tag 'session-handoff' vi phạm lặp lại 7 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến session-handoff, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+35. Quy tắc về Refactor (Promoted from Lessons)
+- **Bối cảnh**: Tag 'refactor' vi phạm lặp lại 9 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến refactor, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+36. Quy tắc về Verification-before-done (Promoted from Lessons)
+- **Bối cảnh**: Tag 'verification-before-done' vi phạm lặp lại 4 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến verification-before-done, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+37. Quy tắc về Brain-muscle (Promoted from Lessons)
+- **Bối cảnh**: Tag 'brain-muscle' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến brain-muscle, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+38. Quy tắc về Cqrs (Promoted from Lessons)
+- **Bối cảnh**: Tag 'cqrs' vi phạm lặp lại 5 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến cqrs, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+39. Quy tắc về Rule-compliance (Promoted from Lessons)
+- **Bối cảnh**: Tag 'rule-compliance' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến rule-compliance, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+40. Quy tắc về Skill-listing (Promoted from Lessons)
+- **Bối cảnh**: Tag 'skill-listing' vi phạm lặp lại 9 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến skill-listing, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+41. Quy tắc về Rule7 (Promoted from Lessons)
+- **Bối cảnh**: Tag 'rule7' vi phạm lặp lại 8 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến rule7, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+42. Quy tắc về Data-integrity (Promoted from Lessons)
+- **Bối cảnh**: Tag 'data-integrity' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến data-integrity, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+43. Quy tắc về Band-aid (Promoted from Lessons)
+- **Bối cảnh**: Tag 'band-aid' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến band-aid, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+44. Quy tắc về Done-criteria (Promoted from Lessons)
+- **Bối cảnh**: Tag 'done-criteria' vi phạm lặp lại 6 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến done-criteria, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+45. Quy tắc về Automigrate (Promoted from Lessons)
+- **Bối cảnh**: Tag 'automigrate' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến automigrate, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+46. Quy tắc về Transparency (Promoted from Lessons)
+- **Bối cảnh**: Tag 'transparency' vi phạm lặp lại 5 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến transparency, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+47. Quy tắc về Carelessness (Promoted from Lessons)
+- **Bối cảnh**: Tag 'carelessness' vi phạm lặp lại 7 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến carelessness, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+48. Quy tắc về Rule1 (Promoted from Lessons)
+- **Bối cảnh**: Tag 'rule1' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến rule1, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+49. Quy tắc về Documentation (Promoted from Lessons)
+- **Bối cảnh**: Tag 'documentation' vi phạm lặp lại 9 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến documentation, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+50. Quy tắc về Testing (Promoted from Lessons)
+- **Bối cảnh**: Tag 'testing' vi phạm lặp lại 28 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến testing, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+51. Quy tắc về Coupling (Promoted from Lessons)
+- **Bối cảnh**: Tag 'coupling' vi phạm lặp lại 27 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến coupling, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+52. Quy tắc về Cdc (Promoted from Lessons)
+- **Bối cảnh**: Tag 'cdc' vi phạm lặp lại 58 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến cdc, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+53. Quy tắc về Schema-migration (Promoted from Lessons)
+- **Bối cảnh**: Tag 'schema-migration' vi phạm lặp lại 22 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến schema-migration, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+54. Quy tắc về Dry (Promoted from Lessons)
+- **Bối cảnh**: Tag 'dry' vi phạm lặp lại 24 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến dry, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+55. Quy tắc về Architecture-design (Promoted from Lessons)
+- **Bối cảnh**: Tag 'architecture-design' vi phạm lặp lại 19 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến architecture-design, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+56. Quy tắc về Logging-strategy (Promoted from Lessons)
+- **Bối cảnh**: Tag 'logging-strategy' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến logging-strategy, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+57. Quy tắc về Schema-drift (Promoted from Lessons)
+- **Bối cảnh**: Tag 'schema-drift' vi phạm lặp lại 25 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến schema-drift, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+58. Quy tắc về Config (Promoted from Lessons)
+- **Bối cảnh**: Tag 'config' vi phạm lặp lại 16 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến config, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+59. Quy tắc về Silent-drop (Promoted from Lessons)
+- **Bối cảnh**: Tag 'silent-drop' vi phạm lặp lại 27 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến silent-drop, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+60. Quy tắc về Serialization (Promoted from Lessons)
+- **Bối cảnh**: Tag 'serialization' vi phạm lặp lại 14 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến serialization, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+61. Quy tắc về Single-source-of-truth (Promoted from Lessons)
+- **Bối cảnh**: Tag 'single-source-of-truth' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến single-source-of-truth, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+62. Quy tắc về Serialization-type (Promoted from Lessons)
+- **Bối cảnh**: Tag 'serialization-type' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến serialization-type, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+63. Quy tắc về Idempotency (Promoted from Lessons)
+- **Bối cảnh**: Tag 'idempotency' vi phạm lặp lại 5 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến idempotency, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+64. Quy tắc về State-machine (Promoted from Lessons)
+- **Bối cảnh**: Tag 'state-machine' vi phạm lặp lại 4 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến state-machine, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+65. Quy tắc về Unique-constraint (Promoted from Lessons)
+- **Bối cảnh**: Tag 'unique-constraint' vi phạm lặp lại 4 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến unique-constraint, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+66. Quy tắc về On-conflict (Promoted from Lessons)
+- **Bối cảnh**: Tag 'on-conflict' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến on-conflict, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+67. Quy tắc về Sql (Promoted from Lessons)
+- **Bối cảnh**: Tag 'sql' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến sql, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+68. Quy tắc về Postgres (Promoted from Lessons)
+- **Bối cảnh**: Tag 'postgres' vi phạm lặp lại 7 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến postgres, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+69. Quy tắc về Migration-hygiene (Promoted from Lessons)
+- **Bối cảnh**: Tag 'migration-hygiene' vi phạm lặp lại 6 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến migration-hygiene, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+70. Quy tắc về Search-path (Promoted from Lessons)
+- **Bối cảnh**: Tag 'search-path' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến search-path, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+71. Quy tắc về Gorm (Promoted from Lessons)
+- **Bối cảnh**: Tag 'gorm' vi phạm lặp lại 8 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến gorm, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+72. Quy tắc về Pgx (Promoted from Lessons)
+- **Bối cảnh**: Tag 'pgx' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến pgx, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+73. Quy tắc về Debezium (Promoted from Lessons)
+- **Bối cảnh**: Tag 'debezium' vi phạm lặp lại 12 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến debezium, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+74. Quy tắc về Loadbalancer (Promoted from Lessons)
+- **Bối cảnh**: Tag 'loadbalancer' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến loadbalancer, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+75. Quy tắc về Retry (Promoted from Lessons)
+- **Bối cảnh**: Tag 'retry' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến retry, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+76. Quy tắc về Read-only-source (Promoted from Lessons)
+- **Bối cảnh**: Tag 'read-only-source' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến read-only-source, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+77. Quy tắc về Avro (Promoted from Lessons)
+- **Bối cảnh**: Tag 'avro' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến avro, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+78. Quy tắc về Cdc-data-pipeline (Promoted from Lessons)
+- **Bối cảnh**: Tag 'cdc-data-pipeline' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến cdc-data-pipeline, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+79. Quy tắc về Testing-verification (Promoted from Lessons)
+- **Bối cảnh**: Tag 'testing-verification' vi phạm lặp lại 5 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến testing-verification, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+80. Quy tắc về Nats (Promoted from Lessons)
+- **Bối cảnh**: Tag 'nats' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến nats, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+81. Quy tắc về Anti-pattern (Promoted from Lessons)
+- **Bối cảnh**: Tag 'anti-pattern' vi phạm lặp lại 4 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến anti-pattern, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+82. Quy tắc về Type-conversion (Promoted from Lessons)
+- **Bối cảnh**: Tag 'type-conversion' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến type-conversion, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+83. Quy tắc về Runtime (Promoted from Lessons)
+- **Bối cảnh**: Tag 'runtime' vi phạm lặp lại 4 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến runtime, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+84. Quy tắc về Memory-knowledge (Promoted from Lessons)
+- **Bối cảnh**: Tag 'memory-knowledge' vi phạm lặp lại 11 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến memory-knowledge, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
+
+85. Quy tắc về Agent-autonomy (Promoted from Lessons)
+- **Bối cảnh**: Tag 'agent-autonomy' vi phạm lặp lại 3 lần trong lessons.md.
+- **Quy định**: Phải nghiêm túc tuân thủ quy trình liên quan đến agent-autonomy, tránh tái phạm các lỗi quy trình đã được cảnh báo trong lessons.md.
+
 ## Workflows Reference
 
 Các workflow agents đã được codify tại `agent/workflows/`:

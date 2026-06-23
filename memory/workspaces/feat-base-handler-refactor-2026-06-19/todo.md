@@ -1,0 +1,6 @@
+- [x] Tạo base handler mới ở `internal/handler/base/base_handler.go` với code do User yêu cầu.
+- [x] Cập nhật các references trong handlers
+- [x] Cập nhật server wiring
+- [x] Cập nhật và sửa lỗi các test files
+- [x] Xóa file cũ `internal/handler/common/common.go`
+- [x] Verify build và chạy test suite

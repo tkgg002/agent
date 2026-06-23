@@ -1,0 +1,5 @@
+- [ ] Refactor `internal/admin/server.go` theo thiết kế mới.
+- [ ] Cập nhật `internal/admin/server_test.go` dùng `Router` thay vì `EngineForTest()`.
+- [ ] Biên dịch dự án thành công (`go build ./...`).
+- [ ] Chạy unit test của package `admin` thành công (`go test -v ./internal/admin/...`).
+- [ ] Chạy rà soát bảo mật (/security-agent).

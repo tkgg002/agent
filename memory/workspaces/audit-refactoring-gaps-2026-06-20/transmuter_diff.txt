@@ -1,0 +1,101 @@
+--- /Users/trainguyen/Documents/work/data-hub-bf/centralized-data-service/internal/service/transmuter.go	2026-06-20 17:13:00
++++ /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go	2026-06-19 10:12:35
+@@ -1,6 +1,11 @@
+-package service
++package master
+ 
+ import (
++	"centralized-data-service/internal/service/source"
++	"centralized-data-service/internal/service/shadow"
++	"centralized-data-service/internal/service/governance"
++	repomaster "centralized-data-service/internal/repository/master"
++	mastermodel "centralized-data-service/internal/model/master"
+ 	"context"
+ 	"encoding/json"
+ 	"fmt"
+@@ -10,9 +15,7 @@
+ 	"sync"
+ 	"time"
+ 
+-	"centralized-data-service/internal/model"
+-	"centralized-data-service/internal/repository"
+-	"centralized-data-service/internal/service/transmute"
++	"centralized-data-service/internal/service/master/transmute"
+ 
+ 	"github.com/tidwall/gjson"
+ 	"go.uber.org/zap"
+@@ -25,10 +28,10 @@
+ 
+ type TransmuterModule struct {
+ 	systemDB    *gorm.DB
+-	connMgr     *ConnectionManager
+-	runtimeRepo *repository.SyncRuntimeStateRepo
++	connMgr     *source.ConnectionManager
++	runtimeRepo *repomaster.SyncRuntimeStateRepo
+ 	ddlEnsurer  MasterDestinationEnsurer
+-	typeRes     *TypeResolver
++	typeRes     *shadow.TypeResolver
+ 	logger      *zap.Logger
+ 	batchSize   int
+ 	mu          sync.Mutex
+@@ -110,10 +113,10 @@
+ 
+ func NewTransmuterModule(
+ 	systemDB *gorm.DB,
+-	connMgr *ConnectionManager,
+-	runtimeRepo *repository.SyncRuntimeStateRepo,
++	connMgr *source.ConnectionManager,
++	runtimeRepo *repomaster.SyncRuntimeStateRepo,
+ 	ddlEnsurer MasterDestinationEnsurer,
+-	typeRes *TypeResolver,
++	typeRes *shadow.TypeResolver,
+ 	logger *zap.Logger,
+ ) *TransmuterModule {
+ 	return &TransmuterModule{
+@@ -830,7 +833,7 @@
+ 		"duration_ms": res.DurationMs,
+ 		"active_gate": res.ActiveGate,
+ 	})
+-	t.persistRuntimeState(ctx, masterBindingID, func(item *model.SyncRuntimeState, now time.Time) {
++	t.persistRuntimeState(ctx, masterBindingID, func(item *mastermodel.SyncRuntimeState, now time.Time) {
+ 		item.LastSuccessAt = &now
+ 		item.LastErrorAt = nil
+ 		item.LastErrorMessage = nil
+@@ -842,8 +845,8 @@
+ 	if opErr == nil {
+ 		return
+ 	}
+-	msg := SanitizeFreeformText(opErr.Error(), 2000)
+-	t.persistRuntimeState(ctx, masterBindingID, func(item *model.SyncRuntimeState, now time.Time) {
++	msg := governance.SanitizeFreeformText(opErr.Error(), 2000)
++	t.persistRuntimeState(ctx, masterBindingID, func(item *mastermodel.SyncRuntimeState, now time.Time) {
+ 		item.LastErrorAt = &now
+ 		item.LastErrorMessage = &msg
+ 	})
+@@ -854,7 +857,7 @@
+ 		"active_gate": reason,
+ 		"status":      "skipped",
+ 	})
+-	t.persistRuntimeState(ctx, masterBindingID, func(item *model.SyncRuntimeState, now time.Time) {
++	t.persistRuntimeState(ctx, masterBindingID, func(item *mastermodel.SyncRuntimeState, now time.Time) {
+ 		item.LastSuccessAt = &now
+ 		item.LastErrorAt = nil
+ 		item.LastErrorMessage = nil
+@@ -862,7 +865,7 @@
+ 	})
+ }
+ 
+-func (t *TransmuterModule) persistRuntimeState(ctx context.Context, masterBindingID int64, mutate func(*model.SyncRuntimeState, time.Time)) {
++func (t *TransmuterModule) persistRuntimeState(ctx context.Context, masterBindingID int64, mutate func(*mastermodel.SyncRuntimeState, time.Time)) {
+ 	if t.runtimeRepo == nil || masterBindingID == 0 {
+ 		return
+ 	}
+@@ -875,7 +878,7 @@
+ 	}
+ 	now := time.Now().UTC()
+ 	if err == gorm.ErrRecordNotFound || item == nil || item.ID == 0 {
+-		item = &model.SyncRuntimeState{
++		item = &mastermodel.SyncRuntimeState{
+ 			MasterBindingID: &masterBindingID,
+ 			RuntimeScope:    "master",
+ 			StatsJSON:       []byte(`{}`),

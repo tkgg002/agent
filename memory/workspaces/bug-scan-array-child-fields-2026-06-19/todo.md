@@ -1,0 +1,9 @@
+- [x] Tìm kiếm code gốc xịn của `HandleScanArrayFields` trong lịch sử git
+- [/] Rà soát module `base` (base_handler.go)
+- [ ] Rà soát module `shadow` (batch_transform_handler.go, schema_ddl_handler.go, provisioning_shadow_bind.go)
+- [ ] Rà soát module `master` (master_ddl_handler.go, transmute_handler.go)
+- [ ] Rà soát module `source` (source_register.go, sync_handler.go, discover_handler.go, mongo_discover_handler.go)
+- [ ] Rà soát module `recon` (recon_handler.go, dlq_handler.go)
+- [ ] Rà soát module `orchestration` (provisioning_handler.go, snapshot_runner_handler.go, provisioning_schedule_enable.go)
+- [ ] Tổng hợp báo cáo `comprehensive_logic_audit.md` và trình User phê duyệttoàn diện
+- [x] Cập nhật `05_progress.md` và hoàn thành task

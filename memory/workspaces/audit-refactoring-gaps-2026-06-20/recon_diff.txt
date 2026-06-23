@@ -1,0 +1,1356 @@
+--- /Users/trainguyen/Documents/work/data-hub-bf/centralized-data-service/internal/service/recon_core.go	2026-06-20 17:13:00
++++ /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_engine.go	2026-06-19 11:18:09
+@@ -1,9 +1,17 @@
+-package service
++package recon
+ 
++// recon_engine.go — Core engine, config, constructors, and shared helpers.
++// Extracted from recon_core.go
++
+ import (
++	"centralized-data-service/internal/service/governance"
++	"centralized-data-service/internal/model/source"
++	"centralized-data-service/internal/service/shadow"
++	"centralized-data-service/internal/service/metadata"
++	"centralized-data-service/internal/model/system"
++	reposource "centralized-data-service/internal/repository/source"
+ 	"context"
+ 	"crypto/md5"
+-	"encoding/json"
+ 	"fmt"
+ 	"hash/crc32"
+ 	"hash/fnv"
+@@ -12,13 +20,10 @@
+ 	"sync"
+ 	"time"
+ 
+-	"centralized-data-service/internal/model"
+-	"centralized-data-service/internal/repository"
+ 	"centralized-data-service/pkgs/metrics"
+ 	"centralized-data-service/pkgs/rediscache"
+ 
+ 	"github.com/google/uuid"
+-	"github.com/tidwall/gjson"
+ 	"go.mongodb.org/mongo-driver/bson"
+ 	"go.mongodb.org/mongo-driver/bson/primitive"
+ 	"go.mongodb.org/mongo-driver/mongo"
+@@ -118,9 +123,9 @@
+ 	masterPlane   *gorm.DB
+ 	db            *gorm.DB
+ 	mongoClient   *mongo.Client
+-	schemaAdapter *SchemaAdapter
+-	registryRepo  *repository.RegistryRepo
+-	metadata      MetadataRegistry
++	schemaAdapter *shadow.SchemaAdapter
++	registryRepo  *reposource.RegistryRepo
++	metadata metadata.MetadataRegistry
+ 	redis         *rediscache.RedisCache
+ 	cfg           ReconCoreConfig
+ 	logger        *zap.Logger
+@@ -133,14 +138,14 @@
+ 	destAgent *ReconDestAgent,
+ 	db *gorm.DB,
+ 	mongoClient *mongo.Client,
+-	schemaAdapter *SchemaAdapter,
+-	registryRepo *repository.RegistryRepo,
++	schemaAdapter *shadow.SchemaAdapter,
++	registryRepo *reposource.RegistryRepo,
+ 	logger *zap.Logger,
+ ) *ReconCore {
+ 	return NewReconCoreWithConfig(sourceAgent, destAgent, db, mongoClient, schemaAdapter, registryRepo, nil, ReconCoreConfig{}, logger)
+ }
+ 
+-func (rc *ReconCore) SetMetadataRegistry(metadata MetadataRegistry) {
++func (rc *ReconCore) SetMetadataRegistry(metadata metadata.MetadataRegistry) {
+ 	rc.metadata = metadata
+ }
+ 
+@@ -151,8 +156,8 @@
+ 	destAgent *ReconDestAgent,
+ 	db *gorm.DB,
+ 	mongoClient *mongo.Client,
+-	schemaAdapter *SchemaAdapter,
+-	registryRepo *repository.RegistryRepo,
++	schemaAdapter *shadow.SchemaAdapter,
++	registryRepo *reposource.RegistryRepo,
+ 	redis *rediscache.RedisCache,
+ 	cfg ReconCoreConfig,
+ 	logger *zap.Logger,
+@@ -181,105 +186,7 @@
+ // Returns (acquired, unlock). Caller MUST call unlock() whether acquired
+ // or not (unlock is a no-op when not acquired). A non-acquired lock
+ // means a previous run is still in flight; the caller should skip.
+-func (rc *ReconCore) withTableLock(ctx context.Context, table string) (bool, func()) {
+-	key := advisoryLockKey("recon_" + table)
+-	var acquired bool
+-	if err := rc.db.WithContext(ctx).Raw(
+-		"SELECT pg_try_advisory_lock(?)", key,
+-	).Scan(&acquired).Error; err != nil {
+-		rc.logger.Warn("advisory lock acquire failed — assuming NOT acquired",
+-			zap.String("table", table), zap.Error(err))
+-		return false, func() {}
+-	}
+-	if !acquired {
+-		return false, func() {}
+-	}
+-	unlock := func() {
+-		rc.db.Exec("SELECT pg_advisory_unlock(?)", key)
+-	}
+-	return true, unlock
+-}
+ 
+-// ============================================================
+-// Leader election
+-// ============================================================
+-
+-// AcquireLeader attempts to become the scheduled-recon leader. Returns a
+-// cancel func that releases the lock + stops the heartbeat. Safe to call
+-// when Redis is not configured — in that case it always returns
+-// (true, noop) so single-instance deployments work unchanged.
+-func (rc *ReconCore) AcquireLeader(ctx context.Context) (bool, func()) {
+-	if rc.redis == nil {
+-		return true, func() {}
+-	}
+-	client := rc.redis.RawClient()
+-	if client == nil {
+-		return true, func() {}
+-	}
+-
+-	ok, err := client.SetNX(ctx, rc.cfg.LeaderLockKey, rc.cfg.InstanceID, rc.cfg.LeaderLockTTL).Result()
+-	if err != nil {
+-		rc.logger.Warn("leader acquire failed — skipping scheduled run",
+-			zap.Error(err))
+-		return false, func() {}
+-	}
+-	if !ok {
+-		return false, func() {}
+-	}
+-
+-	hbCtx, cancel := context.WithCancel(ctx)
+-	go func() {
+-		ticker := time.NewTicker(rc.cfg.LeaderHeartbeat)
+-		defer ticker.Stop()
+-		for {
+-			select {
+-			case <-hbCtx.Done():
+-				return
+-			case <-ticker.C:
+-				// Refresh TTL using an ownership-guarded Lua script so we
+-				// don't accidentally extend a stolen lock.
+-				script := `if redis.call("get", KEYS[1]) == ARGV[1] then
+-					return redis.call("pexpire", KEYS[1], ARGV[2])
+-				else return 0 end`
+-				_, _ = client.Eval(hbCtx, script,
+-					[]string{rc.cfg.LeaderLockKey},
+-					rc.cfg.InstanceID, int64(rc.cfg.LeaderLockTTL/time.Millisecond),
+-				).Result()
+-			}
+-		}
+-	}()
+-
+-	release := func() {
+-		cancel()
+-		// Release lock only if still ours.
+-		script := `if redis.call("get", KEYS[1]) == ARGV[1] then
+-			return redis.call("del", KEYS[1])
+-		else return 0 end`
+-		_, _ = client.Eval(context.Background(), script,
+-			[]string{rc.cfg.LeaderLockKey}, rc.cfg.InstanceID).Result()
+-	}
+-	return true, release
+-}
+-
+-// ============================================================
+-// Run-state tracking
+-// ============================================================
+-
+-type reconRunHandle struct {
+-	id           string
+-	table        string
+-	tier         int
+-	started      time.Time
+-	docsScanned  int64
+-	windowsCount int
+-	mismatches   int
+-	healActions  int
+-}
+-
+-// beginRun inserts a running row into recon_runs. The unique index
+-// `recon_runs_one_running` (table_name WHERE status='running') enforces
+-// a single in-flight row per table; the advisory lock above is the
+-// Go-side gate, this is the DB-side safety net.
+ func (rc *ReconCore) beginRun(ctx context.Context, table string, tier int) (*reconRunHandle, error) {
+ 	h := &reconRunHandle{
+ 		id:      uuid.NewString(),
+@@ -391,7 +298,7 @@
+ func (rc *ReconCore) finishRun(ctx context.Context, h *reconRunHandle, status, errMsg string) {
+ 	finished := time.Now().UTC()
+ 	dur := finished.Sub(h.started).Seconds()
+-	errMsg = SanitizeFreeformText(errMsg, 2000)
++	errMsg = governance.SanitizeFreeformText(errMsg, 2000)
+ 
+ 	updates := map[string]interface{}{
+ 		"status":           status,
+@@ -461,689 +368,7 @@
+ // buildWindows slices [from, to) into N windows of size cfg.WindowSize.
+ // If the range is not a clean multiple of WindowSize the last window
+ // ends exactly at `to`.
+-func (rc *ReconCore) buildWindows(from, to time.Time) []window {
+-	var ws []window
+-	if to.Before(from) {
+-		return ws
+-	}
+-	cur := from
+-	for cur.Before(to) {
+-		next := cur.Add(rc.cfg.WindowSize)
+-		if next.After(to) {
+-			next = to
+-		}
+-		ws = append(ws, window{Lo: cur, Hi: next})
+-		cur = next
+-	}
+-	return ws
+-}
+-
+-// pickScanRange resolves the upper watermark (min of both sides' max
+-// source ts, clamped to now − freeze margin) and the lower watermark
+-// (upper − lookback).
+-// tsField returns the entry's Mongo timestamp field (Bug B). Helper
+-// keeps the nil-pointer dereference in one place + lets us unit-test
+-// the default fallback behaviour when registry value is not set.
+-func tsField(entry model.TableRegistry) string {
+-	if entry.TimestampField == nil {
+-		return ""
+-	}
+-	return *entry.TimestampField
+-}
+-
+-// ============================================================
+-// Recon V4 P3 — Watermark adaptive + Lag monitoring
+-// ============================================================
+-
+-// adaptiveFreeze — freeze margin theo lag THỰC đo được (trụ 1 chuẩn:
+-// moving-target). Lag cao → margin giãn → không false-positive khi
+-// pipeline đang đuổi; kẹp [WindowFreezeMargin, 60m].
+-func (rc *ReconCore) adaptiveFreeze(lagMs int64) time.Duration {
+-	base := rc.cfg.WindowFreezeMargin // default 5m
+-	m := base + time.Duration(lagMs)*time.Millisecond
+-	if m < base {
+-		m = base
+-	}
+-	if m > 60*time.Minute {
+-		m = 60 * time.Minute
+-	}
+-	return m
+-}
+-
+-// lagBetween — chênh watermark giữa 2 max-ts (>=0; vế nào zero → 0,
+-// không đo được thì không phạt margin).
+-func lagBetween(upstream, downstream time.Time) int64 {
+-	if upstream.IsZero() || downstream.IsZero() {
+-		return 0
+-	}
+-	d := upstream.Sub(downstream).Milliseconds()
+-	if d < 0 {
+-		return 0
+-	}
+-	return d
+-}
+-
+-// upsertReconLag — ghi 1 cột đo (ingest_lag_ms | transmute_lag_ms) cho bảng.
+-// col được whitelist cứng — KHÔNG nhận từ input ngoài.
+-func (rc *ReconCore) upsertReconLag(ctx context.Context, table, col string, lagMs int64) {
+-	if col != "ingest_lag_ms" && col != "transmute_lag_ms" {
+-		return
+-	}
+-	if err := rc.db.WithContext(ctx).Exec(fmt.Sprintf(
+-		`INSERT INTO cdc_system.recon_lag (table_name, %s, measured_at)
+-		 VALUES (?, ?, NOW())
+-		 ON CONFLICT (table_name) DO UPDATE SET %s = EXCLUDED.%s, measured_at = NOW()`,
+-		col, col, col), table, lagMs).Error; err != nil {
+-		rc.logger.Warn("recon_lag upsert failed", zap.String("table", table), zap.Error(err))
+-	}
+-}
+-
+-// pickScanRange — wrapper giữ chữ ký cũ cho RunTier2.
+-func (rc *ReconCore) pickScanRange(ctx context.Context, entry model.TableRegistry) (time.Time, time.Time, error) {
+-	lo, hi, _, err := rc.pickScanRangeWithLag(ctx, entry)
+-	return lo, hi, err
+-}
+-
+-// pickScanRangeWithLag — V5: trả thêm ingestLagMs cho Tier-0 quyết định.
+-func (rc *ReconCore) pickScanRangeWithLag(ctx context.Context, entry model.TableRegistry) (time.Time, time.Time, int64, error) {
+-	srcMax, err := rc.sourceAgent.MaxWindowTs(ctx, entry.SourceURL, entry.SourceDB, entry.SourceTable, tsField(entry))
+-	if err != nil {
+-		return time.Time{}, time.Time{}, 0, fmt.Errorf("source max ts: %w", err)
+-	}
+-	dstMax, err := rc.destAgent.MaxWindowTs(ctx, entry.QualifiedTarget())
+-	if err != nil {
+-		return time.Time{}, time.Time{}, 0, fmt.Errorf("dest max ts: %w", err)
+-	}
+-
+-	// P3: ingest lag = chênh watermark source↔shadow; ghi recon_lag +
+-	// nuôi adaptive freeze (lag cao → scan lùi xa hơn, tránh false-positive).
+-	ingestLagMs := lagBetween(srcMax, dstMax)
+-	rc.upsertReconLag(ctx, entry.TargetTable, "ingest_lag_ms", ingestLagMs)
+-
+-	// Upper watermark = min(max(src), max(dst), now - adaptiveFreeze)
+-	nowFreeze := time.Now().UTC().Add(-rc.adaptiveFreeze(ingestLagMs))
+-	upper := nowFreeze
+-	// +1ms khi kẹp theo max-ts: window `ts < upper` là EXCLUSIVE — upper đúng
+-	// bằng max sẽ loại ROW MỚI NHẤT vĩnh viễn khi bảng idle (cùng edge đã
+-	// bắt được ở Segment B: missing row cuối không bao giờ vào window check).
+-	if !srcMax.IsZero() && srcMax.Before(upper) {
+-		upper = srcMax.Add(time.Millisecond)
+-	}
+-	if !dstMax.IsZero() && dstMax.Before(upper) {
+-		upper = dstMax.Add(time.Millisecond)
+-	}
+-	lower := upper.Add(-rc.cfg.WindowLookback)
+-	return lower, upper, ingestLagMs, nil
+-}
+-
+-// ============================================================
+-// Tier 1 — count per window
+-// ============================================================
+-
+-// RunTier1 performs window-based count comparison for a single table.
+-// No full-table COUNT is issued — we count each 15-minute slice in a
+-// range-indexed query on both sides. Returns a drift snapshot that
+-// Tier 2 can drill into.
+-func (rc *ReconCore) RunTier1(ctx context.Context, entry model.TableRegistry) *model.ReconciliationReport {
+-	acquired, unlock := rc.withTableLock(ctx, entry.TargetTable)
+-	defer unlock()
+-	if !acquired {
+-		rc.logger.Info("tier1 skipped — previous run ongoing",
+-			zap.String("table", entry.TargetTable))
+-		return rc.errorReport(entry, "count", 1, fmt.Errorf("previous run ongoing"))
+-	}
+-
+-	handle, err := rc.beginRun(ctx, entry.TargetTable, 1)
+-	if err != nil {
+-		rc.logger.Error("tier1 beginRun failed", zap.Error(err))
+-		return rc.errorReport(entry, "count", 1, err)
+-	}
+-
+-	status := "success"
+-	defer func() {
+-		rc.finishRun(ctx, handle, status, "")
+-	}()
+-
+-	lo, hi, _, err := rc.pickScanRangeWithLag(ctx, entry)
+-	if err != nil {
+-		status = "failed"
+-		return rc.errorReport(entry, "count", 1, err)
+-	}
+-
+-	// ===== V5 TIER-0: "count 3 trạm" đúng nghĩa — O(1) queries, KHÔNG window =====
+-	// estimatedDocumentCount = metadata O(1) (hết collscan); CountRows PG exact.
+-	srcEst, errE := rc.sourceAgent.EstimatedCount(ctx, entry.SourceURL, entry.SourceDB, entry.SourceTable)
+-	if errE != nil {
+-		status = "failed"
+-		return rc.errorReport(entry, "count", 1, fmt.Errorf("src estimated count: %w", errE))
+-	}
+-	dstTotal, errD := rc.destAgent.CountRows(ctx, entry.QualifiedTarget(), entry.PrimaryKeyField)
+-	if errD != nil {
+-		status = "failed"
+-		return rc.errorReport(entry, "count", 1, fmt.Errorf("dst count: %w", errD))
+-	}
+-	// Tolerance cho sai số metadata-estimate (resync/crash counter drift).
+-	estTolerance := srcEst / 1000
+-	if estTolerance < 1 {
+-		estTolerance = 1
+-	}
+-	if abs(srcEst-dstTotal) <= estTolerance {
+-		// KHỚP → DỪNG. Không bucket, không window, không collscan.
+-		duration := int(time.Since(handle.started).Milliseconds())
+-		report := &model.ReconciliationReport{
+-			TargetTable: entry.TargetTable, SourceDB: entry.SourceDB,
+-			SourceCount: &srcEst, DestCount: dstTotal, Diff: srcEst - dstTotal,
+-			TotalSourceCount: &srcEst, TotalDestCount: &dstTotal,
+-			CheckType: "count_total", Status: "ok", Tier: 1,
+-			DurationMs: &duration, CheckedAt: time.Now().UTC(),
+-		}
+-		rc.stampA(report, entry)
+-		metrics.ReconDrift.WithLabelValues(entry.TargetTable, "1").Set(0)
+-		rc.logger.Info("tier0 count_total ok",
+-			zap.String("table", entry.TargetTable),
+-			zap.Int64("src_est", srcEst), zap.Int64("dst", dstTotal))
+-		return report
+-	}
+-
+-	// ===== V5 TIER-1 (CHỈ KHI Tier-0 lệch): bucket-aggregate 2 query/phía =====
+-	// Thay 672 window × 2 round-trips bằng 1 aggregate mỗi phía; fallback
+-	// candidates khi field chính trả rỗng (giữ tinh thần Migration 017).
+-	type winDrift struct {
+-		Lo          time.Time `json:"lo"`
+-		Hi          time.Time `json:"hi"`
+-		SourceCount int64     `json:"source_count"`
+-		DestCount   int64     `json:"dest_count"`
+-	}
+-	var srcBuckets map[int64]int64
+-	for _, f := range append([]string{tsField(entry)}, entry.GetCandidates()...) {
+-		srcBuckets, err = rc.sourceAgent.BucketCounts(ctx, entry.SourceURL, entry.SourceDB, entry.SourceTable, f, lo, hi)
+-		if err != nil {
+-			status = "failed"
+-			return rc.errorReport(entry, "count", 1, fmt.Errorf("src bucket counts (%s): %w", f, err))
+-		}
+-		if len(srcBuckets) > 0 {
+-			break
+-		}
+-	}
+-	dstBuckets, err := rc.destAgent.BucketCounts(ctx, entry.QualifiedTarget(), entry.PrimaryKeyField, lo, hi)
+-	if err != nil {
+-		status = "failed"
+-		return rc.errorReport(entry, "count", 1, fmt.Errorf("dst bucket counts: %w", err))
+-	}
+-
+-	var drifted []winDrift
+-	var totalSrc, totalDst int64
+-	keys := make(map[int64]struct{}, len(srcBuckets)+len(dstBuckets))
+-	for k := range srcBuckets {
+-		keys[k] = struct{}{}
+-	}
+-	for k := range dstBuckets {
+-		keys[k] = struct{}{}
+-	}
+-	for k := range keys {
+-		s, d := srcBuckets[k], dstBuckets[k].Count
+-		totalSrc += s
+-		totalDst += d
+-		if abs(s-d) >= rc.cfg.CountDriftThreshold {
+-			bLo := time.UnixMilli(k).UTC()
+-			drifted = append(drifted, winDrift{Lo: bLo, Hi: bLo.Add(time.Hour), SourceCount: s, DestCount: d})
+-		}
+-	}
+-	handle.windowsCount = len(keys)
+-	handle.docsScanned = totalSrc + totalDst
+-	handle.mismatches = len(drifted)
+-
+-	statusStr := "ok"
+-	if len(drifted) > 0 {
+-		statusStr = "drift"
+-	} else {
+-		// Bucket trong lookback KHỚP nhưng Tier-0 totals lệch → phân xử bằng
+-		// 1 lần CountDocuments EXACT (nhánh hiếm — chỉ bảng nghi vấn):
+-		// exact == dst → estimate noise → ok; exact lệch → drift NGOÀI
+-		// lookback (việc của Tier-3 full sweep).
+-		if exact, err := rc.sourceAgent.CountDocuments(ctx, entry.SourceURL, entry.SourceDB, entry.SourceTable); err == nil {
+-			srcEst = exact
+-			if abs(exact-dstTotal) > 0 {
+-				statusStr = "drift"
+-			}
+-		}
+-	}
+-
+-	driftJSON, _ := json.Marshal(drifted)
+-	duration := int(time.Since(handle.started).Milliseconds())
+-	srcTotal := totalSrc
+-	report := &model.ReconciliationReport{
+-		TargetTable:      entry.TargetTable,
+-		SourceDB:         entry.SourceDB,
+-		SourceCount:      &srcTotal,
+-		TotalSourceCount: &srcEst,
+-		TotalDestCount:   &dstTotal,
+-		DestCount:        totalDst,
+-		Diff:             totalSrc - totalDst,
+-		StaleCount:       len(drifted),
+-		StaleIDs:         driftJSON, // reuse stale_ids column as drifted-windows payload for tier 1/2
+-		CheckType:        "count_windowed",
+-		Status:           statusStr,
+-		Tier:             1,
+-		DurationMs:       &duration,
+-		CheckedAt:        time.Now().UTC(),
+-	}
+-	rc.stampA(report, entry)
+-	// P4: alert ngưỡng (Segment A) vào cdc_alerts.
+-	rc.alertOnReport(ctx, "source_shadow", entry.TargetTable, statusStr, 0, report.Diff)
+-
+-	metrics.ReconDrift.WithLabelValues(entry.TargetTable, "1").Set(float64(len(drifted)))
+-
+-	rc.logger.Info("tier1 bucket_aggregate",
+-		zap.String("table", entry.TargetTable),
+-		zap.Int("buckets", handle.windowsCount),
+-		zap.Int("drifted_buckets", len(drifted)),
+-		zap.Int64("total_src", totalSrc),
+-		zap.Int64("total_dst", totalDst),
+-	)
+-	return report
+-}
+-
+-// ============================================================
+-// Tier 2 — XOR-hash per drifted window + drill-down ID diff
+-// ============================================================
+-
+-// RunTier2 picks up drifted windows detected by Tier 1 (or scans the
+-// same range if Tier 1 has not run yet) and for each such window:
+-//  1. HashWindow on both sides (count + xor)
+-//  2. If count / xor mismatch → ListIDsInWindow on both sides, diff.
+-//
+-// Writes mismatches to cdc_reconciliation_report with status=drift.
+-func (rc *ReconCore) RunTier2(ctx context.Context, entry model.TableRegistry) *model.ReconciliationReport {
+-	acquired, unlock := rc.withTableLock(ctx, entry.TargetTable)
+-	defer unlock()
+-	if !acquired {
+-		rc.logger.Info("tier2 skipped — previous run ongoing",
+-			zap.String("table", entry.TargetTable))
+-		return rc.errorReport(entry, "hash_window", 2, fmt.Errorf("previous run ongoing"))
+-	}
+-
+-	handle, err := rc.beginRun(ctx, entry.TargetTable, 2)
+-	if err != nil {
+-		return rc.errorReport(entry, "hash_window", 2, err)
+-	}
+-	status := "success"
+-	defer func() { rc.finishRun(ctx, handle, status, "") }()
+-
+-	lo, hi, err := rc.pickScanRange(ctx, entry)
+-	if err != nil {
+-		status = "failed"
+-		return rc.errorReport(entry, "hash_window", 2, err)
+-	}
+-	windows := rc.buildWindows(lo, hi)
+-	handle.windowsCount = len(windows)
+-
+-	var missingFromDest []string
+-	var missingFromSrc []string
+-	var driftedWindows int
+-
+-	for _, w := range windows {
+-		srcRes, err := rc.sourceAgent.HashWindow(ctx, entry.SourceURL, entry.SourceDB, entry.SourceTable, tsField(entry), w.Lo, w.Hi)
+-		if err != nil {
+-			status = "failed"
+-			return rc.errorReport(entry, "hash_window", 2, fmt.Errorf("src hash window %v: %w", w.Lo, err))
+-		}
+-		dstRes, err := rc.destAgent.HashWindow(ctx, entry.QualifiedTarget(), entry.PrimaryKeyField, w.Lo, w.Hi)
+-		if err != nil {
+-			status = "failed"
+-			return rc.errorReport(entry, "hash_window", 2, fmt.Errorf("dst hash window %v: %w", w.Lo, err))
+-		}
+-		handle.docsScanned += srcRes.Count + dstRes.Count
+-
+-		if srcRes.Count == dstRes.Count && srcRes.XorHash == dstRes.XorHash {
+-			continue // window clean
+-		}
+-		driftedWindows++
+-
+-		// Drill-down: collect IDs on both sides.
+-		srcIDs, err := rc.sourceAgent.ListIDsInWindow(ctx, entry.SourceURL, entry.SourceDB, entry.SourceTable, tsField(entry), w.Lo, w.Hi)
+-		if err != nil {
+-			rc.logger.Warn("src list ids failed", zap.Error(err))
+-			continue
+-		}
+-		dstIDs, err := rc.destAgent.ListIDsInWindow(ctx, entry.QualifiedTarget(), entry.PrimaryKeyField, w.Lo, w.Hi)
+-		if err != nil {
+-			rc.logger.Warn("dst list ids failed", zap.Error(err))
+-			continue
+-		}
+-		mFromDst, mFromSrc := diffIDs(srcIDs, dstIDs)
+-		missingFromDest = append(missingFromDest, mFromDst...)
+-		missingFromSrc = append(missingFromSrc, mFromSrc...)
+-	}
+-
+-	handle.mismatches = len(missingFromDest) + len(missingFromSrc)
+-
+-	missingJSON, _ := json.Marshal(missingFromDest)
+-	staleJSON, _ := json.Marshal(map[string][]string{
+-		"missing_from_dest": missingFromDest,
+-		"missing_from_src":  missingFromSrc,
+-	})
+-
+-	statusStr := "ok"
+-	if driftedWindows > 0 {
+-		statusStr = "drift"
+-	}
+-
+-	duration := int(time.Since(handle.started).Milliseconds())
+-	report := &model.ReconciliationReport{
+-		TargetTable:  entry.TargetTable,
+-		SourceDB:     entry.SourceDB,
+-		MissingCount: len(missingFromDest),
+-		MissingIDs:   missingJSON,
+-		StaleCount:   driftedWindows,
+-		StaleIDs:     staleJSON,
+-		CheckType:    "hash_window",
+-		Status:       statusStr,
+-		Tier:         2,
+-		DurationMs:   &duration,
+-		CheckedAt:    time.Now().UTC(),
+-	}
+-	rc.stampA(report, entry)
+-
+-	metrics.ReconDrift.WithLabelValues(entry.TargetTable, "2").Set(float64(handle.mismatches))
+-
+-	rc.logger.Info("tier2 hash_window",
+-		zap.String("table", entry.TargetTable),
+-		zap.Int("windows", len(windows)),
+-		zap.Int("drifted_windows", driftedWindows),
+-		zap.Int("missing_from_dest", len(missingFromDest)),
+-		zap.Int("missing_from_src", len(missingFromSrc)),
+-	)
+-	return report
+-}
+-
+-// ============================================================
+-// Orphan prune (Segment A) — soft-delete ghost (shadow có / source không)
+-// ============================================================
+-
+-// RunOrphanPrune soft-delete các shadow row có `_source_id` KHÔNG còn trong source
+-// (ghost/orphan). Xử lý case source bị DROP/RE-SEED collection mà Mongo-Debezium
+-// KHÔNG emit per-doc delete → shadow tích luỹ ghost vượt source. Dùng FULL-table id
+-// diff để bắt cả ghost cũ (ngoài window recon thường). Soft-delete (_deleted=TRUE)
+-// — KHÔNG hard-delete (giữ audit + để transmute lan delete sang master).
+-// Idempotent (chỉ đụng row chưa _deleted).
+-//
+-// Sử dụng StreamAllIDs (Keyset Pagination + Channel) thay thế ListAllIDs cũ để tránh
+-// OOM cho collection hàng trăm triệu records và cursor timeout.
+-func (rc *ReconCore) RunOrphanPrune(ctx context.Context, entry model.TableRegistry) *model.ReconciliationReport {
+-	acquired, unlock := rc.withTableLock(ctx, entry.TargetTable)
+-	defer unlock()
+-	if !acquired {
+-		rc.logger.Info("orphan_prune skipped — previous run ongoing", zap.String("table", entry.TargetTable))
+-		return rc.errorReport(entry, "orphan_prune", 2, fmt.Errorf("previous run ongoing"))
+-	}
+-	handle, err := rc.beginRun(ctx, entry.TargetTable, 2)
+-	if err != nil {
+-		return rc.errorReport(entry, "orphan_prune", 2, err)
+-	}
+-	status := "success"
+-	defer func() { rc.finishRun(ctx, handle, status, "") }()
+-
+-	if rc.shadowPlane == nil {
+-		status = "failed"
+-		return rc.errorReport(entry, "orphan_prune", 2, fmt.Errorf("shadowPlane not wired"))
+-	}
+-
+-	// Shadow: TẤT CẢ _source_id chưa _deleted (đọc trực tiếp shadowPlane, không phụ thuộc _source_ts).
+-	var dstIDs []string
+-	if e := rc.shadowPlane.WithContext(ctx).Raw(
+-		fmt.Sprintf(`SELECT "_source_id"::text FROM %s WHERE NOT "_deleted" AND "_source_id" IS NOT NULL`,
+-			quoteRelation(entry.QualifiedTarget())),
+-	).Scan(&dstIDs).Error; e != nil {
+-		status = "failed"
+-		return rc.errorReport(entry, "orphan_prune", 2, fmt.Errorf("dst list ids: %w", e))
+-	}
+-
+-	// Shadow set: id -> struct{}{} để check tồn tại và xóa nhanh
+-	shadowSet := make(map[string]struct{}, len(dstIDs))
+-	for _, id := range dstIDs {
+-		shadowSet[id] = struct{}{}
+-	}
+-
+-	// Source: stream qua channel — O(1) memory, không OOM, không cursor timeout
+-	idChan, errChan := rc.sourceAgent.StreamAllIDs(ctx, entry.SourceURL, entry.SourceDB, entry.SourceTable)
+-	srcCount := 0
+-	var streamErr error
+-
+-	// Vòng lặp nhận dữ liệu từ các channel cho đến khi cả hai channel đóng hoàn toàn.
+-	for idChan != nil || errChan != nil {
+-		select {
+-		case id, ok := <-idChan:
+-			if !ok {
+-				idChan = nil
+-				break
+-			}
+-			srcCount++
+-			handle.docsScanned++
+-			delete(shadowSet, id)
+-
+-		case err, ok := <-errChan:
+-			if !ok {
+-				errChan = nil
+-				break
+-			}
+-			if err != nil {
+-				streamErr = err
+-			}
+-		}
+-	}
+-
+-	handle.docsScanned += int64(len(dstIDs))
+-
+-	// SAFETY: source rỗng (0 id) thường là lỗi đọc source / collection bị drop tạm —
+-	// KHÔNG prune toàn bộ shadow (tránh xoá nhầm khi source tạm trống). Bỏ qua, log.
+-	if srcCount == 0 && len(dstIDs) > 0 {
+-		rc.logger.Warn("orphan_prune skip — source returned 0 ids (refuse to prune entire shadow)",
+-			zap.String("table", entry.TargetTable),
+-			zap.Int("shadow_ids", len(dstIDs)),
+-			zap.NamedError("stream_err", streamErr),
+-		)
+-		duration := int(time.Since(handle.started).Milliseconds())
+-		report := &model.ReconciliationReport{
+-			TargetTable: entry.TargetTable, SourceDB: entry.SourceDB,
+-			MissingCount: 0, StaleCount: 0, CheckType: "orphan_prune",
+-			Status: "warning", Tier: 2, DurationMs: &duration, CheckedAt: time.Now().UTC(),
+-		}
+-		rc.stampA(report, entry)
+-		return report
+-	}
+-
+-	// Log stream error nhưng không dừng nếu đã đọc được ít nhất 1 ID
+-	if streamErr != nil {
+-		rc.logger.Warn("orphan_prune: source stream had error (partial data)",
+-			zap.String("table", entry.TargetTable),
+-			zap.Int("src_ids_read", srcCount),
+-			zap.Error(streamErr),
+-		)
+-	}
+-
+-	// Còn lại trong shadowSet = orphan (shadow có nhưng source không có)
+-	orphans := make([]string, 0, len(shadowSet))
+-	for id := range shadowSet {
+-		orphans = append(orphans, id)
+-	}
+-
+-	pruned := 0
+-	if len(orphans) > 0 {
+-		updSQL := fmt.Sprintf(
+-			`UPDATE %s SET "_deleted" = TRUE, "_updated_at" = NOW() WHERE "_source_id" IN (?) AND NOT "_deleted"`,
+-			quoteRelation(entry.QualifiedTarget()),
+-		)
+-		const batch = 1000
+-		for i := 0; i < len(orphans); i += batch {
+-			end := i + batch
+-			if end > len(orphans) {
+-				end = len(orphans)
+-			}
+-			res := rc.shadowPlane.WithContext(ctx).Exec(updSQL, orphans[i:end])
+-			if res.Error != nil {
+-				status = "failed"
+-				return rc.errorReport(entry, "orphan_prune", 2, fmt.Errorf("soft-delete orphans: %w", res.Error))
+-			}
+-			pruned += int(res.RowsAffected)
+-		}
+-	}
+-	handle.mismatches = len(orphans)
+-
+-	orphJSON, _ := json.Marshal(orphans)
+-	statusStr := "ok"
+-	if pruned > 0 {
+-		statusStr = "drift"
+-	}
+-	duration := int(time.Since(handle.started).Milliseconds())
+-	report := &model.ReconciliationReport{
+-		TargetTable:  entry.TargetTable,
+-		SourceDB:     entry.SourceDB,
+-		MissingCount: 0,
+-		StaleCount:   pruned, // số ghost đã soft-delete
+-		StaleIDs:     orphJSON,
+-		CheckType:    "orphan_prune",
+-		Status:       statusStr,
+-		Tier:         2,
+-		DurationMs:   &duration,
+-		CheckedAt:    time.Now().UTC(),
+-	}
+-	rc.stampA(report, entry)
+-	metrics.ReconDrift.WithLabelValues(entry.TargetTable, "prune").Set(float64(len(orphans)))
+-	rc.logger.Info("orphan_prune v2",
+-		zap.String("table", entry.TargetTable),
+-		zap.Int("src_ids_streamed", srcCount),
+-		zap.Int("shadow_ids", len(dstIDs)),
+-		zap.Int("orphans", len(orphans)),
+-		zap.Int("pruned", pruned))
+-	return report
+-}
+-
+-// PruneAllOrphans chạy RunOrphanPrune cho mọi active table (mirror CheckAll).
+-func (rc *ReconCore) PruneAllOrphans(ctx context.Context) []*model.ReconciliationReport {
+-	entries := rc.listActiveTableConfigs(ctx)
+-	reports := make([]*model.ReconciliationReport, 0, len(entries))
+-	for _, e := range entries {
+-		reports = append(reports, rc.RunOrphanPrune(ctx, e))
+-	}
+-	return reports
+-}
+-
+-// ============================================================
+-// Tier 3 — 256-bucket whole-table hash with budget + off-peak
+-// ============================================================
+-
+-// RunTier3 computes the 256-bucket fingerprint on both sides and diffs
+-// them. Budget: skip historical (full scan) when estimated rows exceed
+-// Tier3MaxDocsPerRun; in that case fall back to the 7-day window scan
+-// (delegates to RunTier2 for the drifted buckets). Respects off-peak
+-// window [Tier3OffPeakStart, Tier3OffPeakEnd] unless the caller passes
+-// force=true via the Force field in the handle.
+-func (rc *ReconCore) RunTier3(ctx context.Context, entry model.TableRegistry) *model.ReconciliationReport {
+-	acquired, unlock := rc.withTableLock(ctx, entry.TargetTable)
+-	defer unlock()
+-	if !acquired {
+-		return rc.errorReport(entry, "bucket_hash", 3, fmt.Errorf("previous run ongoing"))
+-	}
+-
+-	handle, err := rc.beginRun(ctx, entry.TargetTable, 3)
+-	if err != nil {
+-		return rc.errorReport(entry, "bucket_hash", 3, err)
+-	}
+-	status := "success"
+-	defer func() { rc.finishRun(ctx, handle, status, "") }()
+-
+-	if !rc.isOffPeak(time.Now().UTC()) {
+-		rc.logger.Info("tier3 skipped — outside off-peak window",
+-			zap.String("table", entry.TargetTable),
+-			zap.Int("off_peak_start", rc.cfg.Tier3OffPeakStart),
+-			zap.Int("off_peak_end", rc.cfg.Tier3OffPeakEnd),
+-		)
+-		status = "cancelled"
+-		return rc.errorReport(entry, "bucket_hash", 3, fmt.Errorf("outside off-peak window"))
+-	}
+-
+-	// Budget check: peek at dest count to estimate cost.
+-	destCount, err := rc.destAgent.CountRows(ctx, entry.QualifiedTarget(), entry.PrimaryKeyField)
+-	if err != nil {
+-		status = "failed"
+-		return rc.errorReport(entry, "bucket_hash", 3, err)
+-	}
+-	if destCount > rc.cfg.Tier3MaxDocsPerRun {
+-		rc.logger.Warn("tier3 budget exceeded — falling back to 7-day window scan",
+-			zap.String("table", entry.TargetTable),
+-			zap.Int64("dest_count", destCount),
+-			zap.Int64("budget", rc.cfg.Tier3MaxDocsPerRun),
+-		)
+-		// Degrade gracefully into tier 2 for recent windows — this keeps
+-		// the budget while still catching fresh drift.
+-		handle.mismatches = 0
+-		return rc.RunTier2(ctx, entry)
+-	}
+-
+-	srcBuckets, err := rc.sourceAgent.BucketHash(ctx, entry.SourceURL, entry.SourceDB, entry.SourceTable, tsField(entry))
+-	if err != nil {
+-		status = "failed"
+-		return rc.errorReport(entry, "bucket_hash", 3, err)
+-	}
+-	dstBuckets, err := rc.destAgent.BucketHash(ctx, entry.QualifiedTarget(), entry.PrimaryKeyField)
+-	if err != nil {
+-		status = "failed"
+-		return rc.errorReport(entry, "bucket_hash", 3, err)
+-	}
+-	handle.docsScanned = srcBuckets.Total + dstBuckets.Total
+-
+-	var driftedBuckets []int
+-	for i := 0; i < 256; i++ {
+-		if srcBuckets.Buckets[i] != dstBuckets.Buckets[i] {
+-			driftedBuckets = append(driftedBuckets, i)
+-		}
+-	}
+-	handle.mismatches = len(driftedBuckets)
+-
+-	statusStr := "ok"
+-	if len(driftedBuckets) > 0 {
+-		statusStr = "drift"
+-	}
+-
+-	payload := map[string]interface{}{
+-		"drifted_buckets": driftedBuckets,
+-		"src_total":       srcBuckets.Total,
+-		"dst_total":       dstBuckets.Total,
+-	}
+-	staleJSON, _ := json.Marshal(payload)
+-	duration := int(time.Since(handle.started).Milliseconds())
+-	srcBucketTotal := srcBuckets.Total
+-	report := &model.ReconciliationReport{
+-		TargetTable: entry.TargetTable,
+-		SourceDB:    entry.SourceDB,
+-		SourceCount: &srcBucketTotal,
+-		DestCount:   dstBuckets.Total,
+-		Diff:        srcBuckets.Total - dstBuckets.Total,
+-		StaleCount:  len(driftedBuckets),
+-		StaleIDs:    staleJSON,
+-		CheckType:   "bucket_hash",
+-		Status:      statusStr,
+-		Tier:        3,
+-		DurationMs:  &duration,
+-		CheckedAt:   time.Now().UTC(),
+-	}
+-	rc.stampA(report, entry)
+-
+-	metrics.ReconDrift.WithLabelValues(entry.TargetTable, "3").Set(float64(len(driftedBuckets)))
+-
+-	rc.logger.Info("tier3 bucket_hash",
+-		zap.String("table", entry.TargetTable),
+-		zap.Int("drifted_buckets", len(driftedBuckets)),
+-		zap.Int64("src_total", srcBuckets.Total),
+-		zap.Int64("dst_total", dstBuckets.Total),
+-	)
+-	return report
+-}
+ 
+-// IsOffPeakForTest exposes the cross-midnight window check via a synthesized
+-// ReconCore with only the off-peak config populated. External-package tests use
+-// this; production paths keep calling the unexported (rc).isOffPeak.
+ func IsOffPeakForTest(start, end int, now time.Time) bool {
+ 	rc := &ReconCore{cfg: ReconCoreConfig{Tier3OffPeakStart: start, Tier3OffPeakEnd: end}}
+ 	return rc.isOffPeak(now)
+@@ -1168,7 +393,7 @@
+ // staggered spacing, and runs Tier 1 per table. Returns the list of
+ // produced reports. Leader election is applied at the top level: if
+ // another worker holds the leader lock, this call returns nil.
+-func (rc *ReconCore) CheckAll(ctx context.Context) []*model.ReconciliationReport {
++func (rc *ReconCore) CheckAll(ctx context.Context) []*system.ReconciliationReport {
+ 	isLeader, release := rc.AcquireLeader(ctx)
+ 	defer release()
+ 	if !isLeader {
+@@ -1184,7 +409,7 @@
+ 
+ 	runID := uuid.NewString() // Migration 085: gom mọi report của 1 lần CheckAll thành 1 "phiên"
+ 	var (
+-		reports []*model.ReconciliationReport
++		reports []*system.ReconciliationReport
+ 		mu      sync.Mutex
+ 		wg      sync.WaitGroup
+ 	)
+@@ -1258,7 +483,7 @@
+ 			case "error":
+ 				updates["sync_status"] = "source_error"
+ 			}
+-			rc.db.Model(&model.TableRegistry{}).Where("target_table = ?", report.TargetTable).Updates(updates)
++			rc.db.Model(&source.TableRegistry{}).Where("target_table = ?", report.TargetTable).Updates(updates)
+ 
+ 			mu.Lock()
+ 			reports = append(reports, report)
+@@ -1278,7 +503,7 @@
+ 	return reports
+ }
+ 
+-func (rc *ReconCore) listActiveTableConfigs(ctx context.Context) []model.TableRegistry {
++func (rc *ReconCore) listActiveTableConfigs(ctx context.Context) []source.TableRegistry {
+ 	if rc.metadata != nil {
+ 		if items := rc.metadata.ListTableConfigs(); len(items) > 0 {
+ 			return items
+@@ -1339,13 +564,13 @@
+ // 085) rồi persist. Tập trung 1 chỗ để mọi recon write site nhất quán: target_table
+ // (bare) KHÔNG unique (trùng across-schema + segment A ghi tên shadow / B ghi tên
+ // master) → đọc per-pipeline phải theo (shadow_schema, shadow_table).
+-func (rc *ReconCore) stampA(report *model.ReconciliationReport, entry model.TableRegistry) *model.ReconciliationReport {
++func (rc *ReconCore) stampA(report *system.ReconciliationReport, entry source.TableRegistry) *system.ReconciliationReport {
+ 	report.ShadowSchema, report.ShadowTable, report.RunID = entry.ShadowSchema, entry.TargetTable, entry.RunID
+ 	rc.db.Create(report)
+ 	return report
+ }
+ 
+-func (rc *ReconCore) stampB(report *model.ReconciliationReport, ref MasterBindingRef) *model.ReconciliationReport {
++func (rc *ReconCore) stampB(report *system.ReconciliationReport, ref MasterBindingRef) *system.ReconciliationReport {
+ 	report.ShadowSchema, report.ShadowTable, report.RunID = ref.ShadowSchema, ref.ShadowTable, ref.RunID
+ 	rc.db.Create(report)
+ 	return report
+@@ -1378,223 +603,7 @@
+ // bằng nhau nhưng XOR lệch = stale (master chưa đuổi kịp ts) — đếm window,
+ // đích danh field để L3-B (P4).
+ // deep=true → chạy thêm L3-B row/field-diff trên các ID lệch (P4).
+-func (rc *ReconCore) RunSegmentB(ctx context.Context, ref MasterBindingRef, deep bool) *model.ReconciliationReport {
+-	if rc.masterAgent == nil {
+-		rc.logger.Error("recon segment B: masterAgent not wired — skip",
+-			zap.String("table", ref.runName()),
+-			zap.String("fix_hint", "worker_server phải SetMasterAgent(NewReconDestAgentWithConfig(masterDB,...))"))
+-		return nil
+-	}
+-	acquired, unlock := rc.withTableLock(ctx, "reconB_"+ref.runName())
+-	defer unlock()
+-	if !acquired {
+-		rc.logger.Info("recon segment B: lock busy, skip", zap.String("table", ref.runName()))
+-		return nil
+-	}
+-	handle, err := rc.beginRun(ctx, ref.runName(), tierSegmentB)
+-	if err != nil {
+-		rc.logger.Error("recon segment B: beginRun failed", zap.String("table", ref.runName()), zap.Error(err))
+-		return nil
+-	}
+-
+-	shadowRel, masterRel := ref.ShadowRel(), ref.MasterRel()
+-
+-	// P3: transmute lag = chênh watermark shadow↔master → recon_lag +
+-	// adaptive freeze (master đang đuổi → margin giãn, không false-positive).
+-	shMax, shErr := rc.destAgent.MaxWindowTs(ctx, shadowRel)
+-	msMax, _ := rc.masterAgent.MaxWindowTs(ctx, masterRel)
+-	transmuteLagMs := lagBetween(shMax, msMax)
+-	rc.upsertReconLag(ctx, ref.MasterTable, "transmute_lag_ms", transmuteLagMs)
+ 
+-	// Watermark: chuẩn theo shadow (upstream của B). upper kẹp now-adaptiveFreeze.
+-	upper := time.Now().Add(-rc.adaptiveFreeze(transmuteLagMs))
+-	if shErr == nil && !shMax.IsZero() && shMax.Before(upper) {
+-		// +1ms: window WHERE ts < upper là EXCLUSIVE — nếu upper = shadowMax
+-		// thì ROW MỚI NHẤT vĩnh viễn ngoài window khi bảng idle → missing
+-		// row cuối không bao giờ bị bắt (đã xảy ra thật: b3 465/464 nhưng
+-		// window 11=11 "ok"). Row max đã qua freeze nên +1ms an toàn.
+-		upper = shMax.Add(time.Millisecond)
+-	}
+-	lower := upper.Add(-rc.cfg.WindowLookback)
+-
+-	// ===== V5 TIER-0: totals + max-ts (đều O(1)/cheap, đã đo ở trên) =====
+-	shadowFull, errSF := rc.destAgent.CountRows(ctx, shadowRel, segBPKColumn)
+-	masterFull, errMF := rc.masterAgent.CountRows(ctx, masterRel, segBPKColumn)
+-	if errSF == nil && errMF == nil && shadowFull == masterFull && transmuteLagMs == 0 {
+-		// KHỚP cả count lẫn watermark → DỪNG. Không bucket, không drill-down.
+-		duration := int(time.Since(handle.started).Milliseconds())
+-		report := &model.ReconciliationReport{
+-			TargetTable: ref.MasterTable, SourceDB: shadowRel,
+-			SourceCount: &shadowFull, DestCount: masterFull, Diff: 0,
+-			TotalSourceCount: &shadowFull, TotalDestCount: &masterFull,
+-			CheckType: "count_total", Status: "ok", Tier: tierSegmentB,
+-			Segment: segmentShadowMaster, DurationMs: &duration, CheckedAt: time.Now().UTC(),
+-		}
+-		rc.stampB(report, ref)
+-		rc.finishRun(ctx, handle, "success", "")
+-		metrics.ReconDrift.WithLabelValues(ref.MasterTable, "4").Set(0)
+-		rc.logger.Info("segment B tier0 ok", zap.String("master", masterRel), zap.Int64("rows", masterFull))
+-		return report
+-	}
+-
+-	// ===== V5 TIER-1 (CHỈ KHI lệch): bucket count+xor — 1 query/phía =====
+-	var (
+-		totalShadow, totalMaster int64
+-		missingFromMaster        []string
+-		orphanInMaster           []string
+-		staleIDs                 []string // P4: đích danh row stale (id trùng, ts lệch)
+-		windowErrs               int
+-	)
+-	shBuckets, errS := rc.destAgent.BucketCounts(ctx, shadowRel, segBPKColumn, lower, upper)
+-	msBuckets, errM := rc.masterAgent.BucketCounts(ctx, masterRel, segBPKColumn, lower, upper)
+-	if errS != nil || errM != nil {
+-		rc.logger.Warn("recon segment B: bucket scan error",
+-			zap.String("table", ref.runName()), zap.Error(errS), zap.NamedError("master_err", errM))
+-		windowErrs++
+-	}
+-	bucketKeys := make(map[int64]struct{}, len(shBuckets)+len(msBuckets))
+-	for k := range shBuckets {
+-		bucketKeys[k] = struct{}{}
+-	}
+-	for k := range msBuckets {
+-		bucketKeys[k] = struct{}{}
+-	}
+-	driftedBuckets := 0
+-	for k := range bucketKeys {
+-		sh, ms := shBuckets[k], msBuckets[k]
+-		totalShadow += sh.Count
+-		totalMaster += ms.Count
+-		if sh.Count == ms.Count && sh.Xor == ms.Xor {
+-			continue // bucket khớp
+-		}
+-		driftedBuckets++
+-		// Drill-down đích danh (id, ts) CHỈ bucket lệch (cap chống OOM).
+-		bLo := time.UnixMilli(k).UTC()
+-		bHi := bLo.Add(time.Hour)
+-		shIDTs, errS := rc.destAgent.ListIDTsInWindow(ctx, shadowRel, segBPKColumn, bLo, bHi)
+-		msIDTs, errM := rc.masterAgent.ListIDTsInWindow(ctx, masterRel, segBPKColumn, bLo, bHi)
+-		if errS != nil || errM != nil {
+-			windowErrs++
+-			continue
+-		}
+-		missB, orphB, staleB := diffIDTs(shIDTs, msIDTs)
+-		if len(missingFromMaster) < segBDiffIDCap {
+-			missingFromMaster = append(missingFromMaster, missB...)
+-		}
+-		if len(orphanInMaster) < segBDiffIDCap {
+-			orphanInMaster = append(orphanInMaster, orphB...)
+-		}
+-		if len(staleIDs) < segBDiffIDCap {
+-			staleIDs = append(staleIDs, staleB...)
+-		}
+-	}
+-
+-	handle.windowsCount = len(bucketKeys)
+-	handle.mismatches = len(missingFromMaster) + len(orphanInMaster) + len(staleIDs)
+-
+-	statusStr := "ok"
+-	if handle.mismatches > 0 {
+-		statusStr = "drift"
+-	}
+-	if windowErrs > 0 && handle.mismatches == 0 {
+-		statusStr = "error" // không khẳng định "ok" khi có window không scan được
+-	}
+-
+-	missJSON, _ := json.Marshal(missingFromMaster)
+-	orphJSON, _ := json.Marshal(orphanInMaster)
+-
+-	// P4 L3-B: deep row/field-diff trên ID lệch (missing + stale, cap) —
+-	// re-derive expected từ shadow._raw_data qua CHÍNH mapping rules approved.
+-	var fieldDiffsJSON json.RawMessage
+-	if deep {
+-		deepIDs := append(append([]string{}, missingFromMaster...), staleIDs...)
+-		if diffs := rc.RunRowDiffB(ctx, ref, deepIDs); len(diffs) > 0 {
+-			fieldDiffsJSON, _ = json.Marshal(diffs)
+-		}
+-	}
+-
+-	// Migration 084 (dashboard): TỔNG record thật — V5: ĐÃ đo ở Tier-0
+-	// (shadowFull/masterFull), không đếm lại. Lỗi đếm → NULL.
+-	var totalShadowFull, totalMasterFull *int64
+-	if errSF == nil {
+-		totalShadowFull = &shadowFull
+-	}
+-	if errMF == nil {
+-		totalMasterFull = &masterFull
+-	}
+-
+-	duration := int(time.Since(handle.started).Milliseconds())
+-	report := &model.ReconciliationReport{
+-		TargetTable:      ref.MasterTable,
+-		SourceDB:         shadowRel, // phía "nguồn" của segment B là shadow relation
+-		SourceCount:      &totalShadow,
+-		TotalSourceCount: totalShadowFull,
+-		TotalDestCount:   totalMasterFull,
+-		DestCount:        totalMaster,
+-		Diff:             totalShadow - totalMaster,
+-		MissingCount:     len(missingFromMaster),
+-		MissingIDs:       missJSON,
+-		StaleCount:       len(staleIDs),
+-		StaleIDs:         orphJSON, // reuse cột: orphan-in-master payload (đã làm vậy ở Tier1 với drifted windows)
+-		FieldDiffs:       fieldDiffsJSON,
+-		CheckType:        "segment_b_window",
+-		Status:           statusStr,
+-		Tier:             tierSegmentB,
+-		Segment:          segmentShadowMaster,
+-		DurationMs:       &duration,
+-		CheckedAt:        time.Now().UTC(),
+-	}
+-	rc.stampB(report, ref)
+-	// P4: alert ngưỡng vào cdc_alerts (FE banner sẵn có đọc /api/alerts/active).
+-	rc.alertOnReport(ctx, segmentShadowMaster, ref.MasterTable, statusStr, len(missingFromMaster), report.Diff)
+-	metrics.ReconDrift.WithLabelValues(ref.MasterTable, "4").Set(float64(handle.mismatches))
+-
+-	finishStatus := "success"
+-	errMsg := ""
+-	if windowErrs > 0 {
+-		finishStatus = "failed"
+-		errMsg = fmt.Sprintf("%d scan errors over %d buckets", windowErrs, len(bucketKeys))
+-	}
+-	rc.finishRun(ctx, handle, finishStatus, errMsg)
+-
+-	rc.logger.Info("segment B shadow↔master",
+-		zap.String("shadow", shadowRel), zap.String("master", masterRel),
+-		zap.Int("buckets", len(bucketKeys)), zap.Int("drifted_buckets", driftedBuckets),
+-		zap.Int("scan_errs", windowErrs),
+-		zap.Int64("shadow_rows", totalShadow), zap.Int64("master_rows", totalMaster),
+-		zap.Int("missing_from_master", len(missingFromMaster)),
+-		zap.Int("orphan_in_master", len(orphanInMaster)),
+-		zap.Int("stale_ids", len(staleIDs)),
+-		zap.Bool("deep", deep),
+-	)
+-	return report
+-}
+-
+-// diffIDTs — so 2 tập (id, ts): missing (shadow có master thiếu), orphan
+-// (master thừa), stale (id trùng nhưng ts lệch — master giữ bản khác).
+-func diffIDTs(shadow, master []IDTs) (missing, orphan, stale []string) {
+-	ms := make(map[string]int64, len(master))
+-	for _, it := range master {
+-		ms[it.ID] = it.Ts
+-	}
+-	sh := make(map[string]int64, len(shadow))
+-	for _, it := range shadow {
+-		sh[it.ID] = it.Ts
+-		if mts, ok := ms[it.ID]; !ok {
+-			missing = append(missing, it.ID)
+-		} else if mts != it.Ts {
+-			stale = append(stale, it.ID)
+-		}
+-	}
+-	for _, it := range master {
+-		if _, ok := sh[it.ID]; !ok {
+-			orphan = append(orphan, it.ID)
+-		}
+-	}
+-	return missing, orphan, stale
+-}
+-
+-// SetPlaneDBs — raw handles cho L3-B row-diff (fetch _raw_data + master row).
+ func (rc *ReconCore) SetPlaneDBs(shadowDB, masterDB *gorm.DB) {
+ 	rc.shadowPlane = shadowDB
+ 	rc.masterPlane = masterDB
+@@ -1614,193 +623,14 @@
+ // RunRowDiffB — L3-B: re-derive expected value từ shadow._raw_data qua CHÍNH
+ // mapping rules approved (gjson + ApplyTransform — không nhân đôi logic
+ // transmute) rồi so từng cột với master row. Trả các ô lệch đích danh.
+-func (rc *ReconCore) RunRowDiffB(ctx context.Context, ref MasterBindingRef, ids []string) []FieldDiff {
+-	if rc.shadowPlane == nil || rc.masterPlane == nil || len(ids) == 0 {
+-		return nil
+-	}
+-	if len(ids) > rowDiffMaxIDs {
+-		rc.logger.Warn("row-diff B: ids capped", zap.Int("total", len(ids)), zap.Int("cap", rowDiffMaxIDs))
+-		ids = ids[:rowDiffMaxIDs]
+-	}
+-
+-	// Rules approved của binding — mirror query MasterDDLGenerator (077 self-contained).
+-	type ruleRow struct {
+-		SourceField  string  `gorm:"column:source_field"`
+-		SourcePath   *string `gorm:"column:source_path"`
+-		TargetColumn string  `gorm:"column:target_column"`
+-		TransformFn  *string `gorm:"column:transform_fn"`
+-	}
+-	var rules []ruleRow
+-	if err := rc.db.WithContext(ctx).Raw(`
+-		SELECT COALESCE(m.source_field, v2.source_field) AS source_field,
+-		       COALESCE(m.source_path, v2.source_path)   AS source_path,
+-		       m.target_column,
+-		       v2.transform_fn
+-		  FROM cdc_system.mapping_rule_master m
+-		  LEFT JOIN cdc_system.mapping_rule_v2 v2 ON v2.id = m.mapping_v2_id
+-		 WHERE m.master_binding_id = ? AND m.status = 'approved' AND m.is_active = true`,
+-		ref.ID).Scan(&rules).Error; err != nil || len(rules) == 0 {
+-		return nil
+-	}
+-
+-	shadowRel := fmt.Sprintf("%q.%q", ref.ShadowSchema, ref.ShadowTable)
+-	masterRel := fmt.Sprintf("%q.%q", ref.MasterSchema, ref.MasterTable)
+-
+-	// Fetch 2 phía theo _gpay_id (1 round-trip mỗi phía).
+-	type shadowRow struct {
+-		GpayID  string `gorm:"column:_gpay_id"`
+-		RawData []byte `gorm:"column:_raw_data"`
+-	}
+-	var shRows []shadowRow
+-	if err := rc.shadowPlane.WithContext(ctx).Raw(fmt.Sprintf(
+-		`SELECT _gpay_id::text AS _gpay_id, _raw_data FROM %s WHERE _gpay_id IN (?)`, shadowRel),
+-		ids).Scan(&shRows).Error; err != nil {
+-		rc.logger.Warn("row-diff B: shadow fetch failed", zap.Error(err))
+-		return nil
+-	}
+-	var msRows []map[string]any
+-	if err := rc.masterPlane.WithContext(ctx).Raw(fmt.Sprintf(
+-		`SELECT * FROM %s WHERE _gpay_id IN (?)`, masterRel), ids).Scan(&msRows).Error; err != nil {
+-		rc.logger.Warn("row-diff B: master fetch failed", zap.Error(err))
+-		return nil
+-	}
+-	masterByID := make(map[string]map[string]any, len(msRows))
+-	for _, r := range msRows {
+-		masterByID[fmt.Sprint(r["_gpay_id"])] = r
+-	}
+ 
+-	var diffs []FieldDiff
+-	for _, sr := range shRows {
+-		mrow, inMaster := masterByID[sr.GpayID]
+-		for _, rule := range rules {
+-			path := rule.SourceField
+-			if rule.SourcePath != nil && *rule.SourcePath != "" {
+-				path = *rule.SourcePath
+-			}
+-			val := gjson.GetBytes(sr.RawData, path)
+-			expected := any(nil)
+-			if val.Exists() {
+-				expected = val.Value()
+-			}
+-			if rule.TransformFn != nil && *rule.TransformFn != "" && IsTransformWhitelisted(*rule.TransformFn) {
+-				if tv, err := ApplyTransform(*rule.TransformFn, expected); err == nil {
+-					expected = tv
+-				}
+-			}
+-			expStr := normalizeDiffVal(expected)
+-			actStr := "<ROW MISSING>"
+-			if inMaster {
+-				actStr = normalizeDiffVal(mrow[rule.TargetColumn])
+-			}
+-			if expStr != actStr {
+-				diffs = append(diffs, FieldDiff{GpayID: sr.GpayID, Column: rule.TargetColumn, Expected: expStr, Actual: actStr})
+-				if len(diffs) >= rowDiffMaxEntries {
+-					rc.logger.Warn("row-diff B: entries capped", zap.Int("cap", rowDiffMaxEntries))
+-					return diffs
+-				}
+-			}
+-		}
+-	}
+-	return diffs
+-}
+-
+-// normalizeDiffVal — chuỗi hoá loose để so 2 hệ kiểu (PG trả time.Time/decimal,
+-// gjson trả float64/string): trim + fmt.Sprint; nil/empty → "<NULL>".
+-func normalizeDiffVal(v any) string {
+-	if v == nil {
+-		return "<NULL>"
+-	}
+-	s := strings.TrimSpace(fmt.Sprint(v))
+-	if s == "" {
+-		return "<NULL>"
+-	}
+-	return s
+-}
+-
+-// RunSegmentBFor — resolve master binding theo master_table rồi chạy Segment B.
+-// Trả nil khi không tìm thấy binding hợp lệ (caller log/respond error).
+-func (rc *ReconCore) RunSegmentBFor(ctx context.Context, masterTable string, deep bool) *model.ReconciliationReport {
+-	for _, ref := range rc.listActiveMasterBindings(ctx) {
+-		if ref.MasterTable == masterTable || ref.MasterRel() == masterTable {
+-			return rc.RunSegmentB(ctx, ref, deep)
+-		}
+-	}
+-	rc.logger.Warn("recon segment B: master binding not found/eligible",
+-		zap.String("master_table", masterTable))
+-	return nil
+-}
+-
+-// CheckAllSegmentB — đối soát B cho mọi master binding active+approved.
+-// Leader-gated như CheckAll (A); per-binding advisory lock vẫn serialize.
+-func (rc *ReconCore) CheckAllSegmentB(ctx context.Context) []*model.ReconciliationReport {
+-	isLeader, release := rc.AcquireLeader(ctx)
+-	defer release()
+-	if !isLeader {
+-		rc.logger.Info("recon CheckAllSegmentB — not leader, skipping")
+-		return nil
+-	}
+-	refs := rc.listActiveMasterBindings(ctx)
+-	if len(refs) == 0 {
+-		rc.logger.Warn("recon CheckAllSegmentB: 0 active master bindings — nothing to reconcile",
+-			zap.String("fix_hint", "cần master_binding is_active=true + schema_status='approved'"))
+-		return nil
+-	}
+-	runID := uuid.NewString() // Migration 085: 1 phiên CheckAllSegmentB
+-	var reports []*model.ReconciliationReport
+-	for _, ref := range refs {
+-		ref.RunID = runID
+-		if r := rc.RunSegmentB(ctx, ref, false); r != nil { // CheckAll: deep=false (row-diff theo yêu cầu per-table)
+-			reports = append(reports, r)
+-		}
+-	}
+-	if len(reports) == 0 {
+-		rc.logger.Warn("recon CheckAllSegmentB: 0 bindings checked — toàn bộ bị skip",
+-			zap.Int("bindings", len(refs)))
+-	}
+-	return reports
+-}
+-
+-// ============================================================
+-// Heal — REMOVED in v3 root-cause fix (2026-04-17)
+-// ============================================================
+-//
+-// The legacy `ReconCore.Heal(ctx, entry, missingIDs)` walked `missingIDs`
+-// one row at a time, issued a Mongo FindOne + PG upsert per record AND
+-// wrote one `cdc_activity_log` row per record. On a corrupted Tier 2
+-// report that listed e.g. 1,713 rows the audit table exploded by 1,713
+-// rows per heal trigger, which made the CMS audit view unreadable.
+-//
+-// The v3 `ReconHealer.HealWindow` pathway supersedes it entirely:
+-//   - Audit batching (run_started + run_completed = 2 rows, regardless
+-//     of record count; plus at most a sample of per-record rows when
+-//     the `AuditSampleRate` is set).
+-//   - Batched `$in` Mongo reads instead of FindOne loops.
+-//   - OCC guard on `_source_ts` + per-table sensitive-field masking.
+-//   - Optional Debezium incremental snapshot signal (Phase A).
+-//
+-// Callsites audited on 2026-04-17: only `recon_handler.HandleReconHeal`
+-// referenced `rc.Heal`, and that fallback was deleted in the same
+-// commit. `rc.mongoClient` remains on the struct for future uses (e.g.
+-// source sampling) and to preserve the NewReconCore constructor
+-// signature.
+-
+-// ============================================================
+-// Helpers
+-// ============================================================
+-
+-// errorReport writes a `status='error'` row with structured ErrorCode
+-// classification (Migration 017 / ADR v4 §2.3). SourceCount is left NULL
+-// so FE can distinguish "query failed" from "query OK, 0 rows". Legacy
+-// error rows created before migration 017 will have NULL error_code
+-// and continue to render as generic "Lỗi nguồn" — intentional, no
+-// backfill needed.
+-func (rc *ReconCore) errorReport(entry model.TableRegistry, checkType string, tier int, err error) *model.ReconciliationReport {
+-	errMsg := SanitizeFreeformText(err.Error(), 2000)
++func (rc *ReconCore) errorReport(entry source.TableRegistry, checkType string, tier int, err error) *system.ReconciliationReport {
++	errMsg := governance.SanitizeFreeformText(err.Error(), 2000)
+ 	code := classifyMongoError(err)
+ 	if code == "" {
+ 		code = ErrCodeUnknown
+ 	}
+-	report := &model.ReconciliationReport{
++	report := &system.ReconciliationReport{
+ 		TargetTable:  entry.TargetTable,
+ 		SourceDB:     entry.SourceDB,
+ 		CheckType:    checkType,
