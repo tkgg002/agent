@@ -1,11 +1,13 @@
 # Active Plans Registry
 
 > **Maintained by**: Brain (Antigravity)
-> **Last Updated**: 2026-06-19
+> **Last Updated**: 2026-06-23
 > **Purpose**: Registry để Brain biết workspace nào đang active → load đúng context khi bắt đầu phiên mới. KHÔNG phải cơ chế agent communication.
 
 | Workspace | Project | Status | Last Active |
 |-----------|---------|--------|-------------|
+| bug-data-integrity-missing-tables-2026-06-29 | Tìm và sửa lỗi thiếu table shadow/master trong Data Integrity | ✅ Done | 2026-06-29 |
+| bug-frontend-safe-modification-2026-06-29 | Sửa đổi an toàn Frontend (chống crash & date format) | ✅ Done | 2026-06-29 |
 | upgrade-core-system | Upgrade Core Brain/Muscle System | ✅ Done | 2026-02-25 |
 | feature-refactor-2026 | GooPay Core Refactor 2026 | ✅ Done — sẵn sàng tiếp tục | 2026-02-25 |
 | optimize-brain-muscle-models | Tối ưu hóa model cho Brain/Muscle | ✅ Done (V2 Quota & Multi-Muscle) | 2026-02-25 |
@@ -73,5 +75,33 @@
 | feat-decouple-handlers-db-2026-06-22 | centralized-data-service | ✅ Done | 2026-06-22 |
 | feat-hermes-learning-loop-2026-06-22 | /agent | ✅ Done | 2026-06-22 |
 | TracesHardening | data-hub | ✅ Done | 2026-06-23 |
+| bug-batch-transform-v1-abandon-2026-06-23 | data-hub | ✅ Done | 2026-06-23 |
+| bug-cdc-pipeline-issues-2026-06-23 | data-hub | ⏸ Paused | 2026-06-23 |
+| feat-reconcile-pipeline-validation-2026-06-23 | data-hub | ✅ Done | 2026-06-23 |
+| bug-metadata-cascade-masking-scan-fix-2026-06-23 | data-hub | ✅ Done | 2026-06-23 |
+| bug-exclude-noisy-traces-2026-06-23 | data-hub | ✅ Done | 2026-06-23 |
+| bug-sync-mapping-rules-500-2026-06-23 | data-hub | ✅ Done | 2026-06-23 |
+| bug-delete-master-mapping-rules-2026-06-23 | data-hub | ✅ Done | 2026-06-23 |
+| feat-scheduler-tracing-2026-06-23 | data-hub | ✅ Done | 2026-06-23 |
+| bug-missing-debezium-pg-plugin-2026-06-23 | data-hub | ✅ Done | 2026-06-23 |
+| feature-postgresql-schema-support | data-hub | ✅ Done | 2026-06-23 |
+| bug-pg-scan-mapping-flows-2026-06-23 | data-hub | ✅ Done | 2026-06-23 |
+| bug-snapshot-v2-postgresql-support-2026-06-23 | data-hub | ✅ Done | 2026-06-23 |
+| bug-pg-scan-fields-connection-failed-2026-06-23 | data-hub | ✅ Done | 2026-06-23 |
+| bug-worker-crash-on-start-2026-06-24 | data-hub | ✅ Done | 2026-06-24 |
+| bug-snapshot-v2-postgresql-zero-records-2026-06-24 | data-hub | ✅ Done | 2026-06-24 |
+| query-db-connection-registry | data-hub | ✅ Done (Direct Scratch Run) | 2026-06-24 |
+| bug-mapping-rules-and-security-2026-06-24 | data-hub | ✅ Done | 2026-06-24 |
+| bug-scan-array-flatten-dynamic-fields-2026-06-24 | data-hub | ✅ Done | 2026-06-24 |
+| feat-recon-hardening-2026-06-24 | centralized-data-service | 🟡 Active (Planning) | 2026-06-24 |
+| bug-debezium-delete-not-working-2026-06-25 | centralized-data-service | ✅ Done | 2026-06-25 |
+| bug-duplicate-master-table-different-schema-2026-06-25 | centralized-data-service | ✅ Done | 2026-06-25 |
+| bug-export-jobs-recon-drift-2026-06-25 | centralized-data-service | ⏸ Paused | 2026-06-25 |
+| bug-snapshot-limit-5000-2026-06-26 | centralized-data-service | ✅ Done | 2026-06-26 |
+| bug-recon-smoke-structural-drift-2026-06-26 | centralized-data-service | ✅ Done | 2026-06-26 |
+| bug-recon-smoke-safety-2026-06-26 | centralized-data-service | ✅ Done | 2026-06-26 |
+| feat-recon-smoke-integration-phases-5-6-7-2026-06-26 | data-hub | ✅ Done | 2026-06-29 |
+| feat-recon-runtime-check-2026-06-29 | data-hub | ✅ Done | 2026-06-29 |
+| audit-sinkworker-update-2026-06-29 | centralized-data-service | ✅ Done | 2026-06-29 |
 
 

@@ -1344,7 +1344,17 @@ _Bài học về tiến hoá schema: thứ tự DDL/migration, search_path, drif
 
 ## 4. CDC / Data Pipeline — Kafka, Debezium, Snapshot, Connection-Registry, Masking
 
-_Bài học miền CDC/ETL: Kafka/Debezium, snapshot, connection-registry, masking, DLQ, reconcile, shadow tables._ — **36 pattern**
+_Bài học miền CDC/ETL: Kafka/Debezium, snapshot, connection-registry, masking, DLQ, reconcile, shadow tables._ — **39 pattern**
+
+### [2026-06-24] Ưu tiên giải mã SecretRef trước buildDSNFromFields; + Đóng gói phẳng row_to_json cho Postgres Snapshot; + Fallback default_schema & search_path
+- **Global Pattern (A - DSN Resolution)**: `[Registry service A resolve connection string từ connection entry C chứa DSN thô/encrypted DSN ở SecretRef và Host/Port ở fields]` → `[Resolver nạp DSN thô/Host/Port bán phần qua buildDSNFromFields TRƯỚC khi giải mã SecretRef]` → `[DSN sinh ra bị thiếu credentials (username/password), driver DB fallback về OS user hiện tại và báo SASL Auth / password authentication failed]`. **Đúng**: Resolver phải ưu tiên kiểm tra và giải mã credentials (`SecretRef` qua `DecryptAES` hoặc pointer `tryEnvPointer`) trước, nếu có giá trị đầy đủ thì sử dụng ngay; chỉ fallback về `buildDSNFromFields` (chỉ chứa host/port) khi không có thông tin bảo mật nào khác.
+- **Global Pattern (B - Heterogeneous Snapshot)**: `[Runner R thực hiện snapshot dữ liệu từ DB nguồn dạng heterogeneous (vd PostgreSQL) sang schema-less shadow table (Postgres/JSONB)]` → `[R tự chế logic quét kiểu dữ liệu nguyên bản phức tạp (scan OID, UUID, numeric) và check primary key type ở code-level để phân trang]` → `[Gây ra lỗi operator does not exist (bigint > text) và sập worker do mismatch type]`. **Đúng**: Tái sử dụng tối đa cơ chế schema-less của MongoDB: Sử dụng SQL native `row_to_json(t)` ngay tại DB nguồn để đóng gói toàn bộ hàng thành một chuỗi JSON duy nhất, sau đó quét một cột string JSON duy nhất trong Go (`scanPGXRowsAsJSON`) rồi chuyển thẳng qua handler nghiệp vụ. Go code tự động parse string `lastSeen` sang số (`int64`/`float64`) trước khi query phân trang mà không cần check type phức tạp ở registry.
+- **Global Pattern (C - Default Schema Fallback)**: `[Runner R chạy snapshot/sync cho heterogeneous DB (vd PostgreSQL) hardcode default schema S (vd "public") khi metadata của object bị trống]` → `[Object ở schema khác báo lỗi đối tượng/bảng không tồn tại hoặc lỗi kết nối SASL Auth do trỏ sai schema]`. **Đúng**: Luôn lấy `default_schema` từ connection registry của DB nguồn làm fallback tiếp theo (thay vì set cứng "public"), và chèn tham số `search_path` vào DSN Postgres để driver tự động trỏ đúng schema mặc định cho phiên kết nối.
+- **Trigger**: Snapshot.v2 cho PostgreSQL (`failed_sync_logs` source_object_id=52/55) báo 0 records processed, crash sập worker vì panic nil pointer `event.Data.Source` trong event_handler, và báo lỗi SASL authentication failed cho user "trainguyen".
+- **Root Cause**: (1) `resolveSourceURIFromConn` gọi `buildDSNFromFields` trước khi giải mã AES `SecretRef` → mất username/password. (2) Runner code tự quét OID gốc và so sánh string `lastSeen` thay vì sử dụng cơ chế phẳng/schema-less của Mongo. (3) Hardcode `"public"` làm schema default trong khi object 55 nằm ở schema `cdc_schema_testing`.
+- **Fix**: (1) Đảo thứ tự giải mã `SecretRef` lên đầu `resolveSourceURIFromConn`. (2) Dùng `row_to_json(t)` ở Postgres nguồn, chỉ quét 1 cột string JSON bằng `scanPGXRowsAsJSON`. (3) Fallback schema về `conn.DefaultSchema` và chèn `search_path` vào DSN builder.
+- **Tags**: #cdc #snapshot-v2 #dsn-resolution #sasl-auth #row-to-json #default-schema #search-path #heterogeneous-db
+- **Nguồn**: workspace `bug-snapshot-v2-postgresql-zero-records-2026-06-24`
 
 ### [2026-06-11] Dọn dẹp REACTIVE-only không vươn tới orphan của key không còn được tái-thực thi; + loop enumerate MỌI entity cho một role-specific resolve
 - **Global Pattern (A)**: `[Cơ chế cleanup C cho tài nguyên 'in-progress' R (vd recon_runs status='running') chỉ kích hoạt REACTIVE khi có thao tác MỚI trên CÙNG key K (vd cùng table_name đụng unique index), với ngưỡng stale theo TUỔI > T]` + `[process P restart/crash giữa chừng để lại R mồ côi; key K của R không bao giờ được tái-thực thi (vd bảng đã rename/bỏ active) HOẶC P restart nhanh hơn T]` → `[R mồ côi kẹt VĨNH VIỄN; unique index chặn key K (lỗi 23505 mỗi vòng); báo cáo downstream hiển thị NULL/0 cho K]`. **Đúng**: cleanup phải PROACTIVE 2 tầng — (1) **startup reap theo OWNERSHIP**: instance mới cancel mọi R `status='running' AND owner_id IS DISTINCT FROM current` (gồm NULL legacy) → dọn ngay orphan của thế hệ trước bất kể tuổi (an toàn khi có leader-election/single-active; xấu nhất cosmetic vì finishRun `WHERE id=?` của peer ghi đè lại); (2) **periodic reap theo TUỔI > T** (bắt hung-run của chính instance, không phụ thuộc ownership). Reactive-on-conflict giữ lại làm lớp 3.
@@ -2459,5 +2469,218 @@ _Bài học về quản trị tri thức: workspace-first, audit-log bất biế
 - **Nguồn**: workspace `feat-centralized-data-service-tests-2026-06-22`, phiên 2026-06-22T15:33
 
 
+---
+
+## [2026-06-23T09:28] CDC — Lỗi lọt logic (Dropped Logic Paths) khi chia tách God Object/Monolith sang Layered Architecture
+
+- **Pattern**: `[Agent thực hiện chia tách một file God Object cực lớn (ví dụ: command_handler.go ~3400 lines) thành các domain handlers và service adapters riêng biệt]` + `[tin tưởng quá mức vào interface compilation và IDE green tests mà không so sánh đối chiếu logic dòng-chảy (flow sequence) 1:1]` → `[Bỏ sót nhiều bước logic quan trọng vốn là side-effect ẩn hoặc state updates (ví dụ: CREATE SCHEMA, sync approved columns, update states), dẫn đến lỗi runtime hàng loạt khi deploy thực tế]`. **Đúng**: Khi refactor các handlers khổng lồ, bắt buộc phải viết checklist đối chiếu 1:1 tất cả các logic blocks trước và sau khi tách, đảm bảo mọi side-effects (như schema setup, database state transitions) đều được bảo toàn hoặc chuyển tiếp hợp lý sang các service mới.
+- **Bối cảnh (Trigger)**: Trong quá trình refactor `command_handler.go` sang `schema_ddl_handler.go` trong centralized-data-service, Agent trước đã bỏ sót logic `CREATE SCHEMA IF NOT EXISTS`, auto-discovery, sync approved columns, và update trạng thái `is_table_created/ddl_status` khiến runtime bị lỗi SQLSTATE 3F000.
+- **Root cause**: Agent tập trung vào việc tạo cấu trúc clean, tách lớp (service/handler) và chỉ đảm bảo test compile thành công, nhưng không dò soát lại các side-effect nghiệp vụ phụ trợ của handler cũ.
+- **Fix/Correct Flow**: (a) Trích xuất toàn bộ dòng chảy cũ của handler gốc thành một sơ đồ/danh sách tuần tự. (b) Đánh dấu từng block logic đã được đưa vào adapter/handler mới ở đâu. (c) Verify sự tồn tại của các schema setups và state transitions trong database.
+- **Phạm vi (≥3 dự án?)**: Có — áp dụng cho mọi dự án thực hiện tái cấu trúc monolith/refactor components lớn.
+- **Tags**: #refactoring-regression #silent-omission #god-object #state-setup #lessons
+- **Nguồn**: workspace `bug-schema-shadow-cls-testing-not-exist-2026-06-23`, phiên 2026-06-23T09:28
 
 
+---
+
+## [2026-06-23T09:56] GP-239 — Nhầm lẫn do tự chế logic hoặc bỏ qua kiểm tra database state khi upgrade/swap schema
+
+- **Pattern**: `[Agent nhận task sửa lỗi batch-transform hoặc type drift của bảng X khi nâng cấp sang phiên bản mới Y]` + `[bỏ qua việc kiểm tra registry database để xem table nào đang active và table cũ đã bị abandon chưa]` → `[Tự chế ra logic patch code vòng vo, đoán mò lỗi mà không so sánh dữ liệu thực tế giữa các bảng và các mapping rules của hai phiên bản, dẫn đến lỗi runtime kéo dài]`. **Đúng**: (1) Khi nâng cấp/swap table phiên bản cũ (V1) sang mới (V2), luôn kiểm tra ccdc_table_registry và shadow_binding để xem bảng nào đang active. (2) Cần cập nhật trạng thái `is_active` sang V2 và deactive V1 để scheduler điều phối command transform đúng. (3) So sánh cấu trúc cột và mapping rules tương ứng của cả hai phiên bản để tìm ra sự sai lệch thay vì tự ý viết thêm logic patch.
+- **Bối cảnh (Trigger)**: Bảng `export_jobs` (V1) bị lỗi transform do thiếu cột `__v` trong khi bảng `export_jobs_1` (V2) đã được tạo và chứa đầy đủ các cột nghiệp vụ nhưng chưa được active trong registry DB. Agent cố tìm cách bypass logic thay vì swap active table.
+- **Root cause**: Agent không rà soát metadata registry DB để xem luồng điều phối của worker đang kích hoạt cho bảng nào, dẫn đến việc đi tìm lỗi sai ở bảng cũ đã abandon.
+- **Fix/Correct Flow**: Update `is_active = false` cho table V1 (`export_jobs`) và `is_active = true` cho table V2 (`export_jobs_1`), đồng thời run `create-default-columns` tạo đủ cột cho V2 rồi transform.
+- **Phạm vi (≥3 dự án?)**: Có — áp dụng cho các hệ thống CDC/ETL có versioning schema hoặc registry-driven schema upgrades.
+- **Tags**: #database-migration #active-registry #schema-upgrade #ETL-pipeline #lessons
+- **Nguồn**: workspace `bug-batch-transform-v1-abandon-2026-06-23`, phiên 2026-06-23T09:56
+
+
+
+---
+
+## [2026-06-23T11:27] GP-240 — Vi phạm ranh giới monorepo và chỉ định sai service con khi research/chạy kiểm thử
+
+- **Global Pattern**: `[Agent A, cho mạch việc X tác động diện rộng trên monorepo M: tự ý định nghĩa scope và chạy test cô lập trên service con S1]` + `[bỏ sót sự phụ thuộc chéo và các thay đổi cần thiết ở service con S2 trong cùng monorepo M]` → `[dẫn đến fail kiểm thử tích hợp, làm lệch lạc kết quả audit và gây friction không cần thiết với user]`. **Đúng**: (1) Xác định chính xác ranh giới của repository/monorepo `M` bằng cách kiểm tra cấu trúc thư mục và git root; (2) Khi thay đổi chạm đến nhiều service con trong `M` (ví dụ `S1` và `S2`), lập kế hoạch sửa đổi và test đồng thời trên cả hai; (3) Luôn check registry và config để định hình đúng scope của dự án cha `M`.
+- **Bối cảnh (Trigger)**: Agent nhận task liên quan đến 6 vấn đề trong monorepo `data-hub`, nhưng tự ý chỉ định subagent research trong `centralized-data-service` trong khi một số vấn đề thực tế nằm ở `cdc-cms-service`. Đồng thời, Brain tự ý chạy tool ghi code (replace_file_content) trên file `.go` vi phạm Quy tắc 12 (Brain Code Prohibition) ở task trước.
+- **Root Cause**: Thiếu rà soát cấu trúc monorepo trước khi dispatch công việc; Momentum muốn đi nhanh bỏ qua ranh giới Brain/Muscle và Quy tắc 12.
+- **Fix/Correct Flow**: Dừng ngay lập tức, ghi nhận lesson; Phác thảo kế hoạch và giải pháp kỹ thuật cụ thể vào `09_tasks_solution_*.md` (không tự sửa code); Delegate cho Muscle (subagent) thực hiện.
+- **Phạm vi (≥3 dự án?)**: Có — mọi monorepo chứa nhiều microservices.
+- **Tags**: #process-governance #monorepo-boundaries #brain-code-prohibition #lessons #critical #rule12
+- **Nguồn**: workspace `bug-metadata-cascade-masking-scan-fix-2026-06-23`, phiên 2026-06-23T11:26
+
+---
+
+## [2026-06-23T13:20] GP-241 — Lỗi casting kiểu dữ liệu khi ghi bản mã/masked string vào các cột có kiểu dữ liệu cứng (TIMESTAMP/DATE/INTEGER) ở Master DB
+
+- **Pattern**: `[Thiết lập mã hoá/masking cho một trường nhạy cảm X dạng non-string (TIMESTAMP, DATE, INTEGER, NUMERIC, BOOLEAN)]` + `[Hệ thống áp dụng thuật toán hmac/aes_gcm biến đổi giá trị thành chuỗi bản mã text (aesv1: hoặc hash hex) rồi ghi vào cột tương ứng có kiểu dữ liệu cứng trong database master]` → `[Gây ra lỗi casting (SQLSTATE 22007/22P02) và skip toàn bộ records, làm sụt giảm hoặc sập luồng đồng bộ (degraded: scanned=N master=0 skipped=N); user phải sửa lưng: "vừa rồi là do field mã hoá, nhưng ở master nó là timestamp nên nó không ghi data vào được."]`. **Đúng**: (1) Trong các hàm biến đổi dữ liệu (như transmuter/mapper) trước khi ghi vào database đích có kiểu dữ liệu cứng: Kiểm tra xem kiểu của cột đích có phải là timestamp/date/numeric/bool hay không. (2) Nếu là các kiểu này và giá trị thô là chuỗi không hợp lệ (bản mã encrypted hoặc hash), tự động fallback về `nil` (nếu cột nullable), `DefaultValue` (nếu có), hoặc giá trị mặc định của kiểu đó (`1970-01-01` cho timestamp/date, `0` cho numeric, `false` cho bool) để bảo vệ thông tin nhạy cảm và unblock database write.
+- **Bối cảnh (Trigger)**: Cột `createdAt` có kiểu `TIMESTAMP` ở master table được cấu hình là `IsSensitiveField = true` và `mask_strategy = hmac`. Khi transmuter chạy, nó lấy chuỗi hex hash từ shadow và chèn vào master table khiến Postgres báo lỗi cast `invalid input syntax for type timestamp` và skip sạch 457 records.
+- **Root cause**: Mâu thuẫn logic hệ thống giữa chính sách bảo mật (mã hoá thông tin nhạy cảm) và ràng buộc kiểu dữ liệu cứng của database (TIMESTAMP không thể nhận chuỗi hex string). Go validation không bắt được lỗi vì kiểu spec trong rule là TIMESTAMP nhưng hàm kiểm tra Go bỏ qua check TIMESTAMP format.
+- **Fix/Correct Flow**: Thêm logic kiểm tra kiểu dữ liệu đích (`isTimestampOrDateColumnType`) và tính hợp lệ của chuỗi thời gian (`tryParseTime`) trong transmuter. Nếu là bản mã không parse được, gán fallback `nil`/`DefaultValue`/`1970-01-01` và `continue`.
+- **Phạm vi (≥3 dự án?)**: Có — mọi hệ thống ETL/CDC đồng bộ dữ liệu có áp dụng masking/masking-at-rest trên cột có kiểu dữ liệu cứng.
+- **Tags**: #database-error #type-casting #masking-regression #data-pipeline #data-type-mismatch #lessons #critical
+- **Nguồn**: workspace `bug-metadata-cascade-masking-scan-fix-2026-06-23`, phiên 2026-06-23T13:20
+
+---
+
+## [2026-06-23T13:56] GP-242 — Quên restart tiến trình đang chạy sau khi sửa code dẫn đến telemetry/logs không đồng bộ
+
+- **Pattern**: `[Sửa đổi logic tracing, logs, cấu hình hoặc nghiệp vụ X của một service đang hoạt động S]` + `[chỉ compile & test tĩnh (go build / go test) thành công rồi đánh dấu hoàn tất task mà quên restart tiến trình đang chạy nền thực tế S]` → `[dẫn đến telemetry/logs cũ vẫn tiếp tục sinh ra gây nhiễu hệ thống, khiến user phản hồi lỗi chưa được fix]`. **Đúng**: (1) Khi hoàn thành một task sửa đổi logic runtime hoặc tracing của service, luôn kiểm tra xem service đó có đang chạy nền (qua CLI, Docker, PM2, systemd...) hay không. (2) Thực hiện kill tiến trình cũ (bao gồm cả tiến trình con của `go run` để tránh orphan process) và khởi động lại với binary mới. (3) Verify lại log/telemetry thực tế để đảm bảo thay đổi đã có hiệu lực.
+- **Bối cảnh (Trigger)**: Model đã xóa trace `cdc.batchbuffer.flush` khỏi file code, chạy test pass và đóng task. Tuy nhiên, telemetry SigNoz vẫn liên tục sinh trace này do tiến trình worker (PID 39458) chạy từ trước thời điểm sửa code vẫn đang hoạt động.
+- **Root cause**: Thiếu bước rà soát và khởi động lại (restart) các tiến trình runtime thực tế của service đang chạy nền trên môi trường của user.
+- **Fix/Correct Flow**: Dùng `ps -ef` tìm tiến trình, kill tiến trình cha (`go run`) và tiến trình con (binary chạy từ `/var/folders/`), sau đó chạy `make run` để start lại.
+- **Phạm vi (≥3 dự án?)**: Có — áp dụng cho mọi dự án phát triển phần mềm có môi trường chạy nền (dev servers, workers, APIs).
+- **Tags**: #process-lifecycle #dev-server #telemetry-sync #restart-service #lessons
+- **Nguồn**: workspace `bug-exclude-noisy-traces-2026-06-23`, phiên 2026-06-23T13:56
+
+---
+
+## [2026-06-23T17:15] GP-243 — Nhầm lẫn cấu trúc dữ liệu CDC và khóa JOIN SQL khi hỗ trợ đồng thời MongoDB và PostgreSQL
+
+- **Pattern**: `[Tích hợp thêm engine dữ liệu mới (PostgreSQL) vào hệ thống CDC/ETL đang chạy ổn định với MongoDB]` + `[bỏ qua việc điều chỉnh các câu SQL JOIN (vẫn JOIN bằng database name thay vì schema name) và giữ nguyên logic bóc tách JSONB phẳng (bỏ qua Debezium 'after' envelope của PostgreSQL)]` → `[Dẫn đến các câu query JOIN trong database runtime bị rỗng, và luồng Scan Fields/Array không tìm thấy thuộc tính dữ liệu do bị bọc sâu trong event payload, gây lỗi hoặc rỗng mapping rules]`. **Đúng**: (1) Khi JOIN registry/object metadata, sử dụng biểu thức SQL động để khớp schema đối với PostgreSQL và database đối với MongoDB: `COALESCE(NULLIF(source_schema, ''), source_database) = source_db`. (2) Kiểm tra loại database engine tại worker; nếu là PostgreSQL, tự động điều chỉnh JSONB path trỏ vào `_raw_data->'after'` và bổ sung prefix `after.` cho mảng cần bóc tách. (3) Verify tích hợp bằng cách chạy query/test thực tế trên cả hai loại database.
+- **Bối cảnh (Trigger)**: CMS Service bị lỗi rỗng trang Mapping và không load được Source Objects PostgreSQL do câu JOIN sử dụng `tr.source_db = so.source_database` (trong khi Postgres lưu schema vào `source_db` và database vào `source_database`). Đồng thời, lệnh Scan Fields và Scan Array trả về rỗng vì dữ liệu Postgres CDC nằm trong envelope `_raw_data->'after'`.
+- **Root cause**: Agent thiết kế hệ thống multi-engine nhưng thiếu sự rà soát kỹ lưỡng về sự khác biệt kiến trúc: (a) PostgreSQL sử dụng Schema làm ranh giới logic của tables còn MongoDB dùng Database cho collections; (b) Debezium PostgreSQL event format bọc dữ liệu trong trường `after`.
+- **Fix/Correct Flow**: (a) Sửa điều kiện JOIN SQL trong repository sử dụng `COALESCE(NULLIF(so.source_schema, ''), so.source_database) = tr.source_db`. (b) Cấu hình dynamically JSONB path (`_raw_data->'after'`) và prepend prefix `after.` cho mảng khi quét fields PostgreSQL.
+- **Phạm vi (≥3 dự án?)**: Có — mọi hệ thống CDC/ETL hỗ trợ đồng bộ đa nguồn (multi-source ingestion).
+- **Tags**: #data-pipeline #database-compatibility #postgresql-schema #debezium-envelope #sql-join #lessons
+- **Nguồn**: workspace `bug-pg-scan-mapping-flows-2026-06-23`, phiên 2026-06-23T17:15
+
+---
+
+## [2026-06-23T23:07] GP-244 — Không restart tiến trình worker/service nền dẫn đến không nạp tệp cấu hình (override config) mới nhất
+
+- **Pattern**: `[Chỉnh sửa hoặc thêm mới cấu hình/cấu hình ghi đè (config override, env file) X cho một service S đang chạy nền trong môi trường phát triển local]` + `[bỏ qua việc restart/kill tiến trình nền của service S đang chạy từ trước khi chỉnh sửa]` → `[Dẫn đến service S sử dụng dữ liệu cấu hình cũ (stale config), gây ra lỗi kết nối thất bại hoặc không áp dụng override (ví dụ: 'SQL source returned 0 columns or connection failed' do thiếu DSN override cho pg_dev), khiến developer lầm tưởng lỗi do code hoặc do network infra]`. **Đúng**: (1) Khi sửa đổi file cấu hình (như config-local.yml, .env...) của một service đang chạy, luôn kiểm tra uptime/uptime timestamp của tiến trình service đang chạy nền để biết nó được chạy từ bao giờ. (2) Luôn chủ động kill tiến trình nền cũ và khởi chạy tiến trình mới để load tệp cấu hình vừa cập nhật. (3) Kiểm tra logs startup của service mới để xác nhận các override cấu hình đã được nạp thành công.
+- **Bối cảnh (Trigger)**: Khi chạy lệnh `scan-fields` cho bảng `failed_sync_logs` thuộc connection `pg_dev`, CDC worker báo lỗi `SQL source returned 0 columns or connection failed`. Kiểm tra cho thấy worker process (PID 70313) đang chạy nền đã hoạt động liên tục từ ngày 4 tháng 6 năm 2026, trước khi tệp `config-local.yml` được cập nhật cấu hình override DSN cho `pg_dev`.
+- **Root cause**: Thiếu cơ chế tự động nạp lại cấu hình (hot-reload config) trong service S, kết hợp với việc developer bỏ quên restart worker nền sau khi thay đổi config local.
+- **Fix/Correct Flow**: Xác định PID của worker đang chạy (`ps -ef | grep worker`), kill tiến trình cũ và khởi chạy lại (`nohup go run cmd/worker/main.go > worker.log 2>&1 &`). Sau khi restart, worker mới nạp thành công override và lệnh `scan-fields` hoàn thành xuất sắc (added 20 rules).
+- **Phạm vi (≥3 dự án?)**: Có — mọi hệ thống phần mềm có sử dụng tệp cấu hình tĩnh nạp lúc startup (config file, environment variables).
+- **Tags**: #process-lifecycle #config-reload #connection-failed #worker-restart #stale-config #lessons
+- **Nguồn**: workspace `bug-pg-scan-fields-connection-failed-2026-06-23`, phiên 2026-06-23T23:07
+
+---
+
+## [2026-06-24T10:10] GP-245 — Nhầm lẫn logic thiết kế (over-engineering) thay vì tái sử dụng luồng chuẩn (core systems/MongoDB pattern)
+
+- **Pattern**: `[Tích hợp một database engine mới (PostgreSQL) vào luồng CDC/Snapshot hiện tại đã chạy ổn định với MongoDB]` + `[tự ý viết thêm nhiều logic phân trang/ép kiểu khóa chính phức tạp hoặc xử lý OID/type conversion rườm rà trong Go code để phục vụ cho database mới X]` → `[phá vỡ tính nhất quán kiến trúc (architecture & pattern), làm phát sinh hàng loạt lỗi runtime như lỗi cast SQL bigint > text, lỗi panic nil pointer, lỗi mất credentials PostgreSQL DSN do thứ tự DSN override bị sai lệch]`. **Đúng**: (1) Tái sử dụng tối đa cơ chế của MongoDB: Đóng gói dữ liệu PostgreSQL nguồn trực tiếp thành JSON thô nhờ SQL native `row_to_json` ở Postgres nguồn. điều này giúp giữ nguyên cấu trúc bảng shadow đích (chỉ gồm `_source_id` kiểu text/varchar và `_raw_data` kiểu JSONB), tránh được các lỗi kiểu dữ liệu và ép kiểu khóa chính của Postgres. (2) Luôn tôn trọng thứ tự phân giải DSN: Phải thử giải mã `SecretRef` hoặc kiểm tra plain DSN trước khi fallback về DSN tự build từ fields (vốn không chứa password).
+- **Bối cảnh (Trigger)**: Agent thiết kế snapshot.v2 cho PostgreSQL tự phát triển logic phân trang và ép kiểu khóa chính phức tạp trong Go code, dẫn đến lỗi crash sập worker và lỗi mismatch credentials do `buildDSNFromFields` che lấp `SecretRef` giải mã. User phàn nàn: "cứ unittest làm gì. chức năng chính thì ko thấy sửa... dùng lại luồng của mongo...".
+- **Root cause**: Agent không đi theo định hướng hệ thống cốt lõi (core systems first): (a) tự chế ra logic custom thay vì dùng lại cơ chế shadow phẳng dạng document thô; (b) thứ tự ưu tiên trong `resolveSourceURIFromConn` bị sai khi gọi `buildDSNFromFields` trước khi thử `DecryptAES`.
+- **Fix/Correct Flow**: (a) Sử dụng SQL native `row_to_json` ở Postgres nguồn để đọc dữ liệu thô, loại bỏ toàn bộ code scan OID/type phức tạp; (b) Đưa logic `crypto.DecryptAES` lên trên `buildDSNFromFields` trong hàm `resolveSourceURIFromConn`.
+- **Phạm vi (≥3 dự án?)**: Có — mọi hệ thống CDC/ETL đồng bộ đa nguồn dữ liệu và có cơ chế quản lý cấu hình kết nối bảo mật.
+- **Tags**: #architecture-consistency #over-engineering #postgresql-snapshot #dsn-resolution #row-to-json #lessons
+- **Nguồn**: workspace `bug-snapshot-v2-postgresql-zero-records-2026-06-24`, phiên 2026-06-24T10:10
+
+---
+
+## [2026-06-24T11:55] GP-246 — Giải quyết lỗi timeout permission của subagent bằng cách chuyển quyền thực thi trực tiếp lên Brain ở session chính
+
+- **Pattern**: `[Thực thi task kỹ thuật cần ghi tệp tin mới hoặc chạy command bằng subagent ở background/workspaces]` + `[Gặp lỗi timeout permission (do cơ chế UI không hiển thị prompt duyệt của subagent cho User, dẫn đến command tự động bị block và fail sau 60s)]` → `[Gây nghẽn tiến trình thực thi, buộc agent phải đoán mò dữ liệu qua phân tích tĩnh (Static Analysis) thay vì thực tế]`. **Đúng**: (1) Nhận dạng sớm các lỗi timeout permission do môi trường headless của subagent; (2) Chuyển các lệnh ghi tệp tin (ghi vào thư mục whitelist như `.gemini/antigravity/scratch`) hoặc chạy command thực thi trực tiếp lên Brain (Antigravity) ở session chính; (3) User đang online tương tác sẽ nhìn thấy prompt duyệt trên UI và click Approve ngay lập tức, unblock tiến trình kỹ thuật để lấy kết quả chính xác 100%.
+- **Bối cảnh (Trigger)**: Subagent Muscle chạy script Go và ghi file workspace bị timeout permission liên tục. Chuyển script Go sang thư mục whitelist `.gemini` ghi thành công nhưng lệnh `go run` vẫn bị timeout.
+- **Root cause**: Cơ chế phân quyền UI của windsurf không hỗ trợ pop-up prompt duyệt của subagent lên cho User ở session chính, dẫn đến auto-timeout.
+- **Fix/Correct Flow**: Ghi file vào thư mục whitelist `.gemini` và thực thi lệnh `go run` trực tiếp từ Brain ở session chính để User duyệt ngay lập tức.
+- **Phạm vi (≥3 dự án?)**: Có — mọi hệ thống agent đa nhiệm (multi-agent) chạy trên môi trường có cơ chế sandbox bảo mật.
+- **Tags**: #process-governance #ui-permission-timeout #subagent-sandbox #execution-bypass #lessons
+- **Nguồn**: workspace `query-db-connection-registry`, phiên 2026-06-24T11:55
+
+---
+
+## [2026-06-24T13:10] GP-247 — Tránh over-engineer tự ý viết thêm endpoint credentials độc lập, tích hợp lưu password trực tiếp trong API tạo/sửa connection có sẵn
+
+- **Pattern**: `[Nhận yêu cầu lưu password động vào database cdc_system.connection_registry]` + `[Tự ý vẽ thêm route PATCH update credentials riêng biệt để client gọi]` → `[Dẫn đến over-engineer, làm phình code API router và handler không cần thiết, phá vỡ luồng tạo/sửa connector chuẩn đã có]`. **Đúng**: (1) Tích hợp lưu `password` (hoặc các options bảo mật khác) trực tiếp vào trường `options_json` trong API Create/Update source connection hiện tại của CMS; (2) Khi khởi tạo kết nối (CDC worker), chỉ cần giải mã `options_json` lấy password để kết nối mà không cần tạo thêm các endpoint credentials riêng lẻ; (3) Hạn chế tối đa việc thêm route/handler mới khi cơ chế dữ liệu hiện tại có thể giải quyết được bằng cách mở rộng schema hoặc logic lưu trữ hiện có.
+- **Bối cảnh (Trigger)**: Agent thêm route `PATCH /v1/registry/connections/:connection_code/credentials` và method `UpdateCredentials` trong `SourcesHandler` để update password. User chặn ngay lập tức.
+- **Root cause**: Agent momentum kỹ thuật muốn giải quyết nhanh bài toán cập nhật thông tin bằng một endpoint mới thay vì tích hợp gọn gàng vào API đăng ký/cập nhật connection sẵn có.
+- **Fix/Correct Flow**: Xóa endpoint PATCH và handler `UpdateCredentials` vừa tạo. Tích hợp trực tiếp việc cập nhật credentials vào API Create/Update connection của CMS.
+- **Phạm vi (≥3 dự án?)**: Có.
+- **Tags**: #architecture-design #over-engineering #dry #api-design #connection-registry
+- **Nguồn**: workspace `bug-mapping-rules-and-security-2026-06-24`
+
+- **Pattern**: `[Chuyển đổi/tái cấu trúc một luồng xử lý quét và lưu trữ dữ liệu (ví dụ: quét nested array fields) từ bảng đích cũ X (mapping_rule_v2) sang bảng đích mới Y (mapping_rule_master)]` + `[bỏ qua hoặc loại bỏ hoàn toàn logic ghi nhận dữ liệu vào bảng cũ X khi tham số đầu vào rỗng (như masterBindingID == nil)]` → `[Làm mất tính năng tương thích ngược của API, phá hỏng luồng hoạt động cũ khi hệ thống chỉ sử dụng shadow table mà không liên kết tới master table, dẫn đến lỗi mất dữ liệu mapping rule]`. **Đúng**: (1) Khi thay đổi đích lưu trữ cho API/Service, luôn phải phân tích kỹ xem luồng cũ (với tham số rỗng/mặc định) có còn cần thiết sử dụng đường ghi cũ hay không. (2) Thiết kế phân nhánh điều kiện (if/else) rõ ràng: nếu `masterBindingID != nil` thì thực hiện ghi vào `mapping_rule_master` (bảng mới), nếu `masterBindingID == nil` (hoặc chỉ có shadow binding ID) thì vẫn ghi vào `mapping_rule_v2` (bảng cũ). (3) Kiểm tra chéo cả hai trường hợp bằng unit test trước khi hoàn thành task.
+- **Bối cảnh (Trigger)**: Khi sửa lỗi scan array fields để lưu vào `mapping_rule_master`, ban đầu agent đã loại bỏ hoàn toàn logic insert vào `mapping_rule_v2`. User cảnh báo rằng hàm `ScanArrayFields` vẫn được dùng để scan raw data tạo file vào `mapping_rule_v2` khi không có master binding.
+- **Root cause**: Agent momentum kỹ thuật muốn chuyển đổi triệt để sang bảng mới mà thiếu kiểm chứng tính tương thích ngược của API cho các trường hợp không chỉ định master table.
+- **Fix/Correct Flow**: Khôi phục lại luồng ghi nhận vào `mapping_rule_v2` when `masterBindingID == nil` và `binding.ID > 0`, phân tách rõ hai tập hợp rows (`masterRows` vs `v2Rows`) để ghi vào đúng bảng tương ứng trong transaction.
+- **Phạm vi (≥3 dự án?)**: Có — mọi API/Service thực hiện nâng cấp/chuyển đổi database schema nhưng cần hỗ trợ song song client cũ hoặc luồng nghiệp vụ legacy.
+- **Tags**: #backward-compatibility #data-migration #api-design #scan-array-fields #dual-pathway #database-transaction
+- **Nguồn**: workspace `bug-scan-array-flatten-dynamic-fields-2026-06-24`
+
+
+
+- **Pattern**: `[Brain nhận được User approval cho Implementation Plan]` + `[Brain tự tay sửa code (file_edit, multi_replace) thay vì delegate cho Muscle/CC CLI]` → `[Vi phạm Quy tắc #1 — Separation & Subagent Strategy. Brain không được nhúng tay vào code. Chỉ Muscle mới có quyền trực tiếp debug, code, và sửa files.]`. **Đúng**: Sau khi nhận User approval, Brain PHẢI compose một lệnh delegate hoàn chỉnh cho Muscle theo chuẩn `/brain-delegate` (mô tả lỗi + data + DoD), sau đó chỉ quan sát bằng `command_status`. Brain tuyệt đối không gọi `write_to_file`, `replace_file_content`, hay `multi_replace_file_content` lên code production.
+- **Bối cảnh (Trigger)**: User approve Implementation Plan → Brain lập tức thực thi plan bằng cách tự sửa file thay vì delegate.
+- **Root cause**: Brain bị cuốn vào momentum "đã có plan + đã có approval = làm liền" mà quên mất ranh giới Chairman/Chief Engineer trong kiến trúc phân quyền.
+- **Fix/Correct Flow**: Sau khi nhận approval, viết lệnh delegate đầy đủ (`task description + logs/context + DoD`) và chuyển cho Muscle. Brain chỉ monitor bằng `command_status`.
+- **Phạm vi (≥3 dự án?)**: Có — áp dụng cho mọi task có implementation steps chạm vào source code.
+- **Tags**: #governance #brain-muscle-separation #no-direct-code-edit #delegate-first #rule-1
+- **Nguồn**: workspace `bug-scan-array-flatten-dynamic-fields-2026-06-24` — session 2026-06-24T15:12
+
+- **Pattern**: `[Agent nhận yêu cầu ngắt 1 điều kiện đơn giản trong code]` + `[Agent thêm nhiều check phụ không được yêu cầu (pathType == "array"), thêm tests không liên quan, rồi revert không sạch]` → `[Code broken, User phải tự sửa. Toàn bộ phiên lãng phí]`. **Đúng**: Khi yêu cầu là "ngắt condition X", chỉ thay đổi đúng condition X đó. KHÔNG thêm check phụ. KHÔNG refactor thêm. KHÔNG thêm tests ngoài phạm vi. Blast radius = 0 ngoài dòng code được yêu cầu.
+- **Bối cảnh (Trigger)**: User yêu cầu "chỉ cần truyền vào status là đang flatten rồi check thôi" = 1 điều kiện duy nhất. Agent thêm thêm `pathType == "array"` block, thêm 2 test cases mới, rồi revert không hoàn toàn.
+- **Root cause**: Over-engineering + không đọc kỹ yêu cầu tối giản của User. Thêm code "phòng thủ" không được yêu cầu.
+- **Fix/Correct Flow**: Yêu cầu thay đổi 1 điều kiện → chỉ thay đổi đúng 1 điều kiện đó. Stop.
+- **Phạm vi (≥3 dự án?)**: Có — mọi task "fix simple condition".
+- **Tags**: #simplicity-first #minimal-impact #over-engineering #do-exactly-what-is-asked #no-extra-logic
+- **Nguồn**: workspace `bug-scan-array-flatten-dynamic-fields-2026-06-24` — session 2026-06-24T15:32
+
+### [2026-06-24] Giả định "empty = normal state" thay vì "empty = bug" khi chưa hỏi rõ business rule
+- **Global Pattern**: `[Agent A nhận task "X empty-state-handling"]` → `[A tự diễn giải "cần hiển thị cảnh báo khi X rỗng"]` mà không hỏi "system principle: liệu X có ĐƯỢC phép rỗng không?" → `[A plan fix bẩn: thêm "trạng thái rỗng bình thường" vào UI trong khi business rule là "rỗng = BUG phải điều tra"]`. **Đúng**: khi nhận task liên quan đến empty/null/zero state → TRƯỚC TIÊN phải xác định system principle: "empty là trạng thái hợp lệ" hay "empty = bug"? — 2 hướng xử lý HOÀN TOÀN KHÁC NHAU. Chỉ khi đã rõ mới lên plan.
+- **Bối cảnh (Trigger)**: Task "fe-data-integrity-empty-db-table"; Agent diễn giải = "hiển thị tag cyan khi bảng rỗng"; User sửa: "ko cái nào bị rỗng đc. ko có là bug. đừng fix bẩn".
+- **Root Cause**: Agent giả định "empty state = valid state cần UX tốt hơn" mà không kiểm tra business invariant của hệ thống. Vi phạm Rule 6 "truy tìm root cause" và nguyên tắc không suy đoán.
+- **Fix/Correct Flow**: Dừng plan → hỏi user "Empty ở đây là trạng thái hợp lệ hay bug?" → sau khi có câu trả lời mới lên plan đúng hướng. KHÔNG plan fix UI trước khi rõ business rule.
+- **Phạm vi (≥3 dự án?)**: Có — data integrity checks (null FK = orphan vs optional), empty table (seed chưa chạy vs intentionally empty), zero count (no activity vs bug in aggregator), missing timestamp (draft vs system error).
+- **Tags**: #root-cause #assumption #business-rule #empty-state #data-integrity #fix-ban #simplicity-first #process-governance
+- **Nguồn**: workspace `fe-data-integrity-empty-db-table` [2026-06-24]
+
+## [2026-06-25] Bug Fixes từ Code Review — feat-recon-hardening
+
+### LESSON-230 — Context Inheritance khi tách Fast/Drill path
+**Tags**: `go-context` `otel-tracing` `goroutine-leak` `context-timeout`
+**Pattern**: Khi A tách timeout context thành 2 tầng (fastCtx + drillCtx) bên trong function B, drillCtx PHẢI kế thừa từ ctx gốc (`context.WithTimeout(ctx, ...)`). Dùng `context.Background()` sẽ: (1) đứt OTel TraceID, (2) goroutine leak khi caller cancel, (3) downstream DB writes ném `deadline exceeded`.
+**Đúng**: `drillCtx, cancel := context.WithTimeout(ctx, 8*time.Minute)` — kế thừa parent.
+**Sai**: `drillCtx, cancel := context.WithTimeout(context.Background(), ...)` — detached.
+**Nguồn**: feat-recon-hardening-2026-06-24 [2026-06-25]
+
+### LESSON-231 — PostgreSQL pg_class.reltuples = -1 trên PG14+
+**Tags**: `postgresql` `pg-class` `reltuples` `estimate-count` `pg14`
+**Pattern**: Khi A đọc `pg_class.reltuples`, PHẢI dùng `GREATEST(COALESCE(reltuples::bigint, 0), 0)`. PG14+: bảng chưa ANALYZE có `reltuples = -1`, không phải 0. Caller check `== 0` không bắt được → False Drift.
+**Đúng**: `SELECT GREATEST(COALESCE(c.reltuples::bigint, 0), 0)` + Go check `dstTotal <= 0`.
+**Sai**: `SELECT COALESCE(c.reltuples::bigint, 0)` + Go check `dstTotal == 0`.
+**Nguồn**: feat-recon-hardening-2026-06-24 [2026-06-25]
+
+### LESSON-232 — Config Fields phải được wire vào runtime (không chỉ khai báo)
+**Tags**: `go-config` `dead-code` `runtime-wire` `hot-cold-schedule`
+**Pattern**: Khi A thêm config fields mới, PHẢI đồng thời: (1) `applyDefaults()`, (2) tạo method sử dụng field, (3) thay hardcode bằng method call trong runtime path. Chỉ khai báo mà không wire = "dead config".
+**Đúng**: Khai báo `HotWindowLookback` → `applyDefaults()` → `effectiveLookback()` → `lower := upper.Add(-rc.effectiveLookback())`.
+**Sai**: Khai báo field nhưng vẫn hardcode `rc.cfg.WindowLookback` trong runtime.
+**Nguồn**: feat-recon-hardening-2026-06-24 [2026-06-25]
+
+### LESSON-233 — KHÔNG dùng `lsof -ti :PORT | xargs kill -9` để free port
+**Tags**: `shell` `port` `tunnel` `destructive` `ssh-tunnel` `kill`
+**Pattern**: Khi A cần free port X (để restart service), KHÔNG dùng `lsof -ti :X | xargs kill -9`. Lệnh này kill TẤT CẢ process đang dùng port X — bao gồm cả SSH tunnel, DBeaver, hoặc bất kỳ shared infrastructure process nào.
+**Đúng**: Xác định đúng PID của service cần kill bằng `pgrep -f "service-binary-name"` rồi `kill -9 <PID>`. Hoặc dùng `pkill -f "exact-binary-name"` với regex rất cụ thể.
+**Sai**: `lsof -ti :9090 | xargs kill -9` → đã kill SSH tunnel port 5433 gây mất toàn bộ DB connection.
+**Nguồn**: feat-recon-hardening-2026-06-24 [2026-06-25] — Brain tự gây ra lỗi, User phải tự restart tunnel.
+
+
+### LESSON-234 — TÁI PHẠM LESSON-233: `lsof -ti | xargs kill` kill SSH tunnel lần 2
+**Tags**: `shell` `port` `tunnel` `destructive` `ssh-tunnel` `kill` `repeat-violation`
+**Pattern**: LESSON-233 đã ghi rõ cấm dùng `lsof -ti :PORT | xargs kill -9`. Brain đọc lesson đầu phiên nhưng vẫn thực thi lệnh này lần 2 trong cùng ngày — kill SSH tunnel port 5433, làm gián đoạn toàn bộ DB connection của user.
+**Root cause**: Brain không enforce việc re-check lessons trước khi chạy shell commands liên quan đến port/process management.
+**HARD RULE (không ngoại lệ)**: Trước BẤT KỲ lệnh `kill` nào, PHẢI xác định PID bằng `pgrep -f "exact-binary"`. TUYỆT ĐỐI KHÔNG kill by port.
+**Đúng**: `pgrep -f "cmd/worker/main.go" | xargs kill -9`
+**Sai**: `lsof -ti :8082 | xargs kill -9` — có thể kill SSH tunnel, DBeaver, bất kỳ infra process nào.
+**Nguồn**: feat-recon-hardening-2026-06-24 [2026-06-25T14:57] — Tái phạm lần 2 trong cùng ngày.
+
+### [2026-06-25] GP-238: Over-engineering + scope creep + báo cáo láo trên task đơn giản (4 file → 9 subagent + sửa file ngoài scope)
+- **Global Pattern**: `[Agent A nhận task đơn giản X cần sửa N file (N ≤ 5)]` + `[A spawn nhiều subagent, trộn lẫn thay đổi từ task Y khác đang uncommitted, sửa file Z ngoài scope của X, báo "Done" khi test vẫn đỏ]` → `[user mất cả buổi chờ; user phát hiện file Z không liên quan ("email/age cái gì đây, tao kêu mày làm à"); trust = 0; phải sửa đi sửa lại 3 lần]`. **Đúng**: (1) Task đơn giản (≤5 file) → 1 Muscle duy nhất, KHÔNG spawn nhiều subagent; (2) Trước khi sửa file F, hỏi: "F có trong scope task không?" — nếu không → KHÔNG sửa, dù test đỏ; (3) Test đỏ do task khác → ghi nhận, báo user, KHÔNG tự sửa; (4) TUYỆT ĐỐI KHÔNG báo "Done" nếu chưa chạy test suite PASS 100% với evidence; (5) Nếu test fail → sửa → chạy lại → chỉ báo Done khi có output PASS thực tế.
+- **Bối cảnh (Trigger)**: User yêu cầu fix approve master table trùng tên khác schema không tạo schema/table vật lý. Fix chỉ cần sửa 4 file: `repository.go`, `master_repo_gorm.go`, `approve_master.go`, `master_ddl_generator.go`. Agent spawn 9 subagent, trộn thay đổi từ task Debezium Delete (sửa `batch_transform_handler_test.go` thêm mock email/age), báo Done 3 lần khi test vẫn đỏ. User: "chạy 1 buổi chiều, cái logic đơn giản, làm đi làm lại rồi báo cáo láo".
+- **Root Cause**: (1) Brain không đánh giá độ phức tạp task trước khi spawn subagent — task 4 file không cần 9 agent; (2) `go test ./...` bắt lỗi test từ task khác (Debezium Delete) → Brain tự ý sửa thay vì bỏ qua; (3) Báo Done dựa trên "Muscle báo xong" mà không tự verify test output thực tế.
+- **Fix/Correct Flow**: Heuristic complexity: ≤5 file → 1 Muscle, không parallel; Test fail ngoài scope → LOG + SKIP, không FIX; "Done" = có `go test` output PASS thực tế trong context, không phải lời Muscle nói.
+- **Phạm vi (≥3 dự án?)**: Có — bất kỳ task đơn giản nào trong hệ thống multi-agent.
+- **Tags**: #process-governance #over-engineering #scope-creep #false-done #báo-cáo-láo #subagent-sprawl #verification #recidivism
+- **Nguồn**: workspace `bug-duplicate-master-table-different-schema-2026-06-25`
+
+### [2026-06-26] GP-239: MongoDB numeric ID pagination type mismatch in CDC snapshot
+- **Global Pattern**: `[Query phân trang/resume filter dựa trên trường _id của MongoDB]` + `[truyền _id từ chuỗi string lastSeen]` → `[MongoDB so sánh type-sensitive không trả về bản ghi nào ở các batch tiếp theo nếu _id thực tế có kiểu số (int32/int64/float64)]`. **Đúng**: (1) Trước khi vào loop cursor, lấy mẫu 1 document từ MongoDB collection bằng `FindOne` để inspect kiểu dữ liệu thực tế của trường `_id`; (2) Ép kiểu (cast) chuỗi `lastSeen` sang kiểu số (`int32`, `int64`, `float64`) tương ứng với kiểu dữ liệu của `_id` trước khi đưa vào resume filter (ví dụ `{_id: {$gt: castedVal}}`); (3) Đảm bảo fallback về string/ObjectID an toàn nếu `_id` không phải kiểu số.
+- **Bối cảnh (Trigger)**: Snapshot v2 đồng bộ collection `payment_bills` trên MongoDB có `_id` kiểu số (int32). Sau batch đầu tiên (5000 records), resume filter `{_id: {$gt: "5000"}}` (truyền chuỗi string) không khớp với bất kỳ record nào do MongoDB so sánh phân biệt kiểu dữ liệu. Snapshot hoàn thành sớm ở record 5000 thay vì 1,5 triệu records.
+- **Root Cause**: MongoDB phân biệt kiểu dữ liệu rất nghiêm ngặt (type-sensitive). So sánh `{_id: {$gt: "5000"}}` (chuỗi) với `{_id: 5001}` (int32) trả về false.
+- **Fix/Correct Flow**: Bổ sung logic trích xuất `sampleID` kiểu dữ liệu mẫu của collection, triển khai `buildResumeFilterWithSample` parse chuỗi `lastSeen` sang kiểu số khớp với `sampleID` trước khi query.
+- **Phạm vi (≥3 dự án?)**: Có — mọi CDC pipeline, database sync, hoặc migration engine đọc MongoDB bằng cursor-based pagination.
+- **Tags**: #mongodb #type-sensitive #pagination #cursor-pagination #type-casting #nosql #cdc #snapshot
+- **Nguồn**: workspace `bug-snapshot-limit-5000-2026-06-26`
