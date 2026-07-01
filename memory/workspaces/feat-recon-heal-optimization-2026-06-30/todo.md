@@ -1,0 +1,11 @@
+- [x] 1. Cập nhật filter MongoDB trong `internal/service/recon/recon_stream.go`:
+  - [x] Hàm `ListIDsInWindow`
+  - [x] Hàm `ListIDTsInWindow`
+- [x] 2. Cập nhật filter MongoDB trong `internal/service/recon/recon_hash.go`:
+  - [x] Hàm `HashWindow`
+- [x] 3. Sửa đổi logic trigger heal trong `internal/handler/recon/recon_heal_v4.go`:
+  - [x] Hàm `healSegmentA`: Query report bằng `QualifiedTarget()`
+  - [x] Hàm `healSegmentA`: Gom `missing_from_src` vào danh sách `healIDs` đi heal qua Debezium signal.
+- [x] 4. Kiểm tra và xác minh:
+  - [x] Chạy `go build ./...` để compile check.
+  - [x] Chạy các unit test liên quan.

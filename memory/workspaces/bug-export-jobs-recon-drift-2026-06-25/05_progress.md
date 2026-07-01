@@ -12,3 +12,7 @@
 - `[2026-06-26 11:45:00] [Brain:Antigravity] Review internal/server`: Thực hiện đánh giá chi tiết cấu trúc thư mục internal/server hiện tại và so sánh với backup server_bk.
 - `[2026-06-26 11:50:00] [Brain:Antigravity] Explain runBridgeCycle Origin`: Giải thích xuất xứ nhận định runBridgeCycle dựa trên comment trong source code.
 - `[2026-06-26 11:55:00] [Brain:Antigravity] Analyze runBridgeCycle Logic`: Chứng minh runBridgeCycle là no-op dựa trên logic code thực tế (không chỉ dựa vào comment).
+- `[2026-06-30 08:18:00] [Brain:Antigravity] Reactivate Workspace`: Nhận yêu cầu đối soát lệch và noop của export-jobs, kích hoạt lại workspace bug-export-jobs-recon-drift-2026-06-25.
+- `[2026-06-30 08:19:00] [Brain:Antigravity] Create requirements`: Khởi tạo file yêu cầu 01_requirements_recon_export_jobs.md cho task mới.
+- `[2026-06-30 08:20:00] [Brain:Antigravity] Create plan`: Khởi tạo file kế hoạch 02_plan_recon_export_jobs.md cho task mới.
+- `[2026-06-30 08:21:00] [Brain:Antigravity] Create tasks checklist`: Khởi tạo file checklist 08_tasks_recon_export_jobs.md cho task mới.

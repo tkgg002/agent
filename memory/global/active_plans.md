@@ -6,6 +6,15 @@
 
 | Workspace | Project | Status | Last Active |
 |-----------|---------|--------|-------------|
+| bug-delete-connector-cleanup-bindings-2026-06-30 | data-hub | 🟡 Active (Planning) | 2026-06-30 |
+| bug-recon-heal-missing-shadow-2026-06-30 | data-hub | ✅ Done | 2026-06-30 |
+| bug-transmuter-bigint-casting-2026-06-30 | centralized-data-service | ✅ Done | 2026-06-30 |
+| doc-investigate-master-sync-new-field-2026-06-30 | data-hub | ✅ Done | 2026-06-30 |
+| ReconHealStaleReport | Sửa lỗi healSegmentA lặp lại do lấy stale report | ✅ Done | 2026-06-30 |
+| bug-recon-false-drift-payment-bills-2026-06-30 | Sửa lỗi đối soát báo khống 1.410 drift ảo trên bảng payment_bills | ✅ Done | 2026-06-30 |
+| bug-reconciliation-heal-noop-2026-06-30 | Sửa lỗi Reconciliation Heal trả về noop do cấu hình sai timestamp field | ✅ Done | 2026-06-30 |
+| feat-recon-heal-optimization-2026-06-30 | Tối ưu hóa cơ chế Recon & Heal (Segment A & B) và đồng bộ Soft-delete Master | ✅ Done | 2026-06-30 |
+| bug-data-integrity-drift-mismatch-2026-06-29 | Sửa lỗi lệch trạng thái đối soát dữ liệu (Khớp khi lệch) | ✅ Done | 2026-06-29 |
 | bug-data-integrity-missing-tables-2026-06-29 | Tìm và sửa lỗi thiếu table shadow/master trong Data Integrity | ✅ Done | 2026-06-29 |
 | bug-frontend-safe-modification-2026-06-29 | Sửa đổi an toàn Frontend (chống crash & date format) | ✅ Done | 2026-06-29 |
 | upgrade-core-system | Upgrade Core Brain/Muscle System | ✅ Done | 2026-02-25 |
@@ -103,5 +112,10 @@
 | feat-recon-smoke-integration-phases-5-6-7-2026-06-26 | data-hub | ✅ Done | 2026-06-29 |
 | feat-recon-runtime-check-2026-06-29 | data-hub | ✅ Done | 2026-06-29 |
 | audit-sinkworker-update-2026-06-29 | centralized-data-service | ✅ Done | 2026-06-29 |
+| bug-mask-mongodb-credentials-log-2026-06-30 | centralized-data-service | ✅ Done | 2026-06-30 |
+| feat-metrics-active-count-shadow-master-2026-06-30 | centralized-data-service | ✅ Done | 2026-06-30 |
+| bug-export-jobs-reconciliation-drift-2026-06-30 | centralized-data-service | 🟡 Active | 2026-06-30 |
+| tier2-xor-hash-check | centralized-data-service | 🟡 Active | 2026-07-01 |
+
 
 

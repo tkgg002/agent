@@ -1,0 +1,12 @@
+- [ ] 1. Thiết lập API/NATS: cập nhật `recon_handler_run.go` để nhận và validate `start_time` và `end_time` (hỗ trợ fallback 24h và chặn quét > 24h), lưu vào context.
+- [ ] 2. Cập nhật làm tròn timestamp: sửa `hashIDPlusTsMs` trong `recon_hash.go` để làm tròn timestamp về hàng giây trước khi băm.
+- [ ] 3. Thêm Mongo Stream API: định nghĩa method `ListIDTsInWindow` trong `recon_stream.go` sử dụng cursor stream chống OOM.
+- [ ] 4. Nâng cấp đối soát Segment A: sửa `RunTier2` trong `recon_tier_a.go` để sử dụng `ListIDTsInWindow` và so khớp IDTs chính xác (lọc thiếu và lệch).
+- [ ] 5. Nâng cấp đối soát Segment B: sửa `RunSegmentB` trong `recon_tier_b.go` để so khớp IDTs làm tròn về giây và lưu đúng cấu trúc `StaleIDs` (stale_ids và orphan_in_master).
+- [ ] 6. Cập nhật repository: sửa `reconciliation_report_repo.go` để lấy report bị lệch hoặc thiếu.
+- [ ] 7. Nâng cấp logic Heal: sửa `recon_heal_v4.go` để thực hiện heal Segment A & B theo batching 200, delay 200ms, max 1000 IDs, gộp cả ID thiếu và lệch, bổ sung log.
+- [ ] 8. Đồng bộ Soft-delete & Dọn dẹp Orphan Master: sửa `transmuter.go` để bulk upsert nhận `_deleted`, phát hiện và soft-delete các ID orphan sử dụng SQL `= ANY(?)` và gán `_source_ts = NOW()`.
+- [ ] 9. Xác minh (Verification):
+  - [ ] Chạy `go build` kiểm tra compile.
+  - [ ] Viết unit test cho Race Condition mồ côi trong `transmuter_test.go`.
+  - [ ] Chạy `go test ./...` kiểm tra toàn bộ unit tests.
