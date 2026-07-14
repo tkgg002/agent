@@ -1,0 +1,593 @@
+// Package persistence — GORM concrete adapters for ports.* interfaces
+// and the in-package read ports declared in `internal/app/queries/`.
+//
+// This file implements queries.ReconReader. The SQL is lifted verbatim
+// from `internal/api/reconciliation_handler.go` (LatestReport,
+// TableHistory, ListFailedLogs) so the wire contract is byte-identical.
+//
+// Migration-017 fallback (LatestReport): the primary SELECT references
+// columns introduced by worker migration 017 (timestamp_field_source,
+// full_source_count, …). On older envs that SELECT errors; we silently
+// fall back to a legacy SELECT that omits those columns. The read-port
+// contract returns rows from whichever query succeeded — handlers don't
+// see the fallback.
+package recon
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	reconmodel "cdc-cms-service/internal/model/recon"
+	"cdc-cms-service/pkgs/utils"
+
+	"gorm.io/gorm"
+	"cdc-cms-service/internal/app/queries/recon"
+)
+
+type reconReadRepoGorm struct {
+	db *gorm.DB
+}
+
+// NewReconReadRepo constructs the GORM-backed adapter for
+// recon.ReconReader.
+func NewReconReadRepo(db *gorm.DB) recon.ReconReader {
+	return &reconReadRepoGorm{db: db}
+}
+const listLatestPrimary = `
+	SELECT r.id,
+	       r.run_id,
+	       r.cycle_id,
+	       r.segment,
+	       r.source_type,
+	       r.source_host,
+	       r.source_db,
+	       r.source_total,
+	       r.source_active,
+	       r.shadow_total,
+	       r.shadow_active,
+	       r.master_schema,
+	       r.master_table,
+	       r.master_total,
+	       r.master_active,
+	       r.diff,
+	       r.status,
+	       r.error_message,
+	       r.duration_ms,
+	       r.checked_at,
+	       -- Tương thích ngược với ReconciliationReport
+	       CASE WHEN r.segment = 'shadow_master' THEN r.master_table ELSE r.shadow_table END AS target_table,
+	       r.source_count,
+	       r.dest_count,
+	       r.source_count AS nullable_source_count,
+	       NULL AS error_code,
+	       -- Enrichment metadata
+	       reg.sync_engine, reg.timestamp_field,
+	       reg.timestamp_field_source, reg.timestamp_field_confidence,
+	       reg.full_source_count, reg.full_dest_count, reg.full_count_at,
+	       lag.ingest_lag_ms, lag.transmute_lag_ms, lag.worker_backlog,
+	       sb.source_object_id,
+	       COALESCE(r.source_table, so.source_object_name) AS source_table,
+	       COALESCE(r.shadow_schema, sb.shadow_schema) AS shadow_schema,
+	       COALESCE(r.shadow_table, sb.shadow_table) AS shadow_table,
+	       cr.connection_code AS source_connection_code,
+	       r.master_schema,
+	       COALESCE(scope_counts.binding_count, 0) > 1 AS scope_ambiguous
+	  FROM (
+		SELECT DISTINCT ON (shadow_schema, shadow_table, master_schema, master_table, segment) *
+		  FROM (
+			SELECT
+				r.id,
+				r.run_id,
+				NULL::bigint AS cycle_id,
+				r.segment,
+				r.source_type,
+				r.source_host,
+				r.source_db,
+				COALESCE(s.source_total, r.total_source_count) AS source_total,
+				COALESCE(s.source_active, r.source_count) AS source_active,
+				COALESCE(s.shadow_total, r.total_dest_count) AS shadow_total,
+				COALESCE(s.shadow_active, r.dest_count) AS shadow_active,
+				r.master_schema,
+				r.master_table,
+				s.master_total AS master_total,
+				s.master_active AS master_active,
+				r.diff,
+				r.status,
+				r.error_message,
+				r.duration_ms,
+				r.checked_at,
+				r.shadow_schema,
+				r.shadow_table,
+				r.source_table,
+				COALESCE(
+					CASE WHEN r.segment = 'shadow_master' THEN COALESCE(s.shadow_active, 0) ELSE COALESCE(s.source_active, 0) END,
+					r.source_count
+				) AS source_count,
+				COALESCE(
+					CASE WHEN r.segment = 'shadow_master' THEN COALESCE(s.master_active, 0) ELSE COALESCE(s.shadow_active, 0) END,
+					r.dest_count
+				) AS dest_count
+			FROM cdc_system.cdc_reconciliation_report r
+			LEFT JOIN LATERAL (
+				SELECT source_total, source_active, shadow_total, shadow_active, master_total, master_active
+				FROM cdc_system.cdc_recon_smoke_result
+				WHERE shadow_schema = r.shadow_schema
+				  AND shadow_table = r.shadow_table
+				  AND (master_schema IS NOT DISTINCT FROM r.master_schema)
+				  AND (master_table IS NOT DISTINCT FROM r.master_table)
+				  AND segment = r.segment
+				ORDER BY checked_at DESC
+				LIMIT 1
+			) s ON TRUE
+			UNION ALL
+			SELECT
+				id,
+				run_id,
+				cycle_id,
+				segment,
+				source_type,
+				source_host,
+				source_db,
+				source_total,
+				source_active,
+				shadow_total,
+				shadow_active,
+				master_schema,
+				master_table,
+				master_total,
+				master_active,
+				diff,
+				status,
+				error_message,
+				duration_ms,
+				checked_at,
+				shadow_schema,
+				shadow_table,
+				source_table,
+				CASE WHEN segment = 'shadow_master' THEN COALESCE(shadow_active, 0) ELSE COALESCE(source_active, 0) END AS source_count,
+				CASE WHEN segment = 'shadow_master' THEN COALESCE(master_active, 0) ELSE COALESCE(shadow_active, 0) END AS dest_count
+			FROM cdc_system.cdc_recon_smoke_result
+		  ) unioned
+		 ORDER BY shadow_schema, shadow_table, master_schema, master_table, segment, checked_at DESC
+	  ) r
+	  LEFT JOIN cdc_system.recon_lag lag ON lag.table_name = CASE WHEN r.segment = 'shadow_master' THEN r.master_table ELSE r.shadow_table END
+	  INNER JOIN cdc_table_registry reg ON reg.target_table = r.shadow_table AND reg.is_active = TRUE
+	  LEFT JOIN LATERAL (
+		SELECT source_object_id, shadow_schema, shadow_table
+		FROM cdc_system.shadow_binding
+		WHERE shadow_table = r.shadow_table
+		  AND is_active = TRUE
+		ORDER BY updated_at DESC, id DESC
+		LIMIT 1
+	  ) sb ON TRUE
+	  LEFT JOIN LATERAL (
+		SELECT COUNT(*)::int AS binding_count
+		FROM cdc_system.shadow_binding
+		WHERE shadow_table = r.shadow_table
+		  AND is_active = TRUE
+	  ) scope_counts ON TRUE
+	  LEFT JOIN cdc_system.source_object_registry so ON so.id = sb.source_object_id
+	  LEFT JOIN cdc_system.connection_registry cr ON cr.id = so.source_connection_id
+	 ORDER BY r.shadow_table
+`
+
+// listLatestLegacy is the fallback query when primary errors (older
+// envs without migration 017). New columns come back nil/0.
+const listLatestLegacy = `
+	SELECT r.*, r.source_count AS nullable_source_count,
+	       reg.sync_engine, reg.source_type, reg.timestamp_field,
+	       sb.source_object_id,
+	       so.source_object_name AS source_table,
+	       sb.shadow_schema,
+	       sb.shadow_table,
+	       COALESCE(scope_counts.binding_count, 0) > 1 AS scope_ambiguous
+	  FROM (
+		SELECT DISTINCT ON (target_table) *
+		  FROM cdc_reconciliation_report
+		 ORDER BY target_table, checked_at DESC
+	  ) r
+	  INNER JOIN cdc_table_registry reg ON reg.target_table = r.target_table AND reg.is_active = TRUE
+	  LEFT JOIN LATERAL (
+		SELECT source_object_id, shadow_schema, shadow_table
+		FROM cdc_system.shadow_binding
+		WHERE shadow_table = r.target_table
+		  AND is_active = TRUE
+		ORDER BY updated_at DESC, id DESC
+		LIMIT 1
+	  ) sb ON TRUE
+	  LEFT JOIN LATERAL (
+		SELECT COUNT(*)::int AS binding_count
+		FROM cdc_system.shadow_binding
+		WHERE shadow_table = r.target_table
+		  AND is_active = TRUE
+	  ) scope_counts ON TRUE
+	  LEFT JOIN cdc_system.source_object_registry so ON so.id = sb.source_object_id
+	 ORDER BY r.target_table
+`
+
+func (r *reconReadRepoGorm) ListLatest(ctx context.Context) ([]recon.LatestReportRow, error) {
+	var rows []recon.LatestReportRow
+	if err := r.db.WithContext(ctx).Raw(listLatestPrimary).Scan(&rows).Error; err != nil {
+		// Migration 017 not applied yet — fall back. Legacy path is
+		// best-effort: handler treats `nil` rows as empty list.
+		rows = rows[:0]
+		_ = r.db.WithContext(ctx).Raw(listLatestLegacy).Scan(&rows).Error
+	}
+	return rows, nil
+}
+
+func (r *reconReadRepoGorm) GetTableHistory(ctx context.Context, table, shadowSchema, masterTable string, page, pageSize int) ([]reconmodel.ReconciliationReport, int64, error) {
+	if strings.Contains(table, ".") {
+		parts := strings.Split(table, ".")
+		if len(parts) > 1 {
+			if shadowSchema == "" {
+				shadowSchema = parts[0]
+			}
+			table = parts[len(parts)-1]
+		}
+	}
+	if strings.Contains(masterTable, ".") {
+		parts := strings.Split(masterTable, ".")
+		masterTable = parts[len(parts)-1]
+	}
+
+	where := "shadow_table = ? OR master_table = ?"
+	args := []interface{}{table, table}
+	if shadowSchema != "" {
+		where = "shadow_schema = ? AND shadow_table = ?"
+		args = []interface{}{shadowSchema, table}
+		if masterTable != "" {
+			where += " AND (segment <> 'shadow_master' OR master_table = ?)"
+			args = append(args, masterTable)
+		}
+	}
+
+	unionQuery := `
+		SELECT
+			id,
+			run_id,
+			segment,
+			shadow_schema,
+			shadow_table,
+			CASE WHEN segment = 'shadow_master' THEN master_table ELSE shadow_table END AS target_table,
+			source_db,
+			source_count,
+			dest_count,
+			diff,
+			status,
+			error_message,
+			duration_ms,
+			checked_at,
+			total_source_count,
+			total_dest_count,
+			check_type,
+			source_type,
+			source_host,
+			source_table,
+			recon_start_time,
+			recon_end_time,
+			master_table,
+			master_schema,
+			missing_count,
+			missing_ids,
+			stale_count,
+			stale_ids,
+			field_diffs,
+			orphan_count,
+			healed_at,
+			healed_count,
+			healed_duration_ms,
+			healed_mismatched_count,
+			healed_mismatched_duration_ms,
+			healed_missing_dest_count,
+			healed_missing_dest_duration_ms,
+			pruned_missing_src_count,
+			pruned_missing_src_duration_ms
+		FROM cdc_system.cdc_reconciliation_report
+		UNION ALL
+		SELECT
+			id,
+			run_id,
+			segment,
+			shadow_schema,
+			shadow_table,
+			CASE WHEN segment = 'shadow_master' THEN master_table ELSE shadow_table END AS target_table,
+			source_db,
+			CASE WHEN segment = 'shadow_master' THEN COALESCE(shadow_active, 0) ELSE COALESCE(source_active, 0) END AS source_count,
+			CASE WHEN segment = 'shadow_master' THEN COALESCE(master_active, 0) ELSE COALESCE(shadow_active, 0) END AS dest_count,
+			diff,
+			status,
+			error_message,
+			duration_ms,
+			checked_at,
+			CASE WHEN segment = 'shadow_master' THEN shadow_total ELSE source_total END AS total_source_count,
+			CASE WHEN segment = 'shadow_master' THEN master_total ELSE shadow_total END AS total_dest_count,
+			'smoke' AS check_type,
+			source_type,
+			source_host,
+			source_table,
+			NULL::timestamp without time zone AS recon_start_time,
+			NULL::timestamp without time zone AS recon_end_time,
+			master_table,
+			master_schema,
+			0::integer AS missing_count,
+			NULL::jsonb AS missing_ids,
+			0::integer AS stale_count,
+			diff_time AS stale_ids,
+			NULL::jsonb AS field_diffs,
+			0::integer AS orphan_count,
+			NULL::timestamp without time zone AS healed_at,
+			0::integer AS healed_count,
+			0::integer AS healed_duration_ms,
+			0::integer AS healed_mismatched_count,
+			0::integer AS healed_mismatched_duration_ms,
+			0::integer AS healed_missing_dest_count,
+			0::integer AS healed_missing_dest_duration_ms,
+			0::integer AS pruned_missing_src_count,
+			0::integer AS pruned_missing_src_duration_ms
+		FROM cdc_system.cdc_recon_smoke_result
+	`
+
+	var total int64
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM (%s) AS unioned WHERE %s", unionQuery, where)
+	if err := r.db.WithContext(ctx).Raw(countQuery, args...).Scan(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var reports []reconmodel.ReconciliationReport
+	selectQuery := fmt.Sprintf("SELECT * FROM (%s) AS unioned WHERE %s ORDER BY checked_at DESC OFFSET ? LIMIT ?", unionQuery, where)
+	queryArgs := append(args, (page-1)*pageSize, pageSize)
+	if err := r.db.WithContext(ctx).Raw(selectQuery, queryArgs...).Scan(&reports).Error; err != nil {
+		return nil, 0, err
+	}
+	return reports, total, nil
+}
+
+const failedLogsBase = `
+	SELECT
+		f.id,
+		f.target_table,
+		f.source_table,
+		f.source_db,
+		f.record_id,
+		f.operation,
+		f.raw_json,
+		f.error_message,
+		f.error_type,
+		f.kafka_topic,
+		f.kafka_partition,
+		f.kafka_offset,
+		f.retry_count,
+		f.max_retries,
+		f.status,
+		f.created_at,
+		f.last_retry_at,
+		f.resolved_at,
+		f.resolved_by,
+		so.source_object_name AS resolved_source_table,
+		sb.shadow_schema,
+		sb.shadow_table,
+		COALESCE(scope_counts.binding_count, 0) > 1 AS scope_ambiguous
+	FROM cdc_system.failed_sync_logs f
+	LEFT JOIN LATERAL (
+		SELECT source_object_id, shadow_schema, shadow_table
+		FROM cdc_system.shadow_binding
+		WHERE shadow_table = f.target_table
+		  AND is_active = TRUE
+		ORDER BY updated_at DESC, id DESC
+		LIMIT 1
+	) sb ON TRUE
+	LEFT JOIN LATERAL (
+		SELECT COUNT(*)::int AS binding_count
+		FROM cdc_system.shadow_binding
+		WHERE shadow_table = f.target_table
+		  AND is_active = TRUE
+	) scope_counts ON TRUE
+	LEFT JOIN cdc_system.source_object_registry so ON so.id = sb.source_object_id
+	WHERE 1=1
+`
+
+// resolveTargetTableQueryBase mirrors the legacy resolveTargetTable
+// helper in the recon HTTP handler. The SELECT shape (sb.shadow_table)
+// + LIMIT 2 protocol (caller flags >1 row as ambiguous) is preserved
+// so the wire contract stays byte-identical.
+const resolveTargetTableQueryBase = `
+	SELECT sb.shadow_table
+	FROM cdc_system.shadow_binding sb
+	JOIN cdc_system.source_object_registry so
+	  ON so.id = sb.source_object_id
+	WHERE sb.is_active = TRUE
+`
+
+func (r *reconReadRepoGorm) ResolveTargetTableByScope(ctx context.Context, f recon.ReconScopeFilter) (string, error) {
+	query := resolveTargetTableQueryBase
+	args := make([]interface{}, 0, 6)
+	if v := strings.TrimSpace(f.SourceDatabase); v != "" {
+		query += ` AND so.source_database = ?`
+		args = append(args, v)
+	}
+	if v := strings.TrimSpace(f.SourceSchema); v != "" {
+		query += ` AND so.source_schema = ?`
+		args = append(args, v)
+	}
+	if v := strings.TrimSpace(f.SourceNamespace); v != "" {
+		query += ` AND so.source_namespace = ?`
+		args = append(args, v)
+	}
+	if v := strings.TrimSpace(f.SourceTable); v != "" {
+		query += ` AND so.source_object_name = ?`
+		args = append(args, v)
+	}
+	if v := strings.TrimSpace(f.ShadowSchema); v != "" {
+		query += ` AND sb.shadow_schema = ?`
+		args = append(args, v)
+	}
+	if v := strings.TrimSpace(f.ShadowTable); v != "" {
+		query += ` AND sb.shadow_table = ?`
+		args = append(args, v)
+	}
+	query += ` ORDER BY sb.updated_at DESC, sb.id DESC LIMIT 2`
+
+	var rows []struct {
+		ShadowTable string `gorm:"column:shadow_table"`
+	}
+	if err := r.db.WithContext(ctx).Raw(query, args...).Scan(&rows).Error; err != nil {
+		return "", err
+	}
+	if len(rows) == 0 {
+		return "", gorm.ErrRecordNotFound
+	}
+	if len(rows) > 1 {
+		return "", recon.ErrAmbiguousScope
+	}
+	return rows[0].ShadowTable, nil
+}
+
+func (r *reconReadRepoGorm) GetFailedLogByID(ctx context.Context, id int64) (*reconmodel.FailedSyncLog, error) {
+	var log reconmodel.FailedSyncLog
+	if err := r.db.WithContext(ctx).First(&log, id).Error; err != nil {
+		return nil, err
+	}
+	return &log, nil
+}
+
+// retryScopeQuery is the LATERAL-join enrichment lifted verbatim from
+// the legacy RetryFailedLog handler. The handler historically swallowed
+// the error (`_ = ...Scan(...)`) — keep that behaviour by returning a
+// zero-value scope on err so the retry dispatch is never blocked by a
+// metadata read failure.
+const retryScopeQuery = `
+	SELECT
+		COALESCE(NULLIF(f.source_db, ''), so.source_database) AS source_database,
+		COALESCE(NULLIF(f.source_table, ''), so.source_object_name) AS resolved_source_table,
+		sb.shadow_schema,
+		sb.shadow_table,
+		COALESCE(scope_counts.binding_count, 0) > 1 AS scope_ambiguous
+	FROM cdc_system.failed_sync_logs f
+	LEFT JOIN LATERAL (
+		SELECT source_object_id, shadow_schema, shadow_table
+		FROM cdc_system.shadow_binding
+		WHERE shadow_table = f.target_table
+		  AND is_active = TRUE
+		ORDER BY updated_at DESC, id DESC
+		LIMIT 1
+	) sb ON TRUE
+	LEFT JOIN LATERAL (
+		SELECT COUNT(*)::int AS binding_count
+		FROM cdc_system.shadow_binding
+		WHERE shadow_table = f.target_table
+		  AND is_active = TRUE
+	) scope_counts ON TRUE
+	LEFT JOIN cdc_system.source_object_registry so ON so.id = sb.source_object_id
+	WHERE f.id = ?
+`
+
+func (r *reconReadRepoGorm) GetRetryScopeByLogID(ctx context.Context, id int64) (recon.FailedLogRetryScope, error) {
+	var scope recon.FailedLogRetryScope
+	// Match legacy: error swallowed, zero-value scope returned. The
+	// retry dispatch must not be blocked by a metadata read miss.
+	_ = r.db.WithContext(ctx).Raw(retryScopeQuery, id).Scan(&scope).Error
+	return scope, nil
+}
+
+func (r *reconReadRepoGorm) ListBackfillRuns(ctx context.Context, table, runID string, limit int) ([]recon.BackfillRunRow, error) {
+	if limit <= 0 {
+		limit = 30
+	}
+	q := r.db.WithContext(ctx).
+		Table("recon_runs").
+		Where("tier = ?", 4).
+		// Backfill runs LUÔN có instance_id 'backfill:<run_id>'. Guard này
+		// chặn vĩnh viễn việc nhặt nhầm run loại khác trùng tier (đã xảy ra:
+		// Segment B từng dùng tier=4 → FQN có dấu chấm → CountTableRows
+		// PgIdent fail-close "" → `SELECT COUNT(*) FROM ""` spam mỗi poll).
+		Where("instance_id LIKE ?", "backfill:%").
+		Order("started_at DESC").
+		Limit(limit)
+	if t := strings.TrimSpace(table); t != "" {
+		q = q.Where("table_name = ?", t)
+	}
+	if rid := strings.TrimSpace(runID); rid != "" {
+		q = q.Where("instance_id = ?", "backfill:"+rid)
+	}
+	var rows []recon.BackfillRunRow
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+func (r *reconReadRepoGorm) CountTableRows(ctx context.Context, table string) (int64, int64, error) {
+	ident := utils.PgIdent(table)
+	// Identifier safety: utils.PgIdent fail-closes to `""`. Guard sớm thay vì
+	// bắn query lỗi 42601 vào DB (từng spam log mỗi poll khi caller đưa FQN
+	// có dấu chấm / tên rỗng).
+	if ident == `""` {
+		return 0, 0, fmt.Errorf("count table rows: invalid identifier %q", table)
+	}
+	var total, nul int64
+	if err := r.db.WithContext(ctx).Raw("SELECT COUNT(*) FROM " + ident).Scan(&total).Error; err != nil {
+		return 0, 0, err
+	}
+	if err := r.db.WithContext(ctx).Raw("SELECT COUNT(*) FROM " + ident + " WHERE _source_ts IS NULL").Scan(&nul).Error; err != nil {
+		return total, 0, err
+	}
+	return total, nul, nil
+}
+
+func (r *reconReadRepoGorm) ListFailedLogs(ctx context.Context, f recon.FailedLogFilter, page, pageSize int) ([]recon.FailedLogRow, int64, error) {
+	query := failedLogsBase
+	args := make([]interface{}, 0, 4)
+	if f.TargetTable != "" {
+		query += ` AND f.target_table = ?`
+		args = append(args, f.TargetTable)
+	}
+	if f.Status != "" {
+		query += ` AND f.status = ?`
+		args = append(args, f.Status)
+	}
+	if f.ErrorType != "" {
+		query += ` AND f.error_type = ?`
+		args = append(args, f.ErrorType)
+	}
+
+	var total int64
+	countQuery := `SELECT COUNT(*) FROM (` + query + `) AS failed_logs`
+	if err := r.db.WithContext(ctx).Raw(countQuery, args...).Scan(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	pagedQuery := query + ` ORDER BY f.created_at DESC OFFSET ? LIMIT ?`
+	pagedArgs := append(args, (page-1)*pageSize, pageSize)
+
+	var rows []recon.FailedLogRow
+	if err := r.db.WithContext(ctx).Raw(pagedQuery, pagedArgs...).Scan(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
+}
+
+func (r *reconReadRepoGorm) ListUnhealedReports(ctx context.Context, table, shadowSchema string) ([]reconmodel.ReconciliationReport, error) {
+	if strings.Contains(table, ".") {
+		parts := strings.Split(table, ".")
+		if len(parts) > 1 {
+			if shadowSchema == "" {
+				shadowSchema = parts[0]
+			}
+			table = parts[len(parts)-1]
+		}
+	}
+
+	var reports []reconmodel.ReconciliationReport
+	q := r.db.WithContext(ctx).
+		Table("cdc_system.cdc_reconciliation_report").
+		Where("(shadow_table = ? OR master_table = ?)", table, table).
+		Where("healed_at IS NULL").
+		Where("(missing_count > 0 OR stale_count > 0 OR orphan_count > 0)")
+	if shadowSchema != "" {
+		q = q.Where("shadow_schema = ?", shadowSchema)
+	}
+	err := q.Order("checked_at DESC").Find(&reports).Error
+	return reports, err
+}

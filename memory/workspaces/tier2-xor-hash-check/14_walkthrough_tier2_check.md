@@ -1,124 +1,122 @@
-# Tổng Kết Phiên Làm Việc (Walkthrough: Cải Tiến Luồng Heal & Phân Tích Tier 2 XOR-Hash)
+# Walkthrough: Tier 2 Lookback & MongoDB Filter Dual-Type Fix / Hướng Dẫn Nghiệm Thu: Tùy Chọn Lookback Tier 2 & Sửa Lỗi Bộ Lọc Lệch Kiểu MongoDB
 
-Tài liệu này tổng kết toàn bộ kết quả phân tích kỹ thuật, các thay đổi mã nguồn đã thực hiện và kết quả kiểm thử xác thực đối với luồng đối soát Tier 2 và cơ chế chữa lành (heal) dữ liệu của hệ thống.
-
----
-
-## 1. Kết Quả Báo Cáo Kỹ Thuật
-
-Chúng tôi đã hoàn thành việc phân tích sâu và đề xuất giải pháp cho các vấn đề cốt lõi của luồng heal:
-- **Nguyên nhân kẹt heal Nhánh 1**: Do Debezium signal bị ngắt trên live server nên các tin nhắn gửi qua topic NATS `cdc.cmd.debezium-signal` không có tác dụng. 
-- **Rủi ro Safety Net**: Quét so sánh toàn bảng không giới hạn thời gian gây nguy cơ OOM RAM và làm nghẽn DB connection pool khi bảng đạt quy mô hàng chục triệu record.
-- **Giải pháp**: Thiết kế radio button chọn chế độ heal trên FE (Window vs Full-diff) và phân nhánh routing mới dựa trên param ở BE. Áp dụng range filter query hạn chế tối đa 30 ngày cho chế độ Full-diff để bảo toàn RAM/CPU, và chuyển đổi hẳn Window mode sang direct write `FetchAndWriteByIDs`.
+This walkthrough details the changes made to both cdc-cms-web (Frontend) and centralized-data-service (Backend) to address lookback options for both Check and Heal actions, hide datetimes dynamically on UI, resolve MongoDB date-type mapping issues, and fix the "upper bound range clamp" bug for manual scans.
 
 ---
 
-## 2. Các Thay Đổi Mã Nguồn Đã Thực Hiện (Code Changes Summary)
+## English Version
 
-Các sửa đổi mã nguồn đã được kỹ sư thực thi (Muscle Worker) triển khai chi tiết:
+### Summary of Changes
 
-1. **`internal/handler/recon/recon_handler_run.go`**:
-   - Mở rộng struct payload unmarshal trong `HandleReconHeal` để nhận thêm tham số: `mode` ("window" hoặc "full_diff"), `start_time`, `end_time` (RFC3339).
-   - Cập nhật signature gọi hàm `healSegmentA` để truyền đầy đủ các tham số mới này từ FE gửi lên.
-2. **`internal/service/recon/recon_stream.go`**:
-   - Viết mới hàm `StreamIDsInTimeRange` cho MongoDB và `streamIDsPostgresInTimeRange` cho PostgreSQL. 
-   - Hai hàm này sử dụng keyset pagination kết hợp với bộ lọc thời gian ($gte, $lt trên timestamp field) để stream ID về channel nhằm tối ưu bộ nhớ OO(1) và tránh cursor timeout của database.
-3. **`internal/service/recon/recon_tier_a.go`**:
-   - Viết mới hàm `TimeBoundedDiffMissingFromShadow` thực hiện đối soát dữ liệu giữa Source (MongoDB) và Shadow (PostgreSQL) trong một khoảng thời gian xác định (`startTime`, `endTime`) dựa trên chỉ mục timestamp index.
-4. **`internal/handler/recon/recon_heal_v4.go`**:
-   - Cập nhật signature và logic cho `healSegmentA`.
-   - Phân nhánh định tuyến:
-     - **Nhánh Full-diff (`mode == "full_diff"`)**: Parse và validate khoảng thời gian (không quá 30 ngày để bảo vệ DB), gọi `TimeBoundedDiffMissingFromShadow` để quét các ID bị lệch và thực hiện chữa lành trực tiếp (Direct Write) qua `FetchAndWriteByIDs` từ MongoDB sang Shadow DB.
-     - **Nhánh Window mặc định**: Chạy `RunTier2` với `cold_lookback = true` (quét cửa sổ 7 ngày gần nhất) và chuyển hẳn sang cơ chế direct write (`FetchAndWriteByIDs`) thay vì Debezium NATS signal.
-5. **`internal/handler/recon/recon_heal_v4_test.go`**:
-   - Bổ sung unit test case `TestHealSegmentA_FullDiffMode_InvalidTimeRange` để xác minh trường hợp khoảng thời gian full-diff không hợp lệ sẽ bị reject ngay lập tức mà không gây crash hệ thống.
+#### 1. Frontend Modifications (cdc-cms-web)
+* **`src/hooks/useReconStatus.ts`**:
+  * Updated `useCheckTableMutation` payload schema to accept `lookback?: string` and post it in the payload.
+  * Updated `useHealMutation` payload schema to include `lookback?: string` and post it in the payload.
+* **`src/components/ConfirmDestructiveModal.tsx`**:
+  * Added `isCheckTier2?: boolean` prop control.
+  * Dynamically hide the `startTime` and `endTime` datetime-local pickers when `mode === 'window'` or when checking Tier 2 (`isCheckTier2 === true`).
+  * Render radio buttons for lookback selection (`Hot Mode` - 2h lookback, `Cold Lookback` - 7d lookback) when `mode === 'window'` or when checking Tier 2 (`isCheckTier2 === true`).
+  * Conditionally render datetime pickers only in `full_diff` mode.
+  * Updated `onConfirm` callback signature to propagate `lookback` value back to the parent page.
+* **`src/pages/DataIntegrity.tsx`**:
+  * Configured `openCheckTable` action to pass `isCheckTier2: String(record.tier) === '2'`.
+  * Caught `lookback` callback from modal submit and routed it to `checkTable.mutateAsync` (for check action) and `heal.mutateAsync` (for heal action).
+  * Rendered the modal with `isCheckTier2` prop mapped from modal state.
 
----
-
-## 3. Kết Quả Kiểm Thử Xác Thực (Test Verification Results)
-
-Hệ thống đã chạy thực hiện kiểm thử tự động trên live server và đạt kết quả PASS 100%:
-
-### 1. Unit Tests Package `handler/recon`
-```bash
-go test -v ./internal/handler/recon/...
-```
-Kết quả output:
-```
-=== RUN   TestHealSegmentA_AlwaysFreshScan_LockFail_Noop
---- PASS: TestHealSegmentA_AlwaysFreshScan_LockFail_Noop (0.06s)
-=== RUN   TestHealSegmentA_FreshScan_NoReport_NoDrift_Noop
---- PASS: TestHealSegmentA_FreshScan_NoReport_NoDrift_Noop (0.03s)
-=== RUN   TestHealSegmentA_RegistryNotFound_Error
---- PASS: TestHealSegmentA_RegistryNotFound_Error (0.03s)
-=== RUN   TestHealSegmentA_NatsPublisherNotWired_Error
---- PASS: TestHealSegmentA_NatsPublisherNotWired_Error (0.03s)
-=== RUN   TestHealSegmentA_FullDiffMode_InvalidTimeRange
---- PASS: TestHealSegmentA_FullDiffMode_InvalidTimeRange (0.03s)
-=== RUN   TestExplodePathToPGPath
---- PASS: TestExplodePathToPGPath (0.00s)
-=== RUN   TestValidScanIdent
---- PASS: TestValidScanIdent (0.00s)
-=== RUN   TestFlattenJSONWithTypes
---- PASS: TestFlattenJSONWithTypes (0.00s)
-=== RUN   TestHandleScanRawData_BackwardCompatibility
---- PASS: TestHandleScanRawData_BackwardCompatibility (0.03s)
-=== RUN   TestHandleScanArrayFields_ReplyToAndUnmarshalOrder
---- PASS: TestHandleScanArrayFields_ReplyToAndUnmarshalOrder (0.03s)
-PASS
-ok  	centralized-data-service/internal/handler/recon	0.973s
-```
-
-### 2. Unit Tests Package `service/recon`
-```bash
-go test -v ./internal/service/recon/...
-```
-Kết quả output:
-```
-=== RUN   TestDestAgent_CountInWindow_Default
---- PASS: TestDestAgent_CountInWindow_Default (0.00s)
-=== RUN   TestDestAgent_CountInWindow_DomainTS
---- PASS: TestDestAgent_CountInWindow_DomainTS (0.00s)
-=== RUN   TestDestAgent_BucketCounts_DomainTS
---- PASS: TestDestAgent_BucketCounts_DomainTS (0.00s)
-=== RUN   TestDestAgent_ListIDTsInWindow_DomainTS
---- PASS: TestDestAgent_ListIDTsInWindow_DomainTS (0.00s)
-...
-=== RUN   TestPostgres_StreamAllIDs
---- PASS: TestPostgres_StreamAllIDs (0.00s)
-=== RUN   TestValidatePipelineConnections
---- PASS: TestValidatePipelineConnections (0.00s)
-PASS
-ok  	centralized-data-service/internal/service/recon	0.590s
-```
-
-### 3. Kiểm thử Biên dịch Frontend (`npm run build`)
-```bash
-npm run build
-```
-Kết quả output:
-```
-vite v8.0.3 building client environment for production...
-transforming...✓ 3687 modules transformed.
-rendering chunks...
-computing gzip size...
-dist/assets/ConfirmDestructiveModal-BwF_GodA.js      4.06 kB │ gzip:   1.82 kB
-dist/assets/DataIntegrity-Cqai9YMb.js               42.77 kB │ gzip:  11.87 kB
-✓ built in 790ms
-```
-Kết quả: **PASS** (Biên dịch và bundle React/Vite thành công, không có lỗi TypeScript).
-
-### 4. Kiểm thử Tích hợp Tracing (OpenTelemetry)
-Tất cả các spans và trace context đã được tích hợp chặt chẽ. Hệ thống chạy `go test` vượt qua 100% các cases mà không có regression:
-* Package `handler/recon`: **PASS**
-* Package `service/recon`: **PASS**
+#### 2. Backend Modifications (centralized-data-service)
+* **`internal/handler/recon/recon_handler_run.go`**:
+  * Extended NATS unmarshal payload struct with `Lookback` field for both `HandleReconCheck` and `HandleReconHeal`.
+  * For Tier 2 check:
+    * Injected `"manual_lookback" = true` into the context.
+    * If `payload.Lookback == "cold"`, wraps context containing `"cold_lookback" = true` (7-day lookback).
+    * Otherwise, routes to a default context (2-hour lookback).
+  * Propagated `payload.Lookback` to `healSegmentA` for heal actions.
+* **`internal/handler/recon/recon_heal_v4.go`**:
+  * Refactored `healSegmentA` signature to accept `lookback`.
+  * Injected `"manual_lookback" = true` into context for both Hot and Cold modes.
+  * Integrated lookback routing:
+    * `lookback == "hot"` routes to context (2-hour scan lookback).
+    * Otherwise, routes to context containing `"cold_lookback" = true` (7-day scan lookback).
+* **`internal/service/recon/recon_tier_a.go`**:
+  * In `pickScanRangeWithLag`, checks if context contains `"manual_lookback" = true`.
+  * If the cờ exists, **bypasses** clamping `upper` to the historical `srcMax` and `dstMax`, keeping `upper = nowFreeze` (realtime UTC now minus lag margin).
+  * This guarantees that manual lookbacks (Hot/Cold) scan actual recent windows (e.g. last 7 days/2 hours) rather than getting stuck in the past when source DB is static.
+* **`internal/service/recon/recon_stream.go`**:
+  * Fixed MongoDB filter inside `StreamIDsInTimeRange` using `$or` operator:
+    * Supports both Date format (`time.Time`) and Epoch Milliseconds (`int64` / `primitive.DateTime`), resolving the 0-doc empty stream bug.
 
 ---
 
-## 4. Rà Soát Tính Tuân Thủ Quy Trình (DoD Verification)
+### Verification and Test Results
 
-Chúng tôi đã kiểm tra chéo các yêu cầu về mặt quản trị quy trình:
-1. **Dịch tài liệu sang Tiếng Việt**: Tất cả các tài liệu workspace được duy trì bằng Tiếng Việt đầy đủ.
-2. **Kế hoạch triển khai của AI**: Ghi nhận đầy đủ trong `implementation_plan.md`.
-3. **Lập hồ sơ giải pháp kỹ thuật**: Ghi nhận chi tiết code diffs tại `09_tasks_solution_tier2_check.md`.
-4. **Cập nhật nhật ký tiến trình**: Đã ghi nhận đầy đủ hai sự kiện sửa đổi và verify thành công của Muscle cho cả Frontend, Backend và Tracing vào `05_progress_tier2_check.md`.
+#### 1. Frontend Build Pass
+* Ran `npm run build` inside `cdc-cms-web`.
+* Compilation was 100% successful with typecheck passed.
+
+#### 2. Backend Unit Test Pass
+* Ran unit tests inside `internal/handler/recon/...` and `internal/service/recon/...`.
+* All tests passed without regress.
+
+---
+
+## Tiếng Việt
+
+### Tóm Tắt Các Thay Đổi
+
+#### 1. Sửa Đổi Frontend (cdc-cms-web)
+* **`src/hooks/useReconStatus.ts`**:
+  * Cập nhật payload `useCheckTableMutation` thêm tham số tùy chọn `lookback?: string`.
+  * Cập nhật payload `useHealMutation` thêm tham số tùy chọn `lookback?: string`.
+  * Gửi kèm giá trị `lookback` vào body request POST tới API tương ứng.
+* **`src/components/ConfirmDestructiveModal.tsx`**:
+  * Bổ sung prop `isCheckTier2?: boolean` để điều khiển hiển thị.
+  * Ẩn hoàn toàn DatePicker `startTime`/`endTime` khi chọn `mode === 'window'` hoặc khi thực hiện kiểm tra Tier 2 (`isCheckTier2 === true`).
+  * Hiển thị radio button chọn cửa sổ lookback: Hot Mode (quét 2 giờ gần nhất) / Cold Lookback (quét 7 ngày gần nhất) khi ở chế độ window hoặc check Tier 2.
+  * Chỉ hiển thị DatePicker chọn thời gian khi ở chế độ `full_diff` của Heal.
+  * Cập nhật callback signature của `onConfirm` truyền tiếp `lookback` lên component cha.
+* **`src/pages/DataIntegrity.tsx`**:
+  * Cấu trúc `openCheckTable` truyền thêm cờ `isCheckTier2: String(record.tier) === '2'`.
+  * Nhận `lookback` từ modal callback và gửi sang `checkTable.mutateAsync` (đối với Check) và `heal.mutateAsync` (đối với Heal).
+  * Truyền prop `isCheckTier2` cho `ConfirmDestructiveModal` dựa trên trạng thái modal hiện tại.
+
+#### 2. Sửa Đổi Backend (centralized-data-service)
+* **`internal/handler/recon/recon_handler_run.go`**:
+  * Cấu trúc thêm trường `Lookback` trong NATS payload unmarshal struct cho cả 2 hàm `HandleReconCheck` và `HandleReconHeal`.
+  * Đối với kiểm tra Tier 2:
+    * Luôn truyền cờ `"manual_lookback" = true` vào context.
+    * Nếu `payload.Lookback == "cold"`, wrap context chứa key `"cold_lookback" = true` (quét lookback 7 ngày).
+    * Ngược lại, dùng context gốc (mặc định quét lookback 2 giờ).
+  * Chuyển tiếp `payload.Lookback` vào hàm `healSegmentA`.
+* **`internal/handler/recon/recon_heal_v4.go`**:
+  * Thay đổi chữ ký hàm `healSegmentA` để nhận thêm tham số `lookback`.
+  * Truyền cờ `"manual_lookback" = true` vào context cho cả Hot và Cold modes.
+  * Phân nhánh context:
+    * `lookback == "hot"` dùng context (mặc định quét lookback 2 giờ).
+    * Ngược lại dùng context chứa key `"cold_lookback" = true` (quét lookback 7 ngày).
+* **`internal/service/recon/recon_tier_a.go`**:
+  * Trong hàm `pickScanRangeWithLag`, kiểm tra nếu context có cờ `"manual_lookback" = true`.
+  * Nếu phát hiện cờ, **bỏ qua việc kẹp lùi `upper`** về `srcMax` và `dstMax` trong quá khứ, giữ `upper = nowFreeze` (thời điểm thực tế hiện tại trừ lag margin).
+  * Điều này đảm bảo rằng các lượt quét thủ công (Hot/Cold) sẽ quét thực tế trên 7 ngày/2 giờ gần nhất thay vì bị mắc kẹt tại mốc dữ liệu cũ khi database nguồn tĩnh.
+* **`internal/service/recon/recon_stream.go`**:
+  * Sửa lỗi bộ lọc MongoDB trong `StreamIDsInTimeRange` sử dụng `$or`:
+    * Hỗ trợ song song cả kiểu Date (`time.Time`) và Epoch Ms (`int64` / `primitive.DateTime`), khắc phục triệt để lỗi trả về 0 docs do lệch kiểu dữ liệu.
+
+#### 3. Sửa Đổi API Gateway (cdc-cms-service)
+* **`internal/app/commands/recon/recon_check.go`**: Mở rộng `ReconCheckCommand` struct nhận thêm `Lookback` field.
+* **`internal/app/commands/recon/recon_async.go`**: Mở rộng `ReconHealCommand` struct nhận thêm `Mode`, `StartTime`, `EndTime`, và `Lookback`.
+* **`internal/api/recon/reconciliation_handler_commands.go`**:
+  * Trong cả `TriggerCheck` và `TriggerCheckAll` (định tuyến khi UI gửi request không chứa table param): Sử dụng struct gộp để unmarshal `lookback` từ JSON request body và gán chính xác vào `ReconCheckCommand` gửi đi NATS.
+* **`internal/api/recon/reconciliation_handler_heal.go`**:
+  * Trong `TriggerHeal`: Unmarshal đầy đủ các tham số `mode`, `start_time`, `end_time` và `lookback` từ HTTP body để gán và dispatch sang `ReconHealCommand`.
+
+---
+
+### Kết Quả Xác Minh & Kiểm Thử
+
+#### 1. Frontend Build Thành Công
+* Chạy build thành công `npm run build` trong `cdc-cms-web`. Không phát sinh bất kỳ lỗi compile nào.
+
+#### 2. Backend Unit Test Pass 100%
+* Chạy unit tests trong `internal/handler/recon/...` và `internal/service/recon/...` của `centralized-data-service` đều PASS sạch sẽ.
+* Chạy unit tests trong `internal/...` của `cdc-cms-service` đều PASS sạch sẽ.
+

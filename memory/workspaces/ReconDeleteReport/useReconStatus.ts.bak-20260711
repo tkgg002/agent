@@ -1,0 +1,431 @@
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { cmsApi } from '../services/api';
+
+export type ReconStatus =
+  | 'ok'
+  | 'ok_empty'
+  | 'warning'
+  | 'drift'
+  | 'dest_missing'
+  | 'source_missing_or_stale'
+  | 'error';
+
+export interface ReconRow {
+  target_table: string;
+  // Recon V4: 'source_shadow' (A — ingest) | 'shadow_master' (B — transmute)
+  segment?: 'source_shadow' | 'shadow_master';
+  // Recon V4 P4: L3-B row-diff [{gpay_id, column, expected, actual}]
+  field_diffs?: Array<{ gpay_id: string; column: string; expected: string; actual: string }> | null;
+  // Migration 084: TỔNG record thật 2 trạm tại thời điểm recon (≠ window counts)
+  total_source_count?: number | null;
+  total_dest_count?: number | null;
+  // Dashboard lineage enrich: connector nguồn + schema master (row segment B)
+  source_connection_code?: string | null;
+  master_schema?: string | null;
+  source_total?: number | null;
+  source_active?: number | null;
+  shadow_total?: number | null;
+  shadow_active?: number | null;
+  master_total?: number | null;
+  master_active?: number | null;
+  ingest_lag_ms?: number | null;
+
+  transmute_lag_ms?: number | null;
+  worker_backlog?: number | null;
+  source_object_id?: number | null;
+  source_table?: string | null;
+  shadow_schema?: string | null;
+  shadow_table?: string | null;
+  scope_ambiguous?: boolean;
+  sync_engine?: string | null;
+  source_type?: string | null;
+  source_count: number | null;
+  dest_count: number;
+  drift_pct: number | null;
+  status: ReconStatus;
+  error_code?: string | null;
+  full_source_count?: number | null;
+  full_dest_count?: number | null;
+  full_count_at?: string | null;
+  timestamp_field?: string | null;
+  timestamp_field_source?: 'auto' | 'admin_override' | null;
+  timestamp_field_confidence?: 'high' | 'medium' | 'low' | null;
+  checked_at: string;
+  registry_id?: number | null;
+  heal_needed?: boolean;
+}
+
+export interface ReconReport extends ReconRow {
+  id: number;
+  source_db: string;
+  source_host?: string | null;
+  source_table?: string | null;
+  diff: number;
+  missing_count: number;
+  stale_count: number;
+  check_type: string;
+  duration_ms: number;
+  healed_count: number;
+  source_query_method?: string;
+  recon_start_time?: string | null;
+  recon_end_time?: string | null;
+}
+
+export interface UnhealedReport {
+  id: number;
+  target_table: string;
+  segment: string;
+  source_db: string;
+  missing_count: number;
+  stale_count: number;
+  orphan_count: number;
+  check_type: string;
+  checked_at: string;
+  shadow_schema?: string;
+  shadow_table?: string;
+  healed_at: string | null;
+  healed_mismatched_count?: number;
+  healed_missing_dest_count?: number;
+  pruned_missing_src_count?: number;
+}
+
+export interface ExecuteHealPayload {
+  table: string;
+  segment?: string;
+  report_ids: number[];
+  heal_mismatched: boolean;
+  heal_missing_dest: boolean;
+  prune_missing_src: boolean;
+  force_heal?: boolean;
+}
+
+export interface FailedLog {
+  id: number;
+  target_table: string;
+  source_db?: string | null;
+  record_id: string;
+  operation: string;
+  error_message: string;
+  error_type: string;
+  retry_count: number;
+  status: string;
+  created_at: string;
+  resolved_source_table?: string | null;
+  shadow_schema?: string | null;
+  shadow_table?: string | null;
+  scope_ambiguous?: boolean;
+}
+
+export interface FailedLogsResponse {
+  data: FailedLog[];
+  total: number;
+}
+
+// ---------- Helpers ----------
+
+function newIdempotencyKey(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function auditHeaders(reason: string) {
+  return {
+    'Idempotency-Key': newIdempotencyKey(),
+    'X-Action-Reason': reason,
+  };
+}
+
+// ---------- Queries ----------
+export function useReconReport() {
+  return useQuery<ReconReport[]>({
+    queryKey: ['recon-report'],
+    queryFn: async () => {
+      const { data } = await cmsApi.get<{ data: ReconReport[] }>('/api/reconciliation/report');
+      return data.data || [];
+    },
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+    retry: 2,
+  });
+}
+
+export function useFailedLogs(pageSize = 50) {
+  return useQuery<FailedLogsResponse>({
+    queryKey: ['failed-logs', pageSize],
+    queryFn: async () => {
+      const { data } = await cmsApi.get<FailedLogsResponse>('/api/failed-sync-logs', {
+        params: { page_size: pageSize },
+      });
+      return { data: data.data || [], total: data.total || 0 };
+    },
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+    retry: 2,
+  });
+}
+
+// ---------- Mutations ----------
+
+export function useCheckAllMutation() {
+  return useMutation<void, Error, { reason: string }>({
+    mutationFn: async ({ reason }) => {
+      await cmsApi.post('/api/reconciliation/check', { reason }, { headers: auditHeaders(reason) });
+    },
+    retry: 0,
+  });
+}
+
+export function useCheckTableMutation() {
+  return useMutation<
+    void,
+    Error,
+    {
+      table: string;
+      typeRecon: string;
+      reason: string;
+      sourceDatabase?: string;
+      sourceTable?: string;
+      shadowSchema?: string;
+      shadowTable?: string;
+      lookback?: string;
+      segment?: string;
+      start_time?: number | null;
+      end_time?: number | null;
+    }
+  >({
+    mutationFn: async ({
+      table,
+      typeRecon,
+      reason,
+      sourceDatabase,
+      sourceTable,
+      shadowSchema,
+      shadowTable,
+      lookback,
+      segment,
+      start_time,
+      end_time,
+    }) => {
+      await cmsApi.post(
+        `/api/reconciliation/check?type_recon=${encodeURIComponent(typeRecon)}`,
+        {
+          reason,
+          table,
+          source_database: sourceDatabase || undefined,
+          source_table: sourceTable || undefined,
+          shadow_schema: shadowSchema || undefined,
+          shadow_table: shadowTable || undefined,
+          lookback: lookback || undefined,
+          segment: segment || undefined,
+          start_time: start_time || undefined,
+          end_time: end_time || undefined,
+        },
+        { headers: auditHeaders(reason) },
+      );
+    },
+    retry: 0,
+  });
+}
+
+// Recon V4 dashboard: lịch sử phiên recon của 1 bảng (đóng GAP4 — route có
+// sẵn nhưng FE chưa từng dùng). enabled khi mở drawer drill-down.
+export function useTableHistory(table: string | null, shadowSchema?: string | null, masterTable?: string | null, pageSize = 30) {
+  // Migration 085: shadow_schema → lọc theo KHÓA (shadow_schema, shadow_table) gộp đủ
+  // segment A+B + hết collision target_table bare. master_table → scope segment B vì 1
+  // shadow có thể fan-out NHIỀU master (segment A dùng chung, segment B theo từng master).
+  return useQuery<{ data: ReconReport[]; total: number }>({
+    queryKey: ['recon-history', table, shadowSchema, masterTable, pageSize],
+    queryFn: async () => {
+      const res = await cmsApi.get(`/api/reconciliation/report/${encodeURIComponent(table!)}`, {
+        params: {
+          page: 1, page_size: pageSize,
+          ...(shadowSchema ? { shadow_schema: shadowSchema } : {}),
+          ...(masterTable ? { master_table: masterTable } : {}),
+        },
+      });
+      return res.data;
+    },
+    enabled: !!table,
+    refetchInterval: 30000,
+  });
+}
+
+export function useUnhealedReports(table: string | null, shadowSchema?: string | null) {
+  return useQuery<{ data: UnhealedReport[]; total: number }>({
+    queryKey: ['unhealed-reports', table, shadowSchema],
+    queryFn: async () => {
+      const res = await cmsApi.get(`/api/reconciliation/report/${encodeURIComponent(table!)}/unhealed`, {
+        params: {
+          ...(shadowSchema ? { shadow_schema: shadowSchema } : {}),
+        },
+      });
+      return res.data;
+    },
+    enabled: !!table,
+    refetchInterval: 15_000,
+    staleTime: 10_000,
+    retry: 2,
+  });
+}
+
+export function useHealMutation() {
+  return useMutation<
+    void,
+    Error,
+    {
+      table: string;
+      reason: string;
+      segment?: string;
+      sourceDatabase?: string;
+      sourceTable?: string;
+      shadowSchema?: string;
+      shadowTable?: string;
+    }
+  >({
+    mutationFn: async ({
+      table,
+      reason,
+      segment,
+      sourceDatabase,
+      sourceTable,
+      shadowSchema,
+      shadowTable,
+    }) => {
+      await cmsApi.post(
+        '/api/reconciliation/heal',
+        {
+          reason,
+          table,
+          segment: segment || undefined,
+          source_database: sourceDatabase || undefined,
+          source_table: sourceTable || undefined,
+          shadow_schema: shadowSchema || undefined,
+          shadow_table: shadowTable || undefined,
+        },
+        { headers: auditHeaders(reason) },
+      );
+    },
+    retry: 0,
+  });
+}
+
+export function useExecuteHealMutation() {
+  return useMutation<void, Error, ExecuteHealPayload & { reason: string }>({
+    mutationFn: async ({
+      table,
+      segment,
+      report_ids,
+      heal_mismatched,
+      heal_missing_dest,
+      prune_missing_src,
+      force_heal,
+      reason,
+    }) => {
+      await cmsApi.post(
+        '/api/reconciliation/execute-heal',
+        {
+          table,
+          segment: segment || undefined,
+          report_ids,
+          heal_mismatched,
+          heal_missing_dest,
+          prune_missing_src,
+          force_heal: force_heal || false,
+        },
+        { headers: auditHeaders(reason) },
+      );
+    },
+    retry: 0,
+  });
+}
+
+// Orphan-prune (Segment A): soft-delete shadow row có _source_id không còn ở source
+// (ghost). table='*' → prune tất cả; ngược lại prune 1 bảng. Worker có safety:
+// source đọc 0 id → từ chối nuke (không xoá sạch shadow).
+export function usePruneMutation() {
+  return useMutation<void, Error, { table: string; reason: string }>({
+    mutationFn: async ({ table, reason }) => {
+      const path =
+        table === '*' || table === ''
+          ? '/api/reconciliation/prune'
+          : `/api/reconciliation/prune/${encodeURIComponent(table)}`;
+      await cmsApi.post(path, { reason }, { headers: auditHeaders(reason) });
+    },
+    retry: 0,
+  });
+}
+
+export function useRetryFailedMutation() {
+  return useMutation<void, Error, { id: number; reason: string }>({
+    mutationFn: async ({ id, reason }) => {
+      await cmsApi.post(
+        `/api/failed-sync-logs/${id}/retry`,
+        { reason },
+        { headers: auditHeaders(reason) },
+      );
+    },
+    retry: 0,
+  });
+}
+
+export interface BackfillStatusRow {
+  id: string;
+  table_name: string;
+  tier: number;
+  status: 'running' | 'success' | 'failed' | 'cancelled';
+  started_at: string;
+  finished_at: string | null;
+  docs_scanned: number;
+  heal_actions: number;
+  error_message: string | null;
+  instance_id: string | null;
+  total_rows: number;
+  null_remaining: number;
+  percent_done: number;
+}
+
+interface BackfillStatusResponse {
+  data: BackfillStatusRow[];
+  total: number;
+}
+
+export interface BackfillTriggerResponse {
+  message: string;
+  run_id: string;
+  table: string;
+  status_url: string;
+}
+
+export function useBackfillSourceTsMutation() {
+  return useMutation<BackfillTriggerResponse, Error, { table?: string; reason: string }>({
+    mutationFn: async ({ table, reason }) => {
+      const { data } = await cmsApi.post<BackfillTriggerResponse>(
+        '/api/recon/backfill-source-ts',
+        { table: table || '' },
+        { headers: auditHeaders(reason) },
+      );
+      return data;
+    },
+    retry: 0,
+  });
+}
+
+export function useBackfillStatus(enabled = true, tableFilter?: string) {
+  return useQuery<BackfillStatusResponse>({
+    queryKey: ['backfill-status', tableFilter ?? 'all'],
+    queryFn: async () => {
+      const params: Record<string, string> = {};
+      if (tableFilter) params.table = tableFilter;
+      const { data } = await cmsApi.get<BackfillStatusResponse>(
+        '/api/recon/backfill-source-ts/status',
+        { params },
+      );
+      return { data: data.data || [], total: data.total || 0 };
+    },
+    enabled,
+    refetchInterval: 5_000,
+    staleTime: 4_000,
+    retry: 1,
+  });
+}

@@ -24,7 +24,8 @@ This plan outlines the steps for auditing and analyzing the Tier 2 window-based 
 15. **Technical Solution Mapping**: Document the detailed code changes in `09_tasks_solution_tier2_check.md` for user review and approval.
 16. **Frontend (FE) Execution**: Implement UI modifications in `useReconStatus.ts`, `ConfirmDestructiveModal.tsx`, and `DataIntegrity.tsx` to complete the CMS-Web modal redesign.
 17. **Observability Integration (OTEL Tracing)**: Integrate OpenTelemetry parent & child spans within database streaming query loops, range matching, and direct heal execution paths.
-18. **Documentation**: Write a comprehensive, Vietnamese technical analysis report mapping all findings.
+18. **MongoDB Dual-Type Filter Bug Fix**: Support both `time.Time` (ISODate) and `int64` (Epoch Ms) timestamp formats in the newly introduced `StreamIDsInTimeRange` MongoDB pipeline via an `$or` filter wrapper.
+19. **Documentation**: Write a comprehensive, Vietnamese technical analysis report mapping all findings.
 
 ---
 
@@ -48,4 +49,5 @@ This plan outlines the steps for auditing and analyzing the Tier 2 window-based 
 15. **Lập hồ sơ giải pháp kỹ thuật chi tiết**: Tài liệu hóa các đoạn mã diff cần thiết vào tệp `09_tasks_solution_tier2_check.md` và chờ phê duyệt.
 16. **Thực thi Frontend (FE)**: Cập nhật `useReconStatus.ts`, `ConfirmDestructiveModal.tsx` và `DataIntegrity.tsx` để hoàn thành modal điều khiển Heal trên CMS-Web.
 17. **Tích hợp Quan sát hệ thống (OTEL Tracing)**: Tích hợp OpenTelemetry parent và child spans vào các vòng lặp streaming ID từ nguồn, đối sánh range-bounded, và tiến trình ghi trực tiếp.
-18. **Tài liệu hóa**: Viết báo cáo phân tích kỹ thuật chi tiết bằng tiếng Việt ghi nhận toàn bộ kết quả phân tích.
+18. **Sửa Lỗi Bộ Lọc Lệch Kiểu MongoDB**: Hỗ trợ đồng thời kiểu `time.Time` và `int64` (Epoch Ms) của trường timestamp trong hàm `StreamIDsInTimeRange` của MongoDB thông qua bộ lọc `$or` để tránh trả về 0 docs.
+19. **Tài liệu hóa**: Viết báo cáo phân tích kỹ thuật chi tiết bằng tiếng Việt ghi nhận toàn bộ kết quả phân tích.

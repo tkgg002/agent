@@ -1,0 +1,128 @@
+package recon
+
+import (
+	"context"
+
+	modelrecon "centralized-data-service/internal/model/recon"
+
+	"gorm.io/gorm"
+)
+
+// ReconciliationReportRepo encapsulates GORM operations for ReconciliationReport.
+type ReconciliationReportRepo struct {
+	db *gorm.DB
+}
+
+func NewReconciliationReportRepo(db *gorm.DB) *ReconciliationReportRepo {
+	return &ReconciliationReportRepo{db: db}
+}
+
+// Create inserts a new reconciliation report.
+func (r *ReconciliationReportRepo) Create(ctx context.Context, report *modelrecon.ReconciliationReport) error {
+	return r.db.WithContext(ctx).Create(report).Error
+}
+
+// GetByID fetches a single report by primary key.
+func (r *ReconciliationReportRepo) GetByID(ctx context.Context, id uint64) (*modelrecon.ReconciliationReport, error) {
+	var row modelrecon.ReconciliationReport
+	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&row).Error; err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+// UpdateByID applies a partial update to a report identified by id.
+func (r *ReconciliationReportRepo) UpdateByID(ctx context.Context, id uint64, updates map[string]interface{}) error {
+	return r.db.WithContext(ctx).Model(&modelrecon.ReconciliationReport{}).Where("id = ?", id).Updates(updates).Error
+}
+
+// GetLatestByTable returns the most recent report for a given table and segment.
+func (r *ReconciliationReportRepo) GetLatestByTable(ctx context.Context, targetTable, segment string) (*modelrecon.ReconciliationReport, error) {
+	var row modelrecon.ReconciliationReport
+	q := r.db.WithContext(ctx).Where("target_table = ?", targetTable)
+	if segment != "" {
+		q = q.Where("segment = ?", segment)
+	}
+	if err := q.Order("checked_at DESC").First(&row).Error; err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *ReconciliationReportRepo) GetLatestMissingReport(ctx context.Context, targetTable string, tier int) (*modelrecon.ReconciliationReport, error) {
+	var rows []modelrecon.ReconciliationReport
+	err := r.db.WithContext(ctx).
+		Where("target_table = ? AND tier = ? AND missing_count > 0", targetTable, tier).
+		Order("checked_at DESC").
+		Limit(1).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &rows[0], nil
+}
+
+func (r *ReconciliationReportRepo) GetLatestMissingReportWithSegment(ctx context.Context, targetTable, segment string, tier int) (*modelrecon.ReconciliationReport, error) {
+	var rows []modelrecon.ReconciliationReport
+	err := r.db.WithContext(ctx).
+		Where("target_table = ? AND segment = ? AND tier = ? AND missing_count > 0", targetTable, segment, tier).
+		Order("checked_at DESC").
+		Limit(1).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &rows[0], nil
+}
+
+// GetUnhealedReports returns reports for a table that have not been healed.
+func (r *ReconciliationReportRepo) GetUnhealedReports(ctx context.Context, targetTable string) ([]modelrecon.ReconciliationReport, error) {
+	var rows []modelrecon.ReconciliationReport
+	err := r.db.WithContext(ctx).
+		Where("target_table = ? AND healed_at IS NULL AND (missing_count > 0 OR stale_count > 0 OR orphan_count > 0)", targetTable).
+		Order("checked_at DESC").
+		Find(&rows).Error
+	return rows, err
+}
+
+// ClaimForHealing atomically marks a report as "healing" to prevent
+// concurrent heal by Background Heal and Interactive Heal.
+// Returns (report, true, nil) if claim succeeded; (nil, false, nil) if
+// another worker already claimed or the report is already healed.
+func (r *ReconciliationReportRepo) ClaimForHealing(ctx context.Context, id uint64) (*modelrecon.ReconciliationReport, bool, error) {
+	var row modelrecon.ReconciliationReport
+	result := r.db.WithContext(ctx).
+		Model(&modelrecon.ReconciliationReport{}).
+		Where("id = ? AND status NOT IN ('healing', 'healed')", id).
+		Update("status", "healing")
+	if result.Error != nil {
+		return nil, false, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, false, nil // another worker claimed or already healed
+	}
+	// Fetch the full row after claiming.
+	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&row).Error; err != nil {
+		return nil, false, err
+	}
+	return &row, true, nil
+}
+
+// ReleaseHealClaim reverts a report status when heal fails mid-processing,
+// allowing it to be retried later.
+func (r *ReconciliationReportRepo) ReleaseHealClaim(ctx context.Context, id uint64, prevStatus string) error {
+	if prevStatus == "" {
+		prevStatus = "drift"
+	}
+	return r.db.WithContext(ctx).
+		Model(&modelrecon.ReconciliationReport{}).
+		Where("id = ? AND status = 'healing'", id).
+		Update("status", prevStatus).Error
+}
+

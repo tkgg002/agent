@@ -1,0 +1,119 @@
+// system_health_queries.go — DB-derived snapshot sections.
+//
+// Lives next to the collector (same package) because it touches
+// Collector internals (db, logger, cfg.ProbeTimeout) but is logically
+// independent of the external HTTP probes that already moved to
+// internal/infra/observability/probes. Keeping these here means the probes
+// package stays a leaf with no inbound dependency on service.
+package observability
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	reconmodel "cdc-cms-service/internal/model/recon"
+	systemmodel "cdc-cms-service/internal/model/system"
+
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+)
+
+// queryReconciliation pulls the latest report per target table. The
+// DISTINCT ON pattern + (target_table, checked_at DESC) order picks
+// the freshest row per table in one scan; postgres uses index
+// idx_recon_target_checked.
+func (c *Collector) queryReconciliation(ctx context.Context) []map[string]any {
+	ctxQ, cancel := context.WithTimeout(ctx, c.cfg.ProbeTimeout)
+	defer cancel()
+
+	db := c.db.Session(&gorm.Session{PrepareStmt: false}).WithContext(ctxQ)
+
+	var reports []reconmodel.ReconciliationReport
+	err := db.Raw(
+		`SELECT DISTINCT ON (target_table) * FROM cdc_reconciliation_report ORDER BY target_table, checked_at DESC`,
+	).Scan(&reports).Error
+	if err != nil {
+		c.logger.Debug("query reconciliation", zap.Error(err))
+		return nil
+	}
+
+	result := make([]map[string]any, 0, len(reports))
+	for _, r := range reports {
+		driftPct := float64(0)
+		if r.SourceCount > 0 {
+			driftPct = float64(r.Diff) / float64(r.SourceCount) * 100
+		}
+		result = append(result, map[string]any{
+			"table":        r.TargetTable,
+			"source_count": r.SourceCount,
+			"dest_count":   r.DestCount,
+			"drift_pct":    fmt.Sprintf("%.2f", driftPct),
+			"status":       r.Status,
+			"last_check":   r.CheckedAt,
+		})
+	}
+	return result
+}
+
+// queryFailedCount aggregates 24h / 1h failed-sync rows in a single
+// scan. Outer `created_at > 24h_ago AND <= NOW()` bounds enable
+// partition pruning on failed_sync_logs (migration 010); the inner
+// FILTER counts the 1h subset without re-scanning the partition. Prior
+// 2-query form caused 398ms (SLOW SQL log 2026-05-29) — single Raw cuts
+// to ~<60ms in the same partition window.
+func (c *Collector) queryFailedCount(ctx context.Context) map[string]any {
+	ctxQ, cancel := context.WithTimeout(ctx, c.cfg.ProbeTimeout)
+	defer cancel()
+
+	now := time.Now()
+	oneHourAgo := now.Add(-1 * time.Hour)
+	twentyFourHoursAgo := now.Add(-24 * time.Hour)
+
+	db := c.db.Session(&gorm.Session{PrepareStmt: false}).WithContext(ctxQ)
+
+	var row struct {
+		Count24h int64 `gorm:"column:count_24h"`
+		Count1h  int64 `gorm:"column:count_1h"`
+	}
+	db.Raw(
+		`SELECT
+			count(*) AS count_24h,
+			count(*) FILTER (WHERE created_at > ?) AS count_1h
+		 FROM cdc_system.failed_sync_logs
+		 WHERE created_at > ? AND created_at <= ?`,
+		oneHourAgo, twentyFourHoursAgo, now,
+	).Scan(&row)
+	return map[string]any{"count_24h": row.Count24h, "count_1h": row.Count1h}
+}
+
+// queryRecentEvents returns the 10 most recent activity-log rows.
+// ORDER BY uses created_at (not started_at) to align with the WHERE
+// predicate column and leverage idx_act_created (created_at DESC, id)
+// — prior mismatch caused 260ms SLOW SQL (2026-05-29). Both columns
+// default NOW() at INSERT so the ordering is semantically equivalent.
+func (c *Collector) queryRecentEvents(ctx context.Context) []map[string]any {
+	ctxQ, cancel := context.WithTimeout(ctx, c.cfg.ProbeTimeout)
+	defer cancel()
+
+	now := time.Now()
+	oneDayAgo := now.Add(-24 * time.Hour)
+
+	db := c.db.Session(&gorm.Session{PrepareStmt: false}).WithContext(ctxQ)
+
+	var logs []systemmodel.ActivityLog
+	db.Where("created_at > ? AND created_at <= ?", oneDayAgo, now).
+		Order("created_at DESC").Limit(10).Find(&logs)
+
+	result := make([]map[string]any, 0, len(logs))
+	for _, l := range logs {
+		result = append(result, map[string]any{
+			"time":      l.StartedAt,
+			"operation": l.Operation,
+			"table":     l.TargetTable,
+			"status":    l.Status,
+			"details":   string(l.Details),
+		})
+	}
+	return result
+}

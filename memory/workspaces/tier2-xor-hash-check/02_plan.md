@@ -47,4 +47,6 @@ Nghiên cứu và phân tích luồng đối soát Tier 2 (window-based XOR-hash
 15. **Lập hồ sơ giải pháp kỹ thuật chi tiết**: Tài liệu hóa các đoạn mã diff cần thiết vào tệp `09_tasks_solution_tier2_check.md` và chờ phê duyệt.
 16. **Thực thi Frontend (FE)**: Cập nhật `useReconStatus.ts`, `ConfirmDestructiveModal.tsx` và `DataIntegrity.tsx` để hoàn thành modal điều khiển Heal trên CMS-Web.
 17. **Tích Hợp Tracing (OTEL)**: Bổ sung OpenTelemetry traces (parent & child spans) cho từng bước trong `StreamIDsInTimeRange`, `TimeBoundedDiffMissingFromShadow` và `healSegmentA` để tăng khả năng quan sát (observability).
-18. **Tài liệu hóa**: Viết báo cáo phân tích kỹ thuật chi tiết bằng tiếng Việt ghi nhận toàn bộ kết quả phân tích.
+18. **Sửa Lỗi MongoDB Filter Dual-Type**: Cập nhật hàm `StreamIDsInTimeRange` trong `recon_stream.go` để hỗ trợ lọc timestamp theo cả kiểu `time.Time` và `int64` (Epoch Ms) dùng `$or` filter, khắc phục việc trả về 0 docs do lệch kiểu.
+19. **Tài liệu hóa**: Viết báo cáo phân tích kỹ thuật chi tiết bằng tiếng Việt ghi nhận toàn bộ kết quả phân tích.
+

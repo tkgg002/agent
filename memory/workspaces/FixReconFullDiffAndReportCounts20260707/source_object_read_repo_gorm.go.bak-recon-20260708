@@ -1,0 +1,475 @@
+// Package persistence — GORM concrete adapters for ports.* interfaces
+// and the in-package read ports declared in `internal/app/queries/`.
+//
+// This file implements queries.SourceObjectReader against the live
+// `cdc_system.source_object_registry` table, joining the active
+// `shadow_binding`, the legacy `cdc_table_registry` bridge, and the
+// latest `cdc_reconciliation_report` row. The SQL was lifted verbatim
+// from `internal/api/source_objects_handler.go` (List +
+// GetMappingContext) so the wire contract stays byte-identical
+// throughout Phase 2 v2 / P2.
+package source
+
+import (
+	"context"
+	"errors"
+	"strings"
+
+	"gorm.io/gorm"
+	"cdc-cms-service/internal/app/queries/source"
+)
+
+type sourceObjectReadRepoGorm struct {
+	db *gorm.DB
+}
+
+// NewSourceObjectReadRepo constructs the GORM-backed adapter for
+// source.SourceObjectReader.
+func NewSourceObjectReadRepo(db *gorm.DB) source.SourceObjectReader {
+	return &sourceObjectReadRepoGorm{db: db}
+}
+
+// listBaseFromWhere is the FROM + JOIN + base WHERE shared between the
+// COUNT(*) and SELECT branches of ListEnriched. Filter args are appended
+// to it by the caller via buildListFilter.
+// Each shadow_binding becomes its own row so a source with N targets
+// surfaces as N rows in the list (UI: "Shadow Objects"). Source with
+// zero bindings still yields 1 row via LEFT JOIN (sb.* = NULL → COALESCE
+// fallbacks downstream keep v2_source_only semantics).
+//
+// cdc_table_registry is now connection-aware (migrations 054/055/056):
+// identity = (source_connection_id, source_db, source_table, target_table).
+// We pick at most one tr row per (so, sb) via LATERAL + LIMIT 1, preferring
+// an exact source_connection_id match and falling back to legacy NULL rows
+// that pre-date the backfill.
+const listBaseFromWhere = `
+	FROM cdc_system.source_object_registry so
+	LEFT JOIN cdc_system.shadow_binding sb
+	  ON sb.source_object_id = so.id
+	LEFT JOIN cdc_system.connection_registry cn
+	  ON cn.id = so.source_connection_id
+	LEFT JOIN LATERAL (
+		SELECT
+			tr.id,
+			tr.target_table,
+			tr.sync_interval,
+			tr.priority,
+			tr.timestamp_field,
+			tr.notes,
+			tr.is_table_created,
+			tr.updated_at
+		FROM cdc_system.cdc_table_registry tr
+		WHERE COALESCE(NULLIF(so.source_schema, ''), so.source_database) = tr.source_db
+		  AND tr.source_table = so.source_object_name
+		  AND (
+		        (sb.shadow_table IS NOT NULL AND tr.target_table = sb.shadow_table)
+		     OR (sb.shadow_table IS NULL AND tr.target_table = so.source_object_name)
+		  )
+		  AND (
+		        tr.source_connection_id = so.source_connection_id
+		     OR tr.source_connection_id IS NULL
+		  )
+		ORDER BY
+		  (tr.source_connection_id IS NULL) ASC,
+		  tr.id ASC
+		LIMIT 1
+	) tr ON TRUE
+	LEFT JOIN LATERAL (
+		SELECT
+			rr.target_table,
+			rr.diff,
+			rr.status,
+			rr.checked_at
+		FROM cdc_system.cdc_reconciliation_report rr
+		WHERE rr.shadow_table = COALESCE(sb.shadow_table, tr.target_table)
+		ORDER BY rr.checked_at DESC
+		LIMIT 1
+	) rr ON TRUE
+	WHERE so.sync_engine = 'debezium'
+`
+
+func buildListFilter(base string, args []interface{}, f source.SourceObjectListFilter) (string, []interface{}) {
+	if s := strings.TrimSpace(f.SourceDB); s != "" {
+		base += ` AND so.source_database = ?`
+		args = append(args, s)
+	}
+	if f.IsActive != nil {
+		base += ` AND so.is_active = ?`
+		args = append(args, *f.IsActive)
+	}
+	return base, args
+}
+
+func (r *sourceObjectReadRepoGorm) ListEnriched(ctx context.Context, f source.SourceObjectListFilter, page, pageSize int) ([]source.SourceObjectListItem, int64, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 500 {
+		pageSize = 500
+	}
+
+	where := listBaseFromWhere
+	args := make([]interface{}, 0, 4)
+	where, args = buildListFilter(where, args, f)
+
+	type countRow struct {
+		Total int64 `json:"total"`
+	}
+	var totalRow countRow
+	if err := r.db.WithContext(ctx).Raw(`SELECT COUNT(*) AS total `+where, args...).Scan(&totalRow).Error; err != nil {
+		return nil, 0, err
+	}
+
+	q := `
+		SELECT
+			so.id,
+			tr.id AS registry_id,
+			sb.id AS shadow_binding_id,
+			so.object_code,
+			so.source_connection_id,
+			COALESCE(cn.connection_code, '') AS source_connection_code,
+			COALESCE(so.source_database, '') AS source_db,
+			so.source_engine_type AS source_type,
+			so.source_object_name AS source_table,
+			COALESCE(sb.shadow_table, so.source_object_name) AS target_table,
+			COALESCE(sb.shadow_schema, '') AS shadow_schema,
+			COALESCE(sb.physical_table_fqn, '') AS physical_table_fqn,
+			so.sync_engine,
+			COALESCE(tr.sync_interval, '1h') AS sync_interval,
+			COALESCE(tr.priority, 'normal') AS priority,
+			so.primary_key_field,
+			COALESCE(so.primary_key_type, '') AS primary_key_type,
+			COALESCE(so.timestamp_field, tr.timestamp_field) AS timestamp_field,
+			so.snapshot_batch_size,
+			so.is_active,
+			sb.is_active AS shadow_binding_is_active,
+			COALESCE(sb.ddl_status = 'created', tr.is_table_created, false) AS is_table_created,
+			so.profile_status,
+			sb.ddl_status,
+			CASE
+				WHEN rr.status = 'source_error' THEN 'source_error'
+				WHEN rr.target_table IS NOT NULL AND COALESCE(rr.diff, 0) <> 0 THEN 'drift'
+				WHEN rr.target_table IS NOT NULL THEN 'healthy'
+				ELSE 'unknown'
+			END AS sync_status,
+			CASE
+				WHEN tr.id IS NOT NULL THEN 'bridged'
+				ELSE 'v2_only'
+			END AS bridge_status,
+			CASE
+				WHEN sb.id IS NOT NULL AND tr.id IS NOT NULL THEN 'v2_ready'
+				WHEN sb.id IS NOT NULL THEN 'v2_shadow_only'
+				ELSE 'v2_source_only'
+			END AS metadata_status,
+			COALESCE(rr.diff, 0) AS recon_drift,
+			so.created_at,
+			GREATEST(so.updated_at, COALESCE(sb.updated_at, so.updated_at), COALESCE(tr.updated_at, so.updated_at)) AS updated_at,
+			COALESCE(so.notes, tr.notes) AS notes,
+			so.provisioning_mode,
+			so.provisioning_state,
+			so.source_engine_type
+	` + where + `
+		ORDER BY COALESCE(cn.connection_code, ''), so.source_database, so.source_object_name, sb.id NULLS FIRST
+		LIMIT ? OFFSET ?
+	`
+	queryArgs := append([]interface{}{}, args...)
+	queryArgs = append(queryArgs, pageSize, (page-1)*pageSize)
+
+	var rows []source.SourceObjectListItem
+	if err := r.db.WithContext(ctx).Raw(q, queryArgs...).Scan(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, totalRow.Total, nil
+}
+
+func (r *sourceObjectReadRepoGorm) GetMappingContextByRegistryID(ctx context.Context, registryID uint64, bindingID int64) (*source.SourceObjectMappingContextReadModel, error) {
+	// The LATERAL binding lookup has two modes:
+	//   bindingID = 0  → "default" — pick the active binding whose
+	//                    shadow_table matches the legacy bridge target_table.
+	//   bindingID > 0  → pinned — match `sb.id` exactly. Multi-binding
+	//                    sources require this; otherwise FE always sees
+	//                    the same default binding regardless of which
+	//                    row was clicked (bug-shadow-mapping-rules 2026-05).
+	const q = `
+		SELECT
+			COALESCE(so.id, 0) AS id,
+			tr.id AS registry_id,
+			sb.id AS shadow_binding_id,
+			COALESCE(so.object_code, '') AS object_code,
+			COALESCE(so.source_database, tr.source_db, '') AS source_db,
+			COALESCE(so.source_engine_type, tr.source_type, 'mongodb') AS source_type,
+			COALESCE(so.source_object_name, tr.source_table) AS source_table,
+			COALESCE(sb.shadow_table, tr.target_table, so.source_object_name) AS target_table,
+			COALESCE(sb.shadow_schema, '') AS shadow_schema,
+			COALESCE(sb.physical_table_fqn, '') AS physical_table_fqn,
+			COALESCE(so.sync_engine, tr.sync_engine, 'debezium') AS sync_engine,
+			COALESCE(tr.sync_interval, '1h') AS sync_interval,
+			COALESCE(tr.priority, 'normal') AS priority,
+			COALESCE(so.primary_key_field, tr.primary_key_field, 'id') AS primary_key_field,
+			COALESCE(so.primary_key_type, tr.primary_key_type, '') AS primary_key_type,
+			COALESCE(so.timestamp_field, tr.timestamp_field) AS timestamp_field,
+			COALESCE(so.is_active, tr.is_active, false) AS is_active,
+			COALESCE(sb.ddl_status = 'created', tr.is_table_created, false) AS is_table_created,
+			COALESCE(so.profile_status, 'draft') AS profile_status,
+			sb.ddl_status,
+			CASE
+				WHEN rr.status = 'source_error' THEN 'source_error'
+				WHEN rr.target_table IS NOT NULL AND COALESCE(rr.diff, 0) <> 0 THEN 'drift'
+				WHEN rr.target_table IS NOT NULL THEN 'healthy'
+				ELSE 'unknown'
+			END AS sync_status,
+			CASE
+				WHEN tr.id IS NOT NULL THEN 'bridged'
+				ELSE 'v2_only'
+			END AS bridge_status,
+			CASE
+				WHEN sb.id IS NOT NULL AND tr.id IS NOT NULL THEN 'v2_ready'
+				WHEN sb.id IS NOT NULL THEN 'v2_shadow_only'
+				ELSE 'v2_source_only'
+			END AS metadata_status,
+			COALESCE(rr.diff, 0) AS recon_drift,
+			COALESCE(so.created_at, tr.created_at)::timestamptz AS created_at,
+			GREATEST(
+				COALESCE(so.updated_at, tr.updated_at)::timestamptz,
+				COALESCE(sb.updated_at, tr.updated_at)::timestamptz,
+				tr.updated_at::timestamptz
+			) AS updated_at,
+			COALESCE(so.notes, tr.notes) AS notes
+		FROM cdc_system.cdc_table_registry tr
+		LEFT JOIN cdc_system.source_object_registry so
+		  ON COALESCE(NULLIF(so.source_schema, ''), so.source_database) = tr.source_db
+		 AND so.source_object_name = tr.source_table
+		LEFT JOIN LATERAL (
+			SELECT
+				sb.id,
+				sb.shadow_schema,
+				sb.shadow_table,
+				sb.physical_table_fqn,
+				sb.ddl_status,
+				sb.updated_at
+			FROM cdc_system.shadow_binding sb
+			WHERE sb.source_object_id = so.id
+			  AND (
+			        (?::bigint > 0 AND sb.id = ?::bigint)
+			        OR (?::bigint = 0 AND sb.shadow_table = tr.target_table)
+			      )
+			ORDER BY sb.is_active DESC, sb.updated_at DESC, sb.id DESC
+			LIMIT 1
+		) sb ON TRUE
+		LEFT JOIN LATERAL (
+			SELECT
+				rr.target_table,
+				rr.diff,
+				rr.status
+			FROM cdc_system.cdc_reconciliation_report rr
+			WHERE rr.shadow_table = tr.target_table
+			ORDER BY rr.checked_at DESC
+			LIMIT 1
+		) rr ON TRUE
+		WHERE tr.id = ?
+		ORDER BY (sb.id IS NOT NULL) DESC, so.id DESC NULLS LAST
+		LIMIT 1
+	`
+	var rows []source.SourceObjectMappingContextReadModel
+	if err := r.db.WithContext(ctx).Raw(q, bindingID, bindingID, bindingID, registryID).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return &rows[0], nil
+}
+
+func (r *sourceObjectReadRepoGorm) GetStats(ctx context.Context) (*source.SourceObjectStatsReadModel, error) {
+	stats := &source.SourceObjectStatsReadModel{
+		BySourceDB:   make(map[string]int),
+		BySyncEngine: make(map[string]int),
+		ByPriority:   make(map[string]int),
+	}
+
+	const baseWhere = `
+		FROM cdc_system.source_object_registry so
+		LEFT JOIN LATERAL (
+			SELECT
+				sb.shadow_table,
+				sb.ddl_status,
+				sb.updated_at
+			FROM cdc_system.shadow_binding sb
+			WHERE sb.source_object_id = so.id
+			ORDER BY sb.is_active DESC, sb.updated_at DESC, sb.id DESC
+			LIMIT 1
+		) sb ON TRUE
+		LEFT JOIN cdc_system.cdc_table_registry tr
+		  ON COALESCE(NULLIF(so.source_schema, ''), so.source_database) = tr.source_db
+		 AND tr.source_table = so.source_object_name
+		 AND (
+		       (sb.shadow_table IS NOT NULL AND tr.target_table = sb.shadow_table)
+		    OR (sb.shadow_table IS NULL AND tr.target_table = so.source_object_name)
+		 )
+		WHERE so.sync_engine = 'debezium'
+	`
+
+	type countRow struct {
+		Total int64 `json:"total"`
+	}
+	type groupCount struct {
+		Key   string `json:"key"`
+		Count int    `json:"count"`
+	}
+
+	var totalRow countRow
+	if err := r.db.WithContext(ctx).Raw(`SELECT COUNT(*) AS total ` + baseWhere).Scan(&totalRow).Error; err != nil {
+		return nil, err
+	}
+	stats.Total = totalRow.Total
+
+	var createdRow countRow
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT COUNT(*) AS total
+	` + baseWhere + `
+		  AND COALESCE(sb.ddl_status = 'created', tr.is_table_created, false)
+	`).Scan(&createdRow).Error; err != nil {
+		return nil, err
+	}
+	stats.TablesCreated = createdRow.Total
+
+	var dbCounts []groupCount
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT so.source_database AS key, COUNT(*) AS count
+	` + baseWhere + `
+		GROUP BY so.source_database
+	`).Scan(&dbCounts).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range dbCounts {
+		stats.BySourceDB[row.Key] = row.Count
+	}
+
+	var engineCounts []groupCount
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT so.sync_engine AS key, COUNT(*) AS count
+	` + baseWhere + `
+		GROUP BY so.sync_engine
+	`).Scan(&engineCounts).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range engineCounts {
+		stats.BySyncEngine[row.Key] = row.Count
+	}
+
+	var priorityCounts []groupCount
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT COALESCE(tr.priority, 'normal') AS key, COUNT(*) AS count
+	` + baseWhere + `
+		GROUP BY COALESCE(tr.priority, 'normal')
+	`).Scan(&priorityCounts).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range priorityCounts {
+		stats.ByPriority[row.Key] = row.Count
+	}
+
+	return stats, nil
+}
+
+func (r *sourceObjectReadRepoGorm) ListShadowBindings(ctx context.Context, sourceDB string, isActive *bool, page, pageSize int) ([]source.ShadowBindingListItem, int64, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 500 {
+		pageSize = 500
+	}
+
+	baseWhere := `
+		FROM cdc_system.shadow_binding sb
+		JOIN cdc_system.source_object_registry so
+		  ON so.id = sb.source_object_id
+		LEFT JOIN cdc_system.connection_registry cn
+		  ON cn.id = so.source_connection_id
+		LEFT JOIN cdc_system.cdc_table_registry tr
+		  ON COALESCE(NULLIF(so.source_schema, ''), so.source_database) = tr.source_db
+		 AND tr.source_table = so.source_object_name
+		 AND tr.target_table = sb.shadow_table
+		LEFT JOIN LATERAL (
+			SELECT
+				rr.diff,
+				rr.checked_at
+			FROM cdc_system.cdc_reconciliation_report rr
+			WHERE rr.shadow_table = sb.shadow_table
+			ORDER BY rr.checked_at DESC
+			LIMIT 1
+		) rr ON TRUE
+		WHERE so.sync_engine = 'debezium'
+	`
+
+	args := make([]interface{}, 0, 4)
+	if sourceDB != "" {
+		baseWhere += ` AND so.source_database = ?`
+		args = append(args, sourceDB)
+	}
+	if isActive != nil {
+		baseWhere += ` AND sb.is_active = ?`
+		args = append(args, *isActive)
+	}
+
+	type countRow struct {
+		Total int64 `json:"total"`
+	}
+	var totalRow countRow
+	countQuery := `SELECT COUNT(*) AS total ` + baseWhere
+	if err := r.db.WithContext(ctx).Raw(countQuery, args...).Scan(&totalRow).Error; err != nil {
+		return nil, 0, err
+	}
+
+	query := `
+		SELECT
+			sb.id,
+			sb.binding_code,
+			sb.source_object_id,
+			so.object_code,
+			tr.id AS registry_id,
+			so.source_connection_id,
+			COALESCE(cn.connection_code, '') AS source_connection_code,
+			COALESCE(so.source_database, '') AS source_db,
+			so.source_engine_type AS source_type,
+			so.source_object_name AS source_table,
+			sb.shadow_schema,
+			sb.shadow_table,
+			sb.physical_table_fqn,
+			sb.write_mode,
+			sb.ddl_status,
+			sb.is_active,
+			sb.parent_binding_id,
+			sb.explode_path,
+			COALESCE(rr.diff, 0) AS recon_drift,
+			rr.checked_at AS last_recon_at,
+			sb.created_at,
+			sb.updated_at
+	` + baseWhere + `
+		ORDER BY COALESCE(cn.connection_code, ''), so.source_database, sb.shadow_schema, sb.shadow_table
+		LIMIT ? OFFSET ?
+	`
+
+	queryArgs := append([]interface{}{}, args...)
+	queryArgs = append(queryArgs, pageSize, (page-1)*pageSize)
+
+	var rows []source.ShadowBindingListItem
+	if err := r.db.WithContext(ctx).Raw(query, queryArgs...).Scan(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return rows, totalRow.Total, nil
+}
+
+// errSourceObjectReadOnly guards against accidental write attempts on
+// this read-only adapter. No production code reaches it (the interface
+// has no write methods); kept as a compile-time pin in case a future
+// caller embeds the struct.
+var _ = errors.New("source_object_read_repo_gorm: read-only adapter")
+

@@ -1,0 +1,6 @@
+- `[x]` Tạo file SQL migration `092_recon_cleanup_redundant.sql`
+- `[x]` Cập nhật model `ReconciliationReport` và các câu truy vấn read-side trong `cdc-cms-service`
+- `[x]` Cập nhật model `ReconciliationReport`, xoá `RunSmokeCheck`/`RunSmokeCheckB` và cập nhật `stampA`/`stampB` trong `centralized-data-service`
+- `[x]` Cập nhật interface `ReconReport`, logic `levelLabel` và cách hiển thị tên bảng nguồn trong `cdc-cms-web` (Frontend)
+- `[x]` Chạy kiểm thử & verify build của backend và frontend
+- `[x]` Cập nhật kết quả vào `walkthrough.md`

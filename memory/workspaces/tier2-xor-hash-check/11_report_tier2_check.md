@@ -30,3 +30,24 @@ Báo cáo này liệt kê chi tiết các tệp tin tài liệu và mã nguồn 
 | **[CẬP NHẬT]** | `internal/service/recon/recon_tier_a.go` | Thêm hàm `TimeBoundedDiffMissingFromShadow` thực hiện quét IDs bị lệch theo range an toàn. | +50 lines |
 | **[CẬP NHẬT]** | `internal/handler/recon/recon_heal_v4.go` | Redesign signature `healSegmentA`, validate thời gian giới hạn 30 ngày cho Full-diff, định tuyến direct write `FetchAndWriteByIDs` cho Window mode. | +120 lines |
 | **[CẬP NHẬT]** | `internal/handler/recon/recon_heal_v4_test.go` | Bổ sung unit test case `TestHealSegmentA_FullDiffMode_InvalidTimeRange` để bảo vệ range validation. | +40 lines |
+
+## Cập Nhật Phiên Làm Việc (Muscle Code Execution)
+
+| Trạng thái | Tên tệp tin | Mô tả thay đổi | Số dòng thay đổi |
+|------------|-------------|----------------|------------------|
+| **[CẬP NHẬT]** | `src/hooks/useReconStatus.ts` | Thêm tham số `lookback` vào `useHealMutation` mutation payload và POST request body. | +4 lines |
+| **[CẬP NHẬT]** | `src/components/ConfirmDestructiveModal.tsx` | Ẩn time input khi ở Window mode, thêm radio buttons chọn lookback mode (Hot/Cold), cập nhật kiểu onConfirm và logic gửi params. | +50 lines |
+| **[CẬP NHẬT]** | `src/pages/DataIntegrity.tsx` | Nhận và chuyển tiếp lookback param từ Modal confirm đến `heal.mutateAsync`. | +3 lines |
+| **[CẬP NHẬT]** | `internal/handler/recon/recon_handler_run.go` | Unmarshal thêm parameter `lookback` từ NATS message payload, truyền vào `healSegmentA` và đảm bảo `cold_lookback` chỉ set cho segment B. | +10 lines |
+| **[CẬP NHẬT]** | `internal/handler/recon/recon_heal_v4.go` | Nhận param `lookback` trong `healSegmentA` và điều kiện hóa việc khởi tạo context (Hot mode dùng context gốc, Cold mode dùng context chứa `cold_lookback=true`). | +15 lines |
+| **[XÁC MINH]** | `internal/service/recon/recon_stream.go` | Kiểm tra và xác nhận hàm `StreamIDsInTimeRange` MongoDB filter đã hỗ trợ đầy đủ cả kiểu Date và Epoch Ms. | 0 lines |
+
+## Cập Nhật Phiên Làm Việc (Muscle Code Execution - Hỗ trợ lookback Tier 2)
+
+| Trạng thái | Tên tệp tin | Mô tả thay đổi | Số dòng thay đổi |
+|------------|-------------|----------------|------------------|
+| **[CẬP NHẬT]** | `src/hooks/useReconStatus.ts` | Mở rộng `useCheckTableMutation` payload struct và body POST request thêm `lookback`. | +5 lines |
+| **[CẬP NHẬT]** | `src/components/ConfirmDestructiveModal.tsx` | Nhận thêm `isCheckTier2` prop. Nếu `true`, chỉ hiển thị radio buttons để chọn lookback (Hot/Cold) và ẩn hoàn toàn mode Window/Full-diff hay inputs date. Hàm `handleOk` gọi `onConfirm` truyền `lookback`. | +40 lines |
+| **[CẬP NHẬT]** | `src/pages/DataIntegrity.tsx` | Cập nhật `openCheckTable` để truyền `isCheckTier2: String(record.tier) === "2"` vào modal action. Cập nhật `handleConfirm` chuyển tiếp `lookback` sang `checkTable.mutateAsync`. Pass prop `isCheckTier2` vào `ConfirmDestructiveModal` dựa trên modal action. | +10 lines |
+| **[CẬP NHẬT]** | `internal/handler/recon/recon_handler_run.go` | Mở rộng NATS unmarshal struct của `HandleReconCheck` nhận thêm `lookback`. Ở switch case `payload.Tier == "2"`: Nếu `payload.Lookback == "cold"`, wrap context `"cold_lookback" = true` truyền vào `RunTier2`. | +10 lines |
+

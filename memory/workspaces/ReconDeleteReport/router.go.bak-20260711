@@ -1,0 +1,373 @@
+package router
+
+import (
+	"strings"
+	"time"
+
+	"cdc-cms-service/config"
+	apigovernance "cdc-cms-service/internal/api/governance"
+	apimaster "cdc-cms-service/internal/api/master"
+	apirecon "cdc-cms-service/internal/api/recon"
+	apischeduler "cdc-cms-service/internal/api/scheduler"
+	apishadow "cdc-cms-service/internal/api/shadow"
+	apisource "cdc-cms-service/internal/api/source"
+	apisystem "cdc-cms-service/internal/api/system"
+	"cdc-cms-service/internal/middleware"
+	"cdc-cms-service/pkgs/rediscache"
+
+	"github.com/gofiber/fiber/v2"
+)
+
+// ========================================================================
+// 1. STRUCTS
+// ========================================================================
+
+// HandlerGroup contains all HTTP handlers
+type HandlerGroup struct {
+	System struct {
+		Health        *apisystem.HealthHandler
+		SystemHealth  *apisystem.SystemHealthHandler
+		Introspection *apisystem.IntrospectionHandler
+		ActivityLog   *apisystem.ActivityLogHandler
+		Alerts        *apisystem.AlertsHandler
+	}
+	Governance struct {
+		SchemaChange    *apigovernance.SchemaChangeHandler
+		SchemaProposal  *apigovernance.SchemaProposalHandler
+		SensitiveFields *apigovernance.SensitiveFieldsHandler
+		Provisioning    *apigovernance.ProvisioningHandler
+		Audit           *apigovernance.AuditHandler
+	}
+	Source struct {
+		Registry         *apisource.RegistryHandler
+		Objects          *apisource.SourceObjectsHandler
+		ObjectActions    *apisource.SourceObjectActionsHandler
+		SystemConnectors *apisource.SystemConnectorsHandler
+		Sources          *apisource.SourcesHandler
+	}
+	Shadow struct {
+		BindingActions *apishadow.ShadowBindingActionsHandler
+		MappingPreview *apishadow.MappingPreviewHandler
+		Mapping        *apishadow.MappingRuleHandler
+	}
+	Master struct {
+		Registry *apimaster.MasterRegistryHandler
+		Mapping  *apimaster.MasterMappingRuleHandler
+	}
+	Scheduler struct {
+		Wizard           *apischeduler.WizardHandler
+		TransmuteV1      *apischeduler.TransmuteScheduleHandler
+		WorkerSchedule   *apischeduler.ScheduleHandler
+		Job              *apischeduler.JobHandler
+		SnapshotProgress *apischeduler.SnapshotProgressHandler
+	}
+	Recon *apirecon.ReconciliationHandler
+}
+type DestructiveMiddleware struct {
+	Idempotency fiber.Handler
+	Audit       fiber.Handler
+	RateRestart fiber.Handler // extra layer for connector restart (3/hour)
+}
+
+// ========================================================================
+// 2. MIDDLEWARE BUILDERS
+// ========================================================================
+
+func NewDestructiveMiddleware(redis *rediscache.RedisCache, auditLogger *middleware.AuditLogger) DestructiveMiddleware {
+	bundle := DestructiveMiddleware{}
+	if redis != nil {
+		bundle.Idempotency = middleware.NewIdempotency(
+			middleware.NewIdempotencyFromRedisClient(redis.Client()),
+		)
+		bundle.RateRestart = middleware.NewRateLimit(middleware.RateLimitConfig{
+			Redis:  redis,
+			Scope:  "restart",
+			Max:    3,
+			Window: time.Hour,
+		})
+	}
+	if auditLogger != nil {
+		bundle.Audit = auditLogger.Middleware()
+	}
+	return bundle
+}
+
+// chain applies middlewares in order, skipping any nil entries.
+func chain(mws ...fiber.Handler) []fiber.Handler {
+	out := make([]fiber.Handler, 0, len(mws))
+	for _, m := range mws {
+		if m != nil {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// ========================================================================
+// 3. ROUTE REGISTRATION
+// ========================================================================
+
+func SetupRoutes(
+	app *fiber.App,
+	cfg *config.AppConfig,
+	h *HandlerGroup,
+	destructive DestructiveMiddleware,
+) {
+	app.Use(middleware.DeprecateLegacyAPIPath("Tue, 31 Dec 2026 23:59:59 GMT"))
+
+	// --- Public / Basic Health Routes ---
+	app.Get("/health", h.System.Health.Health)
+	app.Get("/api/system/health", h.System.SystemHealth.Health)
+	app.Get("/api/v1/system/health", h.System.SystemHealth.Health)
+	app.Get("/ready", h.System.Health.Ready)
+
+	api := app.Group("/api")
+	api.Use(middleware.JWTAuth(cfg))
+
+	destructiveChain := chain(middleware.RequireOpsAdmin(), destructive.Idempotency, destructive.Audit)
+	destructiveRestartChain := chain(middleware.RequireOpsAdmin(), destructive.RateRestart, destructive.Idempotency, destructive.Audit)
+
+	// dual registers a route on both /path and /v1/path (unless path already starts with /v1).
+	dual := func(method string, g fiber.Router, path string, handler fiber.Handler) {
+		switch method {
+		case "GET":
+			g.Get(path, handler)
+			if !strings.HasPrefix(path, "/v1") {
+				g.Get("/v1"+path, handler)
+			}
+		case "POST":
+			g.Post(path, handler)
+			if !strings.HasPrefix(path, "/v1") {
+				g.Post("/v1"+path, handler)
+			}
+		case "PATCH":
+			g.Patch(path, handler)
+			if !strings.HasPrefix(path, "/v1") {
+				g.Patch("/v1"+path, handler)
+			}
+		}
+	}
+
+	// registerDestructive registers a POST under the full destructive chain
+	// (OpsAdmin + Idempotency + Audit), auto-mirroring to /v1 prefix.
+	registerDestructive := func(path string, handler fiber.Handler) {
+		mws := append([]fiber.Handler{}, destructiveChain...)
+		api.Post(path, append(mws, handler)...)
+		if !strings.HasPrefix(path, "/v1") {
+			api.Post("/v1"+path, append(mws, handler)...)
+		}
+	}
+	registerDestructiveRestart := func(path string, handler fiber.Handler) {
+		mws := append([]fiber.Handler{}, destructiveRestartChain...)
+		api.Post(path, append(mws, handler)...)
+		if !strings.HasPrefix(path, "/v1") {
+			api.Post("/v1"+path, append(mws, handler)...)
+		}
+	}
+
+	// ---------------------------------------------------------
+	// 4.1 DESTRUCTIVE ROUTES (OPS-ADMIN ONLY)
+	// ---------------------------------------------------------
+
+	// Reconciliation
+	registerDestructive("/reconciliation/check", h.Recon.TriggerCheckAll)
+	registerDestructive("/reconciliation/check/:table", h.Recon.TriggerCheck)
+	registerDestructive("/reconciliation/heal", h.Recon.TriggerHeal)
+	registerDestructive("/reconciliation/heal/:table", h.Recon.TriggerHeal)
+	registerDestructive("/reconciliation/execute-heal", h.Recon.TriggerExecuteHeal)
+	registerDestructive("/reconciliation/prune", h.Recon.TriggerPrune)
+	registerDestructive("/reconciliation/prune/:table", h.Recon.TriggerPrune)
+	registerDestructive("/failed-sync-logs/:id/retry", h.Recon.RetryFailedLog)
+	registerDestructive("/tools/reset-debezium-offset", h.Recon.ResetDebeziumOffset)
+	registerDestructive("/tools/trigger-snapshot/:table", h.Recon.TriggerSnapshot)
+	registerDestructive("/recon/backfill-source-ts", h.Recon.TriggerBackfillSourceTs)
+
+	// Debezium / System Connectors
+	registerDestructiveRestart("/tools/restart-debezium", h.System.SystemHealth.RestartDebezium)
+	registerDestructive("/v1/system/connectors", h.Source.SystemConnectors.Create)
+	registerDestructive("/v1/system/connectors/:name/restart", h.Source.SystemConnectors.Restart)
+	registerDestructive("/v1/system/connectors/:name/tasks/:taskId/restart", h.Source.SystemConnectors.RestartTask)
+	registerDestructive("/v1/system/connectors/:name/pause", h.Source.SystemConnectors.Pause)
+	registerDestructive("/v1/system/connectors/:name/resume", h.Source.SystemConnectors.Resume)
+	api.Patch("/v1/system/connectors/:name/config", append(destructiveChain, h.Source.SystemConnectors.UpdateConfig)...)
+	api.Delete("/v1/system/connectors/:name", append(destructiveChain, h.Source.SystemConnectors.Delete)...)
+
+	// Masters
+	registerDestructive("/v1/masters", h.Master.Registry.Create)
+	registerDestructive("/v1/masters/:name/approve", h.Master.Registry.Approve)
+	registerDestructive("/v1/masters/:name/reject", h.Master.Registry.Reject)
+	registerDestructive("/v1/masters/:name/toggle-active", h.Master.Registry.ToggleActive)
+	registerDestructive("/v1/masters/:name/swap", h.Master.Registry.Swap)
+	api.Patch("/v1/masters/:name/spec", append(destructiveChain, h.Master.Registry.UpdateSpec)...)
+
+	// Wizard / Proposals / Schedules / Snapshots
+	registerDestructive("/v1/wizard/sessions/:id/execute", h.Scheduler.Wizard.Execute)
+	registerDestructive("/v1/schema-proposals/:id/approve", h.Governance.SchemaProposal.Approve)
+	registerDestructive("/v1/schema-proposals/:id/reject", h.Governance.SchemaProposal.Reject)
+	registerDestructive("/v1/schedules", h.Scheduler.TransmuteV1.Create)
+	registerDestructive("/v1/schedules/:id/run-now", h.Scheduler.TransmuteV1.RunNow)
+	api.Patch("/v1/schedules/:id", append(destructiveChain, h.Scheduler.TransmuteV1.Toggle)...)
+	api.Delete("/v1/schedules/:id", append(destructiveChain, h.Scheduler.TransmuteV1.Delete)...)
+	api.Post("/v1/mapping-rules/preview", append(destructiveChain, h.Shadow.MappingPreview.Preview)...)
+	registerDestructive("/v1/snapshot-progress/:id/pause", h.Scheduler.SnapshotProgress.Pause)
+	registerDestructive("/v1/snapshot-progress/:id/resume", h.Scheduler.SnapshotProgress.Resume)
+
+	// Alerts (optional)
+	if h.System.Alerts != nil {
+		registerDestructive("/alerts/:fingerprint/ack", h.System.Alerts.Ack)
+		registerDestructive("/alerts/:fingerprint/silence", h.System.Alerts.Silence)
+	}
+
+	// Provisioning (optional)
+	if h.Governance.Provisioning != nil {
+		api.Get("/v1/cms/sources/:id/provisioning", middleware.RequireOpsAdmin(), h.Governance.Provisioning.GetState)
+		registerDestructive("/v1/cms/sources/:id/provisioning/advance", h.Governance.Provisioning.Advance)
+		registerDestructive("/v1/cms/sources/:id/provisioning/pause", h.Governance.Provisioning.Pause)
+		registerDestructive("/v1/cms/sources/:id/provisioning/resume", h.Governance.Provisioning.Resume)
+		registerDestructive("/v1/cms/sources/:id/provisioning/retry", h.Governance.Provisioning.Retry)
+		registerDestructive("/v1/cms/sources/:id/provisioning/archive", h.Governance.Provisioning.Archive)
+		registerDestructive("/v1/cms/sources/:id/provisioning/mode", h.Governance.Provisioning.SetMode)
+	}
+
+	// ---------------------------------------------------------
+	// 4.2 SHARED ROUTES (ADMIN + OPERATOR)
+	// ---------------------------------------------------------
+	shared := api.Group("", middleware.RequireRole("admin", "operator"))
+
+	// Governance
+	dual("GET", shared, "/schema-changes/pending", h.Governance.SchemaChange.GetPending)
+	dual("GET", shared, "/schema-changes/history", h.Governance.SchemaChange.GetHistory)
+	shared.Get("/v1/schema-proposals", h.Governance.SchemaProposal.List)
+	shared.Get("/v1/schema-proposals/:id", h.Governance.SchemaProposal.Get)
+	shared.Get("/v1/sensitive-fields", h.Governance.SensitiveFields.List)
+
+	// Source & Registry
+	dual("GET", shared, "/sync/health", h.Source.Registry.SyncHealth)
+	shared.Get("/v1/source-objects/stats", h.Source.Objects.GetStats)
+	shared.Get("/v1/source-objects", h.Source.Objects.List)
+	shared.Get("/v1/source-objects/registry/:registry_id", h.Source.Objects.GetMappingContext)
+	shared.Get("/v1/shadow-bindings", h.Source.Objects.ListShadowBindings)
+	shared.Get("/v1/source-objects/:id/dispatch-status", h.Source.ObjectActions.DispatchStatusV2)
+	shared.Get("/v1/source-objects/:id/transform-status", h.Source.ObjectActions.TransformStatusV2)
+	shared.Get("/v1/source-objects/registry/:id/dispatch-status", h.Source.Registry.DispatchStatus)
+	shared.Get("/v1/source-objects/registry/:id/transform-status", h.Source.Registry.TransformStatus)
+	shared.Get("/v1/sources", h.Source.Sources.List)
+	shared.Post("/v1/sources", h.Source.Sources.Create)
+	shared.Get("/v1/sources/:id", h.Source.Sources.Get)
+	shared.Get("/v1/registry/connections", h.Source.Sources.List)
+	shared.Post("/v1/registry/connections", h.Source.Sources.Create)
+	shared.Get("/v1/system/connectors", h.Source.SystemConnectors.List)
+	shared.Get("/v1/system/connectors/:name", h.Source.SystemConnectors.Get)
+	shared.Get("/v1/system/connector-plugins", h.Source.SystemConnectors.Plugins)
+
+	// Master / Mapping
+	shared.Get("/v1/masters", h.Master.Registry.List)
+	shared.Get("/v1/master-mapping-rules", h.Master.Mapping.List)
+	dual("GET", shared, "/mapping-rules", h.Shadow.Mapping.List)
+
+	// Scheduler / Wizard
+	shared.Get("/v1/wizard/sessions/:id", h.Scheduler.Wizard.Get)
+	shared.Get("/v1/wizard/sessions/:id/progress", h.Scheduler.Wizard.Progress)
+	shared.Get("/v1/schedules", h.Scheduler.TransmuteV1.List)
+	dual("GET", shared, "/worker-schedule", h.Scheduler.WorkerSchedule.List)
+	dual("GET", shared, "/snapshot-progress", h.Scheduler.SnapshotProgress.List)
+
+	// System / Activity / Recon reads
+	dual("GET", shared, "/activity-log", h.System.ActivityLog.List)
+	dual("GET", shared, "/activity-log/stats", h.System.ActivityLog.Stats)
+	dual("GET", shared, "/reconciliation/report", h.Recon.LatestReport)
+	dual("GET", shared, "/reconciliation/report/:table", h.Recon.TableHistory)
+	dual("GET", shared, "/failed-sync-logs", h.Recon.ListFailedLogs)
+	dual("GET", shared, "/recon/backfill-source-ts/status", h.Recon.BackfillSourceTsStatus)
+	dual("GET", shared, "/reconciliation/report/:table/unhealed", h.Recon.GetUnhealedReports)
+
+	// Introspection
+	dual("GET", shared, "/introspection/mongo/databases", h.System.Introspection.DiscoverMongoDatabases)
+	dual("GET", shared, "/introspection/mongo/:db/collections", h.System.Introspection.DiscoverMongoCollections)
+	dual("POST", shared, "/introspection/mongo/databases", h.System.Introspection.DiscoverMongoDatabasesPost)
+	dual("POST", shared, "/introspection/mongo/collections", h.System.Introspection.DiscoverMongoCollectionsPost)
+	dual("GET", shared, "/introspection/scan/:table", h.System.Introspection.Scan)
+	dual("GET", shared, "/introspection/scan-raw/:table", h.System.Introspection.ScanRawData)
+	dual("POST", shared, "/introspection/scan-array/:table", h.System.Introspection.ScanArray)
+	dual("POST", shared, "/introspection/scan-array-all", h.System.Introspection.ScanArrayAll)
+	dual("GET", shared, "/introspection/shadow-columns/:table", h.System.Introspection.ShadowColumns)
+	dual("GET", shared, "/introspection/indexes/:table", h.System.Introspection.ListIndexes)
+	dual("POST", shared, "/introspection/indexes", h.System.Introspection.CreateIndex)
+	dual("DELETE", shared, "/introspection/indexes/:name", h.System.Introspection.DropIndex)
+
+	// Alerts (optional)
+	if h.System.Alerts != nil {
+		dual("GET", shared, "/alerts/active", h.System.Alerts.Active)
+		dual("GET", shared, "/alerts/silenced", h.System.Alerts.Silenced)
+		dual("GET", shared, "/alerts/history", h.System.Alerts.History)
+	}
+
+	// Job (optional)
+	if h.Scheduler.Job != nil {
+		dual("GET", shared, "/jobs/:id", h.Scheduler.Job.Get)
+	}
+
+	// ---------------------------------------------------------
+	// 4.3 ADMIN ONLY ROUTES
+	// ---------------------------------------------------------
+	admin := api.Group("", middleware.RequireRole("admin"))
+
+	// Schema & Mapping Approvals
+	dual("POST", admin, "/schema-changes/:id/approve", h.Governance.SchemaChange.Approve)
+	dual("POST", admin, "/schema-changes/:id/reject", h.Governance.SchemaChange.Reject)
+	dual("POST", admin, "/mapping-rules", h.Shadow.Mapping.Create)
+	dual("PATCH", admin, "/mapping-rules/batch", h.Shadow.Mapping.BatchUpdate)
+	dual("PATCH", admin, "/mapping-rules/:id", h.Shadow.Mapping.UpdateStatus)
+	dual("POST", admin, "/mapping-rules/reload", h.Shadow.Mapping.Reload)
+	dual("POST", admin, "/mapping-rules/:id/backfill", h.Shadow.Mapping.Backfill)
+
+	// V2 Source Actions
+	admin.Post("/v1/source-objects/register", h.Source.Registry.Register)
+	admin.Post("/v1/source-objects/register-batch", h.Source.Registry.BulkRegister)
+	admin.Patch("/v1/source-objects/:id", h.Source.ObjectActions.UpdateV2)
+	admin.Patch("/v1/shadow-bindings/:id", h.Shadow.BindingActions.PatchActive)
+	admin.Post("/v1/source-objects/:id/create-default-columns", h.Source.ObjectActions.CreateDefaultColumnsV2)
+	admin.Post("/v1/source-objects/:id/scan-fields", h.Source.ObjectActions.ScanFieldsV2)
+	admin.Post("/v1/source-objects/:id/standardize", h.Source.ObjectActions.StandardizeV2)
+	admin.Post("/v1/source-objects/:id/detect-timestamp-field", h.Source.ObjectActions.DetectTimestampFieldV2)
+	admin.Post("/v1/source-objects/:id/snapshot-v2", h.Source.ObjectActions.SnapshotV2)
+	admin.Post("/v1/source-objects/:id/transform", h.Source.ObjectActions.TransformV2)
+
+	// V1 Bridge Endpoints (Registry)
+	admin.Patch("/v1/source-objects/registry/:id", h.Source.Registry.Update)
+	admin.Post("/v1/source-objects/registry/:id/standardize", h.Source.Registry.Standardize)
+	admin.Post("/v1/source-objects/registry/:id/scan-fields", h.Source.Registry.ScanFields)
+	admin.Post("/v1/source-objects/registry/:id/transform", h.Source.Registry.Transform)
+	admin.Post("/v1/source-objects/registry/:id/create-default-columns", h.Source.Registry.CreateDefaultColumns)
+	admin.Post("/v1/source-objects/registry/:id/detect-timestamp-field", h.Source.Registry.DetectTimestampField)
+
+	// Master Mapping Rules — static paths BEFORE /:id to avoid param collision
+	admin.Post("/v1/master-mapping-rules/sync-from-shadow", h.Master.Mapping.SyncFromShadow)
+	admin.Post("/v1/master-mapping-rules/approve-ddl-all", h.Master.Mapping.ApproveDDLAll)
+	admin.Post("/v1/master-mapping-rules/drop-rejected-columns", h.Master.Mapping.DropRejectedColumns)
+	admin.Post("/v1/master-mapping-rules", h.Master.Mapping.Save)
+	admin.Delete("/v1/master-mapping-rules/:id", h.Master.Mapping.Delete)
+	admin.Put("/v1/master-mapping-rules/batch", h.Master.Mapping.BatchUpdate)
+	admin.Put("/v1/master-mapping-rules/:id/target-column", h.Master.Mapping.UpdateTargetColumn)
+	admin.Put("/v1/master-mapping-rules/:id/data-type", h.Master.Mapping.UpdateDataType)
+	admin.Post("/v1/master-mapping-rules/:id/approve-ddl", h.Master.Mapping.ApproveDDL)
+	admin.Post("/v1/master-mapping-rules/:id/drop-column", h.Master.Mapping.DropColumn)
+
+	// Sensitive Fields
+	admin.Post("/v1/sensitive-fields", h.Governance.SensitiveFields.Create)
+	admin.Patch("/v1/sensitive-fields/:id", h.Governance.SensitiveFields.UpdateStrategy)
+	admin.Delete("/v1/sensitive-fields/:id", h.Governance.SensitiveFields.Delete)
+
+	// Worker Schedule
+	dual("PATCH", admin, "/worker-schedule/:id", h.Scheduler.WorkerSchedule.Update)
+	dual("POST", admin, "/worker-schedule", h.Scheduler.WorkerSchedule.Create)
+
+	// Audit
+	dual("GET", admin, "/audit/qa-summary", h.Governance.Audit.Summary)
+	dual("GET", admin, "/audit/gaps", h.Governance.Audit.Gaps)
+	dual("GET", admin, "/audit/metric-health", h.Governance.Audit.MetricHealth)
+
+	// Wizard
+	admin.Post("/v1/wizard/sessions", h.Scheduler.Wizard.Create)
+	admin.Patch("/v1/wizard/sessions/:id", h.Scheduler.Wizard.Patch)
+}

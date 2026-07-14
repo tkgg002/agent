@@ -1,0 +1,599 @@
+import React, { useEffect, useState } from 'react';
+import { Alert, Badge, Checkbox, Empty, Input, Modal, Space, Spin, Table, Tag, Typography, Popover, Button, message, Tabs, Popconfirm } from 'antd';
+import { MedicineBoxOutlined, EyeOutlined, CopyOutlined, DeleteOutlined } from '@ant-design/icons';
+import { useUnhealedReports, useExecuteHealMutation, useTableHistory, useDeleteReportMutation } from '../hooks/useReconStatus';
+
+const { Text } = Typography;
+const { TextArea } = Input;
+
+const MIN_REASON_LENGTH = 10;
+const EMPTY_ARRAY: any[] = [];
+
+export interface ExecuteHealModalProps {
+  open: boolean;
+  table: string;
+  shadowSchema?: string;
+  segment?: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+export default function ExecuteHealModal({
+  open,
+  table,
+  shadowSchema,
+  segment,
+  onClose,
+  onSuccess,
+}: ExecuteHealModalProps) {
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [healMismatched, setHealMismatched] = useState(true);
+  const [healMissingDest, setHealMissingDest] = useState(true);
+  const [pruneMissingSrc, setPruneMissingSrc] = useState(false);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+
+  const { data, isLoading } = useUnhealedReports(open ? table : null, shadowSchema);
+  const { data: historyData, isLoading: isHistoryLoading } = useTableHistory(open ? table : null, shadowSchema, undefined, 100, true);
+  const heal = useExecuteHealMutation();
+  const deleteMutation = useDeleteReportMutation();
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const isReportFullyHealed = (r: any): boolean => {
+    if (r.check_type === 'smoke') return false;
+    if (r.status === 'ok') return true;
+    if (r.healed_at != null || r.status === 'healed') return true;
+
+    const hasMissing = (r.missing_count || 0) > 0;
+    const hasStale = (r.stale_count || 0) > 0;
+    const hasOrphan = (r.orphan_count || 0) > 0;
+
+    if (!hasMissing && !hasStale && !hasOrphan) return true;
+
+    const missingOk = !hasMissing || ((r.healed_missing_dest_count || 0) >= r.missing_count);
+    const staleOk = !hasStale || ((r.healed_mismatched_count || 0) >= r.stale_count);
+    const orphanOk = !hasOrphan || ((r.pruned_missing_src_count || 0) >= r.orphan_count);
+
+    return missingOk && staleOk && orphanOk;
+  };
+
+  const reports = (data?.data || []).filter((r: any) => !isReportFullyHealed(r));
+  const totalUnhealed = reports.length;
+  const healedReports = (historyData?.data || []).filter(
+    (r: any) => r.check_type !== 'smoke' && r.status !== 'ok' && r.status !== 'error' && isReportFullyHealed(r)
+  );
+
+  // Helper to extract unique diff IDs (missing and stale/orphan/mismatched)
+  const getDiffIDs = (r: any): string[] => {
+    const ids: string[] = [];
+    if (r.missing_ids) {
+      try {
+        const parsed = typeof r.missing_ids === 'string' ? JSON.parse(r.missing_ids) : r.missing_ids;
+        if (Array.isArray(parsed)) {
+          ids.push(...parsed.map(String));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    if (r.stale_ids) {
+      try {
+        const parsed = typeof r.stale_ids === 'string' ? JSON.parse(r.stale_ids) : r.stale_ids;
+        if (parsed) {
+          if (r.segment === 'shadow_master') {
+            if (Array.isArray(parsed.stale_ids)) {
+              ids.push(...parsed.stale_ids.map(String));
+            }
+            if (Array.isArray(parsed.orphan_in_master)) {
+              ids.push(...parsed.orphan_in_master.map(String));
+            }
+            if (Array.isArray(parsed)) {
+              ids.push(...parsed.map(String));
+            }
+          } else {
+            if (Array.isArray(parsed.mismatched)) {
+              ids.push(...parsed.mismatched.map(String));
+            }
+            if (Array.isArray(parsed.missing_from_src)) {
+              ids.push(...parsed.missing_from_src.map(String));
+            }
+            if (Array.isArray(parsed)) {
+              ids.push(...parsed.map(String));
+            }
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return Array.from(new Set(ids.filter(Boolean)));
+  };
+
+  // Helper to format check time range
+  const formatTimeRange = (startStr?: string | null, endStr?: string | null): string => {
+    if (!startStr && !endStr) return '—';
+    if (startStr && !endStr) return `Từ ${new Date(startStr).toLocaleString('vi-VN')}`;
+    if (!startStr && endStr) return `Đến ${new Date(endStr).toLocaleString('vi-VN')}`;
+    
+    const start = new Date(startStr!);
+    const end = new Date(endStr!);
+    
+    const startDateStr = start.toLocaleDateString('vi-VN');
+    const endDateStr = end.toLocaleDateString('vi-VN');
+    
+    const startTimeStr = start.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    const endTimeStr = end.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    
+    if (startDateStr === endDateStr) {
+      return `${startTimeStr} - ${endTimeStr} (${startDateStr})`;
+    }
+    return `${startTimeStr} ${startDateStr} - ${endTimeStr} ${endDateStr}`;
+  };
+
+  // Group by segment for display
+  const segAReports = reports.filter((r) => r.segment === 'source_shadow' || !r.segment);
+  const segBReports = reports.filter((r) => r.segment === 'shadow_master');
+
+  // Reset basic form state on modal open
+  useEffect(() => {
+    if (open) {
+      setReason('');
+      setSubmitting(false);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (open && reports.length > 0) {
+      setSelectedRowKeys(reports.map(r => r.id));
+    } else {
+      setSelectedRowKeys([]);
+    }
+  }, [open, data]);
+
+  // Set default checkbox values when reports data loads or changes
+  useEffect(() => {
+    if (open && reports.length > 0) {
+      const hasRemainingMismatched = reports.some(
+        (r) => r.stale_count - (r.healed_mismatched_count || 0) > 0
+      );
+      const hasRemainingMissingDest = reports.some(
+        (r) => r.missing_count - (r.healed_missing_dest_count || 0) > 0
+      );
+
+      setHealMismatched(hasRemainingMismatched);
+      setHealMissingDest(hasRemainingMissingDest);
+      setPruneMissingSrc(false);
+    }
+  }, [open, data]);
+
+  const trimmed = reason.trim();
+  const isReasonValid = trimmed.length >= MIN_REASON_LENGTH;
+  const hasCheckbox = healMismatched || healMissingDest || pruneMissingSrc;
+
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (newSelectedRowKeys: React.Key[]) => {
+      setSelectedRowKeys(newSelectedRowKeys);
+    },
+  };
+
+  const isFormValid = isReasonValid && hasCheckbox && selectedRowKeys.length > 0;
+  const isBusy = submitting;
+
+  const executeHeal = async (forceHeal = false) => {
+    if (!isFormValid || isBusy) return;
+    try {
+      setSubmitting(true);
+      const reportIds = selectedRowKeys.map(Number);
+      await heal.mutateAsync({
+        table,
+        segment,
+        report_ids: reportIds,
+        heal_mismatched: healMismatched,
+        heal_missing_dest: healMissingDest,
+        prune_missing_src: pruneMissingSrc,
+        force_heal: forceHeal,
+        reason: trimmed,
+      });
+      onSuccess();
+      onClose();
+    } catch (err: unknown) {
+      // Extract error message from Axios response body (API returns {error: "..."})
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      const errMsg = axiosErr?.response?.data?.error || (err instanceof Error ? err.message : String(err));
+      // Check if threshold blocked — show confirmation dialog
+      if (errMsg.includes('safety threshold') || errMsg.includes('execute-heal blocked')) {
+        Modal.confirm({
+          title: '⚠️ Số lượng bản ghi vượt ngưỡng an toàn',
+          content: (
+            <div>
+              <p>{errMsg}</p>
+              <p style={{ color: '#ff4d4f', fontWeight: 600 }}>
+                Bạn có chắc chắn muốn tiếp tục chữa lành toàn bộ? Hành động này có thể gây tải nặng lên hệ thống.
+              </p>
+            </div>
+          ),
+          okText: 'Xác nhận Force Heal',
+          okType: 'danger',
+          cancelText: 'Hủy',
+          onOk: () => executeHeal(true),
+        });
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleOk = async () => {
+    await executeHeal(false);
+  };
+
+  const handleDeleteReport = async (id: number) => {
+    setDeletingId(id);
+    try {
+      await deleteMutation.mutateAsync({ id });
+      message.success('Đã xoá phiên đối soát thành công!');
+    } catch (err: any) {
+      message.error('Lỗi khi xoá phiên đối soát: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const reportColumns = [
+    {
+      title: 'ID', dataIndex: 'id', width: 60,
+    },
+    {
+      title: 'Chặng', dataIndex: 'segment', width: 120,
+      render: (s: string) => (
+        <Tag color={s === 'shadow_master' ? 'purple' : 'blue'} style={{ margin: 0 }}>
+          {s === 'shadow_master' ? 'Shadow → Master' : 'Source → Shadow'}
+        </Tag>
+      ),
+    },
+    {
+      title: 'Loại kiểm tra', dataIndex: 'check_type', width: 150,
+      render: (type: string) => {
+        switch (type) {
+          case 'smoke': return <Tag color="orange" style={{ margin: 0 }}>Smoke Check (7 ngày)</Tag>;
+          case 'hash_window': return <Tag color="cyan" style={{ margin: 0 }}>Hash Window</Tag>;
+          case 'full_diff': return <Tag color="red" style={{ margin: 0 }}>Full Search</Tag>;
+          case 'deep_check': return <Tag color="blue" style={{ margin: 0 }}>Deep Check</Tag>;
+          default: return <Tag color="default" style={{ margin: 0 }}>{type || '—'}</Tag>;
+        }
+      }
+    },
+    {
+      title: 'Khoảng thời gian',
+      key: 'time_range',
+      width: 220,
+      render: (record: any) => formatTimeRange(record.recon_start_time, record.recon_end_time),
+    },
+    {
+      title: 'ID lệch',
+      key: 'diff_ids',
+      width: 180,
+      render: (record: any) => {
+        const ids = getDiffIDs(record);
+        if (ids.length === 0) return <Text type="secondary">—</Text>;
+        const displayIds = ids.slice(0, 2);
+        const hasMore = ids.length > 2;
+        const popoverContent = (
+          <div style={{ maxHeight: 300, overflowY: 'auto', maxWidth: 250 }}>
+            <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text strong>Danh sách ID lệch ({ids.length})</Text>
+              <Button 
+                size="small" 
+                type="link" 
+                icon={<CopyOutlined />} 
+                onClick={() => {
+                  navigator.clipboard.writeText(ids.join(', '));
+                  message.success('Đã copy danh sách ID!');
+                }}
+              >
+                Copy
+              </Button>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {ids.map(id => <Tag key={id} color="red" style={{ margin: 0 }}>{id}</Tag>)}
+            </div>
+          </div>
+        );
+        return (
+          <Space size={4} wrap>
+            {displayIds.map(id => <Tag key={id} color="red" style={{ margin: 0 }}>{id}</Tag>)}
+            {hasMore && (
+              <Popover content={popoverContent} trigger="click" placement="top">
+                <Button size="small" shape="circle" icon={<EyeOutlined />} style={{ fontSize: 10, width: 22, height: 22, minWidth: 22, padding: 0 }} />
+              </Popover>
+            )}
+          </Space>
+        );
+      }
+    },
+    {
+      title: 'Thiếu', dataIndex: 'missing_count', width: 70,
+      render: (v: number, record: any) => {
+        const healed = record.healed_missing_dest_count || 0;
+        const remaining = Math.max(0, v - healed);
+        if (healed > 0) {
+          return (
+            <span style={{ fontWeight: 600 }}>
+              <Text type={remaining > 0 ? "danger" : "secondary"}>{remaining}</Text>
+              <Text type="secondary" style={{ fontSize: 11, fontWeight: 400 }}>/{v}</Text>
+            </span>
+          );
+        }
+        return v > 0 ? <Text type="danger" style={{ fontWeight: 600 }}>{v}</Text> : <Text type="secondary">0</Text>;
+      }
+    },
+    {
+      title: 'Lệch', dataIndex: 'stale_count', width: 70,
+      render: (v: number, record: any) => {
+        const healed = record.healed_mismatched_count || 0;
+        const remaining = Math.max(0, v - healed);
+        if (healed > 0) {
+          return (
+            <span style={{ fontWeight: 600 }}>
+              <Text type={remaining > 0 ? "warning" : "secondary"}>{remaining}</Text>
+              <Text type="secondary" style={{ fontSize: 11, fontWeight: 400 }}>/{v}</Text>
+            </span>
+          );
+        }
+        return v > 0 ? <Text type="warning" style={{ fontWeight: 600 }}>{v}</Text> : <Text type="secondary">0</Text>;
+      }
+    },
+    {
+      title: 'Thừa', dataIndex: 'orphan_count', width: 70,
+      render: (v: number, record: any) => {
+        const healed = record.pruned_missing_src_count || 0;
+        const remaining = Math.max(0, v - healed);
+        if (healed > 0) {
+          return (
+            <span style={{ fontWeight: 600 }}>
+              <Text style={{ color: remaining > 0 ? '#ff4d4f' : '#8c8c8c' }}>{remaining}</Text>
+              <Text type="secondary" style={{ fontSize: 11, fontWeight: 400 }}>/{v}</Text>
+            </span>
+          );
+        }
+        return v > 0 ? <Text style={{ color: '#ff4d4f', fontWeight: 600 }}>{v}</Text> : <Text type="secondary">0</Text>;
+      }
+    },
+    {
+      title: 'Kiểm tra lúc', dataIndex: 'checked_at', width: 150,
+      render: (v: string) => v ? new Date(v).toLocaleString('vi-VN') : '—',
+    },
+    {
+      title: 'Thao tác',
+      key: 'actions',
+      width: 80,
+      render: (record: any) => {
+        return (
+          <Popconfirm
+            title="Xóa phiên đối soát này?"
+            description="Bạn có chắc chắn muốn xóa phiên đối soát chưa xử lý này không?"
+            onConfirm={() => handleDeleteReport(record.id)}
+            okText="Xóa"
+            cancelText="Hủy"
+            okButtonProps={{ danger: true, loading: deletingId === record.id }}
+          >
+            <Button
+              type="text"
+              danger
+              icon={<DeleteOutlined />}
+              size="small"
+              disabled={isBusy}
+            />
+          </Popconfirm>
+        );
+      }
+    },
+  ];
+
+  const healedReportColumns = [
+    {
+      title: 'ID', dataIndex: 'id', width: 60,
+    },
+    {
+      title: 'Chặng', dataIndex: 'segment', width: 120,
+      render: (s: string) => (
+        <Tag color={s === 'shadow_master' ? 'purple' : 'blue'} style={{ margin: 0 }}>
+          {s === 'shadow_master' ? 'Shadow → Master' : 'Source → Shadow'}
+        </Tag>
+      ),
+    },
+    {
+      title: 'Loại kiểm tra', dataIndex: 'check_type', width: 150,
+      render: (type: string) => {
+        switch (type) {
+          case 'smoke': return <Tag color="orange" style={{ margin: 0 }}>Smoke Check (7 ngày)</Tag>;
+          case 'hash_window': return <Tag color="cyan" style={{ margin: 0 }}>Hash Window</Tag>;
+          case 'full_diff': return <Tag color="red" style={{ margin: 0 }}>Full Search</Tag>;
+          case 'deep_check': return <Tag color="blue" style={{ margin: 0 }}>Deep Check</Tag>;
+          default: return <Tag color="default" style={{ margin: 0 }}>{type || '—'}</Tag>;
+        }
+      }
+    },
+    {
+      title: 'Khoảng thời gian',
+      key: 'time_range',
+      width: 220,
+      render: (record: any) => formatTimeRange(record.recon_start_time, record.recon_end_time),
+    },
+    {
+      title: 'Kết quả xử lý',
+      key: 'heal_result',
+      width: 150,
+      render: (record: any) => {
+        return (
+          <Space direction="vertical" size={0}>
+            <Text type="success" style={{ fontWeight: 600 }}>Đã heal: {record.healed_count ?? 0}</Text>
+            {record.pruned_missing_src_count > 0 && (
+              <Text type="secondary" style={{ fontSize: 11 }}>Đã dọn: {record.pruned_missing_src_count}</Text>
+            )}
+          </Space>
+        );
+      }
+    },
+    {
+      title: 'Thời gian xử lý',
+      dataIndex: 'healed_at',
+      width: 150,
+      render: (v: string) => v ? new Date(v).toLocaleString('vi-VN') : '—',
+    },
+  ];
+
+  const tabItems = [
+    {
+      key: 'unhealed',
+      label: (
+        <span>
+          Phiên chưa xử lý{' '}
+          <Badge count={totalUnhealed} showZero style={{ backgroundColor: totalUnhealed > 0 ? '#ff4d4f' : '#d9d9d9' }} />
+        </span>
+      ),
+      children: isLoading ? (
+        <div style={{ textAlign: 'center', padding: 24 }}><Spin tip="Đang tải..." /></div>
+      ) : reports.length === 0 ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có phiên nào cần chữa lành" />
+      ) : (
+        <>
+          {segAReports.length > 0 && segBReports.length > 0 && (
+            <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 4 }}>
+              Gồm {segAReports.length} phiên Ingest (A) + {segBReports.length} phiên Transmute (B)
+            </div>
+          )}
+          <Table
+            size="small"
+            rowKey="id"
+            rowSelection={rowSelection}
+            dataSource={reports}
+            columns={reportColumns}
+            pagination={false}
+            scroll={{ y: 200 }}
+            style={{ marginBottom: 4 }}
+          />
+        </>
+      ),
+    },
+    {
+      key: 'healed',
+      label: (
+        <span>
+          Phiên đã xử lý{' '}
+          <Badge count={healedReports.length} showZero style={{ backgroundColor: '#52c41a' }} />
+        </span>
+      ),
+      children: isHistoryLoading ? (
+        <div style={{ textAlign: 'center', padding: 24 }}><Spin tip="Đang tải..." /></div>
+      ) : healedReports.length === 0 ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có phiên nào đã chữa lành" />
+      ) : (
+        <Table
+          size="small"
+          rowKey="id"
+          dataSource={healedReports}
+          columns={healedReportColumns}
+          pagination={{ pageSize: 5 }}
+          scroll={{ y: 200 }}
+          style={{ marginBottom: 4 }}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <Modal
+      open={open}
+      title={
+        <span>
+          <MedicineBoxOutlined style={{ color: '#ff4d4f', marginRight: 8 }} />
+          Chữa lành đối soát cho {table}
+        </span>
+      }
+      width={1100}
+      onOk={handleOk}
+      onCancel={() => { if (!isBusy) onClose(); }}
+      okText="Thực hiện chữa lành"
+      okButtonProps={{
+        danger: true,
+        disabled: !isFormValid || isBusy,
+        loading: isBusy,
+        icon: <MedicineBoxOutlined />,
+      }}
+      cancelButtonProps={{ disabled: isBusy }}
+      destroyOnHidden
+    >
+      <Tabs defaultActiveKey="unhealed" items={tabItems} style={{ marginBottom: 16 }} />
+
+      {/* Section 2: Checkboxes hành động */}
+      {reports.length > 0 && (
+        <div style={{ marginBottom: 16, padding: 12, background: '#fafafa', borderRadius: 8, border: '1px solid #f0f0f0' }}>
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>
+            Chọn hành động chữa lành:
+          </div>
+          <Space direction="vertical" size={8}>
+            <Checkbox 
+              checked={healMismatched} 
+              disabled={!reports.some(r => r.stale_count - (r.healed_mismatched_count || 0) > 0)}
+              onChange={(e) => setHealMismatched(e.target.checked)}
+            >
+              <span>Chữa lành dữ liệu <strong>lệch</strong> (mismatched) — ghi đè bản ghi sai từ nguồn</span>
+            </Checkbox>
+            <Checkbox 
+              checked={healMissingDest} 
+              disabled={!reports.some(r => r.missing_count - (r.healed_missing_dest_count || 0) > 0)}
+              onChange={(e) => setHealMissingDest(e.target.checked)}
+            >
+              <span>Bổ dung dữ liệu <strong>thiếu ở đích</strong> (missing from dest) — đồng bộ bản ghi mới</span>
+            </Checkbox>
+            <Checkbox 
+              checked={pruneMissingSrc} 
+              disabled={!reports.some(r => r.orphan_count - (r.pruned_missing_src_count || 0) > 0)}
+              onChange={(e) => setPruneMissingSrc(e.target.checked)}
+            >
+              <span style={{ color: '#ff4d4f' }}>Xoá bản ghi <strong>thừa ở đích</strong> (orphan) — soft-delete dữ liệu không còn ở nguồn</span>
+            </Checkbox>
+          </Space>
+          {!hasCheckbox && (
+            <div style={{ color: '#ff4d4f', fontSize: 12, marginTop: 8 }}>
+              Vui lòng chọn ít nhất một hành động.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Section 3: Cảnh báo */}
+      <Alert
+        type="warning"
+        showIcon
+        message="Hành động không thể hoàn tác"
+        description="Chữa lành sẽ ghi đè/xoá dữ liệu trên destination. Hãy chắc chắn đã kiểm tra (Check) trước."
+        style={{ marginBottom: 12 }}
+      />
+
+      {/* Section 4: Lý do */}
+      <div style={{ marginBottom: 8 }}>
+        <Text strong>Lý do thực hiện </Text>
+        <Text type="danger">*</Text>
+        <Text type="secondary"> (tối thiểu {MIN_REASON_LENGTH} ký tự, lưu audit log)</Text>
+      </div>
+      <TextArea
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="Ví dụ: Kafka Connect stuck, cần heal lại bản ghi bị miss trong 2 giờ qua."
+        rows={2}
+        maxLength={500}
+        showCount
+        disabled={isBusy}
+        status={reason.length > 0 && !isReasonValid ? 'error' : undefined}
+      />
+      {reason.length > 0 && !isReasonValid && (
+        <Text type="danger" style={{ fontSize: 12 }}>
+          Cần ít nhất {MIN_REASON_LENGTH} ký tự (hiện tại: {trimmed.length}).
+        </Text>
+      )}
+    </Modal>
+  );
+}

@@ -1,0 +1,429 @@
+package server
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"cdc-cms-service/config"
+	apigovernance "cdc-cms-service/internal/api/governance"
+	apimaster "cdc-cms-service/internal/api/master"
+	apirecon "cdc-cms-service/internal/api/recon"
+	apischeduler "cdc-cms-service/internal/api/scheduler"
+	apishadow "cdc-cms-service/internal/api/shadow"
+	apisource "cdc-cms-service/internal/api/source"
+	apisystem "cdc-cms-service/internal/api/system"
+
+	governanceCmd "cdc-cms-service/internal/app/commands/governance"
+	masterCmd "cdc-cms-service/internal/app/commands/master"
+	reconCmd "cdc-cms-service/internal/app/commands/recon"
+	schedulerCmd "cdc-cms-service/internal/app/commands/scheduler"
+	shadowCmd "cdc-cms-service/internal/app/commands/shadow"
+	sourceCmd "cdc-cms-service/internal/app/commands/source"
+	systemCmd "cdc-cms-service/internal/app/commands/system"
+
+	queriesGov "cdc-cms-service/internal/app/queries/governance"
+	masterQuery "cdc-cms-service/internal/app/queries/master"
+	reconQuery "cdc-cms-service/internal/app/queries/recon"
+	schedulerQuery "cdc-cms-service/internal/app/queries/scheduler"
+	shadowQuery "cdc-cms-service/internal/app/queries/shadow"
+	sourceQuery "cdc-cms-service/internal/app/queries/source"
+	systemQuery "cdc-cms-service/internal/app/queries/system"
+
+	"cdc-cms-service/internal/bootstrap"
+	infrahttp "cdc-cms-service/internal/infra/http"
+	"cdc-cms-service/internal/infra/messaging"
+	natsPub "cdc-cms-service/internal/infra/messaging/nats"
+	"cdc-cms-service/internal/infra/observability"
+
+	persistenceGov "cdc-cms-service/internal/infra/persistence/governance"
+	persistenceMaster "cdc-cms-service/internal/infra/persistence/master"
+	persistenceRecon "cdc-cms-service/internal/infra/persistence/recon"
+	persistenceSched "cdc-cms-service/internal/infra/persistence/scheduler"
+	persistenceShadow "cdc-cms-service/internal/infra/persistence/shadow"
+	persistenceSource "cdc-cms-service/internal/infra/persistence/source"
+	persistenceSystem "cdc-cms-service/internal/infra/persistence/system"
+
+	"cdc-cms-service/internal/middleware"
+	"cdc-cms-service/internal/migrate"
+	"cdc-cms-service/internal/router"
+	"cdc-cms-service/pkgs/database"
+	"cdc-cms-service/pkgs/natsconn"
+	"cdc-cms-service/pkgs/rediscache"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/swagger"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+)
+
+type Server struct {
+	cfg                  *config.AppConfig
+	logger               *zap.Logger
+	db                   *gorm.DB
+	nats                 *natsconn.NatsClient
+	redis                *rediscache.RedisCache
+	app                  *fiber.App
+	healthCollector      *observability.Collector
+	collectorCancel      context.CancelFunc
+	auditLogger          *middleware.AuditLogger
+	auditCancel          context.CancelFunc
+	alertMgr             *persistenceSystem.AlertManager
+	alertResolverCancel  context.CancelFunc
+	stuckJobReaper       *messaging.StuckJobReaper
+	stuckJobReaperCancel context.CancelFunc
+}
+
+func New(cfg *config.AppConfig, logger *zap.Logger) (*Server, error) {
+
+	// ==========================================
+	// 1. INFRASTRUCTURE (Hạ tầng, Kết nối)
+	// ==========================================
+	db, err := database.NewPostgresConnection(cfg.DB)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: %w", err)
+	}
+	logger.Info("PostgreSQL (control plane) connected")
+
+	if err := migrate.Run(db, !cfg.Migration.SkipSeeds, cfg.Migration.SkipCluster, logger); err != nil {
+		return nil, fmt.Errorf("apply migrations: %w", err)
+	}
+
+	shadowDB := db
+	if cfg.ShadowDB.Host != "" {
+		sdb, err := database.NewPostgresConnection(cfg.ShadowDB)
+		if err != nil {
+			return nil, fmt.Errorf("postgres shadow: %w", err)
+		}
+		shadowDB = sdb
+		logger.Info("PostgreSQL (shadow data plane) connected",
+			zap.String("host", cfg.ShadowDB.Host),
+			zap.Int("port", cfg.ShadowDB.Port),
+			zap.String("database", cfg.ShadowDB.Database))
+	} else {
+		logger.Warn("shadowDb not configured — ShadowAutomator falls back to control plane (Path A); shadow tables will be orphaned vs worker writes (Path B)")
+	}
+
+	if err := bootstrap.EnsureDefaultShadowConnection(context.Background(), db, cfg.ShadowDB, logger); err != nil {
+		return nil, fmt.Errorf("seed shadow connection: %w", err)
+	}
+
+	if err := bootstrap.EnsureDefaultMasterConnection(context.Background(), db, logger); err != nil {
+		return nil, fmt.Errorf("seed master connection: %w", err)
+	}
+
+	natsClient, err := natsconn.NewNatsClient(cfg, logger)
+	if err != nil {
+		return nil, fmt.Errorf("nats: %w", err)
+	}
+
+	redisCache, err := rediscache.NewRedisCache(cfg, logger)
+	if err != nil {
+		return nil, fmt.Errorf("redis: %w", err)
+	}
+
+	kafkaConnectClient := infrahttp.NewKafkaConnectClient(cfg.System.KafkaConnectURL)
+	promClient, err := infrahttp.NewPromClient(infrahttp.PromClientConfig{
+		PrometheusURL: cfg.System.PrometheusURL,
+		WorkerURL:     cfg.System.WorkerURL,
+	}, logger)
+	if err != nil {
+		return nil, fmt.Errorf("prom client: %w", err)
+	}
+
+	// ==========================================
+	// 2. REPOSITORIES (Lớp Truy xuất Dữ liệu)
+	// ==========================================
+	registryRepo := persistenceSource.NewRegistryRepo(db)
+	systemConnectorRepo := persistenceSource.NewSystemConnectorRepo(db)
+	sourceObjectV2Sync := persistenceSource.NewSourceObjectV2SyncService(db, logger)
+	sourceObjectRepo := persistenceSource.NewSourceRepo(db, sourceObjectV2Sync)
+	sourceObjectReader := persistenceSource.NewSourceObjectReadRepo(db)
+
+	pendingRepo := persistenceShadow.NewPendingFieldRepo(db)
+	shadowBindingRepo := persistenceShadow.NewShadowBindingRepo(db)
+	shadowPreviewRepo := persistenceShadow.NewPostgresShadowPreviewRepository(db)
+	shadowSchemaReader := persistenceShadow.NewShadowSchemaReader(shadowDB)
+
+	masterRepo := persistenceMaster.NewMasterRepo(db)
+	mappingRuleRepoV2 := persistenceMaster.NewMappingRuleRepo(db)
+	masterReader := persistenceMaster.NewMasterReadRepo(db)
+	masterRuleRepoNew := persistenceMaster.NewPostgresMasterRuleRepository(db)
+
+	schemaLogRepo := persistenceGov.NewSchemaLogRepo(db)
+	schemaProposalRepo := persistenceGov.NewSchemaProposalRepo(db)
+	sensitiveFieldsRepo := persistenceGov.NewSensitiveFieldRepo(db)
+	qaRepo := persistenceGov.NewQARepo(db)
+
+	failedSyncLogRepo := persistenceRecon.NewFailedSyncLogRepo(db)
+	reconReader := persistenceRecon.NewReconReadRepo(db)
+	bridgeStatusReader := persistenceShadow.NewBridgeStatusRepo(db)
+
+	wizardRepo := persistenceSched.NewWizardRepo(db)
+	jobRepo := persistenceSched.NewJobRepo(db)
+	workerScheduleRepo := persistenceSched.NewWorkerScheduleRepo(db)
+	workerScheduleReader := persistenceSched.NewWorkerScheduleReadRepo(db)
+	snapshotProgressReader := persistenceSched.NewSnapshotProgressReadRepoGorm(db)
+	transmuteScheduleReader := persistenceSched.NewTransmuteScheduleReadRepo(db)
+	transmuteScheduleRepoNew := persistenceSched.NewPostgresTransmuteScheduleRepository(db)
+
+	dbHealthChecker := persistenceSystem.NewDBHealthChecker(db)
+	activityLogReader := persistenceSystem.NewActivityLogReadRepo(db)
+	syncHealthReader := persistenceSystem.NewSyncHealthReadRepo(db)
+
+	// ==========================================
+	// 3. CORE SERVICES & OBSERVABILITY
+	// ==========================================
+	cmdBus := messaging.NewNATSCommandBus(natsClient.Conn, jobRepo, logger)
+	natsPublisher := messaging.NewNatsPublisher(natsClient.Conn)
+	reloadPublisher := messaging.NewReloadPublisher(natsClient.Conn)
+	rpcClient := messaging.NewNatsRPCClient(natsClient.Conn)
+	ddlPubNew := natsPub.NewNatsMasterDDLPublisher(natsClient.Conn)
+
+	shadowAutomator := persistenceShadow.NewShadowAutomator(shadowDB, db, logger)
+	activityLogger := persistenceSystem.NewActivityLogger(db, logger)
+	approvalSvc := persistenceGov.NewApprovalService(db, pendingRepo, schemaLogRepo, reloadPublisher, logger)
+	provOrch := persistenceGov.NewProvisioningOrchestrator(db, natsClient.Conn, logger)
+
+	alertMgr := persistenceSystem.NewAlertManager(db, redisCache, logger)
+	stuckJobReaper := messaging.NewStuckJobReaper(db, logger, 30*time.Second, nil)
+	healthCollector := observability.NewCollector(
+		observability.CollectorConfig{
+			WorkerURL:        cfg.System.WorkerURL,
+			KafkaConnectURL:  cfg.System.KafkaConnectURL,
+			NATSMonitorURL:   cfg.System.NatsMonitorURL,
+			KafkaExporterURL: cfg.System.KafkaExporterURL,
+			CacheKey:         cfg.System.HealthCacheKey,
+		}, db, redisCache, promClient, logger,
+	)
+	healthCollector.SetAlertManager(alertMgr)
+
+	// ==========================================
+	// 4. QUERIES (Lớp Đọc - CQRS)
+	// ==========================================
+	listSourceObjectsH := sourceQuery.NewListSourceObjectsHandler(sourceObjectReader)
+	getSourceMappingContextH := sourceQuery.NewGetSourceObjectMappingContextHandler(sourceObjectReader)
+	getSourceObjectStatsH := sourceQuery.NewGetSourceObjectStatsHandler(sourceObjectReader)
+	listShadowBindingsH := sourceQuery.NewListShadowBindingsHandler(sourceObjectReader)
+	listConnectorsH := sourceQuery.NewListConnectorsHandler(kafkaConnectClient)
+	getConnectorH := sourceQuery.NewGetConnectorHandler(kafkaConnectClient)
+	listConnectorPluginsH := sourceQuery.NewListConnectorPluginsHandler(kafkaConnectClient)
+	listSourcesH := sourceQuery.NewListSourcesHandler(systemConnectorRepo)
+	getSourceH := sourceQuery.NewGetSourceHandler(systemConnectorRepo)
+
+	resolveMappingScopeH := shadowQuery.NewResolveMappingScopeHandler(sourceObjectRepo)
+	previewMappingQH := shadowQuery.NewPreviewMappingQueryHandler(shadowPreviewRepo)
+
+	listMappingRulesH := masterQuery.NewListMappingRulesHandler(mappingRuleRepoV2)
+	listMastersH := masterQuery.NewListMastersHandler(masterReader)
+	listMasterRulesQH := masterQuery.NewListMasterRulesHandler(masterRuleRepoNew)
+
+	listLatestReportsH := reconQuery.NewListLatestReportsHandler(reconReader)
+	getTableHistoryH := reconQuery.NewGetTableHistoryHandler(reconReader)
+	listFailedLogsH := reconQuery.NewListFailedLogsHandler(reconReader)
+	listUnhealedReportsH := reconQuery.NewListUnhealedReportsHandler(reconReader)
+	gapsQueryHandler := reconQuery.NewListGapsHandler(qaRepo, logger)
+
+	getWizardSessionH := schedulerQuery.NewGetWizardSessionHandler(wizardRepo)
+	getWizardProgressH := schedulerQuery.NewGetWizardProgressHandler(wizardRepo)
+	listSnapshotProgressH := schedulerQuery.NewListSnapshotProgressHandler(snapshotProgressReader)
+	listTransmuteSchedulesH := schedulerQuery.NewListTransmuteSchedulesHandler(transmuteScheduleReader)
+	listWorkerSchedulesH := schedulerQuery.NewListWorkerSchedulesHandler(workerScheduleReader)
+	getJobH := schedulerQuery.NewGetJobHandler(jobRepo)
+
+	getSyncHealthH := systemQuery.NewGetSyncHealthHandler(syncHealthReader)
+	listActivityLogsH := systemQuery.NewListActivityLogsHandler(activityLogReader)
+	getActivityStatsH := systemQuery.NewGetActivityStatsHandler(activityLogReader)
+	metricHealthHandler := systemQuery.NewGetMetricHealthHandler(promClient, logger)
+	qaQueryHandler := queriesGov.NewGetQASummaryHandler(qaRepo, logger)
+
+	// ==========================================
+	// 5. COMMANDS & COMMAND BUS REGISTRATION
+	// ==========================================
+	createTransmuteCmdH := schedulerCmd.NewCreateTransmuteScheduleHandler(transmuteScheduleRepoNew)
+	toggleTransmuteCmdH := schedulerCmd.NewToggleTransmuteScheduleHandler(transmuteScheduleRepoNew)
+	deleteTransmuteCmdH := schedulerCmd.NewDeleteTransmuteScheduleHandler(transmuteScheduleRepoNew)
+	runNowTransmuteCmdH := schedulerCmd.NewRunNowTransmuteScheduleHandler(transmuteScheduleRepoNew, cmdBus)
+
+	saveCmdH := masterCmd.NewSaveMasterRuleHandler(masterRuleRepoNew, ddlPubNew)
+	deleteCmdH := masterCmd.NewDeleteMasterRuleHandler(masterRuleRepoNew)
+	metadataCmdH := masterCmd.NewUpdateColumnMetadataHandler(masterRuleRepoNew)
+	approveDdlExecutor := masterCmd.NewApproveDDLExecutor(masterRuleRepoNew, ddlPubNew)
+	approveDdlCmdH := masterCmd.NewApproveDDLHandler(masterRuleRepoNew, approveDdlExecutor)
+	approveAllCmdH := masterCmd.NewApproveDDLAllHandler(masterRuleRepoNew, approveDdlExecutor)
+	dropColCmdH := masterCmd.NewDropColumnHandler(masterRuleRepoNew, ddlPubNew)
+	dropRejectedCmdH := masterCmd.NewDropRejectedColumnsHandler(masterRuleRepoNew, ddlPubNew)
+	syncShadowCmdH := masterCmd.NewSyncFromShadowHandler(masterRuleRepoNew)
+	batchCmdH := masterCmd.NewBatchUpdateRulesHandler(masterRuleRepoNew, ddlPubNew)
+
+	// -- Đăng ký Asynchronous Subjects --
+	cmdBus.RegisterSubject("recon.check", "cdc.cmd.recon-check")
+	cmdBus.RegisterSubject("recon.heal", "cdc.cmd.recon-heal")
+	cmdBus.RegisterSubject("execute-heal", "cdc.cmd.execute-heal")
+	cmdBus.RegisterSubject("recon.retry-failed", "cdc.cmd.retry-failed")
+	cmdBus.RegisterSubject("recon.backfill-source-ts", "cdc.cmd.recon-backfill-source-ts")
+	cmdBus.RegisterSubject("debezium.signal", "cdc.cmd.debezium-signal")
+	cmdBus.RegisterSubject("debezium.snapshot", "cdc.cmd.debezium-snapshot")
+	cmdBus.RegisterSubject("debezium.restart", "cdc.cmd.restart-debezium")
+	cmdBus.RegisterSubject("source.create-default-columns", "cdc.cmd.create-default-columns")
+	cmdBus.RegisterSubject("source.standardize", "cdc.cmd.standardize")
+	cmdBus.RegisterSubject("source.scan-fields", "cdc.cmd.scan-fields")
+	cmdBus.RegisterSubject("source.detect-timestamp-field", "cdc.cmd.detect-timestamp-field")
+	cmdBus.RegisterSubject("mapping.backfill", "cdc.cmd.backfill")
+	cmdBus.RegisterSubject("mapping.alter-column", "cdc.cmd.alter-column")
+	cmdBus.RegisterSubject("transmute.run", "cdc.cmd.transmute")
+	cmdBus.RegisterSubject("master.create", "cdc.cmd.master-create")
+	cmdBus.RegisterSubject("master.swap", "cdc.cmd.master-swap")
+	cmdBus.RegisterSubject("snapshot.v2", "cdc.cmd.snapshot.v2")
+
+	// -- Đăng ký Synchronous Handlers --
+	cmdBus.RegisterSync("alert.ack", systemCmd.NewAckAlertHandler(alertMgr))
+	cmdBus.RegisterSync("alert.silence", systemCmd.NewSilenceAlertHandler(alertMgr))
+	cmdBus.RegisterSync("mapping.update-status", masterCmd.NewUpdateMappingRuleHandler(mappingRuleRepoV2, sensitiveFieldsRepo, reloadPublisher, logger))
+	cmdBus.RegisterSync("mapping.create", masterCmd.NewCreateMappingRuleHandler(sourceObjectRepo, mappingRuleRepoV2, logger))
+	cmdBus.RegisterSync("master.reject", governanceCmd.NewRejectMasterHandler(masterRepo, logger))
+	cmdBus.RegisterSync("master.create", masterCmd.NewCreateMasterHandler(masterRepo, logger, cfg.ProvisioningDefaultMasterConnectionCode))
+	cmdBus.RegisterSync("master.approve", governanceCmd.NewApproveMasterHandler(masterRepo, natsPublisher, logger))
+	cmdBus.RegisterSync("wizard.create", schedulerCmd.NewCreateWizardHandler(wizardRepo, logger))
+	cmdBus.RegisterSync("wizard.patch", schedulerCmd.NewPatchWizardHandler(wizardRepo, logger))
+	cmdBus.RegisterSync("wizard.execute", schedulerCmd.NewWizardExecuteHandler(wizardRepo, logger))
+	cmdBus.RegisterSync("source.update-v2", sourceCmd.NewUpdateSourceObjectV2Handler(sourceObjectRepo, logger))
+	cmdBus.RegisterSync("shadow-binding.update", shadowCmd.NewUpdateShadowBindingHandler(shadowBindingRepo, logger))
+	cmdBus.RegisterSync("schedule.update", schedulerCmd.NewUpdateScheduleHandler(workerScheduleRepo, logger))
+	cmdBus.RegisterSync("recon.failed-log-mark-retrying", reconCmd.NewMarkFailedLogRetryingHandler(failedSyncLogRepo))
+	cmdBus.RegisterSync("registry.update", sourceCmd.NewUpdateRegistryHandler(sourceObjectRepo, activityLogger, reloadPublisher, logger))
+	cmdBus.RegisterSync("schedule.create", createTransmuteCmdH)
+	cmdBus.RegisterSync("schedule.toggle", toggleTransmuteCmdH)
+	cmdBus.RegisterSync("registry.register", sourceCmd.NewRegisterRegistryHandler(sourceObjectRepo, activityLogger, shadowAutomator, reloadPublisher, logger))
+	cmdBus.RegisterSync("registry.bulk-register", sourceCmd.NewBulkRegisterRegistryHandler(sourceObjectRepo, activityLogger, reloadPublisher, logger))
+	cmdBus.RegisterSync("source.v2-sync", sourceCmd.NewV2SyncHandler(sourceObjectV2Sync))
+	cmdBus.RegisterSync("master.toggle-active", masterCmd.NewToggleMasterActiveHandler(masterRepo))
+	cmdBus.RegisterSync("master.update-spec", masterCmd.NewUpdateMasterSpecHandler(masterRepo))
+	cmdBus.RegisterSync("worker-schedule.create", schedulerCmd.NewCreateWorkerScheduleHandler(workerScheduleRepo))
+	cmdBus.RegisterSync("schema-proposal.reject", governanceCmd.NewRejectSchemaProposalHandler(schemaProposalRepo))
+	cmdBus.RegisterSync("schema-proposal.approve", governanceCmd.NewApproveSchemaProposalHandler(schemaProposalRepo))
+	cmdBus.RegisterSync("system-connector.create", sourceCmd.NewCreateSystemConnectorHandler(kafkaConnectClient, systemConnectorRepo, logger))
+	cmdBus.RegisterSync("system-connector.update-config", sourceCmd.NewUpdateSystemConnectorConfigHandler(kafkaConnectClient, systemConnectorRepo, logger))
+	cmdBus.RegisterSync("system-connector.delete", sourceCmd.NewDeleteSystemConnectorHandler(kafkaConnectClient, systemConnectorRepo, logger))
+	cmdBus.RegisterSync("system-connector.lifecycle", sourceCmd.NewLifecycleSystemConnectorHandler(kafkaConnectClient, logger))
+
+	// ==========================================
+	// 6. HTTP API HANDLERS (Controllers)
+	// ==========================================
+	h := &router.HandlerGroup{}
+	h.System.Health = apisystem.NewHealthHandler(dbHealthChecker)
+	h.System.SystemHealth = apisystem.NewSystemHealthHandler(redisCache, cmdBus, cfg.System.KafkaConnectURL, cfg.System.HealthCacheKey, logger)
+	h.System.Introspection = apisystem.NewIntrospectionHandler(rpcClient, mappingRuleRepoV2, shadowSchemaReader, masterRepo)
+	h.System.ActivityLog = apisystem.NewActivityLogHandler(listActivityLogsH, getActivityStatsH)
+	h.System.Alerts = apisystem.NewAlertsHandler(alertMgr, cmdBus, logger)
+
+	h.Governance.SchemaChange = apigovernance.NewSchemaChangeHandler(pendingRepo, schemaLogRepo, approvalSvc)
+	h.Governance.SchemaProposal = apigovernance.NewSchemaProposalHandler(schemaProposalRepo, cmdBus, logger)
+	h.Governance.SensitiveFields = apigovernance.NewSensitiveFieldsHandler(sensitiveFieldsRepo)
+	h.Governance.Provisioning = apigovernance.NewProvisioningHandler(provOrch, logger)
+	h.Governance.Audit = apigovernance.NewAuditHandler(qaQueryHandler, gapsQueryHandler, metricHealthHandler, logger)
+
+	h.Source.Registry = apisource.NewRegistryHandler(registryRepo, sourceObjectRepo, natsPublisher, cmdBus, shadowAutomator, sourceObjectV2Sync, activityLogger, logger, getSyncHealthH, bridgeStatusReader)
+	h.Source.Objects = apisource.NewSourceObjectsHandler(logger, listSourceObjectsH, getSourceMappingContextH, getSourceObjectStatsH, listShadowBindingsH)
+	h.Source.ObjectActions = apisource.NewSourceObjectActionsHandler(bridgeStatusReader, cmdBus, natsPublisher, activityLogger, logger)
+	h.Source.SystemConnectors = apisource.NewSystemConnectorsHandler(kafkaConnectClient, systemConnectorRepo, cmdBus, logger, listConnectorsH, getConnectorH, listConnectorPluginsH, cfg.System.SignalKafkaBootstrap, cfg.System.SignalKafkaTopic)
+	h.Source.Sources = apisource.NewSourcesHandler(logger, listSourcesH, getSourceH, systemConnectorRepo)
+
+	h.Shadow.BindingActions = apishadow.NewShadowBindingActionsHandler(cmdBus, logger)
+	h.Shadow.MappingPreview = apishadow.NewMappingPreviewHandler(previewMappingQH, logger)
+	h.Shadow.Mapping = apishadow.NewMappingRuleHandler(reloadPublisher, cmdBus, listMappingRulesH, resolveMappingScopeH, mappingRuleRepoV2)
+
+	h.Master.Registry = apimaster.NewMasterRegistryHandler(masterRepo, logger, listMastersH, cmdBus)
+	h.Master.Mapping = apimaster.NewMasterMappingRuleHandler(listMasterRulesQH, saveCmdH, deleteCmdH, metadataCmdH, approveDdlCmdH, approveAllCmdH, dropColCmdH, dropRejectedCmdH, syncShadowCmdH, batchCmdH)
+
+	h.Scheduler.Wizard = apischeduler.NewWizardHandler(wizardRepo, logger, getWizardSessionH, getWizardProgressH, cmdBus)
+	h.Scheduler.TransmuteV1 = apischeduler.NewTransmuteScheduleHandler(logger, createTransmuteCmdH, toggleTransmuteCmdH, deleteTransmuteCmdH, runNowTransmuteCmdH, listTransmuteSchedulesH)
+	h.Scheduler.WorkerSchedule = apischeduler.NewScheduleHandler(workerScheduleRepo, workerScheduleReader, listWorkerSchedulesH, cmdBus)
+	h.Scheduler.Job = apischeduler.NewJobHandler(getJobH)
+	h.Scheduler.SnapshotProgress = apischeduler.NewSnapshotProgressHandler(listSnapshotProgressH, natsPublisher, db)
+
+	h.Recon = apirecon.NewReconciliationHandler(reconReader, cmdBus, listLatestReportsH, getTableHistoryH, listFailedLogsH, listUnhealedReportsH, activityLogger, logger)
+
+	// ==========================================
+	// 7. ROUTER & SERVER SETUP
+	// ==========================================
+	auditLogger := middleware.NewAuditLogger(db, logger, nil)
+	destructiveMW := router.NewDestructiveMiddleware(redisCache, auditLogger)
+
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Use(cors.New())
+	app.Use(middleware.OtelPropagator())   // W3C traceparent → UserContext
+	app.Use(middleware.HttpTracer(logger)) // root span + structured access log + trace_id
+	app.Get("/swagger/*", swagger.HandlerDefault)
+
+	router.SetupRoutes(app, cfg, h, destructiveMW)
+
+	return &Server{
+		cfg:             cfg,
+		logger:          logger,
+		db:              db,
+		nats:            natsClient,
+		redis:           redisCache,
+		app:             app,
+		healthCollector: healthCollector,
+		auditLogger:     auditLogger,
+		alertMgr:        alertMgr,
+		stuckJobReaper:  stuckJobReaper,
+	}, nil
+}
+
+func (s *Server) Start() error {
+	s.logger.Info("CMS Service started", zap.String("port", s.cfg.Server.Port))
+
+	if s.healthCollector != nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		s.collectorCancel = cancel
+		go s.healthCollector.Run(ctx)
+		s.logger.Info("system health collector started")
+	}
+
+	if s.auditLogger != nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		s.auditCancel = cancel
+		go s.auditLogger.Run(ctx)
+		s.logger.Info("audit logger started")
+	}
+
+	if s.alertMgr != nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		s.alertResolverCancel = cancel
+		go s.alertMgr.RunBackgroundResolver(ctx)
+		s.logger.Info("alert background resolver started")
+	}
+
+	if s.stuckJobReaper != nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		s.stuckJobReaperCancel = cancel
+		go s.stuckJobReaper.Run(ctx)
+	}
+
+	return s.app.Listen(s.cfg.Server.Port)
+}
+
+func (s *Server) Shutdown() {
+	s.logger.Info("shutting down CMS Service...")
+	if s.collectorCancel != nil {
+		s.collectorCancel()
+	}
+	if s.auditCancel != nil {
+		s.auditCancel()
+	}
+	if s.alertResolverCancel != nil {
+		s.alertResolverCancel()
+	}
+	if s.stuckJobReaperCancel != nil {
+		s.stuckJobReaperCancel()
+	}
+	s.app.Shutdown()
+	s.nats.Close()
+	s.redis.Close()
+	sqlDB, _ := s.db.DB()
+	sqlDB.Close()
+	s.logger.Info("CMS Service stopped")
+}

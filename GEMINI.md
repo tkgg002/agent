@@ -235,6 +235,10 @@ TRƯỚC KHI kết thúc một câu trả lời và liệt kê danh sách Skills
 - **Assembly ngoài context**: Gom/transform kết quả bằng script (Python/awk) đọc part-files, không kéo toàn bộ nội dung qua context chính.
 - **Giữ context sạch**: Đúng tinh thần Rule #1 — dùng sub-agent triệt để cho research/xử-lý song song để Context chính luôn gọn.
 
+### 22. Quy tắc chạy Linter Quy trình (Process Linter - BẮT BUỘC)
+- **Quy định**: Trước khi báo cáo hoàn thành ("Done") hoặc kết thúc lượt hội thoại (turn), Agent **bắt buộc** phải chạy lệnh `python3 agent/tooling/verify_governance.py` để tự động hóa kiểm tra tính hợp lệ của tài liệu và log tiến độ ngày hôm nay.
+- **Xử lý vi phạm**: Nếu linter báo `FAILED` 🔴, Agent **không được phép** báo Done và phải lập tức sửa đổi tài liệu/log cho đúng chuẩn.
+
 ---
 ## WORKFLOWS REFERENCE
 Các workflow agents đã được codify tại `agent/workflows/`:

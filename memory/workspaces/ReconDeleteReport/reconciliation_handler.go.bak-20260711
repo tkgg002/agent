@@ -1,0 +1,76 @@
+package recon
+
+import (
+	"cdc-cms-service/internal/app/ports"
+
+	"github.com/gofiber/fiber/v2"
+	"go.uber.org/zap"
+	"cdc-cms-service/internal/app/queries/recon"
+)
+
+type ReconciliationHandler struct {
+	reader         recon.ReconReader
+	bus            ports.CommandBus
+	listLatestQ    *recon.ListLatestReportsHandler
+	getHistoryQ    *recon.GetTableHistoryHandler
+	listFailedQ    *recon.ListFailedLogsHandler
+	listUnhealedQ  *recon.ListUnhealedReportsHandler
+	activityLogger ports.ActivityLogger
+	logger         *zap.Logger
+}
+
+func NewReconciliationHandler(
+	reader recon.ReconReader,
+	bus ports.CommandBus,
+	listLatestQ *recon.ListLatestReportsHandler,
+	getHistoryQ *recon.GetTableHistoryHandler,
+	listFailedQ *recon.ListFailedLogsHandler,
+	listUnhealedQ *recon.ListUnhealedReportsHandler,
+	activityLogger ports.ActivityLogger,
+	loggers ...*zap.Logger,
+) *ReconciliationHandler {
+	logger := zap.NewNop()
+	if len(loggers) > 0 && loggers[0] != nil {
+		logger = loggers[0]
+	}
+	return &ReconciliationHandler{
+		reader:         reader,
+		bus:            bus,
+		listLatestQ:    listLatestQ,
+		getHistoryQ:    getHistoryQ,
+		listFailedQ:    listFailedQ,
+		listUnhealedQ:  listUnhealedQ,
+		activityLogger: activityLogger,
+		logger:         logger,
+	}
+}
+
+// ReportRow + FailedLogRow are type aliases so external callers /
+// Swagger docs continue to see the legacy names; the canonical
+// definitions now live in `internal/app/queries/recon_read_models.go`.
+type ReportRow = recon.LatestReportRow
+type FailedLogRow = recon.FailedLogRow
+
+type reconScopeRequest struct {
+	Table           string `json:"table"`
+	SourceDatabase  string `json:"source_database"`
+	SourceSchema    string `json:"source_schema"`
+	SourceNamespace string `json:"source_namespace"`
+	SourceTable     string `json:"source_table"`
+	ShadowSchema    string `json:"shadow_schema"`
+	ShadowTable     string `json:"shadow_table"`
+}
+
+func (h *ReconciliationHandler) resolveTargetTable(c *fiber.Ctx, scope reconScopeRequest) (string, error) {
+	if t := recon.TrimReconValue(scope.Table); t != "" {
+		return t, nil
+	}
+	return h.reader.ResolveTargetTableByScope(c.UserContext(), recon.ReconScopeFilter{
+		SourceDatabase:  scope.SourceDatabase,
+		SourceSchema:    scope.SourceSchema,
+		SourceNamespace: scope.SourceNamespace,
+		SourceTable:     scope.SourceTable,
+		ShadowSchema:    scope.ShadowSchema,
+		ShadowTable:     scope.ShadowTable,
+	})
+}

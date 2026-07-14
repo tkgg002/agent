@@ -1,0 +1,804 @@
+package recon
+
+// recon_tier_b.go — Segment B: Shadow ↔ Master reconciliation.
+// RunSegmentB, RunRowDiffB, diffIDTs.
+// Extracted from recon_core.go
+
+import (
+	"centralized-data-service/internal/service/master"
+	"centralized-data-service/internal/model/recon"
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"centralized-data-service/pkgs/metrics"
+	"centralized-data-service/pkgs/observability"
+
+	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
+	"go.opentelemetry.io/otel/attribute"
+	"go.uber.org/zap"
+)
+
+func (rc *ReconCore) RunSegmentB(ctx context.Context, ref MasterBindingRef, deep bool) *recon.ReconciliationReport {
+	if deep {
+		return rc.RunDeepCheckB(ctx, ref)
+	}
+	return rc.RunHashWindowCheckB(ctx, ref)
+}
+
+func (rc *ReconCore) measureAndResolveWatermarksB(ctx context.Context, ref MasterBindingRef) (time.Time, time.Time, string, int64, error) {
+	shadowRel, masterRel := ref.ShadowRel(), ref.MasterRel()
+
+	// Resolve cột timestamp nghiệp vụ từ registry
+	tsCol := "_source_ts"
+	if entry, err := rc.registryRepo.GetByTargetTable(ctx, ref.MasterTable); err == nil && entry != nil {
+		_, dstTS, errTS := rc.resolveSourceAndDestTSFields(ctx, *entry)
+		if errTS == nil && dstTS != "" {
+			tsCol = dstTS
+		}
+	}
+
+	shMax, shErr := rc.destAgent.MaxWindowTs(ctx, shadowRel, tsCol)
+	msMax, _ := rc.masterAgent.MaxWindowTs(ctx, masterRel, tsCol)
+	transmuteLagMs := lagBetween(shMax, msMax)
+	rc.upsertReconLag(ctx, ref.MasterTable, "transmute_lag_ms", transmuteLagMs)
+
+	// Watermark: chuẩn theo shadow (upstream của B). upper kẹp now-adaptiveFreeze.
+	upper := time.Now().Add(-rc.adaptiveFreeze(transmuteLagMs))
+	if shErr == nil && !shMax.IsZero() && shMax.Before(upper) {
+		upper = shMax.Add(time.Millisecond)
+	}
+	lower := upper.Add(-rc.cfg.WindowLookback)
+
+	// Override with custom time range if present in context
+	if customStart, customEnd, ok := GetReconTimeRange(ctx); ok {
+		lower = customStart
+		upper = customEnd
+		observability.Ctx(ctx, rc.logger).Info("recon segment B using custom time range from context",
+			zap.Time("start", lower), zap.Time("end", upper))
+	}
+
+	return lower, upper, tsCol, transmuteLagMs, shErr
+}
+
+func (rc *ReconCore) runCountCheckB(ctx context.Context, ref MasterBindingRef) (shadowFull, shadowActive, masterFull, masterActive int64, errSF, errMF error) {
+	shadowRel, masterRel := ref.ShadowRel(), ref.MasterRel()
+	shadowFull, errSF = rc.destAgent.CountRows(ctx, shadowRel, segBPKColumn)
+	masterFull, errMF = rc.masterAgent.CountRows(ctx, masterRel, segBPKColumn)
+
+	shadowActive = shadowFull
+	if errSF == nil {
+		if del, err := rc.destAgent.CountDeletedRows(ctx, shadowRel); err == nil {
+			if a := shadowFull - del; a >= 0 {
+				shadowActive = a
+			}
+		}
+	}
+
+	masterActive = masterFull
+	if errMF == nil {
+		if del, err := rc.masterAgent.CountDeletedRows(ctx, masterRel); err == nil {
+			if a := masterFull - del; a >= 0 {
+				masterActive = a
+			}
+		}
+	}
+
+	return shadowFull, shadowActive, masterFull, masterActive, errSF, errMF
+}
+
+
+func (rc *ReconCore) RunHashWindowCheckB(ctx context.Context, ref MasterBindingRef) *recon.ReconciliationReport {
+	ctx, span := observability.ChildSpan(ctx, "cdc.recon.run_hash_window_check_b", attribute.String("table", ref.runName()))
+	var finalErr error
+	defer func() { observability.EndSpan(span, &finalErr) }()
+
+	masterFQN := ref.MasterTable
+	if ref.MasterSchema != "" {
+		masterFQN = ref.MasterSchema + "." + ref.MasterTable
+	}
+	if rc.masterAgent == nil {
+		observability.Ctx(ctx, rc.logger).Error("recon segment B: masterAgent not wired — skip",
+			zap.String("table", ref.runName()))
+		return nil
+	}
+	acquired, unlock := rc.withTableLock(ctx, "reconB_"+ref.runName())
+	defer unlock()
+	if !acquired {
+		observability.Ctx(ctx, rc.logger).Info("recon segment B: lock busy, skip", zap.String("table", ref.runName()))
+		return nil
+	}
+	handle, err := rc.beginRun(ctx, ref.runName(), tierSegmentB)
+	if err != nil {
+		observability.Ctx(ctx, rc.logger).Error("recon segment B: beginRun failed", zap.String("table", ref.runName()), zap.Error(err))
+		return nil
+	}
+	finishStatus := "success"
+	defer func() {
+		if finishStatus == "failed" {
+			finalErr = fmt.Errorf("hash window check segment B failed")
+		}
+	}()
+
+	shadowRel, masterRel := ref.ShadowRel(), ref.MasterRel()
+	lower, upper, tsCol, transmuteLagMs, _ := rc.measureAndResolveWatermarksB(ctx, ref)
+
+	ctxCount, spanCount := observability.ChildSpan(ctx, "cdc.recon.run_count_check_b")
+	shadowFull, shadowActive, masterFull, masterActive, errSF, errMF := rc.runCountCheckB(ctxCount, ref)
+	spanCount.End()
+
+	// Emit metrics
+	if errSF == nil {
+		metrics.ShadowTableRowCount.WithLabelValues(shadowRel).Set(float64(shadowFull))
+		metrics.ShadowActiveRowCount.WithLabelValues(shadowRel).Set(float64(shadowActive))
+	}
+	if errMF == nil {
+		metrics.MasterTableRowCount.WithLabelValues(masterFQN).Set(float64(masterFull))
+		metrics.MasterActiveRowCount.WithLabelValues(masterFQN).Set(float64(masterActive))
+	}
+
+	if errSF == nil && errMF == nil && shadowActive == masterActive && transmuteLagMs == 0 {
+		duration := int(time.Since(handle.started).Milliseconds())
+		report := &recon.ReconciliationReport{
+			TargetTable: masterFQN, SourceDB: "",
+			SourceCount: &shadowActive, DestCount: masterActive, Diff: 0,
+			TotalSourceCount: &shadowFull, TotalDestCount: &masterFull,
+			CheckType: "count_total", Status: "ok",
+			Segment: segmentShadowMaster, DurationMs: &duration, CheckedAt: time.Now().UTC(),
+		}
+		rc.stampB(report, ref)
+		rc.finishRun(ctx, handle, "success", "")
+		metrics.ReconDrift.WithLabelValues(masterFQN, "4").Set(0)
+		return report
+	}
+
+	var (
+		totalShadow, totalMaster int64
+		missingFromMaster        []string
+		orphanInMaster           []string
+		staleIDs                 []string
+		windowErrs               int
+	)
+
+	ctxBuckets, spanBuckets := observability.ChildSpan(ctx, "cdc.recon.bucket_counts_b")
+	shBuckets, errS := rc.destAgent.BucketCounts(ctxBuckets, shadowRel, segBPKColumn, tsCol, lower, upper)
+	msBuckets, errM := rc.masterAgent.BucketCounts(ctxBuckets, masterRel, segBPKColumn, tsCol, lower, upper)
+	spanBuckets.End()
+
+	if errS != nil || errM != nil {
+		observability.Ctx(ctx, rc.logger).Warn("recon segment B: bucket scan error",
+			zap.String("table", ref.runName()), zap.Error(errS), zap.NamedError("master_err", errM))
+		windowErrs++
+	}
+	bucketKeys := make(map[int64]struct{}, len(shBuckets)+len(msBuckets))
+	for k := range shBuckets {
+		bucketKeys[k] = struct{}{}
+	}
+	for k := range msBuckets {
+		bucketKeys[k] = struct{}{}
+	}
+	driftedBuckets := 0
+
+	ctxLoop, spanLoop := observability.ChildSpan(ctx, "cdc.recon.window_loop_b", attribute.Int("windows_count", len(bucketKeys)))
+	defer spanLoop.End()
+
+	// Smart Tracing: bypass window sạch
+	ctxLoop = observability.ContextWithSkipTrace(ctxLoop)
+
+	for k := range bucketKeys {
+		sh, ms := shBuckets[k], msBuckets[k]
+		totalShadow += sh.Count
+		totalMaster += ms.Count
+		if sh.Count == ms.Count && sh.Xor == ms.Xor {
+			continue
+		}
+		driftedBuckets++
+		bLo := time.UnixMilli(k).UTC()
+		bHi := bLo.Add(time.Hour)
+
+		ctxDrift, spanDrift := observability.ChildSpan(ctxLoop, "cdc.recon.drift_drill_down_b",
+			attribute.String("bucket_time", bLo.Format(time.RFC3339)),
+			attribute.Int64("shadow_count", sh.Count),
+			attribute.Int64("master_count", ms.Count),
+		)
+		shIDTs, errS := rc.destAgent.ListIDTsInWindow(ctxDrift, shadowRel, segBPKColumn, tsCol, bLo, bHi)
+		if errS != nil {
+			observability.EndSpan(spanDrift, &errS)
+			windowErrs++
+			continue
+		}
+		msIDTs, errM := rc.masterAgent.ListIDTsInWindow(ctxDrift, masterRel, segBPKColumn, tsCol, bLo, bHi)
+		if errM != nil {
+			observability.EndSpan(spanDrift, &errM)
+			windowErrs++
+			continue
+		}
+		observability.EndSpan(spanDrift, nil)
+
+		missB, orphB, staleB := diffIDTs(shIDTs, msIDTs)
+		if len(missingFromMaster) < segBDiffIDCap {
+			missingFromMaster = append(missingFromMaster, missB...)
+		}
+		if len(orphanInMaster) < segBDiffIDCap {
+			orphanInMaster = append(orphanInMaster, orphB...)
+		}
+		if len(staleIDs) < segBDiffIDCap {
+			staleIDs = append(staleIDs, staleB...)
+		}
+	}
+
+	handle.windowsCount = len(bucketKeys)
+	handle.mismatches = len(missingFromMaster) + len(orphanInMaster) + len(staleIDs)
+
+	statusStr := "ok"
+	if handle.mismatches > 0 {
+		statusStr = "drift"
+	}
+	if windowErrs > 0 && handle.mismatches == 0 {
+		statusStr = "error"
+	}
+
+	missJSON, _ := json.Marshal(missingFromMaster)
+	staleJSON, _ := json.Marshal(map[string][]string{
+		"missing_from_dest": missingFromMaster,
+		"missing_from_src":  orphanInMaster,
+		"mismatched":        staleIDs,
+	})
+
+	var totalShadowFull, totalMasterFull *int64
+	if errSF == nil {
+		totalShadowFull = &shadowFull
+	}
+	if errMF == nil {
+		totalMasterFull = &masterFull
+	}
+
+	duration := int(time.Since(handle.started).Milliseconds())
+	report := &recon.ReconciliationReport{
+		TargetTable:      masterFQN,
+		SourceDB:         "", // Để trống ở Segment B
+		SourceCount:      &shadowActive,
+		TotalSourceCount: totalShadowFull,
+		TotalDestCount:   totalMasterFull,
+		DestCount:        masterActive,
+		Diff:             shadowActive - masterActive,
+		MissingCount:     len(missingFromMaster),
+		MissingIDs:       missJSON,
+		StaleCount:       len(staleIDs) + len(orphanInMaster),
+		StaleIDs:         staleJSON,
+		OrphanCount:      len(orphanInMaster),
+		CheckType:        "hash_window",
+		Status:           statusStr,
+		Segment:          segmentShadowMaster,
+		DurationMs:       &duration,
+		CheckedAt:        time.Now().UTC(),
+		ReconStartTime:   &lower,
+		ReconEndTime:     &upper,
+	}
+	rc.stampB(report, ref)
+
+	rc.alertOnReport(ctx, segmentShadowMaster, ref.MasterTable, statusStr, len(missingFromMaster), report.Diff)
+	metrics.ReconDrift.WithLabelValues(masterFQN, "4").Set(float64(handle.mismatches))
+
+	errMsg := ""
+	if windowErrs > 0 {
+		finishStatus = "failed"
+		errMsg = fmt.Sprintf("%d scan errors over %d buckets", windowErrs, len(bucketKeys))
+	}
+	rc.finishRun(ctx, handle, finishStatus, errMsg)
+
+	observability.Ctx(ctx, rc.logger).Info("segment B shadow↔master (hash window)",
+		zap.String("shadow", shadowRel), zap.String("master", masterRel),
+		zap.Int("buckets", len(bucketKeys)), zap.Int("drifted_buckets", driftedBuckets),
+		zap.Int("scan_errs", windowErrs),
+		zap.Int64("shadow_rows", totalShadow), zap.Int64("master_rows", totalMaster),
+		zap.Int("missing_from_master", len(missingFromMaster)),
+		zap.Int("orphan_in_master", len(orphanInMaster)),
+		zap.Int("stale_ids", len(staleIDs)),
+	)
+
+	return report
+}
+
+func (rc *ReconCore) RunDeepCheckB(ctx context.Context, ref MasterBindingRef) *recon.ReconciliationReport {
+	ctx, span := observability.ChildSpan(ctx, "cdc.recon.run_deep_check_b", attribute.String("table", ref.runName()))
+	var finalErr error
+	defer func() { observability.EndSpan(span, &finalErr) }()
+
+	masterFQN := ref.MasterTable
+	if ref.MasterSchema != "" {
+		masterFQN = ref.MasterSchema + "." + ref.MasterTable
+	}
+	if rc.masterAgent == nil {
+		observability.Ctx(ctx, rc.logger).Error("recon segment B: masterAgent not wired — skip",
+			zap.String("table", ref.runName()))
+		return nil
+	}
+	acquired, unlock := rc.withTableLock(ctx, "reconB_"+ref.runName())
+	defer unlock()
+	if !acquired {
+		observability.Ctx(ctx, rc.logger).Info("recon segment B: lock busy, skip", zap.String("table", ref.runName()))
+		return nil
+	}
+	handle, err := rc.beginRun(ctx, ref.runName(), tierSegmentB)
+	if err != nil {
+		observability.Ctx(ctx, rc.logger).Error("recon segment B: beginRun failed", zap.String("table", ref.runName()), zap.Error(err))
+		return nil
+	}
+	finishStatus := "success"
+	defer func() {
+		if finishStatus == "failed" {
+			finalErr = fmt.Errorf("deep check segment B failed")
+		}
+	}()
+
+	shadowRel, masterRel := ref.ShadowRel(), ref.MasterRel()
+	lower, upper, tsCol, transmuteLagMs, _ := rc.measureAndResolveWatermarksB(ctx, ref)
+
+	ctxCount, spanCount := observability.ChildSpan(ctx, "cdc.recon.run_count_check_b")
+	shadowFull, shadowActive, masterFull, masterActive, errSF, errMF := rc.runCountCheckB(ctxCount, ref)
+	spanCount.End()
+
+	// Emit metrics
+	if errSF == nil {
+		metrics.ShadowTableRowCount.WithLabelValues(shadowRel).Set(float64(shadowFull))
+		metrics.ShadowActiveRowCount.WithLabelValues(shadowRel).Set(float64(shadowActive))
+	}
+	if errMF == nil {
+		metrics.MasterTableRowCount.WithLabelValues(masterFQN).Set(float64(masterFull))
+		metrics.MasterActiveRowCount.WithLabelValues(masterFQN).Set(float64(masterActive))
+	}
+
+	if errSF == nil && errMF == nil && shadowActive == masterActive && transmuteLagMs == 0 {
+		duration := int(time.Since(handle.started).Milliseconds())
+		report := &recon.ReconciliationReport{
+			TargetTable: masterFQN, SourceDB: "",
+			SourceCount: &shadowActive, DestCount: masterActive, Diff: 0,
+			TotalSourceCount: &shadowFull, TotalDestCount: &masterFull,
+			CheckType: "count_total", Status: "ok",
+			Segment: segmentShadowMaster, DurationMs: &duration, CheckedAt: time.Now().UTC(),
+		}
+		rc.stampB(report, ref)
+		rc.finishRun(ctx, handle, "success", "")
+		metrics.ReconDrift.WithLabelValues(masterFQN, "4").Set(0)
+		return report
+	}
+
+	var (
+		totalShadow, totalMaster int64
+		missingFromMaster        []string
+		orphanInMaster           []string
+		staleIDs                 []string
+		windowErrs               int
+	)
+
+	ctxBuckets, spanBuckets := observability.ChildSpan(ctx, "cdc.recon.bucket_counts_b")
+	shBuckets, errS := rc.destAgent.BucketCounts(ctxBuckets, shadowRel, segBPKColumn, tsCol, lower, upper)
+	msBuckets, errM := rc.masterAgent.BucketCounts(ctxBuckets, masterRel, segBPKColumn, tsCol, lower, upper)
+	spanBuckets.End()
+
+	if errS != nil || errM != nil {
+		observability.Ctx(ctx, rc.logger).Warn("recon segment B: bucket scan error",
+			zap.String("table", ref.runName()), zap.Error(errS), zap.NamedError("master_err", errM))
+		windowErrs++
+	}
+	bucketKeys := make(map[int64]struct{}, len(shBuckets)+len(msBuckets))
+	for k := range shBuckets {
+		bucketKeys[k] = struct{}{}
+	}
+	for k := range msBuckets {
+		bucketKeys[k] = struct{}{}
+	}
+	driftedBuckets := 0
+
+	ctxLoop, spanLoop := observability.ChildSpan(ctx, "cdc.recon.window_loop_b", attribute.Int("windows_count", len(bucketKeys)))
+	defer spanLoop.End()
+
+	// Smart Tracing: bypass window sạch
+	ctxLoop = observability.ContextWithSkipTrace(ctxLoop)
+
+	for k := range bucketKeys {
+		sh, ms := shBuckets[k], msBuckets[k]
+		totalShadow += sh.Count
+		totalMaster += ms.Count
+		if sh.Count == ms.Count && sh.Xor == ms.Xor {
+			continue
+		}
+		driftedBuckets++
+		bLo := time.UnixMilli(k).UTC()
+		bHi := bLo.Add(time.Hour)
+
+		ctxDrift, spanDrift := observability.ChildSpan(ctxLoop, "cdc.recon.drift_drill_down_b",
+			attribute.String("bucket_time", bLo.Format(time.RFC3339)),
+			attribute.Int64("shadow_count", sh.Count),
+			attribute.Int64("master_count", ms.Count),
+		)
+		shIDTs, errS := rc.destAgent.ListIDTsInWindow(ctxDrift, shadowRel, segBPKColumn, tsCol, bLo, bHi)
+		if errS != nil {
+			observability.EndSpan(spanDrift, &errS)
+			windowErrs++
+			continue
+		}
+		msIDTs, errM := rc.masterAgent.ListIDTsInWindow(ctxDrift, masterRel, segBPKColumn, tsCol, bLo, bHi)
+		if errM != nil {
+			observability.EndSpan(spanDrift, &errM)
+			windowErrs++
+			continue
+		}
+		observability.EndSpan(spanDrift, nil)
+
+		missB, orphB, staleB := diffIDTs(shIDTs, msIDTs)
+		if len(missingFromMaster) < segBDiffIDCap {
+			missingFromMaster = append(missingFromMaster, missB...)
+		}
+		if len(orphanInMaster) < segBDiffIDCap {
+			orphanInMaster = append(orphanInMaster, orphB...)
+		}
+		if len(staleIDs) < segBDiffIDCap {
+			staleIDs = append(staleIDs, staleB...)
+		}
+	}
+
+	handle.windowsCount = len(bucketKeys)
+	handle.mismatches = len(missingFromMaster) + len(orphanInMaster) + len(staleIDs)
+
+	statusStr := "ok"
+	if handle.mismatches > 0 {
+		statusStr = "drift"
+	}
+	if windowErrs > 0 && handle.mismatches == 0 {
+		statusStr = "error"
+	}
+
+	missJSON, _ := json.Marshal(missingFromMaster)
+	staleJSON, _ := json.Marshal(map[string][]string{
+		"missing_from_dest": missingFromMaster,
+		"missing_from_src":  orphanInMaster,
+		"mismatched":        staleIDs,
+	})
+
+	var fieldDiffsJSON json.RawMessage
+	deepIDs := append(append([]string{}, missingFromMaster...), staleIDs...)
+	if diffs := rc.RunRowDiffB(ctx, ref, deepIDs); len(diffs) > 0 {
+		fieldDiffsJSON, _ = json.Marshal(diffs)
+	}
+
+	var totalShadowFull, totalMasterFull *int64
+	if errSF == nil {
+		totalShadowFull = &shadowFull
+	}
+	if errMF == nil {
+		totalMasterFull = &masterFull
+	}
+
+	duration := int(time.Since(handle.started).Milliseconds())
+	report := &recon.ReconciliationReport{
+		TargetTable:      masterFQN,
+		SourceDB:         "", // Để trống ở Segment B
+		SourceCount:      &shadowActive,
+		TotalSourceCount: totalShadowFull,
+		TotalDestCount:   totalMasterFull,
+		DestCount:        masterActive,
+		Diff:             shadowActive - masterActive,
+		MissingCount:     len(missingFromMaster),
+		MissingIDs:       missJSON,
+		StaleCount:       len(staleIDs) + len(orphanInMaster),
+		StaleIDs:         staleJSON,
+		OrphanCount:      len(orphanInMaster),
+		FieldDiffs:       fieldDiffsJSON,
+		CheckType:        "bucket_hash",
+		Status:           statusStr,
+		Segment:          segmentShadowMaster,
+		DurationMs:       &duration,
+		CheckedAt:        time.Now().UTC(),
+	}
+	rc.stampB(report, ref)
+	rc.alertOnReport(ctx, segmentShadowMaster, ref.MasterTable, statusStr, len(missingFromMaster), report.Diff)
+	metrics.ReconDrift.WithLabelValues(masterFQN, "4").Set(float64(handle.mismatches))
+
+	if windowErrs > 0 {
+		finishStatus = "failed"
+		errMsg := fmt.Sprintf("%d scan errors over %d buckets", windowErrs, len(bucketKeys))
+		rc.finishRun(ctx, handle, finishStatus, errMsg)
+	} else {
+		rc.finishRun(ctx, handle, finishStatus, "")
+	}
+
+	observability.Ctx(ctx, rc.logger).Info("segment B shadow↔master (deep)",
+		zap.String("shadow", shadowRel), zap.String("master", masterRel),
+		zap.Int("buckets", len(bucketKeys)), zap.Int("drifted_buckets", driftedBuckets),
+		zap.Int("scan_errs", windowErrs),
+		zap.Int64("shadow_rows", totalShadow), zap.Int64("master_rows", totalMaster),
+		zap.Int("missing_from_master", len(missingFromMaster)),
+		zap.Int("orphan_in_master", len(orphanInMaster)),
+		zap.Int("stale_ids", len(staleIDs)),
+	)
+
+	return report
+}
+
+// diffIDTs — so 2 tập (id, ts): missing (shadow có master thiếu), orphan
+// (master thừa), stale (id trùng nhưng ts lệch — master giữ bản khác).
+func diffIDTs(shadow, master []IDTs) (missing, orphan, stale []string) {
+	ms := make(map[string]int64, len(master))
+	for _, it := range master {
+		ms[it.ID] = it.Ts
+	}
+	sh := make(map[string]int64, len(shadow))
+	for _, it := range shadow {
+		sh[it.ID] = it.Ts
+		if mts, ok := ms[it.ID]; !ok {
+			missing = append(missing, it.ID)
+		} else if (mts / 1000) != (it.Ts / 1000) {
+			stale = append(stale, it.ID)
+		}
+	}
+	for _, it := range master {
+		if _, ok := sh[it.ID]; !ok {
+			orphan = append(orphan, it.ID)
+		}
+	}
+	return missing, orphan, stale
+}
+
+// SetPlaneDBs — raw handles cho L3-B row-diff (fetch _raw_data + master row).
+
+func (rc *ReconCore) RunRowDiffB(ctx context.Context, ref MasterBindingRef, ids []string) []FieldDiff {
+	if rc.shadowPlane == nil || rc.masterPlane == nil || len(ids) == 0 {
+		return nil
+	}
+	if len(ids) > rowDiffMaxIDs {
+		observability.Ctx(ctx, rc.logger).Warn("row-diff B: ids capped", zap.Int("total", len(ids)), zap.Int("cap", rowDiffMaxIDs))
+		ids = ids[:rowDiffMaxIDs]
+	}
+
+	// Rules approved của binding — mirror query MasterDDLGenerator (077 self-contained).
+	type ruleRow struct {
+		SourceField  string  `gorm:"column:source_field"`
+		SourcePath   *string `gorm:"column:source_path"`
+		TargetColumn string  `gorm:"column:target_column"`
+		TransformFn  *string `gorm:"column:transform_fn"`
+	}
+	var rules []ruleRow
+	if err := rc.db.WithContext(ctx).Raw(`
+		SELECT COALESCE(m.source_field, v2.source_field) AS source_field,
+		       COALESCE(m.source_path, v2.source_path)   AS source_path,
+		       m.target_column,
+		       v2.transform_fn
+		  FROM cdc_system.mapping_rule_master m
+		  LEFT JOIN cdc_system.mapping_rule_v2 v2 ON v2.id = m.mapping_v2_id
+		 WHERE m.master_binding_id = ? AND m.status = 'approved' AND m.is_active = true`,
+		ref.ID).Scan(&rules).Error; err != nil || len(rules) == 0 {
+		return nil
+	}
+
+	shadowRel := fmt.Sprintf("%q.%q", ref.ShadowSchema, ref.ShadowTable)
+	masterRel := fmt.Sprintf("%q.%q", ref.MasterSchema, ref.MasterTable)
+
+	// Fetch 2 phía theo _gpay_id (1 round-trip mỗi phía).
+	type shadowRow struct {
+		GpayID  string `gorm:"column:_gpay_id"`
+		RawData []byte `gorm:"column:_raw_data"`
+	}
+	var shRows []shadowRow
+	if err := rc.shadowPlane.WithContext(ctx).Raw(fmt.Sprintf(
+		`SELECT _gpay_id::text AS _gpay_id, _raw_data FROM %s WHERE _gpay_id IN (?)`, shadowRel),
+		ids).Scan(&shRows).Error; err != nil {
+		observability.Ctx(ctx, rc.logger).Warn("row-diff B: shadow fetch failed", zap.Error(err))
+		return nil
+	}
+	var msRows []map[string]any
+	if err := rc.masterPlane.WithContext(ctx).Raw(fmt.Sprintf(
+		`SELECT * FROM %s WHERE _gpay_id IN (?)`, masterRel), ids).Scan(&msRows).Error; err != nil {
+		observability.Ctx(ctx, rc.logger).Warn("row-diff B: master fetch failed", zap.Error(err))
+		return nil
+	}
+	masterByID := make(map[string]map[string]any, len(msRows))
+	for _, r := range msRows {
+		masterByID[fmt.Sprint(r["_gpay_id"])] = r
+	}
+
+	var diffs []FieldDiff
+	for _, sr := range shRows {
+		mrow, inMaster := masterByID[sr.GpayID]
+		for _, rule := range rules {
+			path := rule.SourceField
+			if rule.SourcePath != nil && *rule.SourcePath != "" {
+				path = *rule.SourcePath
+			}
+			val := gjson.GetBytes(sr.RawData, path)
+			expected := any(nil)
+			if val.Exists() {
+				expected = val.Value()
+			}
+			if rule.TransformFn != nil && *rule.TransformFn != "" && master.IsTransformWhitelisted(*rule.TransformFn) {
+				if tv, err := master.ApplyTransform(*rule.TransformFn, expected); err == nil {
+					expected = tv
+				}
+			}
+			expStr := normalizeDiffVal(expected)
+			actStr := "<ROW MISSING>"
+			if inMaster {
+				actStr = normalizeDiffVal(mrow[rule.TargetColumn])
+			}
+			if expStr != actStr {
+				diffs = append(diffs, FieldDiff{GpayID: sr.GpayID, Column: rule.TargetColumn, Expected: expStr, Actual: actStr})
+				if len(diffs) >= rowDiffMaxEntries {
+					observability.Ctx(ctx, rc.logger).Warn("row-diff B: entries capped", zap.Int("cap", rowDiffMaxEntries))
+					return diffs
+				}
+			}
+		}
+	}
+	return diffs
+}
+
+// normalizeDiffVal — chuỗi hoá loose để so 2 hệ kiểu (PG trả time.Time/decimal,
+// gjson trả float64/string): trim + fmt.Sprint; nil/empty → "<NULL>".
+func normalizeDiffVal(v any) string {
+	if v == nil {
+		return "<NULL>"
+	}
+	s := strings.TrimSpace(fmt.Sprint(v))
+	if s == "" {
+		return "<NULL>"
+	}
+	return s
+}
+
+// RunSegmentBFor — resolve master binding theo master_table rồi chạy Segment B.
+// Trả nil khi không tìm thấy binding hợp lệ (caller log/respond error).
+func (rc *ReconCore) RunSegmentBFor(ctx context.Context, masterTable string, deep bool) *recon.ReconciliationReport {
+	for _, ref := range rc.ListActiveMasterBindings(ctx) {
+		if ref.MasterTable == masterTable || ref.MasterRel() == masterTable {
+			return rc.RunSegmentB(ctx, ref, deep)
+		}
+	}
+	observability.Ctx(ctx, rc.logger).Warn("recon segment B: master binding not found/eligible",
+		zap.String("master_table", masterTable))
+	return nil
+}
+
+// CheckAllSegmentB — đối soát B cho mọi master binding active+approved.
+// Leader-gated như CheckAll (A); per-binding advisory lock vẫn serialize.
+func (rc *ReconCore) CheckAllSegmentB(ctx context.Context) []*recon.ReconciliationReport {
+	isLeader, release := rc.AcquireLeader(ctx)
+	defer release()
+	if !isLeader {
+		observability.Ctx(ctx, rc.logger).Info("recon CheckAllSegmentB — not leader, skipping")
+		return nil
+	}
+	refs := rc.ListActiveMasterBindings(ctx)
+	if len(refs) == 0 {
+		observability.Ctx(ctx, rc.logger).Warn("recon CheckAllSegmentB: 0 active master bindings — nothing to reconcile",
+			zap.String("fix_hint", "cần master_binding is_active=true + schema_status='approved'"))
+		return nil
+	}
+	runID := uuid.NewString() // Migration 085: 1 phiên CheckAllSegmentB
+	var reports []*recon.ReconciliationReport
+	for _, ref := range refs {
+		ref.RunID = runID
+		if r := rc.RunSegmentB(ctx, ref, false); r != nil { // CheckAll: deep=false (row-diff theo yêu cầu per-table)
+			reports = append(reports, r)
+		}
+	}
+	if len(reports) == 0 {
+		observability.Ctx(ctx, rc.logger).Warn("recon CheckAllSegmentB: 0 bindings checked — toàn bộ bị skip",
+			zap.Int("bindings", len(refs)))
+	}
+	return reports
+}
+
+// TimeBoundedDiffMissingFromMaster performs comparison between shadow and master in a specific time range.
+func (rc *ReconCore) TimeBoundedDiffMissingFromMaster(ctx context.Context, ref MasterBindingRef, startTime, endTime time.Time) ([]string, int, int, error) {
+	if rc.shadowPlane == nil {
+		return nil, 0, 0, fmt.Errorf("shadowPlane not wired")
+	}
+	if rc.masterPlane == nil {
+		return nil, 0, 0, fmt.Errorf("masterPlane not wired")
+	}
+
+	ctx, span := observability.ChildSpan(ctx, "cdc.recon.time_bounded_diff_b", attribute.String("table", ref.runName()))
+	var finalErr error
+	defer func() { observability.EndSpan(span, &finalErr) }()
+
+	startMs := startTime.UnixMilli()
+	endMs := endTime.UnixMilli()
+
+	// Resolve cột timestamp nghiệp vụ từ registry
+	tsCol := "_source_ts"
+	if entry, err := rc.registryRepo.GetByTargetTable(ctx, ref.MasterTable); err == nil && entry != nil {
+		_, dstTS, errTS := rc.resolveSourceAndDestTSFields(ctx, *entry)
+		if errTS == nil && dstTS != "" {
+			tsCol = dstTS
+		}
+	}
+
+	// Tải ID từ Postgres Shadow DB trong khoảng thời gian
+	var shadowIDs []string
+	shadowRel := ref.ShadowRel()
+	var errS error
+	if tsCol == "_source_ts" {
+		shadowQuery := fmt.Sprintf(`SELECT %s::text FROM %s WHERE NOT "_deleted" AND "_source_ts" >= ? AND "_source_ts" < ?`,
+			quoteIdent(segBPKColumn), quoteRelation(shadowRel))
+		errS = rc.shadowPlane.WithContext(ctx).Raw(shadowQuery, startMs, endMs).Scan(&shadowIDs).Error
+	} else {
+		shadowQuery := fmt.Sprintf(`SELECT %s::text FROM %s WHERE NOT "_deleted" AND %s >= ? AND %s < ?`,
+			quoteIdent(segBPKColumn), quoteRelation(shadowRel), quoteIdent(tsCol), quoteIdent(tsCol))
+		errS = rc.shadowPlane.WithContext(ctx).Raw(shadowQuery, startTime, endTime).Scan(&shadowIDs).Error
+	}
+	if errS != nil {
+		finalErr = errS
+		return nil, 0, 0, fmt.Errorf("shadow query: %w", errS)
+	}
+
+	// Tải ID từ Postgres Master DB trong khoảng thời gian
+	var masterIDs []string
+	masterRel := ref.MasterRel()
+	var errM error
+	if tsCol == "_source_ts" {
+		masterQuery := fmt.Sprintf(`SELECT %s::text FROM %s WHERE NOT "_deleted" AND "_source_ts" >= ? AND "_source_ts" < ?`,
+			quoteIdent(segBPKColumn), quoteRelation(masterRel))
+		errM = rc.masterPlane.WithContext(ctx).Raw(masterQuery, startMs, endMs).Scan(&masterIDs).Error
+	} else {
+		masterQuery := fmt.Sprintf(`SELECT %s::text FROM %s WHERE NOT "_deleted" AND %s >= ? AND %s < ?`,
+			quoteIdent(segBPKColumn), quoteRelation(masterRel), quoteIdent(tsCol), quoteIdent(tsCol))
+		errM = rc.masterPlane.WithContext(ctx).Raw(masterQuery, startTime, endTime).Scan(&masterIDs).Error
+	}
+	if errM != nil {
+		finalErr = errM
+		return nil, 0, 0, fmt.Errorf("master query: %w", errM)
+	}
+
+	masterSet := make(map[string]struct{}, len(masterIDs))
+	for _, id := range masterIDs {
+		masterSet[id] = struct{}{}
+	}
+
+	var missing []string
+	for _, id := range shadowIDs {
+		if _, exists := masterSet[id]; !exists {
+			missing = append(missing, id)
+		}
+	}
+
+	return missing, len(shadowIDs), len(masterIDs), nil
+}
+
+// ============================================================
+// Heal — REMOVED in v3 root-cause fix (2026-04-17)
+// ============================================================
+//
+// The legacy `ReconCore.Heal(ctx, entry, missingIDs)` walked `missingIDs`
+// one row at a time, issued a Mongo FindOne + PG upsert per record AND
+// wrote one `cdc_activity_log` row per record. On a corrupted Tier 2
+// report that listed e.g. 1,713 rows the audit table exploded by 1,713
+// rows per heal trigger, which made the CMS audit view unreadable.
+//
+// The v3 `ReconHealer.HealWindow` pathway supersedes it entirely:
+//   - Audit batching (run_started + run_completed = 2 rows, regardless
+//     of record count; plus at most a sample of per-record rows when
+//     the `AuditSampleRate` is set).
+//   - Batched `$in` Mongo reads instead of FindOne loops.
+//   - OCC guard on `_source_ts` + per-table sensitive-field masking.
+//   - Optional Debezium incremental snapshot signal (Phase A).
+//
+// Callsites audited on 2026-04-17: only `recon_handler.HandleReconHeal`
+// referenced `rc.Heal`, and that fallback was deleted in the same
+// commit. `rc.mongoClient` remains on the struct for future uses (e.g.
+// source sampling) and to preserve the NewReconCore constructor
+// signature.
+
+// ============================================================
+// Helpers
+// ============================================================
+
+// errorReport writes a `status='error'` row with structured ErrorCode
+// classification (Migration 017 / ADR v4 §2.3). SourceCount is left NULL
+// so FE can distinguish "query failed" from "query OK, 0 rows". Legacy
+// error rows created before migration 017 will have NULL error_code
+// and continue to render as generic "Lỗi nguồn" — intentional, no
+// backfill needed.
