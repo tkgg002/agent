@@ -1,0 +1,504 @@
+package metrics
+
+import (
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+var (
+	EventsProcessed = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cdc_events_processed_total",
+			Help: "Total CDC events processed",
+		},
+		[]string{"operation", "source_db", "table", "status"},
+	)
+
+	EventsDropped = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cdc_sink_events_dropped_total",
+			Help: "Total CDC events dropped by reason",
+		},
+		[]string{"reason", "topic"},
+	)
+
+	ProcessingDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "cdc_processing_duration_seconds",
+			Help:    "Processing duration per event",
+			Buckets: prometheus.ExponentialBuckets(0.001, 2, 10),
+		},
+		[]string{"operation", "source_db", "table"},
+	)
+
+	SchemaDriftDetected = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "schema_drift_detected_total",
+			Help: "Schema drifts detected",
+		},
+		[]string{"source_db", "table"},
+	)
+
+	MappingRulesLoaded = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "mapping_rules_loaded",
+			Help: "Current loaded mapping rules count",
+		},
+	)
+
+	PendingFieldsCount = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "pending_fields_count",
+			Help: "Pending fields by status",
+		},
+		[]string{"status"},
+	)
+
+	RegisteredTables = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "registered_tables_total",
+			Help: "Registered CDC tables",
+		},
+		[]string{"source_db", "sync_engine"},
+	)
+
+	SyncSuccess = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cdc_sync_success_total",
+			Help: "Total successful CDC syncs",
+		},
+		[]string{"table", "operation", "source"},
+	)
+
+	SyncFailed = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cdc_sync_failed_total",
+			Help: "Total failed CDC syncs",
+		},
+		[]string{"table", "operation", "source"},
+	)
+
+	ConsumerLag = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_kafka_consumer_lag",
+			Help: "Kafka consumer group lag per topic partition",
+		},
+		[]string{"topic", "partition"},
+	)
+
+	ConsumerOffset = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_kafka_consumer_offset",
+			Help: "Last read offset per topic partition; used to verify failover resume position",
+		},
+		[]string{"topic", "partition"},
+	)
+
+	ReconDrift = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_recon_drift_count",
+			Help: "Data drift count per table",
+		},
+		[]string{"table", "tier"},
+	)
+
+	// ReconRunDuration records wall-time for a single recon run,
+	// bucketed by `table_group` (prefix before first underscore of
+	// the target table name; `other` when no prefix exists) and
+	// `tier` (1/2/3). Kept low-cardinality to protect Prometheus TSDB.
+	ReconRunDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "cdc_recon_run_duration_seconds",
+			Help:    "Reconciliation run duration per table group and tier",
+			Buckets: []float64{1, 5, 15, 30, 60, 120, 300, 600, 1800},
+		},
+		[]string{"table_group", "tier"},
+	)
+
+	// ReconMismatchCount carries per-table mismatches for the latest
+	// run. High-cardinality intentionally (one series per table) so
+	// the SRE can alert on "table X has N drifted records for >1h".
+	// Operators with >500 tables should whitelist or drop this metric
+	// at scrape time via relabel_configs.
+	ReconMismatchCount = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_recon_mismatch_count",
+			Help: "Mismatches found by the most recent recon run per table + tier",
+		},
+		[]string{"table", "tier"},
+	)
+
+	// ReconHealActions counts heal outcomes. `action` ∈ upsert|skip|error.
+	ReconHealActions = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cdc_recon_heal_actions_total",
+			Help: "Total recon heal actions by outcome",
+		},
+		[]string{"table", "action"},
+	)
+
+	// ReconLastSuccessTs is the Unix timestamp of the most recent
+	// successful recon run. Fuel for a "ReconStale" alert
+	// (time() - value > threshold).
+	ReconLastSuccessTs = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_recon_last_success_timestamp",
+			Help: "Unix epoch seconds of the most recent successful recon run per table + tier",
+		},
+		[]string{"table", "tier"},
+	)
+
+	E2ELatency = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "cdc_e2e_latency_seconds",
+		Help:    "End-to-end latency: Kafka message timestamp → Postgres insert",
+		Buckets: []float64{0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60},
+	})
+
+	// ReconBackfillProgress — gauge 0..100 (%) for the _source_ts backfill
+	// job. Emitted by BackfillSourceTsService per table. Cardinality is
+	// bounded by the active table set (tens at most) so a per-table label
+	// is safe here.
+	ReconBackfillProgress = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_recon_backfill_progress",
+			Help: "Progress percent (0..100) of the _source_ts backfill job per table",
+		},
+		[]string{"table"},
+	)
+
+	PipelinePaused = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "cdc_pipeline_paused_total",
+			Help: "Số lần pipeline tự pause do DLQ circuit breaker.",
+		},
+	)
+
+	DLQWriteFail = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "cdc_dlq_write_failures_total",
+			Help: "Số lần ghi DLQ thất bại.",
+		},
+	)
+
+	BatchesFlushed = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cdc_batches_flushed_total",
+			Help: "Total number of CDC batches successfully flushed to the database",
+		},
+		[]string{"sink", "table"},
+	)
+
+	BurstModeActive = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "cdc_burst_mode_active",
+			Help: "1 if adaptive batching burst mode is active, 0 otherwise",
+		},
+	)
+
+	PerSourcePoolSaturation = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_per_source_pool_in_use",
+			Help: "Number of active connections acquired from the per-source semaphore",
+		},
+		[]string{"source_code"},
+	)
+
+	// SourceQueryDuration tracks how long the CDC service spends inside each
+	// GORM query against the Source / Shadow / ControlPlane DBs. Paired with
+	// the postgres_exporter scrape (deployments/prometheus/prometheus.yml),
+	// these two views catch overload before it surfaces as user-visible lag.
+	SourceQueryDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "cdc_source_query_duration_seconds",
+			Help:    "Duration of GORM queries against source/shadow/control-plane DBs per role and operation",
+			Buckets: prometheus.ExponentialBuckets(0.001, 2, 12),
+		},
+		[]string{"role", "operation"},
+	)
+
+	// DestThrottledTotal counts adaptive-batcher decisions to clamp
+	// batchSize back to baseBatchSize because the destination DB is
+	// unhealthy (e.g. failing health probe). One series per reason.
+	DestThrottledTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cdc_dest_throttled_total",
+			Help: "Times the adaptive batcher throttled to base size due to destination health",
+		},
+		[]string{"reason"},
+	)
+
+	// WALSnapshotResumeTotal counts WAL-monitor decisions to trigger a
+	// snapshot resume. `reason` ∈ inactive|lag_exceeded. Used by the
+	// auto-resume control loop in internal/service/wal_monitor.go.
+	WALSnapshotResumeTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cdc_wal_snapshot_resume_total",
+			Help: "Snapshot-resume events emitted by the WAL monitor, by slot and reason",
+		},
+		[]string{"slot", "reason"},
+	)
+
+	// SnapshotPartialDoneTotal counts snapshot mark-done attempts blocked by
+	// the completeness guard at the terminal transition point. Each increment
+	// is a snapshot run that would have reported success while shadow rows
+	// fell below total_rows * threshold. Reason labels: persist_mismatch.
+	SnapshotPartialDoneTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cdc_snapshot_partial_done_total",
+			Help: "Snapshot mark-done attempts blocked by completeness guard, by reason.",
+		},
+		[]string{"reason"},
+	)
+
+	// ── Reconcile Cycle Summary ─────────────────────────────────────────────
+	// ReconCycleTotal counts completed cycles (scheduled CheckAll runs).
+	// `has_drift` and `has_error` labels let operators alert when either
+	// condition is consistently true over a rolling window.
+	ReconCycleTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cdc_recon_cycle_total",
+			Help: "Total reconcile cycles completed by the Worker scheduler",
+		},
+		[]string{"has_drift", "has_error"},
+	)
+
+	// ReconCycleDuration is a histogram of full-cycle wall time.
+	// Use rate(cdc_recon_cycle_duration_seconds_sum[5m]) /
+	//     rate(cdc_recon_cycle_duration_seconds_count[5m])
+	// to get average cycle latency and alert when it exceeds the interval.
+	ReconCycleDuration = promauto.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "cdc_recon_cycle_duration_seconds",
+			Help:    "Wall-clock duration of one full reconcile cycle (CheckAll + SegmentB)",
+			Buckets: []float64{1, 5, 15, 30, 60, 120, 300, 600},
+		},
+	)
+
+	// ReconCycleTablesChecked is a gauge tracking how many tables were
+	// checked in the most recent cycle. Drops to 0 if the registry is empty.
+	ReconCycleTablesChecked = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "cdc_recon_cycle_tables_checked",
+			Help: "Number of tables checked in the most recent reconcile cycle",
+		},
+	)
+
+	// ReconCycleDriftDetected is a gauge: number of tables that reported
+	// drift in the most recent cycle. Zero means everything is in-sync.
+	ReconCycleDriftDetected = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "cdc_recon_cycle_drift_detected",
+			Help: "Number of tables with drift in the most recent reconcile cycle",
+		},
+	)
+
+	// ── Hardening & Scale Metrics (added 2026-06-25) ─────────────────────────
+
+	// ReconIngestLagMs tracks the measured replication lag (ms) between
+	// MongoDB source and Shadow table. Emitted in pickScanRangeWithLag.
+	// Alert when value > 3_600_000 (60 minutes).
+	ReconIngestLagMs = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_recon_ingest_lag_ms",
+			Help: "Ingest lag ms (MongoDB source → Shadow table). Alert when > 3600000.",
+		},
+		[]string{"table"},
+	)
+
+	// ReconLockContention counts times withTableLock found the advisory lock
+	// busy. A sustained rate signals lock leak or extremely long recon runs.
+	ReconLockContention = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cdc_recon_lock_contention_total",
+			Help: "Times pg_try_advisory_lock returned false (previous run ongoing or lock leak).",
+		},
+		[]string{"table"},
+	)
+
+	// ReconCircuitBreakerTrips counts times Tier1 was skipped because the
+	// measured ingest lag exceeded MaxTolerableLagMs (default 60m).
+	// A sustained rate means the pipeline is stuck and not recovering.
+	ReconCircuitBreakerTrips = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cdc_recon_circuit_breaker_trips_total",
+			Help: "Times Tier1 recon was skipped due to ingest lag > MaxTolerableLagMs.",
+		},
+		[]string{"table"},
+	)
+
+	// ReconDrillDownWaitMs measures goroutine wait time for the BucketCounts
+	// semaphore slot. Use p95 > 2000ms as signal to raise DrillDownConcurrency.
+	ReconDrillDownWaitMs = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "cdc_recon_drill_down_wait_ms",
+			Help:    "Milliseconds a Tier1 goroutine waited for the BucketCounts semaphore slot.",
+			Buckets: []float64{0, 10, 50, 100, 250, 500, 1000, 2000, 5000},
+		},
+		[]string{"table"},
+	)
+
+	// ReconFastPathHit tracks which count path was taken in Tier1.
+	// path=pg_class: O(1) estimate from pg_class.reltuples (fast, preferred).
+	// path=count_star: full COUNT(*) fallback (slow, only for new/empty tables).
+	ReconFastPathHit = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cdc_recon_fast_path_total",
+			Help: "Tier1 count path: pg_class (O1 estimate) or count_star (full scan fallback).",
+		},
+		[]string{"table", "path"},
+	)
+
+	// ── Dashboard Node Metrics (added 2026-06-25) ────────────────────────────
+	// Required for SigNoz panels: Source DB / Shadow DB / Master DB row counts
+	// and composite pipeline health per table.
+
+	// SourceTableRowCount carries the O(1) EstimatedDocumentCount from MongoDB
+	// for the source collection. Emitted in RunSmokeCheck after EstimatedCount call.
+	SourceTableRowCount = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_source_table_row_count",
+			Help: "Estimated row count of the source MongoDB collection (EstimatedDocumentCount O(1)).",
+		},
+		[]string{"table", "source_db"},
+	)
+
+	// ShadowTableRowCount carries the pg_class.reltuples estimate for the
+	// shadow PostgreSQL table. Emitted in RunSmokeCheck after EstimatedCountRows.
+	ShadowTableRowCount = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_shadow_table_row_count",
+			Help: "Estimated row count of the shadow PostgreSQL table (GREATEST(reltuples,0)).",
+		},
+		[]string{"table"},
+	)
+
+	// MasterTableRowCount carries the pg_class.reltuples estimate for the
+	// master PostgreSQL table. Emitted alongside shadow count in RunSmokeCheck.
+	MasterTableRowCount = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_master_table_row_count",
+			Help: "Estimated row count of the master PostgreSQL table (pg_class O(1)).",
+		},
+		[]string{"table"},
+	)
+
+	// ShadowActiveRowCount = EstimatedCountRows - CountDeletedRows(_deleted=true).
+	// Avoids full table scan: tombstone count is tiny and index-scanned.
+	// Use this to compare accurately against Source (no soft-delete concept).
+	ShadowActiveRowCount = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_shadow_active_row_count",
+			Help: "Active row count for shadow table: pg_class_estimate - tombstone_count (_deleted=true).",
+		},
+		[]string{"table"},
+	)
+
+	// MasterActiveRowCount = same formula applied to master table.
+	// Emitted from RunSegmentB where MasterBindingRef has the correct master schema.
+	MasterActiveRowCount = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_master_active_row_count",
+			Help: "Active row count for master table: pg_class_estimate - tombstone_count (_deleted=true).",
+		},
+		[]string{"table"},
+	)
+
+	// DLQDepth is a gauge tracking the running count of messages successfully
+	// sent to DLQ per source_table. Increments on sendToDLQ success;
+	// reset externally when operator replays or clears the queue.
+	// Use rate(cdc_dlq_depth[5m]) > 0 for sustained DLQ alert.
+	DLQDepth = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_dlq_depth",
+			Help: "Running count of events routed to DLQ per source_table. Reset on replay.",
+		},
+		[]string{"table"},
+	)
+
+	// PipelineTableStatus is a composite health gauge per table:
+	//   0 = healthy (recon OK, no drift)
+	//   1 = drift   (count mismatch detected)
+	//   2 = error   (recon run failed)
+	//   3 = skipped (circuit breaker open — lag too high)
+	// Emitted in CheckAll after wg.Wait(). Use for traffic-light panels on SigNoz.
+	PipelineTableStatus = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_pipeline_table_status",
+			Help: "Composite pipeline health: 0=healthy 1=drift 2=error 3=skipped.",
+		},
+		[]string{"table"},
+	)
+
+	// ── Transmute (Shadow → Master) Metrics (added 2026-06-25) ───────────────
+	// TransmuteOpsTotal counts individual row outcomes per master_table and
+	// triggered_by label. op ∈ inserted|updated|skipped|type_error|rule_miss.
+	// Low-cardinality: bounded by (master_tables × 5 ops × 3 trigger sources).
+	TransmuteOpsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cdc_transmute_ops_total",
+			Help: "Total Shadow→Master transmute row outcomes by operation, master_table, and trigger_type.",
+		},
+		[]string{"master_table", "op", "trigger_type"},
+	)
+
+	// TransmuteErrorTotal counts failed transmute handler invocations per
+	// master_table. Alert when rate > 0 sustained for > 5 minutes.
+	TransmuteErrorTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cdc_transmute_error_total",
+			Help: "Total failed transmute runs per master_table.",
+		},
+		[]string{"master_table"},
+	)
+
+	// TransmuteDurationMs is a histogram of wall-clock duration per transmute
+	// run. Useful to detect slow rule evaluation or destination DB pressure.
+	TransmuteDurationMs = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "cdc_transmute_duration_ms",
+			Help:    "Wall-clock duration of one transmute run (Shadow→Master) per master_table.",
+			Buckets: []float64{50, 100, 250, 500, 1000, 2000, 5000, 10000, 30000},
+		},
+		[]string{"master_table"},
+	)
+
+	// ── Sink (Kafka → Shadow DB) Aggregate Metrics (added 2026-06-25) ────────
+	// SinkEventsTotal gives a per-table, per-operation breakdown of events
+	// flowing from Kafka into Shadow DB. Derived from cdc_events_processed_total
+	// but with a cleaner label set for dashboard panels.
+	// op ∈ c (create/insert) | u (update) | d (delete) | r (read/snapshot).
+	SinkEventsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cdc_sink_events_total",
+			Help: "Total Debezium events successfully sunk to Shadow DB per table and operation type.",
+		},
+		[]string{"table", "op"},
+	)
+
+	// ReconSmokeLatency tracks the latency of the O(1) smoke check run.
+	ReconSmokeLatency = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_recon_smoke_latency",
+			Help: "Latency of smoke check in milliseconds per table and segment",
+		},
+		[]string{"segment", "table"},
+	)
+
+	// ReconSmokeStatus tracks the status of the O(1) smoke check (0=ok, 1=drift, 2=error, 3=skipped).
+	ReconSmokeStatus = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_recon_smoke_status",
+			Help: "Status of smoke check: 0=ok, 1=drift, 2=error, 3=skipped",
+		},
+		[]string{"segment", "table"},
+	)
+
+	// ReconSmokeDrift tracks the drift count detected by the O(1) smoke check.
+	ReconSmokeDrift = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cdc_recon_smoke_drift_count",
+			Help: "Drift count from smoke check per table and segment",
+		},
+		[]string{"segment", "table"},
+	)
+)

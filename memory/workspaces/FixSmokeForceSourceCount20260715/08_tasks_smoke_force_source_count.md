@@ -1,0 +1,3 @@
+- [x] Sửa cú pháp gán SourceTotal và SourceActive trong `RunTotalOnlyA` của `recon_smoke.go` bằng cú pháp Go chuẩn (dùng if-else để xác định giá trị và gán qua con trỏ).
+- [x] Chạy `go build ./...` hoặc `go test ./...` để verify việc compile thành công.
+- [x] Báo cáo kết quả và kết thúc task.

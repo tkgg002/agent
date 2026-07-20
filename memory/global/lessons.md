@@ -4,6 +4,35 @@
 
 ## 1. Golang & GORM Quirks
 
+### [2026-07-16] REPEATED OFFENSE: Tuyên bố "đã đọc lessons.md" nhưng không thực sự đọc + không tạo workspace docs cho phase mới
+- **Global Pattern:** Agent [A] nhận task mới [X] → nói "Đã xác nhận nội tâm: Đã đọc GEMINI.md và lessons.md" nhưng **KHÔNG gọi view_file** để thực sự đọc → nhảy thẳng vào làm → bị User nhắc lần 2+ trong cùng phiên. Đồng thời không tạo bộ docs workspace riêng cho phase mới (01_requirements, 05_progress, 02_plan) mà chỉ copy artifact ra workspace. **Đúng:** (1) Gọi `view_file` THỰC SỰ đọc lessons.md, (2) Tạo bộ docs tối thiểu cho task/phase mới, (3) Lưu plan vào workspace bằng prefix đúng (`02_plan_*.md`), (4) Cập nhật progress TRƯỚC khi bắt đầu.
+- **Bối cảnh (Trigger):** Sau khi user approve audit, nhận lệnh "lên plan fix issues" → tuyên bố đã đọc lessons nhưng không đọc thật → tạo plan trong artifact nhưng chỉ `cp` sang workspace thay vì tạo đúng prefix `02_plan_*.md` → User nhắc lần 2.
+- **Root Cause:** Coi bước pre-flight là hình thức, chỉ viết text xác nhận mà không thực hiện hành động đọc. Coi workspace docs là phụ, chỉ tập trung artifact user-facing.
+- **Fix/Correct Flow:** BẮT BUỘC: (1) `view_file lessons.md` thực sự ở đầu mỗi task mới, (2) Mỗi phase/task mới → tạo bộ docs riêng với prefix chuẩn, (3) Không bao giờ chỉ copy artifact ra workspace.
+- **Tags:** #pre-flight-check #repeated-offense #governance-bypass #workspace-creation #no-shadow-files
+
+### [2026-07-16] Giả định sai dựa trên config file template — không kiểm tra env vars override
+- **Global Pattern:** Agent [A] đọc config file [X] thấy giá trị rỗng (`brokers: []`) → kết luận feature [Y] không chạy ở production. Thực tế production inject giá trị qua env vars → feature **ĐANG chạy**. **Đúng:** Khi audit config, BẮT BUỘC kiểm tra cả: (1) config file, (2) env vars override, (3) activity log/metrics thực tế, (4) hỏi User xác nhận trước khi kết luận.
+- **Bối cảnh (Trigger):** Audit luồng sink, thấy `config-production.yml` có `brokers: []` → kết luận Kafka Consumer không chạy ở prod, Sink Worker là PRIMARY. User phản bác bằng activity log thực tế.
+- **Root Cause:** Chỉ đọc 1 source (config file) mà không cross-check với runtime evidence (activity log, metrics, user confirmation).
+- **Fix/Correct Flow:** Config file chỉ là template mặc định. Luôn kiểm tra env vars, runtime logs, và hỏi User xác nhận trước khi đưa kết luận về production behavior.
+- **Tags:** #config-assumption #env-vars-override #cross-check-required #audit-methodology
+
+### [2026-07-16] Không lưu report/analysis theo từng chặng làm việc — vi phạm No Shadow Files
+- **Global Pattern:** Agent [A] hoàn thành phân tích/audit [X] nhưng chỉ tạo artifact mà **KHÔNG** lưu `11_report_*.md`, `13_analysis_*.md` vào workspace. Thảo luận và correction trong chat không được persist thành file vật lý. **Đúng:** Sau MỖI chặng (research xong, tổng hợp xong, user review xong), BẮT BUỘC lưu report vào workspace ngay lập tức.
+- **Bối cảnh (Trigger):** Audit sink/transmute — hoàn thành 3 phase research + tổng hợp + user review corrections nhưng chỉ có artifact, thiếu `11_report`, `13_analysis` trong workspace.
+- **Root Cause:** Tập trung vào artifact (user-facing) mà quên lưu workspace docs (project memory) theo Rule #4.
+- **Fix/Correct Flow:** Sau mỗi chặng: (1) Cập nhật `05_progress.md`, (2) Tạo/update `11_report_*.md` ghi lại thay đổi, (3) Tạo `13_analysis_*.md` ghi phân tích chi tiết. Không được đóng task nếu thiếu.
+- **Tags:** #no-shadow-files #workspace-docs #post-flight-check #governance-bypass
+
+
+### [2026-07-15] Nhảy thẳng vào debug/fix code mà không có plan, workspace, và không đọc lessons trước
+- **Global Pattern:** Agent [A] nhận bug report từ User [B] → bắt đầu ngay vòng lặp debug/code (kill server, go build, curl verify) mà bỏ qua toàn bộ: đọc lessons.md, tạo workspace docs, lập plan → vi phạm đồng thời #brain-muscle-separation #workspace-creation #governance-bypass. **Đúng:** DỪNG → đọc lessons.md → tạo workspace tối thiểu (01_requirements, 05_progress, 08_tasks) → lập plan chi tiết có DoD → xin approve → mới code.
+- **Bối cảnh (Trigger):** Nhận yêu cầu fix bug hiển thị "— — 2,718,739" trên data-integrity grid và "pipeline đã xoá connector vẫn hiện".
+- **Root Cause:** Coi bug nhỏ là "trivial" nên bỏ qua quy trình — thực tế cần điều tra SQL DISTINCT ON, FE dedup logic, và connector filter.
+- **Fix/Correct Flow:** Dừng lại ngay, đọc lessons.md, ghi lesson, tạo workspace, lập plan có root cause + DoD trước khi sửa một dòng code.
+- **Tags:** #brain-muscle-separation #workspace-creation #governance-bypass #pre-flight-check #repeated-offense
+
 ### [2026-07-13] Thiếu database repository injection ở handler dẫn đến mất kết quả đối soát (silent report loss)
 - **Global Pattern:** Handler [A] gọi tiến trình check [B] thành công nhưng thiếu [X] (reportRepo) -> [Y] (kết quả report chỉ trả qua NATS/API mà không bao giờ được ghi xuống DB cdc_reconciliation_report). **Đúng:** Luôn inject reportRepo vào CheckHandler và gọi repo.Create sau khi tính toán xong.
 - **Bối cảnh (Trigger):** Kích hoạt hash_window hoặc deep check từ cdc-cms-service, API trả về 202 Accepted và worker chạy xong nhưng bảng cdc_reconciliation_report rỗng.
@@ -21,6 +50,20 @@
 
 
 ## 2. PostgreSQL & Schema Design
+
+### [2026-07-16] Lệch múi giờ Go-level do logic hoán đổi timezone thủ công trên cột TIMESTAMP và TIMESTAMPTZ
+- **Global Pattern:** Driver [A] (pgx) đọc cột Postgres [B] trả về múi giờ khác nhau tùy kiểu cột (`TIMESTAMP` trả về UTC, `TIMESTAMPTZ` trả về Local timezone). Việc dùng logic thủ công `time.Date(v.Year(), ..., time.UTC)` [X] hoán đổi múi giờ làm sai lệch vật lý 7 tiếng đối với cột Local. **Đúng:** Sử dụng phương thức native `v.UTC()` [Y] để chuẩn hóa đúng thời gian vật lý của cả hai kiểu cột về múi giờ UTC.
+- **Bối cảnh (Trigger):** Đối soát nhanh bằng XOR Hash báo lệch dữ liệu giả mạo trên bảng `schedule_histories` do cột `lastUpdatedAt` có kiểu `TIMESTAMPTZ` bị parse lệch 7 tiếng.
+- **Root Cause:** Nhánh `if v.Location() != time.UTC` trong hàm parse cũ cố tình giữ nguyên giờ hiển thị và gắn nhãn UTC, làm dịch chuyển mốc thời gian vật lý.
+- **Fix/Correct Flow:** Thay thế toàn bộ logic chuyển múi giờ thủ công bằng việc gọi trực tiếp `v.UTC()` trên giá trị time nhận được từ driver DB.
+- **Tags:** #timezone-drift #timestamptz-parsing #postgres-driver-timezone #data-parity-issue
+
+### [2026-07-14] Tự động tạo hoặc đề xuất index cho các cột không tồn tại vật lý trong bảng đích gây lỗi SQL runtime (SQLSTATE 42703)
+- **Global Pattern:** Tự động tạo hoặc đề xuất index [A] dựa trên thông tin cấu hình registry `timestamp_field` hoặc metadata [B] mà không kiểm tra sự tồn tại vật lý của cột trong DB đích [X] -> Gây ra lỗi SQL runtime `42703` (column does not exist) làm sập luồng đồng bộ hoặc hỏng chức năng UI [Y]. **Đúng:** Luôn truy vấn `information_schema.columns` để xác định danh sách các cột vật lý thực tế của bảng đích, thực hiện so khớp linh hoạt (exact, snake_case, camelCase) trước khi khuyến nghị hoặc chạy câu lệnh DDL index.
+- **Bối cảnh (Trigger):** Lỗi sập luồng hoặc nút "Tạo Index ngay" trên UI báo lỗi `42703` khi click vì cột timestamp field cấu hình trên registry chưa được provision thực tế trên shadow table.
+- **Root Cause:** Dùng cấu hình metadata từ `cdc_system.cdc_table_registry` làm chân lý tuyệt đối để generate DDL/đề xuất mà không đồng bộ/đối chiếu với schema thực tế đang có trong DB.
+- **Fix/Correct Flow:** Bổ sung bước kiểm tra cột trong target table schema. Nếu không tồn tại cột đó trong danh sách cột thực tế, log cảnh báo và bỏ qua an toàn thay vì cố thực thi DDL index.
+- **Tags:** #column-existence-check #sql-42703-error #schema-drift-prevention #robust-ddl
 
 ### [2026-07-13] Tự ý chạy các script SQL phá hủy schema cấu hình (control plane) mà không phân tích kỹ tác động
 - **Global Pattern:** Agent [A] tự ý chạy câu lệnh SQL phá hủy hoặc các script wipe (`wipe_cdc.sql`) [B] khi gặp lỗi di trú/conflict mà không phân tích kỹ nội dung file -> làm mất toàn bộ schema cấu hình control plane (`cdc_system` có chứa registry, mapping, connections) [X] -> gây mất cấu hình tùy chỉnh của nhà phát triển và gây gián đoạn nghiêm trọng môi trường local [Y]. **Đúng:** Trước khi chạy bất kỳ câu lệnh SQL phá hủy (DROP/DELETE) hoặc script wipe, bắt buộc phải đọc và phân tích nội dung, xin chỉ thị rõ ràng từ User. Nếu chỉ cần dọn dẹp dữ liệu chạy (logs, reports), hãy chỉ truncate các bảng log cụ thể hoặc shadow schema thay vì drop cả schema control plane.
@@ -62,6 +105,20 @@
 - **Compose Volume Tách Project:** Khi tách Docker-compose A thành A và B, compose sẽ tự sinh Volume namespace mới (làm mất data Postgres/Kafka). Phải mount `external: true` và trỏ tên volume cũ.
 
 ## 5. Operation & Workspace Pitfalls
+
+### [2026-07-14] Sử dụng ký tự bao bọc (như backtick) trong log tiến độ 05_progress.md làm sai lệch định dạng kiểm tra của linter quy trình
+- **Global Pattern:** Log tiến độ [A] sử dụng ký tự đặc biệt/backtick [B] bao quanh phần timestamp/tag trong `05_progress.md` -> linter quy trình (`verify_governance.py`) không parse được regex do sai lệch ký tự bắt đầu [X] -> gây lỗi audit quy trình bị fail khi kết thúc turn [Y]. **Đúng:** Luôn viết log tiến độ ở dạng text thô, đúng định dạng `- [Timestamp] [Agent:Model] Action` không có backticks hay styling phức tạp ở phần tiền tố.
+- **Bối cảnh (Trigger):** Lệnh kiểm tra quy trình `verify_governance.py` trả về lỗi do không tìm thấy log hôm nay mặc dù log đã tồn tại.
+- **Root Cause:** Dùng backticks ` ` ` để định dạng timestamp và agent tag trong markdown làm regex của linter không khớp.
+- **Fix/Correct Flow:** Loại bỏ hoàn toàn backticks ở đầu các dòng log tiến độ trong `05_progress.md`.
+- **Tags:** #progress-log-format #regex-mismatch #verify-governance-fail #carelessness
+
+### [2026-07-14] Tự ý thay đổi nghiệp vụ core (bỏ isStale, đổi repo method, đổi param check) thay vì chỉ comment/ẩn block gây tốn performance theo yêu cầu
+- **Global Pattern:** Thay đổi flow nghiệp vụ [A] khi được giao nhiệm vụ tối ưu performance [B] bằng cách tự ý xóa bỏ các điều kiện cache logic/isStale, tự viết hàm repo mới hoặc thay đổi tham số hàm check [X] -> làm phá vỡ logic nghiệp vụ gốc của User và gây sai lệch hành vi hệ thống [Y]. **Đúng:** Chỉ tập trung comment lại/ẩn đi phần check mới gây thâm hụt hiệu năng (vì nó là rác performance) và giữ nguyên cấu trúc logic còn lại.
+- **Bối cảnh (Trigger):** Sửa proposeHealSegmentB để giảm thời gian xử lý từ 120s xuống.
+- **Root Cause:** Chưa hiểu đúng ý User về việc "comment lại" (tức là comment out/ẩn đi phần check mới hoàn toàn) mà lại cố đi sửa tham số từ deep check sang hash_window check.
+- **Tags:** #business-logic-alteration #caching-bypass #over-refactoring #comment-out-performance-waste #carelessness
+
 ### [2026-07-08] Lỗi biểu đồ LineChart/YAxis mặc định làm biến mất các chênh lệch dữ liệu nhỏ trên bảng lớn
 - **Global Pattern:** Biểu đồ đối soát [A] hiển thị số lượng bản ghi thực tế qua các phiên đối soát trên trục Y mặc định của Recharts [B] -> khi quy mô dữ liệu lớn (e.g. 2.000.000 record) và chênh lệch nhỏ (e.g. 1-2 record), các đường vẽ Source, Shadow, Master trùng khít/phẳng lỳ và biến mất hoàn toàn trên trực quan [Y]. **Đúng:** Tính toán miền trục Y (`yDomain`) động dựa trên min/max và dải dao động (`range`) thực tế của các dòng dữ liệu để phóng to (zoom-in) trục Y, đồng thời đặt khoảng đệm (`padding`) tối thiểu và chặn dưới `>= 0`.
 - **Bối cảnh (Trigger):** Nhận phản ánh biểu đồ biến động số lượng phiên recon phẳng lỳ, không hiển thị được độ lệch 1-2 record trên bảng 2 triệu record.
@@ -146,3 +203,10 @@
 - **Bối cảnh (Trigger):** Cập nhật lessons.md hoặc implementation_plan.md và chuẩn bị trả lời User.
 - **Root Cause:** Thiếu tính kỷ luật trong pre-flight check cuối phiên, bị cuốn vào việc giải thích logic mà bỏ qua bước linter bắt buộc.
 - **Tags:** #governance-bypass #pre-flight-check #carelessness #repeated-offense
+
+### [2026-07-16] Lỗi Linter quy trình thất bại do sai định dạng thời gian và định danh tác nhân trong Progress Log
+- **Global Pattern:** Ghi log tiến độ [A] dùng sai định dạng múi giờ hoặc định danh tác nhân tùy chỉnh thay vì prefix chuẩn `[Agent:Model]` [B] -> Linter quy trình `verify_governance.py` báo lỗi FAILED do không khớp regex và từ chối nghiệm thu [Y]. **Đúng:** Luôn sử dụng đúng định dạng thời gian ISO 8601 `[YYYY-MM-DDTHH:MM:SS+ZZ:ZZ]` và tiền tố bắt buộc `[Agent:Model]` (ví dụ: `[Agent:Gemini-3.5-Flash]`) cho mọi dòng log trong progress file.
+- **Bối cảnh (Trigger):** Chạy `verify_governance.py` sau khi hoàn thành code và cập nhật progress log.
+- **Root Cause:** Thiếu cẩn thận khi viết timestamp (dùng khoảng trắng thay vì chữ `T` và thiếu múi giờ) và dùng tên riêng `[Antigravity:Model]` thay vì prefix `[Agent:Model]` bắt buộc bởi regex của linter.
+- **Fix/Correct Flow:** Chuẩn hóa thời gian sang dạng `2026-07-16T08:55:50+07:00` và đổi định danh tác nhân thành `Agent:Gemini-3.5-Flash`.
+- **Tags:** #progress-log-format #regex-mismatch #verify-governance-fail #carelessness

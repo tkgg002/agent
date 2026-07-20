@@ -1,0 +1,474 @@
+package recon
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	modelrecon "centralized-data-service/internal/model/recon"
+	"centralized-data-service/internal/model/source"
+	reporecon "centralized-data-service/internal/repository/recon"
+	"centralized-data-service/pkgs/observability"
+
+	"github.com/nats-io/nats.go"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+)
+
+const (
+	segAChunkSize         = 1000
+	interactiveHealMaxIDs = 50000
+	healChunkSize         = 200
+	healDelayMs           = 200 * time.Millisecond
+)
+
+type executeHealOpts struct {
+	Table           string   `json:"table"`
+	ReportIDs       []uint64 `json:"report_ids"`
+	HealMismatched  bool     `json:"heal_mismatched"`
+	HealMissingDest bool     `json:"heal_missing_dest"`
+	PruneMissingSrc bool     `json:"prune_missing_src"`
+	ForceHeal       bool     `json:"force_heal"`
+}
+
+type ExecuteHealHandler struct {
+	*ReconBase
+	reportRepo   *reporecon.ReconciliationReportRepo
+	shadowDB     *gorm.DB
+	natsPub      NatsPublisher
+	eventHandler HealEventHandler
+}
+
+func NewExecuteHealHandler(base *ReconBase, reportRepo *reporecon.ReconciliationReportRepo) *ExecuteHealHandler {
+	return &ExecuteHealHandler{ReconBase: base, reportRepo: reportRepo}
+}
+
+func (h *ExecuteHealHandler) WithShadowDB(db *gorm.DB) *ExecuteHealHandler {
+	h.shadowDB = db
+	return h
+}
+
+func (h *ExecuteHealHandler) WithNatsPublisher(pub NatsPublisher) *ExecuteHealHandler {
+	h.natsPub = pub
+	return h
+}
+
+func (h *ExecuteHealHandler) WithEventHandler(eh HealEventHandler) *ExecuteHealHandler {
+	h.eventHandler = eh
+	return h
+}
+
+// -----------------------------------------------------------------------------
+// NATS Handlers
+// -----------------------------------------------------------------------------
+func (h *ExecuteHealHandler) HandleExecuteHeal(msg *nats.Msg) {
+	var payload executeHealOpts
+	errPayload := json.Unmarshal(msg.Data, &payload)
+
+	spanName := "nats.HandleExecuteHeal"
+	if payload.Table != "" {
+		spanName = fmt.Sprintf("nats.HandleExecuteHeal: %s", payload.Table)
+	}
+
+	parentCtx := observability.ExtractNATSHeader(context.Background(), msg.Header)
+	ctx, cancel := context.WithTimeout(parentCtx, 30*time.Minute)
+	defer cancel()
+
+	ctx, span := observability.ChildSpan(ctx, spanName)
+	defer span.End()
+
+	if errPayload != nil {
+		h.logger.Error("[execute-heal] payload unmarshal failed", zap.Error(errPayload))
+		h.RespondError(msg, fmt.Errorf("invalid_payload: %w", errPayload))
+		return
+	}
+
+	h.logger.Info("execute-heal received", zap.String("table", payload.Table), zap.Any("report_ids", payload.ReportIDs), zap.Bool("force_heal", payload.ForceHeal))
+
+	totalProcessed, err := h.executeHeal(ctx, payload)
+	if err != nil {
+		h.logActivity("execute-heal", payload.Table, "error", 0, err)
+		h.RespondError(msg, err)
+		return
+	}
+
+	h.logActivity("execute-heal", payload.Table, "success", int64(totalProcessed), nil)
+	h.RespondJSON(msg, map[string]any{"status": "success", "reports_processed": len(payload.ReportIDs), "total_healed": totalProcessed})
+}
+
+// -----------------------------------------------------------------------------
+// Core Business Logic: Execute Heal
+// -----------------------------------------------------------------------------
+func (h *ExecuteHealHandler) executeHeal(ctx context.Context, opts executeHealOpts) (int, error) {
+	opts.ReportIDs = uniqueUint64s(opts.ReportIDs)
+	if err := h.checkSafetyThreshold(ctx, opts); err != nil {
+		return 0, err
+	}
+
+	totalProcessed := 0
+	for _, id := range opts.ReportIDs {
+		rpt, claimed, err := h.reportRepo.ClaimForHealing(ctx, id)
+		if err != nil {
+			h.logger.Error("[execute-heal] claim failed", zap.Uint64("id", id), zap.Error(err))
+			continue
+		}
+		if !claimed {
+			h.logger.Warn("[execute-heal] report already claimed or healed, skipping", zap.Uint64("id", id))
+			continue
+		}
+
+		totalProcessed += h.processSingleReport(ctx, rpt, opts)
+	}
+	return totalProcessed, nil
+}
+
+func (h *ExecuteHealHandler) checkSafetyThreshold(ctx context.Context, opts executeHealOpts) error {
+	if opts.ForceHeal {
+		return nil
+	}
+	totalIDs := 0
+	for _, id := range opts.ReportIDs {
+		rpt, err := h.reportRepo.GetByID(ctx, id)
+		if err != nil {
+			continue
+		}
+		totalIDs += rpt.MissingCount + rpt.StaleCount + rpt.OrphanCount
+	}
+	if totalIDs > interactiveHealMaxIDs {
+		return fmt.Errorf("execute-heal blocked: %d IDs exceeds hard limit %d", totalIDs, interactiveHealMaxIDs)
+	}
+	return nil
+}
+
+func (h *ExecuteHealHandler) processSingleReport(ctx context.Context, rpt *modelrecon.ReconciliationReport, opts executeHealOpts) int {
+	prevStatus := rpt.Status
+	if rpt.TargetTable == "" {
+		if rpt.Segment == SegmentShadowMaster {
+			rpt.TargetTable = rpt.MasterTable
+		} else {
+			rpt.TargetTable = rpt.ShadowTable
+		}
+	}
+	entry := h.resolveTargetTableConfig(rpt.TargetTable)
+	processed := 0
+
+	switch rpt.Segment {
+	case SegmentSourceShadow, "":
+		if entry == nil {
+			h.logger.Error("[execute-heal-a] registry not found", zap.String("table", rpt.TargetTable))
+			_ = h.reportRepo.ReleaseHealClaim(ctx, rpt.ID, prevStatus)
+			return 0
+		}
+		processed = h.executeHealSegA(ctx, rpt, entry, opts)
+	case SegmentShadowMaster:
+		processed = h.executeHealSegB(ctx, rpt, opts)
+	default:
+		h.logger.Warn("[execute-heal] unknown segment", zap.String("segment", rpt.Segment))
+		_ = h.reportRepo.ReleaseHealClaim(ctx, rpt.ID, prevStatus)
+		return 0
+	}
+
+	h.finalizeReport(ctx, rpt)
+	return processed
+}
+
+func (h *ExecuteHealHandler) finalizeReport(ctx context.Context, rpt *modelrecon.ReconciliationReport) {
+	now := time.Now().UTC()
+
+	isFullyHealed := rpt.HealedMissingDestCount >= rpt.MissingCount &&
+		rpt.HealedMismatchedCount >= rpt.StaleCount &&
+		rpt.PrunedMissingSrcCount >= rpt.OrphanCount
+
+	updates := map[string]any{
+		"healed_count":                    rpt.HealedMismatchedCount + rpt.HealedMissingDestCount,
+		"healed_mismatched_count":         rpt.HealedMismatchedCount,
+		"healed_mismatched_duration_ms":   rpt.HealedMismatchedDurationMs,
+		"healed_missing_dest_count":       rpt.HealedMissingDestCount,
+		"healed_missing_dest_duration_ms": rpt.HealedMissingDestDurationMs,
+		"pruned_missing_src_count":        rpt.PrunedMissingSrcCount,
+		"pruned_missing_src_duration_ms":  rpt.PrunedMissingSrcDurationMs,
+	}
+
+	if rpt.HealedMismatchedCount > 0 {
+		updates["healed_mismatched_at"] = now
+	}
+	if rpt.HealedMissingDestCount > 0 {
+		updates["healed_missing_dest_at"] = now
+	}
+	if rpt.PrunedMissingSrcCount > 0 {
+		updates["healed_missing_src_at"] = now
+	}
+
+	if isFullyHealed {
+		updates["healed_at"] = now
+		updates["status"] = "healed"
+	} else {
+		updates["healed_at"] = nil
+		updates["status"] = "partially_healed"
+	}
+
+	_ = h.reportRepo.UpdateByID(ctx, rpt.ID, updates)
+}
+
+// -----------------------------------------------------------------------------
+// Segment A (MongoDB -> Shadow DB) Execution
+// -----------------------------------------------------------------------------
+func (h *ExecuteHealHandler) executeHealSegA(ctx context.Context, rpt *modelrecon.ReconciliationReport, entry *source.TableRegistry, opts executeHealOpts) int {
+	staleA := parseStaleSegmentA(rpt.StaleIDs)
+	missingIDs := parseMissingIDs(rpt.MissingIDs)
+
+	// Deduplicate IDs to avoid duplicate processing
+	staleA.Mismatched = uniqueStrings(staleA.Mismatched)
+	staleA.MissingFromSrc = uniqueStrings(staleA.MissingFromSrc)
+	missingIDs = uniqueStrings(missingIDs)
+
+	healed := 0
+
+	if opts.HealMismatched && len(staleA.Mismatched) > 0 {
+		start := time.Now()
+		written := h.fetchAndWriteChunked(ctx, entry, staleA.Mismatched, "mismatched")
+		rpt.HealedMismatchedCount = written
+		rpt.HealedMismatchedDurationMs = int(time.Since(start).Milliseconds())
+		healed += written
+	}
+	if opts.HealMissingDest && len(missingIDs) > 0 {
+		start := time.Now()
+		written := h.fetchAndWriteChunked(ctx, entry, missingIDs, "missing_dest")
+		rpt.HealedMissingDestCount = written
+		rpt.HealedMissingDestDurationMs = int(time.Since(start).Milliseconds())
+		healed += written
+	}
+	if opts.PruneMissingSrc && len(staleA.MissingFromSrc) > 0 {
+		start := time.Now()
+		h.logger.Info("[execute-heal-a] prune missing_src (soft-delete pending)", zap.String("table", rpt.TargetTable), zap.Int("count", len(staleA.MissingFromSrc)))
+		
+		updSQL := fmt.Sprintf(
+			`UPDATE %s SET "_deleted" = TRUE, "_updated_at" = NOW() WHERE "_source_id" IN (?) AND NOT "_deleted"`,
+			quoteRelation(rpt.TargetTable),
+		)
+		const batch = 1000
+		pruned := 0
+		for i := 0; i < len(staleA.MissingFromSrc); i += batch {
+			end := i + batch
+			if end > len(staleA.MissingFromSrc) {
+				end = len(staleA.MissingFromSrc)
+			}
+			res := h.shadowDB.WithContext(ctx).Exec(updSQL, staleA.MissingFromSrc[i:end])
+			if res.Error != nil {
+				h.logger.Error("[execute-heal-a] prune shadow failed", zap.Error(res.Error))
+			} else {
+				pruned += int(res.RowsAffected)
+			}
+		}
+		h.logger.Info("[execute-heal-a] prune shadow completed", zap.Int("pruned", pruned))
+		rpt.PrunedMissingSrcCount = pruned
+		rpt.PrunedMissingSrcDurationMs = int(time.Since(start).Milliseconds())
+		healed += pruned
+	}
+	return healed
+}
+
+func (h *ExecuteHealHandler) fetchAndWriteChunked(ctx context.Context, entry *source.TableRegistry, ids []string, label string) int {
+	totalWritten := 0
+	for start := 0; start < len(ids); start += segAChunkSize {
+		end := start + segAChunkSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+
+		written, err := h.FetchAndWriteByIDs(ctx, entry, ids[start:end])
+		if err != nil {
+			h.logger.Error("[execute-heal-a] chunk heal failed", zap.String("label", label), zap.Int("chunk_start", start), zap.Int("chunk_size", end-start), zap.Error(err))
+		}
+		totalWritten += written
+		if start > 0 {
+			h.logger.Info("[execute-heal-a] chunk progress", zap.String("label", label), zap.Int("written_so_far", totalWritten), zap.Int("total_ids", len(ids)))
+		}
+	}
+	return totalWritten
+}
+
+// -----------------------------------------------------------------------------
+// Segment B (Shadow DB -> Master DB) Execution
+// -----------------------------------------------------------------------------
+func (h *ExecuteHealHandler) executeHealSegB(ctx context.Context, rpt *modelrecon.ReconciliationReport, opts executeHealOpts) int {
+	if h.natsPub == nil || h.shadowDB == nil {
+		h.logger.Error("[execute-heal-b] not wired")
+		return 0
+	}
+
+	staleB := parseStaleSegmentB(rpt.StaleIDs)
+	missingGpayIDs := parseMissingIDs(rpt.MissingIDs)
+
+	// Deduplicate IDs to avoid duplicate processing
+	staleB.Mismatched = uniqueStrings(staleB.Mismatched)
+	staleB.MissingFromSrc = uniqueStrings(staleB.MissingFromSrc)
+	missingGpayIDs = uniqueStrings(missingGpayIDs)
+
+	healed := 0
+
+	var shadowRel string
+	if rpt.Segment == SegmentShadowMaster {
+		shadowRel = rpt.ShadowSchema + "." + rpt.ShadowTable
+	} else {
+		shadowRel = rpt.SourceDB
+	}
+
+	if opts.HealMismatched && len(staleB.Mismatched) > 0 {
+		start := time.Now()
+		var sourceIDs []string
+		var err error
+		sourceIDs, err = h.mapGpayToSourceIDs(ctx, shadowRel, staleB.Mismatched)
+		if err == nil {
+			processed, err := h.publishTransmuteChunked(ctx, rpt.TargetTable, sourceIDs, "execute-heal-b")
+			if err == nil {
+				rpt.HealedMismatchedCount = processed
+				healed += processed
+			} else {
+				h.logger.Error("[execute-heal-b] transmute failed for mismatched", zap.Error(err))
+			}
+		} else {
+			h.logger.Error("[execute-heal-b] mapGpayToSourceIDs failed for mismatched", zap.Error(err))
+		}
+		rpt.HealedMismatchedDurationMs = int(time.Since(start).Milliseconds())
+	}
+	if opts.HealMissingDest && len(missingGpayIDs) > 0 {
+		start := time.Now()
+		var sourceIDs []string
+		var err error
+		sourceIDs, err = h.mapGpayToSourceIDs(ctx, shadowRel, missingGpayIDs)
+		if err == nil {
+			processed, err := h.publishTransmuteChunked(ctx, rpt.TargetTable, sourceIDs, "execute-heal-b")
+			if err == nil {
+				rpt.HealedMissingDestCount = processed
+				healed += processed
+			} else {
+				h.logger.Error("[execute-heal-b] transmute failed for missing dest", zap.Error(err))
+			}
+		} else {
+			h.logger.Error("[execute-heal-b] mapGpayToSourceIDs failed for missing dest", zap.Error(err))
+		}
+		rpt.HealedMissingDestDurationMs = int(time.Since(start).Milliseconds())
+	}
+	if opts.PruneMissingSrc && len(staleB.MissingFromSrc) > 0 {
+		start := time.Now()
+		h.logger.Info("[execute-heal-b] prune orphan_in_master (missing_from_src)", zap.String("table", rpt.TargetTable), zap.Int("count", len(staleB.MissingFromSrc)))
+		
+		masterDB := h.reconCore.MasterPlane()
+		if masterDB != nil {
+			// Thực hiện XÓA CỨNG trên Master DB theo yêu cầu của User
+			delSQL := fmt.Sprintf(
+				`DELETE FROM %s WHERE "_gpay_id" IN (?)`,
+				quoteRelation(rpt.TargetTable),
+			)
+			const batch = 1000
+			pruned := 0
+			for i := 0; i < len(staleB.MissingFromSrc); i += batch {
+				end := i + batch
+				if end > len(staleB.MissingFromSrc) {
+					end = len(staleB.MissingFromSrc)
+				}
+				res := masterDB.WithContext(ctx).Exec(delSQL, staleB.MissingFromSrc[i:end])
+				if res.Error != nil {
+					h.logger.Error("[execute-heal-b] prune master (delete) failed", zap.Error(res.Error))
+				} else {
+					pruned += int(res.RowsAffected)
+				}
+			}
+			h.logger.Info("[execute-heal-b] prune master completed", zap.Int("pruned", pruned))
+			rpt.PrunedMissingSrcCount = pruned
+		} else {
+			h.logger.Error("[execute-heal-b] masterDB not wired, cannot prune master")
+		}
+		
+		rpt.PrunedMissingSrcDurationMs = int(time.Since(start).Milliseconds())
+		healed += rpt.PrunedMissingSrcCount
+	}
+	return healed
+}
+
+func (h *ExecuteHealHandler) publishTransmuteChunked(ctx context.Context, table string, sourceIDs []string, triggeredBy string) (int, error) {
+	dispatched := 0
+	for start := 0; start < len(sourceIDs); start += healChunkSize {
+		if start > 0 {
+			time.Sleep(healDelayMs)
+		}
+		end := start + healChunkSize
+		if end > len(sourceIDs) {
+			end = len(sourceIDs)
+		}
+		payload, _ := json.Marshal(map[string]any{
+			"master_table": table,
+			"_source_ids":  sourceIDs[start:end],
+			"triggered_by": triggeredBy,
+		})
+
+		// Kiểm tra nếu natsPub là một *nats.Conn thực tế để chèn header trace context.
+		if conn, ok := h.natsPub.(*nats.Conn); ok {
+			outMsg := &nats.Msg{
+				Subject: "cdc.cmd.transmute",
+				Data:    payload,
+				Header:  make(nats.Header),
+			}
+			observability.InjectNATSHeader(ctx, outMsg.Header)
+			if err := conn.PublishMsg(outMsg); err != nil {
+				h.logger.Error("[execute-heal] transmute publish failed", zap.Error(err), zap.Int("dispatched_so_far", dispatched))
+				return dispatched, err
+			}
+		} else {
+			if err := h.natsPub.Publish("cdc.cmd.transmute", payload); err != nil {
+				h.logger.Error("[execute-heal] transmute publish failed", zap.Error(err), zap.Int("dispatched_so_far", dispatched))
+				return dispatched, err
+			}
+		}
+		dispatched += end - start
+	}
+	return dispatched, nil
+}
+
+func (h *ExecuteHealHandler) mapGpayToSourceIDs(ctx context.Context, shadowRel string, gpayIDs []string) ([]string, error) {
+	if shadowRel == "" || !strings.Contains(shadowRel, ".") {
+		return nil, fmt.Errorf("invalid shadow relation %q in report.source_db", shadowRel)
+	}
+	qualified := quoteRelation(shadowRel)
+	out := make([]string, 0, len(gpayIDs))
+	for start := 0; start < len(gpayIDs); start += healChunkSize {
+		end := start + healChunkSize
+		if end > len(gpayIDs) {
+			end = len(gpayIDs)
+		}
+		var chunk []string
+		err := h.shadowDB.WithContext(ctx).Raw(fmt.Sprintf(`SELECT _source_id FROM %s WHERE _gpay_id IN (?)`, qualified), gpayIDs[start:end]).Scan(&chunk).Error
+		if err != nil {
+			return nil, fmt.Errorf("map _gpay_id→_source_id: %w", err)
+		}
+		out = append(out, chunk...)
+	}
+	return out, nil
+}
+
+func uniqueStrings(slice []string) []string {
+	keys := make(map[string]bool)
+	list := make([]string, 0, len(slice))
+	for _, entry := range slice {
+		if !keys[entry] {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
+}
+
+func uniqueUint64s(slice []uint64) []uint64 {
+	keys := make(map[uint64]bool)
+	list := make([]uint64, 0, len(slice))
+	for _, entry := range slice {
+		if !keys[entry] {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
+}

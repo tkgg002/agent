@@ -11,4 +11,5 @@
 - [x] Cập nhật tên span động cho Reconciliation Core Engine (`recon_tier_a.go` và `recon_tier_b.go`).
 - [x] Cập nhật tên span động cho các luồng chu kỳ (Scheduler & Cycles: `server_jobs.go`).
 - [x] Cập nhật tên span động trong `cdc-cms-service` (Saga runner, Command Bus).
+- [x] Cập nhật unit test `saga_otel_test.go` của `cdc-cms-service` tương thích với span name mới.
 - [x] Chạy biên dịch và kiểm thử để xác minh.

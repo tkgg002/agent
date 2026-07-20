@@ -1,0 +1,3 @@
+- [2026-07-18T20:01:00+07:00] [Agent:Gemini-1.5-Pro] Bắt đầu nhiệm vụ tích hợp score-bubble vào các sub-grid items và làm sáng marker lines.
+- [2026-07-18T20:02:00+07:00] [Agent:Gemini-1.5-Pro] Bắt đầu chỉnh sửa file chart.html theo giải pháp kỹ thuật đã duyệt.
+- [2026-07-18T20:03:30+07:00] [Agent:Gemini-1.5-Pro] Hoàn thành thay đổi code, chạy verify_governance.py thành công và chụp màn hình xác minh giao diện đạt yêu cầu.

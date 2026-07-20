@@ -4,3 +4,5 @@
 - [2026-07-14T08:58:30+07:00] [Agent:Gemini] Bổ sung hai cột Lệch và Thời gian xử lý vào `ReconPipelineGrid.tsx`.
 - [2026-07-14T08:58:58+07:00] [Agent:Gemini] Sửa lỗi biên dịch tsc do biến `EMPTY_ARRAY` không sử dụng ở `ExecuteHealModal.tsx`.
 - [2026-07-14T08:59:04+07:00] [Agent:Gemini] Biên dịch thành công Frontend (npm run build) và hoàn thành các tài liệu phân tích/walkthrough.
+- [2026-07-14T09:09:00+07:00] [Agent:Gemini] Gộp các cột "Thời gian xử lý", "Lệch" vào cột "Chi tiết" với định dạng "Thời gian xử lý : Chi tiết (lệch)".
+

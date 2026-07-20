@@ -1,0 +1,564 @@
+package shadow
+
+import (
+	"centralized-data-service/internal/model/shadow"
+	"centralized-data-service/internal/model/system"
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	reposhadow "centralized-data-service/internal/repository/shadow"
+	"centralized-data-service/internal/service/governance"
+	serviceshadow "centralized-data-service/internal/service/shadow"
+	servicesource "centralized-data-service/internal/service/source"
+	"centralized-data-service/pkgs/metrics"
+	"centralized-data-service/pkgs/observability"
+
+	"github.com/nats-io/nats.go"
+	"go.opentelemetry.io/otel/attribute"
+	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+	"gorm.io/gorm"
+)
+
+type BatchBuffer struct {
+	records           []*shadow.UpsertRecord
+	mu                sync.Mutex
+	maxSize           int
+	timeout           time.Duration
+	db                *gorm.DB
+	schemaAdapter     *serviceshadow.SchemaAdapter
+	connMgr           *servicesource.ConnectionManager
+	adapters          sync.Map // role:key -> *serviceshadow.SchemaAdapter
+	masking           *governance.MaskingService
+	failedSyncLogRepo *reposhadow.FailedSyncLogRepo
+	logger            *zap.Logger
+	flushCh           chan struct{}
+	ctx               context.Context
+	cancel            context.CancelFunc
+	lastFlush         time.Time
+	// natsConn (optional) bật realtime post-ingest fan-out: sau khi 1 batch group
+	// ghi shadow OK, bắn cdc.cmd.transmute-shadow để materialise master ngay. nil =
+	// tắt (chỉ cron/run-now). Fire-and-forget — KHÔNG ảnh hưởng đường ghi shadow.
+	natsConn *nats.Conn
+	piCache  sync.Map // shadowSchema|shadowTable -> postIngestCacheEntry (gate cache 30s)
+	onCommitOffsets func(context.Context, map[TopicPartition]int64)
+}
+
+type TopicPartition struct {
+	Topic     string
+	Partition int
+}
+
+func (bb *BatchBuffer) SetOnCommitOffsets(cb func(context.Context, map[TopicPartition]int64)) {
+	bb.onCommitOffsets = cb
+}
+
+func (bb *BatchBuffer) SetFailedSyncLogRepo(repo *reposhadow.FailedSyncLogRepo) {
+	bb.failedSyncLogRepo = repo
+}
+
+type postIngestCacheEntry struct {
+	enabled bool
+	at      time.Time
+}
+
+type BatchStatus struct {
+	BufferSize int       `json:"buffer_size"`
+	MaxSize    int       `json:"max_size"`
+	LastFlush  time.Time `json:"last_flush"`
+}
+
+func NewBatchBuffer(maxSize int, timeout time.Duration, db *gorm.DB, schemaAdapter *serviceshadow.SchemaAdapter, logger *zap.Logger) *BatchBuffer {
+	ctx, cancel := context.WithCancel(context.Background())
+	bb := &BatchBuffer{
+		records:       make([]*shadow.UpsertRecord, 0, maxSize),
+		maxSize:       maxSize,
+		timeout:       timeout,
+		db:            db,
+		schemaAdapter: schemaAdapter,
+		logger:        logger,
+		flushCh:       make(chan struct{}, 1),
+		ctx:           ctx,
+		cancel:        cancel,
+	}
+	go bb.timerLoop()
+	return bb
+}
+
+// SetNatsConn bật realtime post-ingest fan-out (xem field natsConn). Gọi ở bootstrap.
+func (bb *BatchBuffer) SetNatsConn(c *nats.Conn) { bb.natsConn = c }
+
+func (bb *BatchBuffer) SetMaskingService(masking *governance.MaskingService) {
+	bb.masking = masking
+}
+
+func (bb *BatchBuffer) SetConnectionManager(connMgr *servicesource.ConnectionManager) {
+	bb.connMgr = connMgr
+}
+
+// FlushSchemaCache evicts all cached table schemas from every per-connection
+// SchemaAdapter held in bb.adapters, plus the default bb.schemaAdapter.
+// Call this whenever a schema.config.reload event fires so newly-added columns
+// are picked up on the next upsert without a process restart.
+func (bb *BatchBuffer) FlushSchemaCache() {
+	bb.adapters.Range(func(_, v any) bool {
+		v.(*serviceshadow.SchemaAdapter).FlushAll()
+		return true
+	})
+	bb.schemaAdapter.FlushAll()
+}
+
+// WriteRecordSync upserts a single record synchronously and returns
+// rows actually materialized in the destination (per pgx RowsAffected)
+// plus any error. It deliberately does NOT write into failed_sync_logs —
+// KafkaConsumer.writeDLQ is the single owner of DLQ persistence so we
+// don't end up with duplicate rows for the same failure
+// (cdc-activity-log-metrics workspace, plan §1.3).
+func (bb *BatchBuffer) WriteRecordSync(record *shadow.UpsertRecord) (int, error) {
+	if record == nil {
+		return 0, nil
+	}
+	tableName := record.TableName
+	schemaName := bb.recordSchema(record)
+	db := bb.resolveDB(record)
+	schemaAdapter := bb.resolveSchemaAdapter(record, db)
+
+	pk := record.PrimaryKeyField
+	if err := schemaAdapter.PrepareForCDCInsertInSchema(schemaName, tableName, pk); err != nil {
+		return 0, fmt.Errorf("prepare %s.%s: %w", schemaName, tableName, err)
+	}
+
+	schema := schemaAdapter.GetSchemaInSchema(schemaName, tableName)
+	if schema == nil {
+		return 0, fmt.Errorf("schema not found for %s.%s", schemaName, tableName)
+	}
+
+	// V2 contract: shadow PK = _gpay_id, ON CONFLICT anchor = _source_id.
+	// Source PK (id/wallet_id) emitted by event_handler được route vào
+	// _source_id để giải phóng _gpay_id cho sonyflake trigger.
+	effectivePK := pk
+	if _, hasSourceID := schema.Columns["_source_id"]; hasSourceID {
+		effectivePK = "_source_id"
+	}
+
+	if record.IsDelete {
+		rows, err := bb.executeSoftDelete(db, schemaAdapter, schema, schemaName, tableName, effectivePK, record)
+		return int(rows), err
+	}
+
+	query, values := schemaAdapter.BuildUpsertSQLInSchema(
+		schema, schemaName, tableName, effectivePK,
+		record.PrimaryKeyValue, record.MappedData,
+		record.RawData, record.Source, record.Hash, record.SourceTsMs,
+	)
+	res := db.Exec(query, values...)
+	if res.Error != nil {
+		metrics.SyncFailed.WithLabelValues(tableName, "upsert", record.Source).Inc()
+		return 0, res.Error
+	}
+	metrics.SyncSuccess.WithLabelValues(tableName, "upsert", record.Source).Inc()
+	return int(res.RowsAffected), nil
+}
+
+func (bb *BatchBuffer) Add(record *shadow.UpsertRecord) {
+	bb.mu.Lock()
+	bb.records = append(bb.records, record)
+	shouldFlush := len(bb.records) >= bb.maxSize
+	bb.mu.Unlock()
+
+	if shouldFlush {
+		select {
+		case bb.flushCh <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (bb *BatchBuffer) timerLoop() {
+	ticker := time.NewTicker(bb.timeout)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-bb.ctx.Done():
+			_, _ = bb.Flush() // best-effort drain on shutdown; err already logged inside Flush
+			return
+		case <-ticker.C:
+			_, _ = bb.Flush()
+		case <-bb.flushCh:
+			_, _ = bb.Flush()
+		}
+	}
+}
+
+// Flush drains the buffer synchronously and returns (written, err):
+//   - written: rows actually persisted across all groups (RowsAffected).
+//   - err: first error encountered. Non-nil err does NOT imply written == 0
+//     — earlier groups may have succeeded before a later group failed.
+//
+// Snapshot runner consumes both so progress reflects destination reality;
+// timer-loop callers may ignore via `_, _ = bb.Flush()`.
+func (bb *BatchBuffer) Flush() (written int, err error) {
+	// Sử dụng timeout context tách biệt khỏi lifecycle cancel của parent context để đảm bảo ghi DB thành công khi shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	bb.mu.Lock()
+	if len(bb.records) == 0 {
+		bb.mu.Unlock()
+		return 0, nil
+	}
+	batch := bb.records
+	bb.records = make([]*shadow.UpsertRecord, 0, bb.maxSize)
+	bb.lastFlush = time.Now()
+	bb.mu.Unlock()
+
+	// Group by connection + schema + table
+	byTable := make(map[string][]*shadow.UpsertRecord)
+	for _, r := range batch {
+		byTable[bb.groupKey(r)] = append(byTable[bb.groupKey(r)], r)
+	}
+
+	var mu sync.Mutex
+	var g errgroup.Group
+	g.SetLimit(20) // Giới hạn tối đa 20 bảng ghi song song đồng thời
+
+	for groupKey, records := range byTable {
+		gk := groupKey
+		recs := records
+		g.Go(func() error {
+			groupWritten, gerr := bb.batchUpsert(ctx, recs)
+			
+			mu.Lock()
+			defer mu.Unlock()
+
+			if gerr != nil {
+				observability.Ctx(ctx, bb.logger).Error("batch upsert failed",
+					observability.ErrorField(gerr),
+					observability.Attrs(
+						zap.String("group", gk),
+						zap.Int("count", len(recs)),
+						zap.Int("persisted", groupWritten),
+					),
+				)
+				if err == nil {
+					err = gerr // capture first error; continue draining other groups
+				}
+			} else {
+				observability.Ctx(ctx, bb.logger).Info("batch upsert ok",
+					observability.Attrs(
+						zap.String("group", gk),
+						zap.Int("count", len(recs)),
+						zap.Int("persisted", groupWritten),
+					),
+				)
+				metrics.BatchesFlushed.WithLabelValues("postgres", recs[0].TableName).Inc()
+				if bb.natsConn != nil {
+					bb.publishTransmuteTrigger(ctx, recs[0].SchemaName, recs[0].TableName, recs)
+				}
+			}
+			written += groupWritten
+			return nil // Luôn trả về nil để bảo vệ các goroutine khác khỏi bị cancel
+		})
+	}
+
+	_ = g.Wait()
+
+	// Trigger callback commit Kafka offsets sau khi tất cả các bảng ghi song song xong
+	if bb.onCommitOffsets != nil {
+		groupOffsets := make(map[TopicPartition]int64)
+		for _, r := range batch {
+			if r.KafkaTopic != "" && r.KafkaOffset > 0 {
+				tp := TopicPartition{Topic: r.KafkaTopic, Partition: r.KafkaPartition}
+				if r.KafkaOffset > groupOffsets[tp] {
+					groupOffsets[tp] = r.KafkaOffset
+				}
+			}
+		}
+		if len(groupOffsets) > 0 {
+			bb.onCommitOffsets(ctx, groupOffsets)
+		}
+	}
+
+	return written, err
+}
+
+func (bb *BatchBuffer) batchUpsert(ctx context.Context, records []*shadow.UpsertRecord) (written int, err error) {
+	if len(records) == 0 {
+		return 0, nil
+	}
+	// Safety guard for unit tests where db or schemaAdapter are mocked as nil
+	if bb.db == nil || bb.schemaAdapter == nil {
+		return len(records), nil
+	}
+	first := records[0]
+	tableName := first.TableName
+	schemaName := bb.recordSchema(first)
+
+	// --- Bắt đầu tích hợp Activity Log ---
+	var logEntry *system.ActivityLog
+	var act *governance.ActivityLogger
+	if bb.db != nil {
+		act = governance.NewActivityLogger(bb.db, bb.logger)
+		targetFQN := schemaName + "." + tableName
+		logEntry = act.Start("kafka-consumer", targetFQN, "kafka-consumer")
+	}
+
+	defer func() {
+		if act != nil && logEntry != nil {
+			if err != nil {
+				act.Fail(logEntry, err.Error())
+			} else {
+				details := map[string]any{
+					"batch_size": len(records),
+					"written":    written,
+				}
+				act.Complete(logEntry, int64(written), details)
+			}
+		}
+	}()
+	// --------------------------------------
+
+	// Thu thập trace links từ các record
+	var links []oteltrace.Link
+	for _, r := range records {
+		if r.TraceContext != nil {
+			if span := oteltrace.SpanFromContext(r.TraceContext); span.SpanContext().IsValid() {
+				links = append(links, oteltrace.Link{SpanContext: span.SpanContext()})
+			}
+		}
+	}
+
+	spanName := fmt.Sprintf("cdc.batchbuffer.upsert: %s", tableName)
+	ctx, span := observability.ChildSpanWithLinks(ctx, spanName, links,
+		attribute.Int("cdc.batch_size", len(records)),
+		attribute.String("cdc.target_table", tableName),
+		attribute.String("cdc.target_schema", schemaName),
+	)
+	defer observability.EndSpan(span, &err)
+
+	db := bb.resolveDB(first)
+	schemaAdapter := bb.resolveSchemaAdapter(first, db)
+
+	// Prepare table once via SchemaAdapter (CDC columns, NOT NULL, UNIQUE — all dynamic)
+	pk := first.PrimaryKeyField
+	if err = schemaAdapter.PrepareForCDCInsertInSchema(schemaName, tableName, pk); err != nil {
+		bb.logger.Error("prepare table failed",
+			zap.String("schema", schemaName),
+			zap.String("table", tableName),
+			zap.Error(err),
+		)
+		return 0, err
+	}
+
+	schema := schemaAdapter.GetSchemaInSchema(schemaName, tableName)
+	if schema == nil {
+		return 0, fmt.Errorf("schema not found for %s.%s", schemaName, tableName)
+	}
+
+	// V2 shadow contract: bootstrap (ShadowAutomator) emits `_gpay_id BIGINT
+	// PK` (sonyflake trigger fills) + `_source_id TEXT NOT NULL` partial
+	// UNIQUE WHERE NOT _deleted (ON CONFLICT anchor). event_handler converts
+	// Mongo `_id` → `id`; remap source PK vào `_source_id` để _gpay_id slot
+	// dành cho trigger.
+	effectivePK := first.PrimaryKeyField
+	if _, hasSourceID := schema.Columns["_source_id"]; hasSourceID {
+		effectivePK = "_source_id"
+	}
+
+	chunkSize := 500
+	for i := 0; i < len(records); i += chunkSize {
+		end := i + chunkSize
+		if end > len(records) {
+			end = len(records)
+		}
+		chunk := records[i:end]
+
+		var chunkWritten int64
+		txErr := db.Transaction(func(tx *gorm.DB) error {
+			// Chia chunk thành các sub-chunks liên tiếp theo IsDelete
+			type subChunkGroup struct {
+				IsDelete bool
+				Records  []*shadow.UpsertRecord
+			}
+			var subChunks []subChunkGroup
+			for _, r := range chunk {
+				n := len(subChunks)
+				if n == 0 || subChunks[n-1].IsDelete != r.IsDelete {
+					subChunks = append(subChunks, subChunkGroup{
+						IsDelete: r.IsDelete,
+						Records:  []*shadow.UpsertRecord{r},
+					})
+				} else {
+					subChunks[n-1].Records = append(subChunks[n-1].Records, r)
+				}
+			}
+
+			var txWritten int64
+			for _, sc := range subChunks {
+				if !sc.IsDelete {
+					// CDC Priority: "Accuracy and Safety first, Speed second"
+					// Signature Grouping: Group records by exact schema signature to guarantee
+					// that multi-row upserts do not force `NULL` into missing fields when
+					// records in the same chunk have heterogeneous schemas (spec drift).
+					groups := make(map[string][]*shadow.UpsertRecord)
+					for _, r := range sc.Records {
+						sig := getSignature(r)
+						groups[sig] = append(groups[sig], r)
+					}
+
+					for _, subChunk := range groups {
+						// Dedup within each signature group by PrimaryKeyValue to prevent
+						// PostgreSQL SQLSTATE 21000 — "ON CONFLICT DO UPDATE command cannot
+						// affect row a second time" — which fires when the same source
+						// document emits multiple CDC events within one flush window and
+						// they land in the same multi-row INSERT VALUES list.
+						subChunk = dedupByConflictKey(subChunk)
+
+						query, values := schemaAdapter.BuildBatchUpsertSQLInSchema(
+							schema, schemaName, tableName, effectivePK, subChunk,
+						)
+						if query == "" {
+							continue
+						}
+						res := tx.Exec(query, values...)
+						if res.Error != nil {
+							return res.Error // Rollback entire chunk on first error
+						}
+						txWritten += res.RowsAffected
+					}
+				} else {
+					// Logic mới: Duyệt qua từng record và gọi executeSoftDelete trong transaction
+					for _, r := range sc.Records {
+						rows, err := bb.executeSoftDelete(tx, schemaAdapter, schema, schemaName, tableName, effectivePK, r)
+						if err != nil {
+							return err // Rollback
+						}
+						txWritten += rows
+					}
+				}
+			}
+			chunkWritten = txWritten
+			return nil
+		})
+
+		if txErr != nil {
+			// Fallback to sequential execution for this chunk to isolate failures.
+			// Counter recounted from per-row RowsAffected — TX rolled back so
+			// nothing landed yet.
+			chunkWritten = 0
+			for _, r := range chunk {
+				if r.IsDelete {
+					rows, err := bb.executeSoftDelete(db, schemaAdapter, schema, bb.recordSchema(r), r.TableName, effectivePK, r)
+					if err != nil {
+						bb.logger.Error("soft delete failed",
+							zap.String("schema", bb.recordSchema(r)),
+							zap.String("table", tableName),
+							zap.String("pk", r.PrimaryKeyValue),
+							zap.Error(err),
+						)
+						bb.writeFailedSyncLog(tableName, r, err)
+					} else {
+						chunkWritten += rows
+					}
+				} else {
+					query, values := schemaAdapter.BuildUpsertSQLInSchema(
+						schema, bb.recordSchema(r), r.TableName, effectivePK,
+						r.PrimaryKeyValue, r.MappedData,
+						r.RawData, r.Source, r.Hash, r.SourceTsMs,
+					)
+					res := db.Exec(query, values...)
+					if res.Error != nil {
+						bb.logger.Error("upsert failed",
+							zap.String("schema", bb.recordSchema(r)),
+							zap.String("table", tableName),
+							zap.String("pk", r.PrimaryKeyValue),
+							zap.Any("mapped_data", r.MappedData),
+							zap.Error(res.Error),
+						)
+						bb.writeFailedSyncLog(tableName, r, res.Error)
+						metrics.SyncFailed.WithLabelValues(tableName, "upsert", r.Source).Inc()
+					} else {
+						chunkWritten += res.RowsAffected
+						metrics.SyncSuccess.WithLabelValues(tableName, "upsert", r.Source).Inc()
+					}
+				}
+			}
+			// Escalate when fallback persisted 0 rows — caller (snapshot runner)
+			// needs to see this so markProgressError surfaces the real cause.
+			if chunkWritten == 0 {
+				written += int(chunkWritten)
+				return written, fmt.Errorf("batch upsert chunk failed: %w (fallback persisted 0 rows)", txErr)
+			}
+		} else {
+			for _, r := range chunk {
+				if !r.IsDelete {
+					metrics.SyncSuccess.WithLabelValues(tableName, "upsert", r.Source).Inc()
+				}
+			}
+		}
+
+		written += int(chunkWritten)
+	}
+
+	return written, nil
+}
+func (bb *BatchBuffer) executeSoftDelete(tx *gorm.DB, schemaAdapter *serviceshadow.SchemaAdapter, schema *serviceshadow.TableSchema, schemaName, tableName, effectivePK string, r *shadow.UpsertRecord) (int64, error) {
+	queryUpdate, argsUpdate := schemaAdapter.BuildSoftDeleteUpdateSQL(schema, schemaName, tableName, effectivePK, r)
+	resUpdate := tx.Exec(queryUpdate, argsUpdate...)
+	if resUpdate.Error != nil {
+		metrics.SyncFailed.WithLabelValues(tableName, "delete", r.Source).Inc()
+		return 0, resUpdate.Error
+	}
+
+	if resUpdate.RowsAffected > 0 {
+		metrics.SyncSuccess.WithLabelValues(tableName, "delete", r.Source).Inc()
+		return resUpdate.RowsAffected, nil
+	}
+
+	// Nếu RowsAffected == 0, gọi BuildSoftDeleteInsertSQL
+	queryInsert, argsInsert := schemaAdapter.BuildSoftDeleteInsertSQL(schema, schemaName, tableName, effectivePK, r)
+	resInsert := tx.Exec(queryInsert, argsInsert...)
+	if resInsert.Error != nil {
+		metrics.SyncFailed.WithLabelValues(tableName, "delete", r.Source).Inc()
+		return 0, resInsert.Error
+	}
+
+	metrics.SyncSuccess.WithLabelValues(tableName, "delete", r.Source).Inc()
+	return resInsert.RowsAffected, nil
+}
+
+func (bb *BatchBuffer) GetStatus() BatchStatus {
+	bb.mu.Lock()
+	defer bb.mu.Unlock()
+	return BatchStatus{
+		BufferSize: len(bb.records),
+		MaxSize:    bb.maxSize,
+		LastFlush:  bb.lastFlush,
+	}
+}
+
+func (bb *BatchBuffer) Stop() {
+	bb.cancel()
+}
+
+func (bb *BatchBuffer) writeFailedSyncLog(tableName string, r *shadow.UpsertRecord, err error) {
+	log := bb.buildFailedSyncLog(tableName, r, err)
+	var dbErr error
+	if bb.failedSyncLogRepo != nil {
+		dbErr = bb.failedSyncLogRepo.Create(context.Background(), log)
+	} else {
+		dbErr = bb.db.Create(log).Error
+	}
+	if dbErr != nil {
+		metrics.DLQWriteFail.Inc()
+		bb.logger.Error("failed to write failed sync log to database",
+			zap.String("table", tableName),
+			zap.String("pk", r.PrimaryKeyValue),
+			zap.Error(dbErr),
+		)
+	}
+}

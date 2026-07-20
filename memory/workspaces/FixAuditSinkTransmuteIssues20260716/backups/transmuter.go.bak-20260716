@@ -1,0 +1,1012 @@
+package master
+
+import (
+	mastermodel "centralized-data-service/internal/model/master"
+	repomaster "centralized-data-service/internal/repository/master"
+	"centralized-data-service/internal/service/shadow"
+	"centralized-data-service/internal/service/source"
+	"context"
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"centralized-data-service/internal/service/master/transmute"
+	"centralized-data-service/pkgs/observability"
+
+	"github.com/tidwall/gjson"
+	"go.opentelemetry.io/otel/attribute"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+)
+
+type MasterDestinationEnsurer interface {
+	EnsureMaster(ctx context.Context, masterName string) error
+}
+
+type TransmuterModule struct {
+	systemDB             *gorm.DB
+	connMgr              *source.ConnectionManager
+	runtimeRepo          *repomaster.SyncRuntimeStateRepo
+	ddlEnsurer           MasterDestinationEnsurer
+	typeRes              *shadow.TypeResolver
+	logger               *zap.Logger
+	batchSize            int
+	mu                   sync.RWMutex
+	cache                map[string]cachedRules
+	cacheTTL             time.Duration
+	shadowCache          map[string]shadowState
+	ensuredMasters       map[string]bool
+	ensuredShadowIndexes map[string]bool // Thêm cache cho index của shadow table
+}
+
+
+type cachedRules struct {
+	rules    []mappingRuleRow
+	loadedAt time.Time
+}
+
+type shadowState struct {
+	isActive      bool
+	profileStatus string
+	loadedAt      time.Time
+}
+
+type mappingRuleRow struct {
+	ID              int64   `gorm:"column:id"`
+	SourceObjectID  int64   `gorm:"column:source_object_id"`
+	MasterBindingID *int64  `gorm:"column:master_binding_id"`
+	SourceField     string  `gorm:"column:source_field"`
+	TargetColumn    string  `gorm:"column:target_column"`
+	DataType        string  `gorm:"column:data_type"`
+	SourceFormat    string  `gorm:"column:source_format"`
+	SourcePath      *string `gorm:"column:source_path"`
+	TransformFn     *string `gorm:"column:transform_fn"`
+	IsNullable      bool    `gorm:"column:is_nullable"`
+	DefaultValue    *string `gorm:"column:default_value"`
+}
+
+type masterBindingRuntime struct {
+	ID                  int64  `gorm:"column:id"`
+	SourceObjectID      int64  `gorm:"column:source_object_id"`
+	ShadowBindingID     *int64 `gorm:"column:shadow_binding_id"`
+	MasterConnectionKey string `gorm:"column:master_connection_key"`
+	MasterSchema        string `gorm:"column:master_schema"`
+	MasterTable         string `gorm:"column:master_table"`
+	PhysicalTableFQN    string `gorm:"column:physical_table_fqn"`
+	TransformType       string `gorm:"column:transform_type"`
+	TransformSpec       []byte `gorm:"column:transform_spec"`
+	IsActive            bool   `gorm:"column:is_active"`
+	SchemaStatus        string `gorm:"column:schema_status"`
+	ShadowConnectionKey string `gorm:"column:shadow_connection_key"`
+	ShadowSchema        string `gorm:"column:shadow_schema"`
+	ShadowTable         string `gorm:"column:shadow_table"`
+	ShadowIsActive      bool   `gorm:"column:shadow_is_active"`
+	SourceProfileStatus string `gorm:"column:source_profile_status"`
+	SourcePK            string `gorm:"column:source_pk"`
+	ShadowPK            string `gorm:"column:shadow_pk"`
+}
+
+type shadowBatchRow struct {
+	GpayID   int64  `gorm:"column:_gpay_id"`
+	SourceID string `gorm:"column:_source_id"`
+	RawData  []byte `gorm:"column:_raw_data"`
+	SourceTs int64  `gorm:"column:_source_ts"`
+	Deleted  bool   `gorm:"column:_deleted"`
+}
+
+type batchOutcome struct {
+	scanned, inserted, updated, skipped, occSkipped, ruleMisses, typeErrors, lastGpayID int64
+}
+
+type TransmuteResult struct {
+	Master     string `json:"master"`
+	Source     string `json:"source"`
+	Scanned    int64  `json:"scanned"`
+	Inserted   int64  `json:"inserted"`
+	Updated    int64  `json:"updated"`
+	Skipped    int64  `json:"skipped"`
+	OccSkipped int64  `json:"occ_skipped"`
+	RuleMisses int64  `json:"rule_misses"`
+	TypeErrors int64  `json:"type_errors"`
+	DurationMs int64  `json:"duration_ms"`
+	ActiveGate string `json:"active_gate,omitempty"`
+}
+
+func NewTransmuterModule(
+	systemDB *gorm.DB,
+	connMgr *source.ConnectionManager,
+	runtimeRepo *repomaster.SyncRuntimeStateRepo,
+	ddlEnsurer MasterDestinationEnsurer,
+	typeRes *shadow.TypeResolver,
+	logger *zap.Logger,
+) *TransmuterModule {
+	return &TransmuterModule{
+		systemDB:             systemDB,
+		connMgr:              connMgr,
+		runtimeRepo:          runtimeRepo,
+		ddlEnsurer:           ddlEnsurer,
+		typeRes:              typeRes,
+		logger:               logger,
+		batchSize:            2000,
+		cache:                make(map[string]cachedRules),
+		shadowCache:          make(map[string]shadowState),
+		ensuredMasters:       make(map[string]bool),
+		ensuredShadowIndexes: make(map[string]bool), // Khởi tạo cache
+		cacheTTL:             60 * time.Second,
+	}
+}
+
+func (t *TransmuterModule) Run(ctx context.Context, masterName string, onlySourceIDs []string) (res TransmuteResult, err error) {
+	spanName := fmt.Sprintf("cdc.service.transmute: %s", masterName)
+	ctx, span := observability.ChildSpan(ctx, spanName,
+		attribute.String("cdc.master_table", masterName),
+		attribute.Int("cdc.incremental_ids_count", len(onlySourceIDs)),
+	)
+	defer func() {
+		observability.EndSpan(span, &err)
+	}()
+
+	start := time.Now()
+	res = TransmuteResult{Master: masterName}
+
+	var masterRow *masterBindingRuntime
+	masterRow, err = t.loadMaster(ctx, masterName)
+	if err != nil {
+		t.markRuntimeFailure(ctx, 0, err)
+		return res, fmt.Errorf("master lookup: %w", err)
+	}
+	if !masterRow.IsActive || masterRow.SchemaStatus != "approved" {
+		res.ActiveGate = fmt.Sprintf("master gate: is_active=%v schema_status=%s", masterRow.IsActive, masterRow.SchemaStatus)
+		t.markRuntimeSkipped(ctx, masterRow.ID, res.ActiveGate)
+		return res, nil
+	}
+	res.Source = masterRow.ShadowTable
+
+	if ok, reason := t.shadowActive(masterRow); !ok {
+		res.ActiveGate = fmt.Sprintf("shadow gate: %s", reason)
+		t.markRuntimeSkipped(ctx, masterRow.ID, res.ActiveGate)
+		return res, nil
+	}
+	if t.ddlEnsurer != nil {
+		t.mu.RLock()
+		isEnsured := t.ensuredMasters[masterRow.MasterTable]
+		t.mu.RUnlock()
+
+		if !isEnsured {
+			t.logger.Info("transmuter: executing hot-path DDL EnsureMaster (AccessExclusiveLock required)",
+				zap.String("master", masterRow.MasterTable))
+
+			if err = t.ddlEnsurer.EnsureMaster(ctx, masterRow.MasterTable); err != nil {
+				t.markRuntimeFailure(ctx, masterRow.ID, err)
+				return res, fmt.Errorf("ensure master destination: %w", err)
+			}
+
+			t.mu.Lock()
+			t.ensuredMasters[masterRow.MasterTable] = true
+			t.mu.Unlock()
+		}
+	}
+
+	var rules []mappingRuleRow
+	rules, err = t.loadRules(ctx, masterRow)
+	if err != nil {
+		t.markRuntimeFailure(ctx, masterRow.ID, err)
+		return res, fmt.Errorf("rule load: %w", err)
+	}
+	if len(rules) == 0 {
+		err = fmt.Errorf("no approved mapping rules found for master binding ID %d (%s)", masterRow.ID, masterRow.MasterTable)
+		t.markRuntimeFailure(ctx, masterRow.ID, err)
+		return res, err
+	}
+
+	// Phân chia onlySourceIDs thành các lô nhỏ hơn hoặc bằng t.batchSize
+	var idChunks [][]string
+	if len(onlySourceIDs) > 0 {
+		for i := 0; i < len(onlySourceIDs); i += t.batchSize {
+			end := i + t.batchSize
+			if end > len(onlySourceIDs) {
+				end = len(onlySourceIDs)
+			}
+			idChunks = append(idChunks, onlySourceIDs[i:end])
+		}
+	} else {
+		idChunks = [][]string{nil}
+	}
+
+	for _, chunkIDs := range idChunks {
+		var lastGpayID int64
+		if len(chunkIDs) == 0 && t.runtimeRepo != nil {
+			state, errState := t.runtimeRepo.GetByMasterBinding(ctx, masterRow.ID)
+			if errState == nil && state != nil && len(state.LastCursorJSON) > 0 {
+				var cursorMap map[string]any
+				if errJson := json.Unmarshal(state.LastCursorJSON, &cursorMap); errJson == nil {
+					if val, ok := cursorMap["last_gpay_id"]; ok {
+						if fVal, ok := val.(float64); ok {
+							lastGpayID = int64(fVal)
+							t.logger.Info("transmuter: resuming from checkpoint",
+								zap.String("master", masterName),
+								zap.Int64("last_gpay_id", lastGpayID))
+						}
+					}
+				}
+			}
+		}
+
+		var shadowRows []shadowBatchRow
+		for {
+			shadowRows, err = t.fetchShadowBatch(ctx, masterRow, lastGpayID, chunkIDs)
+			if err != nil {
+				t.markRuntimeFailure(ctx, masterRow.ID, err)
+				return res, fmt.Errorf("fetch shadow batch: %w", err)
+			}
+
+			// Xử lý Orphan Master: so sánh chunkIDs với shadowRows để tìm ra các bản ghi mồ côi (đã bị xóa ở Shadow)
+			// và tiến hành soft-delete trực tiếp trên Master table sử dụng SQL = ANY(?) và gán _source_ts = time.Now().UnixMilli()
+			if len(chunkIDs) > 0 && lastGpayID == 0 {
+				existingMap := make(map[string]bool)
+				deletedInShadow := make([]string, 0)
+				for _, row := range shadowRows {
+					existingMap[row.SourceID] = true
+					if row.Deleted {
+						deletedInShadow = append(deletedInShadow, row.SourceID)
+					}
+				}
+
+				orphanMasterIDs := make([]string, 0)
+				for _, id := range chunkIDs {
+					if !existingMap[id] {
+						orphanMasterIDs = append(orphanMasterIDs, id)
+					}
+				}
+
+				toSoftDelete := append(orphanMasterIDs, deletedInShadow...)
+				if len(toSoftDelete) > 0 {
+					masterDB, errDB := t.connMgr.GetMasterDB(ctx, masterRow.MasterConnectionKey)
+					if errDB != nil {
+						t.logger.Error("transmuter: get master DB for orphan prune failed", zap.Error(errDB))
+					} else {
+						nowMs := time.Now().UnixMilli()
+						sqlText := fmt.Sprintf(`UPDATE %s SET _deleted = true, _source_ts = ?, _updated_at = NOW() WHERE _source_id = ANY(?)`,
+							quoteTransmuteQualified(masterRow.MasterSchema, masterRow.MasterTable))
+						errDel := masterDB.WithContext(ctx).Exec(sqlText, nowMs, toSoftDelete).Error
+						if errDel != nil {
+							t.logger.Error("transmuter: soft-delete orphan master failed", zap.String("master", masterRow.MasterTable), zap.Error(errDel))
+						} else {
+							t.logger.Info("transmuter: soft-deleted orphan master rows successfully",
+								zap.String("master", masterRow.MasterTable),
+								zap.Int("count", len(toSoftDelete)),
+								zap.Int("physical_orphans", len(orphanMasterIDs)),
+								zap.Int("marked_deleted", len(deletedInShadow)))
+						}
+					}
+				}
+			}
+
+			if len(shadowRows) == 0 {
+				break
+			}
+			batchRes := t.processBatch(ctx, masterRow, rules, shadowRows)
+			res.Scanned += batchRes.scanned
+			res.Inserted += batchRes.inserted
+			res.Updated += batchRes.updated
+			res.Skipped += batchRes.skipped
+			res.OccSkipped += batchRes.occSkipped
+			res.RuleMisses += batchRes.ruleMisses
+			res.TypeErrors += batchRes.typeErrors
+			lastGpayID = batchRes.lastGpayID
+
+			// P2-2: Flatten Orphan Cleanup khi array shrink
+			if masterRow.TransformType == "flatten" && len(shadowRows) > 0 {
+				masterDB, errDB := t.connMgr.GetMasterDB(ctx, masterRow.MasterConnectionKey)
+				if errDB == nil {
+					nowMs := time.Now().UnixMilli()
+					var orphansToSoftDelete []int64
+
+					for _, row := range shadowRows {
+						if row.Deleted {
+							continue
+						}
+						var s struct {
+							ExplodePath string `json:"explode_path"`
+						}
+						_ = json.Unmarshal(masterRow.TransformSpec, &s)
+						if s.ExplodePath == "" {
+							continue
+						}
+
+						elements := explodeArrayElements(row.RawData, s.ExplodePath)
+						n := len(elements)
+
+						var potentialOrphanIDs []int64
+						for idx := n; idx < n+500; idx++ {
+							potentialOrphanIDs = append(potentialOrphanIDs, deterministicGpayID(row.GpayID, "::idx::"+strconv.Itoa(idx)))
+						}
+
+						var existingOrphans []int64
+						sqlQuery := fmt.Sprintf(`SELECT _gpay_id FROM %s WHERE _gpay_id = ANY(?) AND _deleted = false`,
+							quoteTransmuteQualified(masterRow.MasterSchema, masterRow.MasterTable))
+						errQ := masterDB.WithContext(ctx).Raw(sqlQuery, potentialOrphanIDs).Scan(&existingOrphans).Error
+						if errQ == nil && len(existingOrphans) > 0 {
+							orphansToSoftDelete = append(orphansToSoftDelete, existingOrphans...)
+						}
+					}
+
+					if len(orphansToSoftDelete) > 0 {
+						sqlDel := fmt.Sprintf(`UPDATE %s SET _deleted = true, _source_ts = ?, _updated_at = NOW() WHERE _gpay_id = ANY(?)`,
+							quoteTransmuteQualified(masterRow.MasterSchema, masterRow.MasterTable))
+						errDel := masterDB.WithContext(ctx).Exec(sqlDel, nowMs, orphansToSoftDelete).Error
+						if errDel != nil {
+							t.logger.Error("transmuter: soft-delete flatten orphan master failed", zap.String("master", masterRow.MasterTable), zap.Error(errDel))
+						} else {
+							t.logger.Info("transmuter: soft-deleted flatten orphan master rows successfully",
+								zap.String("master", masterRow.MasterTable),
+								zap.Int("count", len(orphansToSoftDelete)))
+						}
+					}
+				}
+			}
+
+			// Lưu checkpoint sau mỗi lô (chỉ áp dụng cho Full Sync)
+			if len(chunkIDs) == 0 && t.runtimeRepo != nil && lastGpayID > 0 {
+				cursorBytes, _ := json.Marshal(map[string]any{"last_gpay_id": lastGpayID})
+				t.persistRuntimeState(ctx, masterRow.ID, func(item *mastermodel.SyncRuntimeState, now time.Time) {
+					item.LastCursorJSON = cursorBytes
+				})
+			}
+
+			// Nếu là Incremental Sync, thoát ngay sau batch đầu tiên của chunk hiện tại
+			if len(chunkIDs) > 0 {
+				break
+			}
+		}
+	}
+
+	res.DurationMs = time.Since(start).Milliseconds()
+
+	// Reset checkpoint sau khi đồng bộ Full Sync hoàn tất thành công
+	if len(onlySourceIDs) == 0 && t.runtimeRepo != nil {
+		t.persistRuntimeState(ctx, masterRow.ID, func(item *mastermodel.SyncRuntimeState, now time.Time) {
+			item.LastCursorJSON = []byte(`{}`)
+		})
+	}
+
+	if res.Scanned > 0 && res.Inserted == 0 && res.Updated == 0 {
+		if res.Skipped > 0 && res.OccSkipped == res.Skipped && res.RuleMisses == 0 && res.TypeErrors == 0 {
+			t.markRuntimeSuccess(ctx, masterRow.ID, res)
+			return res, nil
+		}
+		degraded := fmt.Errorf("transmute degraded: scanned=%d nhưng 0 dòng ghi master (skipped=%d occ_skipped=%d rule_misses=%d type_errors=%d) — kiểm tra transform_spec/mapping rules",
+			res.Scanned, res.Skipped, res.OccSkipped, res.RuleMisses, res.TypeErrors)
+		t.markRuntimeFailure(ctx, masterRow.ID, degraded)
+		return res, degraded
+	}
+	t.markRuntimeSuccess(ctx, masterRow.ID, res)
+	return res, nil
+}
+
+func (t *TransmuterModule) loadMaster(ctx context.Context, name string) (*masterBindingRuntime, error) {
+	var row masterBindingRuntime
+	pureTable := name
+	schemaPrefix := ""
+	if idx := strings.LastIndex(name, "."); idx != -1 {
+		schemaPrefix = name[:idx]
+		pureTable = name[idx+1:]
+	}
+
+	var err error
+	if schemaPrefix != "" {
+		err = t.systemDB.WithContext(ctx).Raw(`
+			SELECT mb.id, mb.source_object_id, mb.shadow_binding_id,
+			       COALESCE(mc.connection_code, 'default') AS master_connection_key,
+			       mb.master_schema, mb.master_table, mb.physical_table_fqn, mb.transform_type,
+			       COALESCE(mb.transform_spec, '{}'::jsonb) AS transform_spec,
+			       mb.is_active, mb.schema_status,
+			       COALESCE(sc.connection_code, 'default') AS shadow_connection_key,
+			       sb.shadow_schema, sb.shadow_table, sb.is_active AS shadow_is_active,
+			       sor.profile_status AS source_profile_status,
+			       COALESCE(sor.primary_key_field, 'id') AS source_pk,
+			       '_gpay_id' AS shadow_pk
+			  FROM cdc_system.master_binding mb
+			  LEFT JOIN cdc_system.connection_registry mc ON mc.id = mb.master_connection_id
+			  LEFT JOIN cdc_system.shadow_binding sb ON sb.id = mb.shadow_binding_id
+			  LEFT JOIN cdc_system.connection_registry sc ON sc.id = sb.shadow_connection_id
+			  LEFT JOIN cdc_system.source_object_registry sor ON sor.id = mb.source_object_id
+			 WHERE mb.master_table = ? AND mb.master_schema = ? LIMIT 1`, pureTable, schemaPrefix).Scan(&row).Error
+	} else {
+		err = t.systemDB.WithContext(ctx).Raw(`
+			SELECT mb.id, mb.source_object_id, mb.shadow_binding_id,
+			       COALESCE(mc.connection_code, 'default') AS master_connection_key,
+			       mb.master_schema, mb.master_table, mb.physical_table_fqn, mb.transform_type,
+			       COALESCE(mb.transform_spec, '{}'::jsonb) AS transform_spec,
+			       mb.is_active, mb.schema_status,
+			       COALESCE(sc.connection_code, 'default') AS shadow_connection_key,
+			       sb.shadow_schema, sb.shadow_table, sb.is_active AS shadow_is_active,
+			       sor.profile_status AS source_profile_status,
+			       COALESCE(sor.primary_key_field, 'id') AS source_pk,
+			       '_gpay_id' AS shadow_pk
+			  FROM cdc_system.master_binding mb
+			  LEFT JOIN cdc_system.connection_registry mc ON mc.id = mb.master_connection_id
+			  LEFT JOIN cdc_system.shadow_binding sb ON sb.id = mb.shadow_binding_id
+			  LEFT JOIN cdc_system.connection_registry sc ON sc.id = sb.shadow_connection_id
+			  LEFT JOIN cdc_system.source_object_registry sor ON sor.id = mb.source_object_id
+			 WHERE mb.master_table = ? LIMIT 1`, pureTable).Scan(&row).Error
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	if row.MasterTable == "" {
+		return nil, fmt.Errorf("master %q not registered", name)
+	}
+	return &row, nil
+}
+func (t *TransmuterModule) shadowActive(row *masterBindingRuntime) (bool, string) {
+	if row == nil {
+		return false, "missing master row"
+	}
+	cacheKey := row.ShadowConnectionKey + "|" + row.ShadowSchema + "|" + row.ShadowTable
+	t.mu.RLock()
+	if e, ok := t.shadowCache[cacheKey]; ok && time.Since(e.loadedAt) < t.cacheTTL {
+		t.mu.RUnlock()
+		if !e.isActive {
+			return false, "is_active=false"
+		}
+		if e.profileStatus != "active" {
+			return false, fmt.Sprintf("profile_status=%s", e.profileStatus)
+		}
+		return true, ""
+	}
+	t.mu.RUnlock()
+
+	state := shadowState{
+		isActive:      row.ShadowIsActive,
+		profileStatus: row.SourceProfileStatus,
+		loadedAt:      time.Now(),
+	}
+	t.mu.Lock()
+	t.shadowCache[cacheKey] = state
+	t.mu.Unlock()
+	if !state.isActive {
+		return false, "is_active=false"
+	}
+	if state.profileStatus != "active" {
+		return false, fmt.Sprintf("profile_status=%s", state.profileStatus)
+	}
+	return true, ""
+}
+
+func (t *TransmuterModule) loadRules(ctx context.Context, row *masterBindingRuntime) ([]mappingRuleRow, error) {
+	cacheKey := fmt.Sprintf("%d|%s", row.ID, row.MasterTable)
+	t.mu.RLock()
+	if e, ok := t.cache[cacheKey]; ok && time.Since(e.loadedAt) < t.cacheTTL {
+		rules := e.rules
+		t.mu.RUnlock()
+		return rules, nil
+	}
+	t.mu.RUnlock()
+
+	var rules []mappingRuleRow
+	err := t.systemDB.WithContext(ctx).Raw(`
+		SELECT m.id, ?::bigint AS source_object_id, m.master_binding_id,
+		       COALESCE(m.source_field, v2.source_field) AS source_field,
+		       m.target_column, COALESCE(m.data_type, v2.data_type) AS data_type,
+		       COALESCE(v2.source_format, '') AS source_format,
+		       COALESCE(m.source_path, v2.source_path) AS source_path,
+		       v2.transform_fn, COALESCE(v2.is_nullable, true) AS is_nullable, v2.default_value
+		  FROM cdc_system.mapping_rule_master m
+		  LEFT JOIN cdc_system.mapping_rule_v2 v2 ON v2.id = m.mapping_v2_id
+		 WHERE m.master_binding_id = ? AND m.is_active = true AND m.status = 'approved'
+		 ORDER BY m.id`, row.SourceObjectID, row.ID).Scan(&rules).Error
+	if err != nil {
+		return nil, err
+	}
+	valid := rules[:0]
+	for _, r := range rules {
+		if r.TransformFn != nil && !IsTransformWhitelisted(*r.TransformFn) {
+			continue
+		}
+		if !t.typeRes.Validate(r.DataType) {
+			continue
+		}
+		if strings.ContainsRune(r.TargetColumn, '$') {
+			t.logger.Warn("loadRules: skipping rule with invalid PG identifier", zap.String("target_column", r.TargetColumn))
+			continue
+		}
+		valid = append(valid, r)
+	}
+	t.mu.Lock()
+	t.cache[cacheKey] = cachedRules{rules: valid, loadedAt: time.Now()}
+	t.mu.Unlock()
+	return valid, nil
+}
+
+func (t *TransmuterModule) InvalidateRuleCache(bindingID int64, masterTable string) {
+	cacheKey := fmt.Sprintf("%d|%s", bindingID, masterTable)
+	t.mu.Lock()
+	_, existed := t.cache[cacheKey]
+	delete(t.cache, cacheKey)
+	delete(t.ensuredMasters, masterTable)
+	t.mu.Unlock()
+	t.logger.Info("transmuter rule and DDL cache invalidated after DDL apply",
+		zap.Int64("master_binding_id", bindingID),
+		zap.String("master_table", masterTable),
+		zap.Bool("had_entry", existed))
+}
+
+
+func (t *TransmuterModule) fetchShadowBatch(ctx context.Context, row *masterBindingRuntime, cursor int64, onlyIDs []string) ([]shadowBatchRow, error) {
+	shadowDB, err := t.connMgr.GetShadowDB(ctx, row.ShadowConnectionKey)
+	if err != nil {
+		return nil, err
+	}
+	var rows []shadowBatchRow
+	pkIdent := quoteTransmuteIdent(row.ShadowPK)
+	pkSelect := pkIdent
+	if row.ShadowPK != "_gpay_id" {
+		pkSelect = fmt.Sprintf("%s::bigint AS _gpay_id", pkIdent)
+	}
+
+	// Đảm bảo index idx_<tableName>_source_id luôn được kiểm tra và tạo/sửa lỗi từ sớm cho tất cả các bảng shadow
+	t.ensureShadowSourceIDIndex(ctx, shadowDB, row)
+
+	// Tách biệt truy vấn incremental/heal: không ORDER BY PK, không LIMIT
+	if len(onlyIDs) > 0 {
+		qt := fmt.Sprintf(`SELECT %s, _source_id, _raw_data, _source_ts, _deleted FROM %s WHERE _source_id IN (?)`,
+			pkSelect, quoteTransmuteQualified(row.ShadowSchema, row.ShadowTable))
+		err = shadowDB.WithContext(ctx).Raw(qt, onlyIDs).Scan(&rows).Error
+		return rows, err
+	}
+
+	qt := fmt.Sprintf(`SELECT %s, _source_id, _raw_data, _source_ts, _deleted FROM %s WHERE %s > ?`,
+		pkSelect, quoteTransmuteQualified(row.ShadowSchema, row.ShadowTable), fmt.Sprintf("(%s)::bigint", pkIdent))
+
+	args := []any{cursor}
+	qt += ` ORDER BY 1 LIMIT ?`
+	args = append(args, t.batchSize)
+	err = shadowDB.WithContext(ctx).Raw(qt, args...).Scan(&rows).Error
+	return rows, err
+}
+
+func (t *TransmuterModule) ensureShadowSourceIDIndex(ctx context.Context, shadowDB *gorm.DB, row *masterBindingRuntime) {
+	if shadowDB.Dialector.Name() != "postgres" {
+		return
+	}
+
+	indexName := fmt.Sprintf("idx_%s_source_id", row.ShadowTable)
+
+	// RLock để check cache xem đã kiểm tra chưa
+	t.mu.RLock()
+	var isEnsured bool
+	if t.ensuredShadowIndexes != nil {
+		isEnsured = t.ensuredShadowIndexes[indexName]
+	}
+	t.mu.RUnlock()
+	if isEnsured {
+		return
+	}
+
+	var validCount int64
+	errValid := shadowDB.WithContext(ctx).Raw(`
+		SELECT COUNT(*) 
+		FROM pg_index i
+		JOIN pg_class c ON c.oid = i.indexrelid
+		JOIN pg_class t ON t.oid = i.indrelid
+		JOIN pg_namespace n ON n.oid = t.relnamespace
+		WHERE n.nspname = ? AND t.relname = ? AND c.relname = ? AND i.indisvalid = true`,
+		row.ShadowSchema, row.ShadowTable, indexName).Scan(&validCount).Error
+
+	if errValid == nil && validCount > 0 {
+		// Index hợp lệ đã tồn tại, cập nhật cache và bỏ qua
+		t.mu.Lock()
+		if t.ensuredShadowIndexes == nil {
+			t.ensuredShadowIndexes = make(map[string]bool)
+		}
+		t.ensuredShadowIndexes[indexName] = true
+		t.mu.Unlock()
+		return
+	}
+
+	if errValid == nil {
+		// Đánh dấu cache để tránh spam log cảnh báo trong các lần transmute tiếp theo
+		t.mu.Lock()
+		if t.ensuredShadowIndexes == nil {
+			t.ensuredShadowIndexes = make(map[string]bool)
+		}
+		t.ensuredShadowIndexes[indexName] = true
+		t.mu.Unlock()
+
+		// Chỉ ghi log cảnh báo, tuyệt đối KHÔNG chạy DDL gây lock-storm tại runtime
+		t.logger.Warn("transmuter: missing or invalid core index on _source_id. Please create it manually from CMS UI beforehand to prevent deadlocks and lock contention under sync load",
+			zap.String("schema", row.ShadowSchema),
+			zap.String("table", row.ShadowTable),
+			zap.String("index", indexName))
+	}
+}
+
+func (t *TransmuterModule) processBatch(ctx context.Context, binding *masterBindingRuntime, rules []mappingRuleRow, rows []shadowBatchRow) batchOutcome {
+	out := batchOutcome{}
+	strat, ok := transmute.Get(binding.TransformType)
+	if !ok {
+		t.logger.Error("no transform strategy registered", zap.String("transform_type", binding.TransformType))
+		out.skipped += int64(len(rows))
+		out.scanned += int64(len(rows))
+		if n := len(rows); n > 0 {
+			out.lastGpayID = rows[n-1].GpayID
+		}
+		return out
+	}
+
+	rc := transmute.RunContext{
+		Rules:          toTransmuteRules(rules),
+		Spec:           binding.TransformSpec,
+		ExtractColumns: t.extractColumnsFn(ctx),
+		ExtractArray:   explodeArrayElements,
+	}
+
+	var mu sync.Mutex
+	var allRecords []map[string]any
+	var wg sync.WaitGroup
+
+	chunkSize := len(rows) / 10
+	if chunkSize == 0 {
+		chunkSize = 1
+	}
+
+	for i := 0; i < len(rows); i += chunkSize {
+		end := i + chunkSize
+		if end > len(rows) {
+			end = len(rows)
+		}
+		wg.Add(1)
+
+		go func(chunk []shadowBatchRow) {
+			defer wg.Done()
+			var localRecords []map[string]any
+			var localMisses, localTypeErrs, localSkipped int64
+
+			for _, row := range chunk {
+				emits, st, err := strat.BuildEmits(rc, transmute.ShadowRow{
+					Raw: row.RawData, SourceID: row.SourceID, SourceTs: row.SourceTs, Deleted: row.Deleted,
+				})
+				localMisses += st.RuleMisses
+				localTypeErrs += st.TypeErrors
+				if err != nil || len(emits) == 0 {
+					localSkipped++
+					continue
+				}
+				for _, e := range emits {
+					record := e.Cols
+					record["_gpay_id"] = deterministicGpayID(row.GpayID, e.KeySuffix)
+					record["_source_ts"] = row.SourceTs
+					record["_deleted"] = row.Deleted
+					localRecords = append(localRecords, record)
+				}
+			}
+			mu.Lock()
+			allRecords = append(allRecords, localRecords...)
+			out.ruleMisses += localMisses
+			out.typeErrors += localTypeErrs
+			out.skipped += localSkipped
+			mu.Unlock()
+		}(rows[i:end])
+	}
+	wg.Wait()
+
+	out.scanned = int64(len(rows))
+	if n := len(rows); n > 0 {
+		out.lastGpayID = rows[n-1].GpayID
+	}
+
+	// [BỔ SUNG VÁ LỖI QUAN TRỌNG]: Dedup nội bộ mẻ để loại bỏ triệt để lỗi SQLSTATE 21000
+	if len(allRecords) > 0 {
+		bestIndices := make(map[int64]int)
+		for idx, rec := range allRecords {
+			var gpayID int64
+			switch v := rec["_gpay_id"].(type) {
+			case int64:
+				gpayID = v
+			case float64:
+				gpayID = int64(v)
+			default:
+				t.logger.Warn("dedup: _gpay_id unexpected type, skipping record",
+					zap.Any("_gpay_id", rec["_gpay_id"]),
+					zap.String("type", fmt.Sprintf("%T", rec["_gpay_id"])))
+				continue
+			}
+
+			storedIdx, exists := bestIndices[gpayID]
+			if !exists {
+				bestIndices[gpayID] = idx
+				continue
+			}
+
+			// So sánh _source_ts, nếu bằng nhau thì lấy bản ghi xuất hiện sau (mới nhất)
+			var currentTs, storedTs int64
+			switch v := rec["_source_ts"].(type) {
+			case int64:
+				currentTs = v
+			case float64:
+				currentTs = int64(v)
+			default:
+				bestIndices[gpayID] = idx // fallback: lấy bản mới nhất
+				continue
+			}
+
+			switch v := allRecords[storedIdx]["_source_ts"].(type) {
+			case int64:
+				storedTs = v
+			case float64:
+				storedTs = int64(v)
+			default:
+				bestIndices[gpayID] = idx // fallback
+				continue
+			}
+
+			if currentTs >= storedTs {
+				bestIndices[gpayID] = idx
+			}
+		}
+
+		dedupedRecords := make([]map[string]any, 0, len(bestIndices))
+		for _, idx := range bestIndices {
+			dedupedRecords = append(dedupedRecords, allRecords[idx])
+		}
+
+		// Ghi nhận số dòng trùng bị loại bỏ vào occSkipped để đồng bộ với cơ chế chống false-positive degraded
+		intraBatchDuplicates := int64(len(allRecords) - len(dedupedRecords))
+		out.occSkipped += intraBatchDuplicates
+		out.skipped += intraBatchDuplicates
+
+		allRecords = dedupedRecords
+	}
+
+	// Thực hiện chia nhỏ mẻ để ghi dữ liệu hàng loạt (Bulk Upsert)
+	if len(allRecords) > 0 {
+		keysCount := len(allRecords[0])
+		if keysCount == 0 {
+			keysCount = 1
+		}
+		batchInsertSize := 60000 / keysCount
+		if batchInsertSize == 0 {
+			batchInsertSize = 1
+		}
+
+		for i := 0; i < len(allRecords); i += batchInsertSize {
+			end := i + batchInsertSize
+			if end > len(allRecords) {
+				end = len(allRecords)
+			}
+
+			var ins, upd, occSkip int64
+			var err error
+			maxRetries := 3
+			for attempt := 0; attempt <= maxRetries; attempt++ {
+				ins, upd, occSkip, err = t.bulkUpsertMaster(ctx, binding, allRecords[i:end])
+				if err == nil {
+					break
+				}
+				if !isRetryableDBError(err) || attempt == maxRetries {
+					t.logger.Error("bulk upsert failed permanently",
+						zap.String("master", binding.MasterTable),
+						zap.Int("attempt", attempt+1),
+						zap.Error(err))
+					break
+				}
+				backoff := time.Duration(1<<attempt) * 100 * time.Millisecond
+				t.logger.Warn("bulk upsert retryable error, retrying",
+					zap.String("master", binding.MasterTable),
+					zap.Int("attempt", attempt+1),
+					zap.Duration("backoff", backoff),
+					zap.Error(err))
+				time.Sleep(backoff)
+			}
+
+			if err != nil {
+				out.skipped += int64(end - i)
+				continue
+			}
+			out.inserted += ins
+			out.updated += upd
+			out.occSkipped += occSkip
+			out.skipped += occSkip
+		}
+	}
+	return out
+}
+
+func (t *TransmuterModule) bulkUpsertMaster(ctx context.Context, binding *masterBindingRuntime, records []map[string]any) (int64, int64, int64, error) {
+	if len(records) == 0 {
+		return 0, 0, 0, nil
+	}
+	masterDB, err := t.connMgr.GetMasterDB(ctx, binding.MasterConnectionKey)
+	if err != nil {
+		return 0, 0, int64(len(records)), err
+	}
+
+	keys := sortedKeysAny(records[0])
+	cols := make([]string, len(keys))
+	for i, k := range keys {
+		cols[i] = quoteTransmuteIdent(k)
+	}
+
+	var values []any
+	var placeholders []string
+
+	for i, rec := range records {
+		rowPh := make([]string, len(keys))
+		for j, k := range keys {
+			rowPh[j] = fmt.Sprintf("$%d", i*len(keys)+j+1)
+			values = append(values, sqlBindValueTransmute(rec[k]))
+		}
+		placeholders = append(placeholders, fmt.Sprintf("(%s)", strings.Join(rowPh, ", ")))
+	}
+
+	conflictTarget := "_gpay_id"
+	pkCol := parsePKFromSpec(binding.TransformSpec)
+	if pkCol != "" && pkCol != "_gpay_id" {
+		conflictTarget = pkCol
+	}
+
+	sets := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if k == conflictTarget {
+			continue
+		}
+		sets = append(sets, fmt.Sprintf("%s = EXCLUDED.%s", quoteTransmuteIdent(k), quoteTransmuteIdent(k)))
+	}
+	sets = append(sets, `"_updated_at" = NOW()`)
+
+	qt := quoteTransmuteQualified(binding.MasterSchema, binding.MasterTable)
+	sqlText := fmt.Sprintf(`INSERT INTO %s (%s) VALUES %s
+		ON CONFLICT (%s) DO UPDATE SET %s
+		WHERE COALESCE(EXCLUDED._source_ts, 0) >= COALESCE(%s._source_ts, 0)
+		RETURNING (xmax = 0) AS inserted`,
+		qt, strings.Join(cols, ", "), strings.Join(placeholders, ", "), quoteTransmuteIdent(conflictTarget), strings.Join(sets, ", "), qt)
+
+	var resRows []struct {
+		Inserted bool `gorm:"column:inserted"`
+	}
+	if err := masterDB.WithContext(ctx).Raw(sqlText, values...).Scan(&resRows).Error; err != nil {
+		if failedField := findFailedFieldFromErr(err, records); failedField != "" {
+			err = fmt.Errorf("%w (potential failed field: %q)", err, failedField)
+		}
+		return 0, 0, int64(len(records)), err
+	}
+
+	var inserted, updated int64
+	for _, r := range resRows {
+		if r.Inserted {
+			inserted++
+		} else {
+			updated++
+		}
+	}
+	skipped := int64(len(records)) - inserted - updated
+	return inserted, updated, skipped, nil
+}
+
+func toTransmuteRules(rules []mappingRuleRow) []transmute.MappingRule {
+	out := make([]transmute.MappingRule, len(rules))
+	for i, r := range rules {
+		out[i] = transmute.MappingRule{
+			SourceField: r.SourceField, TargetColumn: r.TargetColumn, DataType: r.DataType, SourceFormat: r.SourceFormat,
+			SourcePath: r.SourcePath, TransformFn: r.TransformFn, IsNullable: r.IsNullable, DefaultValue: r.DefaultValue,
+		}
+	}
+	return out
+}
+
+func (t *TransmuterModule) extractColumnsFn(ctx context.Context) transmute.ColumnExtractor {
+	return func(raw []byte, rules []transmute.MappingRule) (map[string]any, int64, int64, bool) {
+		return t.extractColumns(ctx, raw, rules)
+	}
+}
+
+func (t *TransmuterModule) extractColumns(ctx context.Context, raw []byte, rules []transmute.MappingRule) (map[string]any, int64, int64, bool) {
+	rec := make(map[string]any, len(rules)+4)
+	rawStr := string(raw)
+	var missCount, typeErrCount int64
+	for _, r := range rules {
+		path := r.SourceField
+		if r.SourcePath != nil && *r.SourcePath != "" {
+			path = *r.SourcePath
+		} else if r.SourceFormat == "debezium_after" {
+			path = "after." + r.SourceField
+		}
+		gres := gjson.Get(rawStr, path)
+		if !gres.Exists() {
+			if r.IsNullable {
+				rec[r.TargetColumn] = nil
+			} else if r.DefaultValue != nil {
+				rec[r.TargetColumn] = *r.DefaultValue
+			} else {
+				t.logger.Warn("extractColumns: missing non-nullable field without default, skipping record",
+					zap.String("target_column", r.TargetColumn),
+					zap.String("path", path))
+				missCount++
+				return nil, missCount, typeErrCount, false
+			}
+			continue
+		}
+		val := gjsonValueToGo(gres)
+		val = unwrapMongoExtJSON(val)
+		if r.TransformFn != nil && *r.TransformFn != "" {
+			converted, err := ApplyTransform(*r.TransformFn, val)
+			if err != nil {
+				if r.DefaultValue != nil {
+					t.logger.Warn("extractColumns: transform error, fallback to default value",
+						zap.String("target_column", r.TargetColumn),
+						zap.String("transform_fn", *r.TransformFn),
+						zap.Error(err))
+					rec[r.TargetColumn] = *r.DefaultValue
+					continue
+				}
+				t.logger.Warn("extractColumns: transform error, skipping record",
+					zap.String("target_column", r.TargetColumn),
+					zap.String("transform_fn", *r.TransformFn),
+					zap.Error(err))
+				typeErrCount++
+				if r.IsNullable {
+					rec[r.TargetColumn] = nil
+					continue
+				}
+				return nil, missCount, typeErrCount, false
+			}
+			val = converted
+		}
+		if isTimestampOrDateColumnType(r.DataType) {
+			if s, ok := val.(string); ok {
+				if parsedTime, parsed := tryParseTime(s); parsed {
+					val = parsedTime
+				}
+			}
+		}
+		if violation := t.typeRes.ValidateValue(ctx, r.DataType, val); violation != "" {
+			if r.DefaultValue != nil {
+				t.logger.Warn("extractColumns: validation failure, fallback to default value",
+					zap.String("target_column", r.TargetColumn),
+					zap.String("data_type", r.DataType),
+					zap.String("violation", violation))
+				rec[r.TargetColumn] = *r.DefaultValue
+				continue
+			}
+			t.logger.Warn("extractColumns: validation failure, skipping record",
+				zap.String("target_column", r.TargetColumn),
+				zap.String("data_type", r.DataType),
+				zap.String("violation", violation))
+			typeErrCount++
+			if r.IsNullable {
+				rec[r.TargetColumn] = nil
+				continue
+			}
+			return nil, missCount, typeErrCount, false
+		}
+		rec[r.TargetColumn] = coerceForColumn(val, r.DataType)
+	}
+	return rec, missCount, typeErrCount, true
+}
+
+func isRetryableDBError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := strings.ToLower(err.Error())
+	if strings.Contains(errStr, "deadlock") ||
+		strings.Contains(errStr, "lock conflict") ||
+		strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "conn closed") ||
+		strings.Contains(errStr, "driver: bad connection") {
+		return true
+	}
+	if strings.Contains(errStr, "40001") || // serialization_failure
+		strings.Contains(errStr, "40p01") || // deadlock_detected
+		strings.Contains(errStr, "55000") || // object_in_use
+		strings.Contains(errStr, "57p01") {  // admin_shutdown
+		return true
+	}
+	return false
+}

@@ -1,17 +1,16 @@
 # Phân tích kỹ thuật: Bổ sung cột Lệch & Thời gian xử lý vào FE
 
 ## 1. Chi tiết thay đổi trong `ReconPipelineGrid.tsx`
-- **Sửa đổi bảng Table trong component `DrillDown`:**
-  - Cấu hình thuộc tính `scroll: { x: 920, y: 260 }` cho `Table` để bật thanh cuộn ngang khi giao diện Drawer (width 860) bị thu hẹp hoặc tổng chiều rộng các cột vượt quá khung nhìn, đảm bảo không bị vỡ/tràn chữ.
-  - Bổ sung cột **Lệch**:
-    - Sử dụng `fmtDrift(r.diff != null ? -r.diff : null)`.
-    - Việc truyền `-r.diff` nhằm mục đích đảo chiều từ góc nhìn nguồn-đích (source_count - dest_count) của report gốc sang dạng đích-nguồn (dest_count - source_count) giống như `driftAB` và `driftBC` ở master grid.
-    - Màu đỏ biểu thị thiếu dữ liệu ở trạm sau (`-X (thiếu)`).
-    - Màu vàng biểu thị thừa dữ liệu ở trạm sau (`+X (thừa)`).
-    - Màu xanh lá hiển thị `0` nếu hai trạm khớp.
-  - Bổ sung cột **Thời gian xử lý**:
-    - Lấy dữ liệu từ trường `duration_ms`.
-    - Định dạng thông minh: dưới 1000ms hiển thị `ms` (ví dụ `320ms`), từ 1000ms trở lên hiển thị `s` (ví dụ `1.45s`).
+- **Tối ưu hóa hiển thị trong `DrillDown`:**
+  - Thay vì sử dụng các cột `Lệch` và `Thời gian xử lý` riêng lẻ gây tốn diện tích và phải bật scroll ngang, chúng tôi đã hợp nhất các thông tin này vào cột `Chi tiết`.
+  - Định dạng thống nhất của cột `Chi tiết` mới là: `"[Thời gian xử lý] : [Nguồn] → [Đích] ([Lệch])"` kèm các thông tin bổ sung nếu có (thiếu, stale, đã heal).
+  - Ví dụ thực tế: `85ms : 2,713,267 → 2,713,279 (-12)`.
+  - Định dạng hiển thị chênh lệch (drift) trong ngoặc đơn:
+    - Sử dụng hướng tính drift: `v = -r.diff` để đồng bộ với Master Grid.
+    - Màu đỏ biểu thị thiếu dữ liệu ở trạm sau (`(v)` âm).
+    - Màu vàng biểu thị thừa dữ liệu ở trạm sau (`(+v)` dương).
+    - Màu xanh hiển thị khớp (`(0)`).
+  - Thời gian xử lý (`duration_ms`) được định dạng thông minh (sử dụng đơn vị `ms` hoặc `s` tùy giá trị).
 
 ## 2. Giải quyết lỗi biên dịch tsc tồn tại trước đó
 - File `src/components/ExecuteHealModal.tsx` phát sinh lỗi do biến `EMPTY_ARRAY` được khai báo nhưng không sử dụng:

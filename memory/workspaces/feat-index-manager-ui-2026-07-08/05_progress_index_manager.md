@@ -10,3 +10,13 @@
 - [2026-07-08T17:06:00Z] [Agent:Gemini] (MUSCLE) Điều chỉnh logic đề xuất index ở frontend: Chỉ khuyến nghị các index đặc thù của CDC shadow (`_deleted`, `_source_ts`, `_source_id`) khi `plane === 'shadow'`. Bảng Master sẽ không nhận các khuyến nghị này.
 - [2026-07-08T17:17:00Z] [Agent:Gemini] (MUSCLE) Thay đổi UI SourceConnectors: thay thế cột URL / Host bằng Connector Name / Topic. Loại bỏ hoàn toàn server_address/URL để tránh lỗi hiển thị `<hidden_or_invalid_url>` và đảm bảo an toàn. Xóa hàm maskAddress không còn sử dụng. Frontend build thành công.
 - [2026-07-08T17:50:00Z] [Agent:Gemini] (MUSCLE) Cập nhật ReconPipelineGrid.tsx: Thay thế hiển thị `source_host` bằng `source_connection_code` để loại bỏ hoàn toàn việc hiển thị `<hidden_or_invalid_url>` trong màn hình Data Integrity. Frontend build thành công.
+- [2026-07-14T03:26:00Z] [Agent:Gemini] (MUSCLE) Sửa đổi lỗi hiển thị đề xuất index của trường Timestamp Field trên Shadow Table:
+  - Cập nhật backend `GetRecommendations` để lấy thông tin từ systemDB thay vì shadowDB.
+  - Sửa registry lookup để liên kết qua `mapping_rule_v2` và `source_object_registry`.
+  - Tự động tạo index cho trường Timestamp Field mặc định khi provisioning shadow table trong `HandleCreateDefaultColumns` của `schema_ddl_handler.go`.
+  - Tích hợp và kiểm thử UI thành công: nút "Tạo Index ngay" hoạt động hoàn hảo và tạo thành công index thực tế trên DB, sau đó cập nhật UI tự động.
+- [2026-07-14T03:43:00Z] [Agent:Gemini] (MUSCLE) Sửa đổi lỗi tạo index thất bại khi cột không tồn tại trên Shadow Table:
+  - Bổ sung kiểm tra sự tồn tại của cột trong cơ sở dữ liệu thực tế tại `GetRecommendations` trước khi đề xuất index, hỗ trợ ánh xạ giữa camelCase và snake_case.
+  - Bổ sung kiểm tra sự tồn tại của cột trước khi tự động tạo default timestamp index trong `HandleCreateDefaultColumns`.
+  - Thêm phương thức kiểm tra trong `CreateIndexConcurrently` để trả về lỗi chi tiết, dễ đọc thay vì lỗi thực thi SQL thô.
+  - Thêm unit test `TestIndexManager_NonExistentColumn` và cập nhật `TestIndexManager_GetRecommendations_TimestampField` để kiểm thử chính xác sự tồn tại của cột.
