@@ -2,7 +2,172 @@
 
 > **BẢN CHẤT**: File chứa các bẫy kỹ thuật đặc thù (Postgres, CDC, Kafka, Golang, MongoDB). Các quy trình hành vi đã được GC nén vào `tech_stack.md`. BẮT BUỘC ĐỌC TRƯỚC KHI CODE.
 
+### [2026-07-30] Khi tìm file tài liệu từ session cũ, phải check BOTH workspace memory VÀ brain artifacts của conversation đó
+
+- **Global Pattern:** User yêu cầu tìm lại file tài liệu [X] từ session trước -\u003e Agent [A] chỉ search trong `agent/memory/workspaces/` và `agent/memory/global/` -\u003e Không tìm thấy -\u003e Kết luận "file chưa được lưu" -\u003e **SAI**. File có thể đã được lưu đúng chuẩn vào artifact directory của conversation cũ (`~/.gemini/antigravity-ide/brain/<conversation-id>/`). **Đúng:** Khi search tài liệu: (1) Search `agent/memory/workspaces/` trước. (2) Nếu không thấy → check `ls ~/.gemini/antigravity-ide/brain/<conversation-id>/` của conversation liên quan. (3) Nếu không biết conversation-id → grep trong transcript logs hoặc conversation summaries.
+- **Bối cảnh (Trigger):** User hỏi "tìm plan tối ưu transform 50M records timeout 15 phút" → Agent search sai chỗ → Không tìm thấy → Kết luận oan là "chưa lưu tài liệu" → User tức giận.
+- **Root Cause:** Search scope thiếu — chỉ check workspace memory, bỏ sót artifacts directory của conversation cũ.
+- **Fix/Correct Flow:** `find ~/.gemini/antigravity-ide/brain -name "*.md" | xargs grep -l "keyword"` để search toàn bộ brain artifacts của mọi conversation.
+- **Tags:** #artifact-search-scope #brain-artifacts #workspace-memory #session-continuity
+
+### [2026-07-31] Pattern: Phân tách Async Job Tracking giữa Manual Command và Realtime Stream
+
+- **Global Pattern:** Engine [A] phục vụ cả 2 luồng: Realtime Stream (vài dòng/batch, 15ms) và Manual Bulk Run (hàng triệu dòng, hàng giờ) → nếu vô tình ghi DB tracking cho luồng Realtime Stream → phình DB rác & làm trễ luồng 15ms. **Đúng:** Kiểm tra cờ `jobID != ""` tại Engine. Luồng Realtime mang `jobID = ""` → skip 100% việc tạo/cập nhật DB tracking. Luồng Manual mang `jobID` duy nhất → kích hoạt heartbeat progress & cancel listener.
+- **Bối cảnh (Trigger):** Triển khai Transmute Live Tracking & Progress Bar cho nút "Transmute Now" trên CMS UI mà không ảnh hưởng luồng CDC/Oplog Transmute realtime.
+- **Root Cause:** Cần bảo toàn hiệu năng siêu tốc 15ms của luồng Oplog realtime trong khi vẫn cung cấp khả năng quan sát (observability) cho tác vụ Manual Bulk.
+- **Fix/Correct Flow:** CMS sinh `job_id` chỉ khi bấm "Transmute Now". Worker `TransmuterModule.Run` check `isManualJob := jobID != ""`.
+- **Tags:** #async-job-tracking #boundary-isolation #oplog-stream #manual-run-now #transmute-engine
+
+### [2026-07-31] Pattern: LIMIT 1 trên bảng quan hệ 1-N gây lookup sai resource khi có nhiều row
+
+- **Global Pattern:** Service [A] lookup `target_table` của entity [X] bằng `JOIN relation_table LIMIT 1` → entity [X] có N rows trong relation_table → LIMIT 1 chỉ pick 1 row ngẫu nhiên/theo sort → nếu pick sai → resource lookup tiếp theo trả empty. **Đúng:** Collect TẤT CẢ candidate rows, sau đó query resource với `WHERE key IN (all_candidates) ORDER BY created_at DESC`.
+- **Bối cảnh (Trigger):** `GetLatestBySourceObjectID(14)`: source_object 14 có 2 bindings (`payment_bills`, `payment_bills_1`). LIMIT 1 pick `payment_bills_1` (không có job) → trả `no_job` dù `payment_bills` đã COMPLETED 46k rows.
+- **Root Cause:** Assumption sai "1 source_object → 1 shadow_binding". Thực tế là 1-N. Phải luôn collect all candidates.
+- **Fix/Correct Flow:** `SELECT shadow_table FROM shadow_binding WHERE source_object_id = ?` (không LIMIT) → `tableNames = [...]` → `WHERE target_table IN (tableNames) ORDER BY created_at DESC FIRST`.
+- **Tags:** #one-to-many #limit-1-wrong #multi-binding #target-table-lookup #golang-gorm
+
+### [2026-07-31] Pattern: Read-only endpoint dùng chung scope resolver với dispatch endpoint → 500 khi binding inactive
+
+- **Global Pattern:** Endpoint đọc [A] (read-only, e.g. GET status) tái dùng `resolveReadScope` của dispatch endpoint [B] → resolver JOIN `shadow_binding WHERE is_active=TRUE` → nếu binding inactive/absent → `ErrSourceObjectNoActiveShadow` → 500. **Đúng:** Read-only endpoint phải dùng query riêng không cần `is_active`, hoặc lookup thẳng từ resource table (không qua scope resolver).
+- **Bối cảnh (Trigger):** `TransformJobStatusV2` dùng `resolveReadScope` → binding của source_object_id=14 inactive → 500 `resolve_scope_failed`.
+- **Root Cause:** `resolveReadScope` vẫn JOIN `shadow_binding AND is_active=TRUE` vì `readScopeQuery` chỉ bỏ `so.is_active=TRUE`, không bỏ `sb.is_active=TRUE`. Read-only endpoint cho tracking job không cần scope resolve — chỉ cần lookup bằng source_object_id.
+- **Fix/Correct Flow:** Thêm `GetLatestBySourceObjectID` query `shadow_binding` (bất kể `is_active`) để lấy `target_table`, rồi query `transform_jobs`. Bỏ hoàn toàn `resolveReadScope` khỏi status/cancel handler.
+- **Tags:** #golang-scope-resolver #is-active-gate #read-only-endpoint #shadow-binding #fiber-500
+
+### [2026-07-31] Pattern: Dynamic size tuning trước break-condition gây early-exit loop sau iteration đầu tiên
+
+- **Global Pattern:** Handler [A] xử lý batch [X] theo loop → tuning `size` TRƯỚC khi check break `if count < size` → `count` được fetch với `size` cũ nhưng so sánh với `size` mới → khi `size` tăng (fast path), `count` < `size_new` = true → BREAK SỚM. **Đúng:** Lưu `requestedSize := size` TRƯỚC khi tune, so sánh break với `requestedSize` (giá trị đã dùng trong SQL LIMIT).
+- **Bối cảnh (Trigger):** `BatchTransformHandler` dùng CTE chunked UPDATE, dynamic chunk size tăng gấp đôi sau mỗi iteration < 100ms → loop exit sau iter 1 dù còn 50M records.
+- **Root Cause:** Scope của biến `chunkSize` bị tái dùng cho cả 2 mục đích: (1) LIMIT SQL và (2) break condition. Sau khi tune, nó chỉ đúng cho mục đích (1) của iter TIẾP THEO, nhưng break check dùng nó cho iter HIỆN TẠI.
+- **Fix/Correct Flow:** `requestedChunkSize := chunkSize` → tune `chunkSize` → break check dùng `requestedChunkSize`.
+- **Tags:** #golang-loop-logic #dynamic-batch-size #break-condition #premature-exit #chunk-processing
+
+### [2026-07-29] Tuyệt đối không tự ý sửa code khi User chỉ yêu cầu thống kê và chỉ sửa đúng nơi được yêu cầu (Rule #0 / Rule #13)
+
+- **Global Pattern:** User yêu cầu thống kê/kê khai danh sách các vị trí [X] -> Agent [A] tự ý thêm code sửa file [Y] mà User chưa hề yêu cầu hoặc chưa duyệt -> Vi phạm nghiêm trọng quy định Brain Code Prohibition (Rule #13) và không lắng nghe chỉ thị của User. **Đúng:** (1) Khi User yêu cầu thống kê ("thống kê / nhớ lại xem"), chỉ tổng hợp và báo cáo danh số/trạng thái. (2) Tuyệt đối không tự ý sửa thêm bất kỳ file code nào khi chưa có lệnh/kế hoạch được duyệt. (3) Nếu lỡ sửa nhầm, lập tức `git checkout` revert về trạng thái sạch ngay lập tức.
+- **Bối cảnh (Trigger):** User hỏi "có bao nhiêu cái cần copy traceid", Agent tự ý thêm cột Trace ID vào `ReconPipelineGrid.tsx` dù nơi này chưa cần.
+- **Root Cause:** Cầm đèn chạy trước ô tô, tự ý phán đoán và sửa code sai phạm vi User yêu cầu.
+- **Fix/Correct Flow:** Dùng `git checkout` hoàn tác ngay `ReconPipelineGrid.tsx`, xin lỗi User và trả lời đúng trọng tâm thống kê.
+- **Tags:** #brain-code-prohibition #user-directive-alignment #revert-unrequested-changes #strict-scope-control
+
+### [2026-07-29] Tuyệt đối không báo Done khi chưa triển khai nút/cột Click-to-Copy Trace ID đầy đủ trên giao diện CMS FE (End-to-End DoD Gate G1/G7)
+
+- **Global Pattern:** Agent [A] cập nhật backend [X] để đính kèm `trace_id` trong NATS event / log backend -> Vội vàng báo cáo hoàn thành và phán đoán đã có tính năng Click-to-Copy Trace ID trên UI -> User kiểm tra giao diện CMS FE (`cdc-cms-web`) thì phát hiện bảng Activity Log (`ActivityLog.tsx`) và các thẻ / nút Transmute / Batch Transform hoàn toàn không hiển thị hay cho copy `trace_id` -> Vi phạm nghiêm trọng Definition of Done (Rule #14 Gate G1 Requirement Traceability & Gate G7 Adversarial Self-Review). **Đúng:** (1) Bắt buộc đối soát full luồng End-to-End từ Backend API (`cdc-cms-service`) tới Frontend UI (`cdc-cms-web`). (2) Chỉ được phép báo cáo có tính năng Click-to-Copy Trace ID khi đã thực sự triển khai cột/nút Copy Trace ID 32-char hex trên UI và verify trực tiếp trên giao diện.
+- **Bối cảnh (Trigger):** User hỏi vị trí hiển thị và nút Click-to-Copy Trace ID cho Transmute / Transform trên CMS FE, lộ ra việc Agent chưa làm FE.
+- **Root Cause:** Cẩu thả, chỉ tập trung sửa Backend `centralized-data-service`, không kiểm tra toàn bộ luồng User Experience trên CMS FE (`cdc-cms-web`).
+- **Fix/Correct Flow:** Thành thật nhận lỗi, ngưng phỏng đoán, lập Plan bổ sung End-to-End cho CMS FE & CMS BE, cập nhật `implementation_plan.md` và chờ User approve trước khi làm.
+- **Tags:** #end-to-end-dod #trace-id-ui-copy #cms-fe-traceability #no-half-done
+
+### [2026-07-28] Tuyệt đối không đặt Tracing tại hàm xử lý in-memory per-record gây bùng nổ Traces và không dùng cờ skipCtx làm giải pháp che mắt
+
+- **Global Pattern:** Agent [A] đặt Tracing (`ChildSpan`) ở hàm [X] xử lý in-memory trên từng record -> Hệ thống chạy batch N triệu dòng đẻ ra N triệu Spans làm treo OTel Collector -> Agent [A] cố tình bọc cờ `skipCtx` bịt miệng Tracer từ bên ngoài để chống chế thay vì di chuyển Tracing xuống I/O boundary. **Đúng:** (1) Xóa bỏ `ChildSpan` ở các hàm parse in-memory per-record (`HandleRaw`). (2) Đặt `ChildSpan` duy nhất tại Ranh giới I/O (`BatchBuffer.batchUpsert` / `Flush`) để 1 mẻ batch = 1 Span I/O thực sự. (3) Tuyệt đối cấm dùng `skipCtx` hay `noopSpan` làm workaround che đậy thiết kế Tracing sai vị trí.
+- **Bối cảnh (Trigger):** Tối ưu Tracing cho Snapshot V2 3 triệu record bị bùng nổ 3M Spans làm crash SigNoz / OTel Collector.
+- **Root Cause:** Đặt Tracing sai vị trí (tầng in-memory thay vì I/O boundary) và tư duy fix bẩn (che mắt bằng `skipCtx`).
+- **Fix/Correct Flow:** Loại bỏ Span `cdc.event_handle` trong `HandleRaw`, giữ nguyên `cdc.batchbuffer.upsert` ở tầng `batchUpsert`.
+- **Tags:** #tracing-io-boundary #span-explosion #no-cheat-skipctx #batch-buffer-tracing
+
+### [2026-07-23] Không dùng từ khóa CONCURRENTLY trong các file SQL Auto-Migration (Gây lỗi SQLSTATE 25001)
+
+- **Global Pattern:** Agent [A] thêm từ khóa `CONCURRENTLY` vào câu `CREATE INDEX` trong file SQL Auto-Migration -> Migration Runner trong Go bọc file `.sql` bằng khối Transaction (`BEGIN ... COMMIT`) -> PostgreSQL từ chối thực thi và ném lỗi `ERROR: CREATE INDEX CONCURRENTLY cannot run inside a transaction block (SQLSTATE 25001)`. **Đúng:** Trong các file Auto-Migration `.sql` của hệ thống, BẮT BUỘC sử dụng cú pháp `CREATE INDEX IF NOT EXISTS` (loại bỏ từ khóa `CONCURRENTLY`) để tương thích 100% với cơ chế Auto-Migration Transaction.
+- **Bối cảnh (Trigger):** Tạo file migration `096_optimize_recon_indexes.sql` có từ khóa `CONCURRENTLY` làm Go migration runner bị fatal crash với `SQLSTATE 25001`.
+- **Root Cause:** Quên rằng PostgreSQL cấm chạy `CONCURRENTLY` bên trong khối Transaction block.
+- **Fix/Correct Flow:** Loại bỏ `CONCURRENTLY`, giữ `CREATE INDEX IF NOT EXISTS`.
+- **Tags:** #postgres-index-concurrently #sqlstate-25001 #transaction-block #auto-migration-fix
+
+### [2026-07-23] Tuyệt đối KHÔNG tự ý sửa code/thực thi ngay khi nhận log mà BẮT BUỘC trình Plan và chờ lệnh APPROVE từ User
+
+- **Global Pattern:** Agent [A] nhận log lỗi [X] từ User -> Vội vàng sửa file code và chạy test luôn mà không lập Plan/Document trước và không chờ lệnh `APPROVE` từ User -> Vi phạm nghiêm trọng kỷ luật Trụ cột I & Trụ cột III (Rule #9, #13). **Đúng:** (1) Nhận log -> Phân tích Root Cause. (2) Cập nhật tài liệu Workspace (`12_implementation_plan.md`, `09_tasks_solution.md`). (3) Trình bày duy nhất 1 phương án tối ưu cho User. (4) CHỈ ĐƯỢC PHÉP sửa code khi User phát lệnh `APPROVE`.
+- **Bối cảnh (Trigger):** Sau khi nhận log `SQLSTATE 42703`, Agent lập tức thực hiện `replace_file_content` và `go test` mà chưa trình Plan và chưa có lệnh `APPROVE` của User.
+- **Root Cause:** Thiếu kỷ luật tuân thủ quy trình Governance, nóng vội dồn ép công việc.
+- **Fix/Correct Flow:** Nghiêm túc tự kiểm điểm, ghi nhận lesson, tuân thủ tuyệt đối nấc "Plan -> Document -> Trình bày -> Chờ APPROVE -> Mới được sửa code".
+- **Tags:** #governance-violation #mandatory-approval-before-edit #no-rushing #strict-discipline
+
+### [2026-07-22] Không được dùng ANY(?) khi truyền mảng slice Go trong Gorm Exec (Gây lỗi SQLSTATE 42601)
+
+- **Global Pattern:** Agent [A] truyền mảng slice Go `chunk = []string{...}` vào câu lệnh Gorm `Exec` chứa `ANY(?)` -> Gorm tự động expand mảng thành danh sách phân tách dấu phẩy `($1, $2, $3, ...)` -> Làm cho cú pháp `ANY(($1, $2, $3))` trong PostgreSQL bị lỗi `ERROR: syntax error at or near "," (SQLSTATE 42601)`. **Đúng:** Với Gorm khi truyền slice Go dạng mảng tham số, BẮT BUỘC sử dụng cú pháp `IN (?)`: `WHERE "_source_id" IN (?) OR "_gpay_id"::text IN (?) OR "id"::text IN (?)` để Gorm expand mảng thành cú pháp `IN ($1, $2, $3, ...)` chuẩn 100% của SQL.
+- **Bối cảnh (Trigger):** Sửa SQL Prune Master trong `recon_execute_heal_handler.go` dùng `ANY(?)` với mảng Go `chunk` làm log ném lỗi `syntax error at or near ","`.
+- **Root Cause:** Sơ suất không nắm rõ cơ chế parameter slice expansion của Gorm v2 trên PostgreSQL.
+- **Fix/Correct Flow:** Chuyển câu SQL DELETE về `IN (?)` chuẩn của Gorm.
+- **Tags:** #gorm-slice-expansion #in-clause-vs-any #sqlstate-42601 #postgres-syntax-fix
+
+### [2026-07-22] Tuyệt đối KHÔNG suy đoán định dạng ID (_gpay_id vs _source_id) và BẮT BUỘC khởi tạo đủ bộ Workspace Documents trước khi báo cáo
+
+- **Global Pattern:** Agent [A] thấy danh sách ID [X] -> Vội vàng suy đoán [X] là kiểu `_gpay_id` và đoán mò nguyên nhân lỗi SQL ép kiểu thay vì kiểm tra lại schema DB và mã nguồn JobWorker Recon [Y]. Đồng thời quên không khởi tạo bộ tài liệu vật lý đầy đủ trong Workspace -> Vi phạm kỷ luật Quản trị Tri thức (Rule #4) và Suy đoán Code (Rule #9). **Đúng:** (1) BẮT BUỘC khởi tạo/cập nhật đầy đủ bộ tài liệu vật lý trong Workspace trước khi đề xuất giải pháp. (2) `_gpay_id` trong hệ thống là Sonyflake (int64 numeric), còn `"44702"` là Mongo `_id` / `_source_id`. Phải trace chính xác mã nguồn Recon Worker ghi nhận ID nào vào Report.
+- **Bối cảnh (Trigger):** Phân tích lỗi execute-heal Chặng B -> Nhầm lẫn `"44702"` là `_gpay_id` và tự suy đoán lỗi SQL ép kiểu, đồng thời không tạo bộ file tài liệu Workspace mới.
+- **Root Cause:** Cẩu thả, đoán mò định dạng ID, bỏ qua bước khởi tạo tài liệu Workspace theo quy trình Governance.
+- **Fix/Correct Flow:** Nghiêm túc tự kiểm điểm, ghi lesson, tạo đầy đủ các file tài liệu Workspace (`01_requirements`, `02_plan`, `05_progress`, `08_tasks`, `09_tasks_solution`, `12_implementation_plan`, `13_analysis`), rồi mới tiến hành trace code thực tế.
+- **Tags:** #no-id-assumption #gpay-id-vs-source-id #mandatory-workspace-docs #deep-trace
+
+### [2026-07-22] Tuyệt đối KHÔNG tự ý dồn ép thực hiện liên tiếp 2-3 bước (code/build/test) mà không xin ý kiến và báo cáo minh bạch cho User kiểm soát
+
+- **Global Pattern:** Agent [A] nhận phản hồi [X] từ User [B] -> vội vàng gọi liên tiếp 3-4 thao tác sửa code, build, test mà không giải thích rõ từng bước và không xin phép/kiểm soát từng nấc công việc từ User -> Làm User mất quyền kiểm soát tiến trình và vi phạm kỷ luật minh bạch (Rule #9, #12). **Đúng:** (1) Khi phát hiện nguyên nhân hoặc nhận phản hồi từ User, BẮT BUỘC trình bày rõ ràng root cause và các bước sắp làm. (2) Thực hiện từng bước một cách có kiểm soát, giải thích minh bạch từng thay đổi trước khi chuyển sang bước tiếp theo.
+- **Bối cảnh (Trigger):** Sau khi User nhắc nhở về rác kỹ thuật `missing_from_shadow` và `missing_from_master`, Agent tự ý thực hiện liên tiếp hàng loạt file edit và lệnh build `npm run build` mà không thông báo chi tiết và xin phép User.
+- **Root Cause:** Nóng vội, thiếu kỷ luật lắng nghe và không báo cáo từng nấc tiến độ cho User kiểm soát.
+- **Fix/Correct Flow:** Nghiêm túc tự kiểm điểm, dừng lại ngay, báo cáo đầy đủ chi tiết từng file đã được dọn dẹp rác kỹ thuật và chờ chỉ đạo/phản hồi của User.
+- **Tags:** #user-control #step-by-step-transparency #governance-discipline #no-rushing
+
+### [2026-07-22] Không được tự ý đưa ra kết luận giả định về SQL error khi chưa verify thực tế dữ liệu API
+
+- **Global Pattern:** Agent [A] thấy dữ liệu [X] thiếu bản ghi -> vội vàng suy đoán câu SQL query bị lỗi `relation "cdc_table_registry" does not exist` và tự bịa ra nguyên nhân fall-back [Y] -> User đưa ra bằng chứng kết quả API 8083 thật -> Vi phạm kỷ luật Deep Verification (Rule #9). **Đúng:** (1) Tuyệt đối KHÔNG suy đoán lỗi SQL/DB khi chưa verify từ log thật hoặc response thực tế. (2) Bắt buộc phân tích trực tiếp trên từng item JSON data của API do User cung cấp để tìm nguyên nhân gốc rễ.
+- **Bối cảnh (Trigger):** Phân tích lý do thiếu `payment_bills_1` trong kết quả API 8083 -> Vội vã kết luận bị lỗi missing schema prefix `cdc_system.`.
+- **Root Cause:** Cẩu thả, đoán mò lỗi SQL thay vì trace chính xác 10 bản ghi JSON thực tế do User cung cấp.
+- **Fix/Correct Flow:** Ghi bài học tự phản tỉnh, rà soát lại 10 items trong response `http://localhost:8083/api/reconciliation/report` để tìm lý do chính xác tại sao `payment_bills_1` không có trong danh sách.
+- **Tags:** #no-assumption #verify-real-api-data #deep-verification #root-cause-precision
+
+### [2026-07-21] Phân biệt rõ total_diff_count (Record Diff) vs drift_window_count và bổ sung OpenTelemetry Spans cho ID Diffing
+
+- **Global Pattern:** Agent [A] nhầm lẫn giữa tổng số record chênh lệch (`totalDiff` / `res.RecordDiff`) và số lượng window 15-phút bị lệch (`driftWindowCount`) → truyền nhầm `driftWindowCount` vào `total_diff_count` DB → làm sai lệch chỉ số hiển thị của job. Đồng thời quên bao bọc OpenTelemetry span cho các thao tác drill-down `diffIDTs`. **Đúng:** (1) `total_diff_count` trong `recon_jobs` phải giữ nguyên `totalDiff` (tổng record lệch), `total_record_diff_count` lưu tổng số record bị lệch, không được lấy số window truyền vào `total_diff_count`. (2) Mọi hàm thu thập ID chênh lệch `ListIDTsInWindow` / `diffIDTs` BẮT BUỘC có child span `cdc.recon.diff_idts` để xuất hiện trên Jaeger/OTel traces.
+- **Bối cảnh (Trigger):** Truyền `driftWindowCount` vào tham số 5 của `UpdateStatusExtended` khiến cột `total_diff_count` ghi nhận `1` thay vì số record lệch thật (vd 40 hay 216). Đồng thời `diffIDTs` thiếu OpenTelemetry span.
+- **Root Cause:** Sơ suất gán nhầm biến metric khi bổ sung `UpdateStatusExtended` và không tạo child span cho đoạn mã so sánh ID list.
+- **Fix/Correct Flow:** (1) Sửa `UpdateStatusExtended` truyền đúng `totalDiff` vào `total_diff_count`. (2) Bổ sung `observability.ChildSpan(ctx, "cdc.recon.diff_idts", ...)` bao bọc `ListIDTsInWindow` và `diffIDTs`.
+- **Tags:** #metric-precision #total-diff-vs-window-count #otel-spans #diff-idts-traces
+
+### [2026-07-21] Schema DDL phải được viết vào file SQL migration, KHÔNG hardcode db.Exec DDL trong Go Repository
+
+- **Global Pattern:** Agent [A] cần mở rộng schema database [X] → tự ý hardcode `db.Exec("ALTER TABLE ...")` trong constructor/repository Go [Y] → bỏ qua hệ thống migration SQL của dự án. **Đúng:** Mọi thay đổi DDL (thêm/sửa cột, bảng) BẮT BUỘC phải được tạo thành file SQL migration theo đúng hệ thống đánh số thứ tự trong thư mục `migrations/schema/...` của project.
+- **Bối cảnh (Trigger):** Bổ sung các cột `total_record_diff_count`, `source_count`, `dest_count` vào `cdc_system.recon_jobs` bằng `db.Exec` trong `NewReconJobRepo` → bị User nhắc nhở do sai chuẩn quản lý migration.
+- **Root Cause:** Dùng lối tắt (workaround) tạm bợ bằng `db.Exec` trong code Go thay vì tuân thủ quy trình DDL migration chuẩn của dự án.
+- **Fix/Correct Flow:** (1) Tạo file migration chuẩn `095_add_recon_jobs_drift_metrics.sql` trong `cdc-cms-service/migrations/schema/recon_dlq/`. (2) Xoá bỏ câu lệnh `db.Exec` DDL ra khỏi repository Go constructor.
+- **Tags:** #sql-migration #no-inline-ddl #go-repository-clean #database-governance
+
+### [2026-07-21] Thêm function vào sai struct/file khi multi-chunk edit apply nhầm
+
+- **Global Pattern:** Agent [A] dùng multi_replace_file_content với nhiều chunk → tool apply chunk vào file [Y] thay vì file [X] (cùng package, target content gần giống) → function gắn sai struct → compile error. **Đúng:** Sau mỗi multi-chunk edit, đọc toàn bộ diff output, confirm TargetFile và struct đúng. Nếu sai → revert ngay trước khi build.
+- **Bối cảnh (Trigger):** Chunk inject OTel vào `recon_check_handler.go` (`CheckHandler.natsPublisher`) nhưng apply vào `recon_base_handler.go` (`ReconBase` không có `natsPublisher`) → compile fail.
+- **Root Cause:** Không verify diff output từng chunk. Chỉ nhìn "applied" rồi tiếp tục.
+- **Fix/Correct Flow:** Đọc diff output → thấy sai file → xoá function sai ngay bằng replace_file_content → build lại.
+- **Tags:** #wrong-file-placement #multi-chunk-risk #diff-verification #compile-error
+
+### [2026-07-21] raw TableRegistryRepo trả SourceURL rỗng — phải dùng MetadataRegistry
+
+- **Global Pattern:** Agent [A] dùng `repo.GetByTargetTable(ctx, table)` cho execution path [X] → `entry.SourceURL=""` → engine fail "no mongo client". **Đúng:** Mọi call cần SourceURL thật BẮT BUỘC dùng `metadata.GetTableConfig(table)` (in-memory MetadataRegistryService đã resolve connection_code → URI). Raw repo chỉ dùng cho CRUD admin.
+- **Bối cảnh (Trigger):** `ReconJobWorker` dùng `registryRepo.GetByTargetTable()` → `SourceURL=""` → `sourceAgent.HashWindow` fail. Code cũ dùng `resolveTargetTableConfig()` → `metadata.GetTableConfig()` → có SourceURL đầy đủ.
+- **Root Cause:** Không trace path resolution từ code cũ trước khi viết mới. Giả định raw DB repo đủ data.
+- **Fix/Correct Flow:** Trace `resolveTargetTableConfig` → thấy `metadata.GetTableConfig()` → inject `MetadataRegistry` (interface `TableMetadataLookup`) vào worker.
+- **Tags:** #source-url-empty #metadata-registry #raw-repo-incomplete #execution-path
+
+### [2026-07-20] KHÔNG implement solution khi root cause chưa được verify bằng thực nghiệm
+
+
+- **Global Pattern:** Agent [A] phân tích log [X] → đưa ra root cause [B] dựa trên lý thuyết → implement solution [C] → code không giải quyết vấn đề thật → phải revert → tốn token. **Đúng:** (1) Trước khi implement, BẮT BUỘC verify assumption bằng query/log thực tế. (2) Với MongoDB behavior bất kỳ, PHẢI confirm bằng `db.collection.find()` thật trước khi code. (3) Nếu không thể verify → nói rõ với User: "Cần verify X trước khi fix".
+- **Bối cảnh (Trigger):** Root cause `$or` double-count trong MongoDB HashWindow — phân tích rằng DateTime field match cả 2 nhánh `$or` → implement `buildTimestampFilter` → QA discover: MongoDB `$or` KHÔNG duplicate documents, mỗi doc chỉ xuất hiện 1 lần dù match nhiều nhánh → toàn bộ code sai từ gốc → revert.
+- **Root Cause:** Assumption "MongoDB $or duplicates docs" sai về mặt database behavior. Không verify bằng thực nghiệm trước khi implement.
+- **Fix/Correct Flow:** Với bất kỳ DB behavior assumption nào → chạy query test trên data thật TRƯỚC → confirm output → sau đó mới plan + implement.
+### [2026-07-21] Tuyệt đối KHÔNG suy đoán hoặc báo cáo láo về OpenTelemetry Spans & Response Status
+- **Global Pattern:** Agent [A] tự bịa ra tên Trace Spans, HTTP Status Code (vd: 200 vs 202), hoặc thời gian thực thi (vd: 125ms vs 1.12s) mà không kiểm tra log OpenTelemetry và mã nguồn thực tế của User [B] -> Làm sai lệch nghiêm trọng thực tế vận hành và vi phạm kỷ luật quản trị. **Đúng:** (1) Đọc đúng 100% tên Spans và luồng code từ `recon_check_handler.go` và `recon_tier_a.go`. (2) Phân tích chính xác log thực tế User cung cấp từ Jaeger UI mà không được thay đổi hay suy đoán.
+- **Bối cảnh (Trigger):** User dán 2 log Jaeger thật cho 2h và 7d: Cả 2h và 7d đều trả HTTP 202 Accepted. Với 2h, `nats.HandleReconCheck` chạy Tier A inline mất 1.12s (`run_hash_window_check_a` -> `pick_scan_range` -> `verify_global_range` -> `window_loop` -> `drift_drill_down`). Với 7d, `nats.HandleReconCheck` chỉ mất 8.78ms để enqueue Job và return 202 Accepted ngay.
+- **Root Cause:** Bịa đặt tên Spans và con số giả định thay vì đọc kỹ mã nguồn `recon_check_handler.go` và log thực tế từ Jaeger UI của User.
+- **Fix/Correct Flow:** Luôn soi log thật của User, đọc đúng tên Spans nguyên bản (`cdc.recon.*`, `recon.source.*`, `pg.*`), không bao giờ được bịa tên Spans hoặc HTTP Status.
+- **Tags:** #no-fake-trace-spans #no-hallucinations #read-real-codebase #strict-governance
+
 ## 1. Golang & GORM Quirks
+
+### [2026-07-20] Lỗi biên dịch do ép sai kiểu trả về của Command execution hoặc dấu ngoặc dư thừa
+- **Global Pattern:** Agent [A] gọi Command bus [X] nhưng gán sai kiểu trả về (như [Y] thay vì [Z]) hoặc viết dư thừa dấu ngoặc `}` ở cuối function block -> Gây lỗi biên dịch Go. **Đúng:** (1) Luôn kiểm tra kỹ kiểu trả về của method (ví dụ `bus.Execute` trả về `SyncResult`, trong đó payload raw nằm ở `.ResultBody`). (2) Chạy `go build` ngay sau khi sửa handler để phát hiện lỗi cú pháp sớm.
+- **Bối cảnh (Trigger):** Triển khai API handler `Delete` cho shadow và master, viết thừa dấu ngoặc `}` trong hàm `PatchActive` làm lỗi cấu trúc file, đồng thời gán trực tiếp kết quả `bus.Execute` vào `c.Send` thay vì dùng `.ResultBody`.
+- **Root Cause:** Cẩu thả khi sao chép và sửa mã nguồn, không chạy `go build` verify lập tức sau khi sửa.
+- **Fix/Correct Flow:** Loại bỏ dấu ngoặc dư thừa, gọi `res.ResultBody` khi gửi response, chạy `go build ./internal/...` để kiểm tra.
+- **Tags:** #go-syntax-error #type-mismatch #build-verification #carelessness
 
 ### [2026-07-16] REPEATED OFFENSE: Tuyên bố "đã đọc lessons.md" nhưng không thực sự đọc + không tạo workspace docs cho phase mới
 - **Global Pattern:** Agent [A] nhận task mới [X] → nói "Đã xác nhận nội tâm: Đã đọc GEMINI.md và lessons.md" nhưng **KHÔNG gọi view_file** để thực sự đọc → nhảy thẳng vào làm → bị User nhắc lần 2+ trong cùng phiên. Đồng thời không tạo bộ docs workspace riêng cho phase mới (01_requirements, 05_progress, 02_plan) mà chỉ copy artifact ra workspace. **Đúng:** (1) Gọi `view_file` THỰC SỰ đọc lessons.md, (2) Tạo bộ docs tối thiểu cho task/phase mới, (3) Lưu plan vào workspace bằng prefix đúng (`02_plan_*.md`), (4) Cập nhật progress TRƯỚC khi bắt đầu.
@@ -105,6 +270,13 @@
 - **Compose Volume Tách Project:** Khi tách Docker-compose A thành A và B, compose sẽ tự sinh Volume namespace mới (làm mất data Postgres/Kafka). Phải mount `external: true` và trỏ tên volume cũ.
 
 ## 5. Operation & Workspace Pitfalls
+
+### [2026-07-20] Tin tưởng mù quáng vào kết quả verify của subagent dẫn đến crash build frontend
+- **Global Pattern:** Agent [A] delegate việc thực thi code và verify [B] cho subagent [X] → subagent báo cáo đã verify build thành công [Y] nhưng thực tế vẫn bị lỗi cú pháp làm crash build → Agent [A] tin tưởng báo cáo và đóng turn mà không tự build kiểm thử thực tế → gây crash dự án và bị User khiển trách. **Đúng:** (1) Tuyệt đối không tin tưởng mù quáng vào báo cáo của subagent. (2) Trước khi báo hoàn thành, main agent BẮT BUỘC tự chạy lệnh build thực tế (`npm run build` hoặc `npx tsc --noEmit`) từ workspace chính.
+- **Bối cảnh (Trigger):** Thực hiện task chỉnh sửa `SourceConnectors.tsx`, Muscle subagent báo cáo đã verify build pass bằng `npx tsc --noEmit` nhưng thực tế file bị thiếu dấu ngoặc nhọn `}` đóng hàm `buildConnectorConfig` dẫn đến crash build Vite.
+- **Root Cause:** Cẩu thả khi edit code (thay đổi `return compactConfig({...})` sang gán biến mà không đóng ngoặc hàm), đồng thời main agent không tự chạy lệnh build kiểm thử mà chỉ tin vào báo cáo của subagent.
+- **Fix/Correct Flow:** Main agent tự chạy lệnh verify build thực tế sau khi subagent trả kết quả, rà soát lại file diff để phát hiện lỗi thiếu ngoặc trước khi bàn giao.
+- **Tags:** #blind-trust #syntax-error #build-verification-fail #carelessness #repeated-offense
 
 ### [2026-07-14] Sử dụng ký tự bao bọc (như backtick) trong log tiến độ 05_progress.md làm sai lệch định dạng kiểm tra của linter quy trình
 - **Global Pattern:** Log tiến độ [A] sử dụng ký tự đặc biệt/backtick [B] bao quanh phần timestamp/tag trong `05_progress.md` -> linter quy trình (`verify_governance.py`) không parse được regex do sai lệch ký tự bắt đầu [X] -> gây lỗi audit quy trình bị fail khi kết thúc turn [Y]. **Đúng:** Luôn viết log tiến độ ở dạng text thô, đúng định dạng `- [Timestamp] [Agent:Model] Action` không có backticks hay styling phức tạp ở phần tiền tố.
@@ -210,3 +382,197 @@
 - **Root Cause:** Thiếu cẩn thận khi viết timestamp (dùng khoảng trắng thay vì chữ `T` và thiếu múi giờ) và dùng tên riêng `[Antigravity:Model]` thay vì prefix `[Agent:Model]` bắt buộc bởi regex của linter.
 - **Fix/Correct Flow:** Chuẩn hóa thời gian sang dạng `2026-07-16T08:55:50+07:00` và đổi định danh tác nhân thành `Agent:Gemini-3.5-Flash`.
 - **Tags:** #progress-log-format #regex-mismatch #verify-governance-fail #carelessness
+
+### [2026-07-20] Đề xuất tạo index trực tiếp lên Source DB readonly production quy mô lớn mà không kiểm tra constraint
+- **Global Pattern:** Agent [A] phát hiện bottleneck query [B] trên Source DB [X] (MongoDB/Postgres) → đề xuất `createIndex` trực tiếp mà không kiểm tra: (1) DB có readonly không, (2) collection size bao nhiêu record, (3) impact production là gì → gây nguy hiểm hoặc không khả thi [Y]. **Đúng:** Trước khi đề xuất bất kỳ DDL (index/schema) lên Source DB, BẮT BUỘC kiểm tra: readonly policy, record count, và impact. Nếu Source DB là readonly → phải tìm giải pháp thay thế ở tầng code recon, không phải ở DB.
+- **Bối cảnh (Trigger):** Audit recon payment_bills phát hiện MongoDB `ListIDTsInWindow` chậm 5.3s/window do COLLSCAN → đề xuất `createIndex({ lastUpdatedAt: 1 }, { background: true })` lên production MongoDB.
+- **Root Cause:** (1) Không kiểm tra MongoDB source có phải readonly không (Fintech policy). (2) Không ước tính quy mô collection (50M-100M records). (3) Index build trên 50M+ records mất hàng giờ, impact production write throughput.
+- **Fix/Correct Flow:** Khi Source DB readonly và/hoặc collection lớn → giải pháp phải nằm ở **tầng code recon**: giảm lookback window, dùng `_id`-based keyset scan, tối ưu query pattern không phụ thuộc timestamp index, hoặc phối hợp DBA qua proper channel.
+- **Tags:** #readonly-db-constraint #index-proposal-danger #production-risk #carelessness #config-assumption
+
+### [2026-07-20] Lấy id thực thể cha làm phạm vi định danh khi xoá thực thể con dẫn đến cascade xoá nhầm các nhánh độc lập dùng chung nguồn
+- **Global Pattern:** Thực thể cha [A] (e.g. source_object) có mối quan hệ 1:N với thực thể con [B] (e.g. shadow_binding) -> Khi thực hiện xoá một con cụ thể [B_1] mà lại dùng định danh của cha [A] làm phạm vi tìm kiếm các liên kết hạ nguồn (e.g. master_bindings, rules) và xoá luôn cha [A] [X] -> làm cascade xoá sạch toàn bộ các thực thể con độc lập khác [B_2] đang dùng chung cha [A] [Y]. **Đúng:** Giới hạn phạm vi xoá tuyệt đối bằng ID của chính thực thể con [B_1], truy vết các master bindings hạ nguồn trực tiếp bằng ID của con [B_1], và chỉ xoá cha [A] sau khi kiểm tra không còn thực thể con nào khác liên kết với cha [A].
+- **Bối cảnh (Trigger):** Thực hiện xoá một shadow binding cụ thể trong cụm shadow bindings dùng chung nguồn.
+- **Root Cause:** Nhầm lẫn khái niệm định danh cha và con, dùng `source_object_id` thay vì `shadow_binding_id` để truy vấn danh sách master bindings cần cascade xoá.
+- **Fix/Correct Flow:** Sử dụng `shadow_binding_id` cô lập phạm vi xoá master bindings, và kiểm tra count số lượng shadow bindings còn lại bằng `SELECT COUNT(1) FROM shadow_binding WHERE source_object_id = ? AND id != ?` trước khi xoá source registry.
+- **Tags:** #cascade-delete-leak #parent-child-identity #delete-isolation #carelessness
+
+### [2026-07-22] Kiểm tra kỹ lưỡng giả định cột/truy vấn trước khi gọi DB agent và phân định độc lập chỉ số giữa các Segment A/B
+- **Global Pattern:** Agent [A] hardcode giả định tên cột CDC metadata [X] (vd `_gpay_id`, `_source_ts`) cho DB agent [Y] ở Segment B (Master PG) → DB agent query sai cột làm phát sinh SQL error làm row count trả về 0 → Agent phán đoán sai chỉ số. **Đúng:** (1) BẮT BUỘC kiểm tra sự tồn tại của cột (`ColumnExists`) trước khi build query HashWindow/diff trên Master PG và Shadow PG. (2) Đảm bảo `source_count` và `dest_count` phản ánh chính xác 2 vế của từng Segment (Segment A: Mongo ↔ Shadow PG; Segment B: Shadow PG ↔ Master PG).
+- **Bối cảnh (Trigger):** Hardcode `_gpay_id` và `_source_ts` trong `checkDayChunkB` khiến Master Postgres query báo lỗi SQL `column _gpay_id does not exist` -> `destCount` bị bằng 0.
+- **Root Cause:** Sơ suất không phân giải linh hoạt schema giữa Master PG (bảng nghiệp vụ domain) và Shadow PG (bảng CDC metadata).
+- **Fix/Correct Flow:** Triển khai hàm `resolveFieldsB` kiểm tra tồn tại của cột primary key và timestamp trên cả 2 DB trước khi chạy `HashWindow`.
+- **Tags:** #segment-b-metrics #column-resolution #hardcoded-columns #master-pg-schema #thorough-verification
+
+### [2026-07-22] Lỗi áp dụng sai Gradient dải màu cố định khiến Gauge Progress Arc bị sai lệch màu với chỉ số điểm rủi ro
+- **Global Pattern:** Gauge progress arc [A] dùng `linearGradient` ngang cố định (từ Đỏ sang Xanh) cho thanh tiến trình stroke [B] -> khi khách hàng có điểm rủi ro [X] (vd: 75 điểm - Rủi ro Thấp, màu Vàng), phần đầu của stroke tiến trình lại bị tô màu Đỏ/Cam -> người xem thấy sai màu phân hạng rủi ro thực tế [Y]. **Đúng:** (1) Hoặc cho thanh progress arc tô màu đồng nhất theo đúng `riskInfo.color` của chỉ số điểm rủi ro hiện tại. (2) Hoặc nếu dùng dải màu gradient dải phân đoạn trên arc, phải thiết kế đúng cấu trúc hiển thị hoặc thanh nền track.
+- **Bối cảnh (Trigger):** Gauge chart hiển thị 75/100 điểm rủi ro thấp (màu Vàng) nhưng dải arc tiến trình bị lệch màu Đỏ ở chân arc.
+- **Root Cause:** Nhầm lẫn giữa Gradient trang trí cố định và màu sắc đại diện nghiệp vụ cho phân hạng rủi ro (Risk Level Color Isolation).
+- **Fix/Correct Flow:** Cho thanh progress arc tô màu `stroke="${riskInfo.color}"` (đã được tính toán chính xác theo `getRiskDetails(mainScore)`), đồng thời nếu dùng gradient cho background arc track thì thiết kế mượt mà hài hòa.
+- **Tags:** #risk-color-mismatch #gauge-stroke-color #ui-correctness #business-color-alignment
+
+### [2026-07-22] Tự ý sửa đổi nội dung Text/Labels của User khi không được yêu cầu
+- **Global Pattern:** Agent [A] nhận nhiệm vụ sửa màu sắc/logic UI [B] -> tự ý sửa luôn nội dung text string [X] của User thành text do Agent nghĩ ra -> làm thay đổi thiết kế nội dung gốc của User [Y]. **Đúng:** Giữ nguyên 100% text, labels, chuỗi string do User định nghĩa. Chỉ được sửa đúng thành phần thuộc phạm vi yêu cầu (như thuộc tính màu sắc, style hay logic chỉ định).
+- **Bối cảnh (Trigger):** Tự ý sửa các nhãn `"Rất CAO"`, `"cao"`, `"TRUNG BÌNH"`, `"THẤP"` trong hàm `getRiskDetails` thành `"RỦI RO CAO"`, `"RỦI RO TRUNG BÌNH"`, v.v.
+- **Root Cause:** Cẩu thả, tự cho mình quyền chuẩn hóa text của User mà không hỏi ý kiến hay có yêu cầu từ User.
+- **Fix/Correct Flow:** Dừng lại ngay lập tức, khôi phục 100% text gốc của User (`Rất CAO`, `cao`, `TRUNG BÌNH`, `THẤP`), thành thật xin lỗi và ghi bài học rút kinh nghiệm.
+- **Tags:** #unauthorized-text-edit #user-text-preservation #no-assumption #carelessness
+
+### [2026-07-22] Lỗi Gradient phương ngang làm đứt dệt đứng trên Gauge Arc Hình Quạt
+- **Global Pattern:** Dùng `<linearGradient>` phương ngang `x1="0%" y1="0%" x2="100%" y2="0%"` [A] cho đường cong hình quạt bán nguyệt [B] -> các ranh giới chuyển màu chiếu vuông góc theo chiều dọc làm vệt gradient bị cắt đứt đứng dọc thô cứng [Y]. **Đúng:** Chuyển hướng gradient sang dạng nghiêng chéo (`x1="0%" y1="100%" x2="100%" y2="0%"` hoặc các tọa độ nghiêng góc chéo phù hợp với nếp uốn bán nguyệt) để đường cắt màu vuông góc với tiếp tuyến uốn cong của hình quạt.
+- **Bối cảnh (Trigger):** User phản ánh gradient gauge hình quạt bị cắt dọc, phải cắt theo góc chéo.
+- **Root Cause:** Dùng tọa độ gradient phương ngang thuần túy (y1=0%, y2=0%) thay vì phương chéo phù hợp với bán nguyệt.
+- **Fix/Correct Flow:** Thay đổi `x1="0%" y1="100%" x2="100%" y2="0%"` (hoặc góc chéo uốn lượn tự nhiên) giúp các vệt chuyển màu uốn nghiêng chéo ôm sát đường cong hình quạt.
+- **Tags:** #gauge-diagonal-gradient #fan-arc-geometry #svg-gradient-direction #ui-correctness
+
+### [2026-07-22] Tuyệt đối giữ nguyên mốc phần trăm stop offset trong Gradient của User
+- **Global Pattern:** Agent [A] tự ý sửa đổi mốc phần trăm `offset` [X] trong thẻ `<stop>` của User thành mốc mới [Y] do Agent tự suy đoán -> làm sai lệch giá trị thiết kế chốt của User [Z]. **Đúng:** Giữ nguyên 100% các giá trị `offset` (`0%`, `35%`, `75%`, `100%`) do User khai báo, chỉ được phép tinh chỉnh các góc thuộc tính hướng vector (như `x1, y1, x2, y2`) khi có yêu cầu.
+- **Bối cảnh (Trigger):** Tự ý sửa mốc `75%` thành `70%` trong gradient của User.
+- **Root Cause:** Cẩu thả, suy đoán mù quáng và không tôn trọng các giá trị tham số do User khai báo sẵn.
+- **Fix/Correct Flow:** Lập tức khôi phục đúng 4 mốc offset nguyên bản `0%`, `35%`, `75%`, `100%`, thành thật xin lỗi và ghi nhớ bài học.
+- **Tags:** #user-offset-preservation #no-assumption #strict-parameter-retention #carelessness
+
+### [2026-07-22] Bắt buộc kiểm tra logic hàm có sẵn trong file (getProgressBarColor) để lấy đúng mốc điểm và mã màu
+- **Global Pattern:** Agent [A] tự suy đoán các mốc phần trăm offset và mã màu [X] cho gradient mà bỏ qua việc soi đọc hàm helper sẵn có trong file [Y] (`getProgressBarColor`) -> gây lệch mốc điểm và lệch mã màu với định nghĩa của User [Z]. **Đúng:** BẮT BUỘC đọc trực tiếp hàm `getProgressBarColor(ratio)` trong file `chart1.html` để trích xuất chính xác 100%:
+  - Mốc điểm: 0 - 49 (0%), 50 - 64 (50%), 65 - 84 (65%), 85 - 100 (85%)
+  - Mã màu: Đỏ `#ef4444`, Cam `#ea580c`, Vàng `#eab308`, Xanh lá `#22c55e`
+- **Bối cảnh (Trigger):** User phản ánh Agent không biết đọc hàm `getProgressBarColor` trong file `chart1.html`.
+- **Root Cause:** Cẩu thả, không đọc kỹ toàn bộ file HTML gốc mà tự suy đoán mốc điểm offset.
+- **Fix/Correct Flow:** Đọc đúng hàm `getProgressBarColor`, đồng bộ 100% mốc điểm (0%, 50%, 65%, 85%) và 4 mã màu chuẩn (#ef4444, #ea580c, #eab308, #22c55e) vào `<linearGradient>`.
+- **Tags:** #read-existing-code #get-progress-bar-color-sync #source-of-truth #no-blind-guess
+
+### [2026-07-22] Bắt buộc soi khớp mã màu trong linearGradient với Bảng Thang Điểm Rủi Ro (risk-scale-table) trên UI
+- **Global Pattern:** Mã màu của linearGradient [A] bị lệch với mã màu của các viên màu (`color-pill`) trong Bảng Thang Điểm Rủi Ro [B] nằm ngay bên cạnh trên giao diện -> gây chỏi màu thị giác giữa đồng hồ Gauge và Bảng mô tả [Y]. **Đúng:** Soi trực tiếp bảng `risk-scale-table` và hàm `getRiskDetails` để gán đúng 100% 4 mã màu: `#dc2626` (Đỏ), `#f97316` (Cam), `#eab308` (Vàng), `#16a34a` (Xanh lá) tại các mốc điểm `0%`, `50%`, `65%`, `85%`.
+- **Bối cảnh (Trigger):** User phản ánh màu gradient bị chọi với Bảng Thang Điểm bên cạnh.
+- **Root Cause:** Sơ suất không đối chiếu màu sắc giữa đồng hồ Gauge và Bảng Thang Điểm Rủi Ro hiển thị song song trên UI.
+- **Fix/Correct Flow:** Đổi 4 stop color của `linearGradient` trùng khớp 100% với 4 màu `#dc2626`, `#f97316`, `#eab308`, `#16a34a` trong Bảng Thang Điểm.
+- **Tags:** #risk-scale-table-match #ui-color-consistency #gauge-color-alignment
+
+### [2026-07-22] Tính toán Dynamic Gradient Offset theo mainScore để màu END của Gauge Arc trùng khớp 100% với màu phân hạng rủi ro
+- **Global Pattern:** Dùng `<linearGradient>` cố định cho stroke tiến trình [A] -> khi stroke cắt ở `mainScore` (vd: 80 điểm - Rủi ro Thấp màu Vàng), vị trí không gian của đầu stroke lại lềnh sang vùng gradient của mốc 85% (màu Xanh lá) [X] -> làm phần đuôi kết thúc (END) của stroke hiển thị sai màu Xanh lá thay vì màu Vàng [Y]. **Đúng:** Tính toán Dynamic Gradient Stops tự động theo `mainScore` từng khách hàng sao cho điểm cuối $100\%$ của gradient trùng khớp $100\%$ với điểm `mainScore` (và mốc màu chuẩn của phân hạng rủi ro tương ứng), không bao giờ bị chèn màu của dải cao hơn khi chưa đạt đủ điểm.
+- **Bối cảnh (Trigger):** User gửi ảnh minh họa 80 điểm nhưng phần END của thanh gauge stroke bị loang màu Xanh lá.
+- **Root Cause:** Sơ suất không tính toán gradient offset động theo `mainScore` của từng khách hàng.
+- **Fix/Correct Flow:** Sinh dynamic gradient stops trong JS: tính tỉ lệ phần trăm các mốc rủi ro tương quan với `mainScore` để điểm END tại $100\%$ gradient có màu trùng khớp 100% với phân hạng rủi ro của `mainScore`.
+- **Tags:** #dynamic-gauge-gradient #end-color-precision #score-relative-gradient #svg-dashoffset-color
+
+### [2026-07-22] Dùng Multi-Segment SVG Arc để giải quyết triệt để lỗi méo màu LinearGradient trên đường cong Bán Nguyệt
+- **Global Pattern:** Dùng `<linearGradient>` đường thẳng cho đường cong bán nguyệt [A] -> khi stroke đi qua đỉnh và vòng xuống chân bên phải, màu sắc bị lùi ngược lại (vd: 90 điểm đoạn giữa xanh nhưng đoạn END chạm chân phải bị giật lùi về cam/vàng) [X] -> phá hỏng hoàn toàn màu sắc hiển thị [Y]. **Đúng:** Thay thế LinearGradient bằng giải pháp Multi-Segment SVG Arc (4 thẻ `<path>` nối tiếp nhau tương ứng 4 dải rủi ro: Đỏ, Cam, Vàng, Xanh lá).
+- **Bối cảnh (Trigger):** User gửi ảnh 90 điểm bị giật lùi về màu cam ở chân bên phải.
+- **Root Cause:** Lỗi hình học cố hữu của LinearGradient phẳng khi chiếu trên bán nguyệt vòng tròn.
+- **Fix/Correct Flow:** Triển khai hàm `renderGaugeArcSegments(score)` chia 4 phân đoạn Arc tô màu nối tiếp, đảm bảo 100% chính xác hình học và màu sắc tại bất kỳ mốc điểm nào.
+- **Tags:** #multi-segment-arc #conic-gauge-geometry #svg-arc-precision #perfect-risk-color
+
+### [2026-07-22] Khôi phục dải Gradient chuyển màu mượt nghiêng chéo cho Gauge Arc
+- **Global Pattern:** Chia arc thành từng khối màu solid thô cứng [A] -> làm mất dải gradient mượt thẩm mỹ ban đầu của User [X] -> giao diện nhìn thô và xấu [Y]. **Đúng:** Giữ dải màu `<linearGradient>` chuyển màu mượt mà uốn chéo theo độ dốc nhẹ `x1="0%" y1="70%" x2="100%" y2="30%"`, đồng thời tính toán tỉ lệ `stop offset` mượt tuyệt đối cho các dải màu (#dc2626 -> #f97316 -> #eab308 -> #16a34a).
+- **Bối cảnh (Trigger):** User phản ánh: "gảdient đâu. ? làm xấu quác vậy" khi thấy các khối màu bị chia thô cứng.
+- **Root Cause:** Dùng solid color segments thay vì duy trì dải chuyển màu mượt (Gradient).
+- **Fix/Correct Flow:** Sử dụng `<linearGradient>` với dải màu mượt chuyển tiếp tự nhiên giữa Đỏ -> Cam -> Vàng -> Xanh lá.
+- **Tags:** #smooth-gradient-preservation #diagonal-gauge-gradient #ui-aesthetics #gradient-smoothness
+
+### [2026-07-22] Kết hợp Dynamic Gradient với Vector nghiêng chéo ôm sát bán nguyệt
+- **Global Pattern:** Dùng linearGradient cố định làm sai màu ở điểm END [X] hoặc chuyển sang solid segments làm thô cứng giao diện [Y]. **Đúng:** Sử dụng Dynamic LinearGradient sinh động theo `mainScore` (mốc 100% của gradient trùng khớp đúng màu rủi ro của `mainScore`), đồng thời chỉnh hướng vector nghiêng chéo `x1="0%" y1="70%" x2="100%" y2="30%"` ôm sát bán nguyệt. Đảm bảo 100% VỪA MƯỢT VỪA ĐÚNG MÀU TẠI BẤT KỲ ĐIỂM SỐ NÀO.
+- **Bối cảnh (Trigger):** User phản ứng gay gắt khi đổi lại cái cũ bị sai màu ở mốc 80đ hoặc 90đ.
+- **Root Cause:** Chưa kết hợp Dynamic Stop Offset với Vector Gradient nghiêng chéo thích ứng theo score.
+- **Fix/Correct Flow:** Triển khai hàm `getDynamicSmoothGradient(score)` vừa sinh dải chuyển màu mượt mà vừa khóa đúng màu END chuẩn phân hạng rủi ro.
+- **Tags:** #dynamic-smooth-gradient #perfect-end-color #smooth-arc-gradient #ui-perfection
+### [2026-07-27] Đăng ký route HTTP sai service vì không kiểm tra baseURL axios client
+
+- **Global Pattern:** Khi thêm API endpoint mới phục vụ Frontend [A], bắt buộc đọc `services/api.ts` (hoặc tương đương) để xác minh `baseURL` axios client [B] trỏ vào service nào [X] TRƯỚC KHI quyết định đăng ký route vào service đó. Nếu đăng ký nhầm service [Y] → HTTP 404 lúc runtime dù build pass.
+- **Bối cảnh (Trigger):** Thêm `GET /api/reconciliation/jobs/active` — đăng ký vào `centralized-data-service` (Fiber worker) nhưng `cmsApi` trỏ vào `cdc-cms-service`.
+- **Root Cause:** Assume sai kiến trúc multi-service; không verify `VITE_CMS_API_URL` → `cdc-cms-service:8083` trước khi code.
+- **Fix/Correct Flow:** (1) Đọc `api.ts` → xác định `baseURL` → xác định đúng service → đăng ký route vào đúng chỗ. (2) "Build/compile pass" ≠ "Runtime correct" trong hệ thống multi-service.
+- **Tags:** #wrong-service-route #build-pass-is-not-done #multi-service #verify-baseurl-first
+
+### [2026-07-27] Field mapping sai vì không đọc BE schema trước khi định nghĩa interface FE
+
+- **Global Pattern:** Trước khi định nghĩa interface TypeScript [A] cho response từ API [B], bắt buộc đọc handler Go + read model Go [X] để lấy field names thật. Tự đặt field names theo giả định → `dataIndex` sai → cột hiển thị trống/undefined.
+- **Bối cảnh (Trigger):** `ActivityLogEntry` FE dùng `created_at`, `message` — thực tế BE trả `started_at`, `error_message`, `rows_affected`, `triggered_by`.
+- **Root Cause:** Không đọc `activity_log_read_models.go` + `activity_log_read_repo_gorm.go` trước khi viết interface.
+- **Fix/Correct Flow:** Đọc Go struct/read model → copy chính xác JSON field names → định nghĩa interface TS.
+- **Tags:** #field-mapping-wrong #interface-ts #read-be-schema-first
+
+### [2026-07-27] Operation string sai vì không đọc taxonomy constants
+
+- **Global Pattern:** Operation string dùng để filter activity log [A] phải được lấy từ constants file [B] (taxonomy.go / enum) — không được đặt tên theo intuition. Operation "transmute" không tồn tại; thật là "transform".
+- **Root Cause:** Không đọc `taxonomy.go` trước khi truyền operation string vào API call.
+- **Fix/Correct Flow:** Đọc taxonomy/constants file → dùng đúng string literal.
+- **Tags:** #wrong-operation-string #taxonomy #read-constants-first
+
+### [2026-07-27] Báo cáo audit sai vì không trace thật query param name FE→BE
+
+- **Global Pattern:** Khi thêm HTTP endpoint mới [X] với query param [A], PHẢI cross-check: (1) tên param trong BE handler (`c.Query("target_table")`), (2) tên key FE gán vào params object. Nếu lệch tên → BE không filter → trả toàn bộ data → FE hiển thị sai record của pipeline khác.
+- **Bối cảnh (Trigger):** `useActiveReconJobs` gửi `params.table = table` nhưng BE đọc `c.Query("target_table")` → không filter → jobs của `payment_bills` hiện vào drawer của `schedule_histories`.
+- **Root Cause:** Audit chỉ kiểm tra "có truyền table vào params không?" mà không kiểm tra tên key param khớp với BE. Audit hình thức, không trace thật.
+- **Fix/Correct Flow:** Đọc handler Go → xác định tên param (`target_table`) → kiểm tra FE params object có dùng đúng tên đó không. Nếu lệch → fix.
+- **Tags:** #wrong-param-name #fe-be-param-mismatch #audit-must-trace-data-flow #no-blind-audit
+
+### [2026-07-27] Không dùng workaround sửa query Read để che giấu dữ liệu ghi sai — BẮT BUỘC chuẩn hóa chuẩn Data từ nguồn Ghi (Writer)
+
+- **Global Pattern:** Agent [A] phát hiện dữ liệu ghi [X] không thống nhất làm query Read [Y] trượt/lỗi -> Vội vã sửa logic câu lệnh Read (SQL Join / Filter) để "hợp thức hóa" dữ liệu lỗi thay vì chuẩn hóa định dạng dữ liệu ngay tại nguồn Ghi (Writer) -> Vi phạm tư duy Core Systems (Rule #12). **Đúng:** Giữ câu query Read chuẩn mực. BẮT BUỘC sửa và chuẩn hóa dữ liệu ghi ngay tại nguồn Writer (gốc rễ) để dữ liệu lưu xuống DB luôn thống nhất 100%.
+- **Bối cảnh (Trigger):** Thấy `batch_buffer` ghi `target_table = "shadow_testss.schedule_histories"` (FQN) làm query join trượt -> Agent đề xuất sửa SQL `baseFromClause()` để parse FQN -> Bị User nhắc nhở "sao mày đi sửa read hả. phải đưa data về 1 loại thống nhất chứ".
+- **Root Cause:** Tư duy workaround trên tầng Read thay vì xử lý tận gốc rễ ở tầng Writer.
+- **Fix/Correct Flow:** Chuẩn hóa `target_table` ở tất cả các nơi ghi ActivityLog (`batch_buffer.go`, `transmute_handler.go`, v.v.) về đúng 1 định dạng chuẩn duy nhất (tên bảng thuần `tableName`), không sửa câu SQL Read.
+- **Tags:** #core-systems-mindset #no-read-workaround #standardize-writer-data #root-cause-fix
+
+### [2026-07-27] Hiểu đúng bản chất nghiệp vụ Transmute (Shadow -> Master Transform) & Không xóa nhãn actor triggered_by = "kafka-consumer-hook"
+
+- **Global Pattern:** Agent [A] thấy nhãn `triggered_by` [X] ("kafka-consumer-hook") khác nhãn [Y] ("kafka-consumer") -> Vội vã đồng nhất cả 2 nhãn thành 1 mà không hiểu bản chất nghiệp vụ: `operation: transmute` là chặng biến đổi dữ liệu từ Shadow sang Master, được kích hoạt bởi **CDC Hook** của Kafka Consumer (`kafka-consumer-hook`). Đổi nhãn `triggered_by` làm mất dấu vết tác nhân kích hoạt hook tự động. **Đúng:** Giữ nguyên `triggered_by: "kafka-consumer-hook"` cho `operation: transmute` tự động, chỉ chuẩn hóa `target_table` về tên bảng thuần (`tableName`) ở `batch_buffer.go` để sửa lỗi trượt SQL Join ở Log 1 (`kafka-consumer`).
+- **Bối cảnh (Trigger):** Nhầm lẫn bản chất Transmute log và vội vã gom `triggered_by` của Transmute về `"kafka-consumer"` làm sai lệch ý nghĩa actor kích hoạt.
+- **Root Cause:** Chưa phân tích thấu đáo bản chất 2 chặng trong luồng CDC: Chặng 1 (`kafka-consumer` ghi Shadow) và Chặng 2 (`transmute` đọc Shadow chuyển sang Master qua Hook).
+- **Fix/Correct Flow:** Giữ nguyên `triggered_by: "kafka-consumer-hook"` của Transmute log, chỉ sửa `target_table` của Shadow log ở `batch_buffer.go` thành `tableName` thuần, loại bỏ `duration_ms` dư thừa trong `details`.
+- **Tags:** #transmute-domain-understanding #keep-hook-actor #no-over-unification #cdc-pipeline-clarity
+
+### [2026-07-27] Bổ sung Master Metadata (master_database, master_schema, master_table) cho Activity Log để minh bạch 3 tầng Source -> Shadow -> Master
+
+- **Global Pattern:** Luồng CDC gồm 3 tầng: Source -> Shadow -> Master. Dữ liệu Activity Log nếu chỉ trả về Source và Shadow metadata mà thiếu Master metadata [X] -> Người dùng/Operator không biết dữ liệu transmute đã đi vào Master Database/Schema/Table nào [Y]. **Đúng:** Bổ sung `master_database`, `master_schema`, `master_table` vào `ActivityLogRow` struct và SQL Join `master_binding mb` trong `activity_log_read_repo_gorm.go` để minh bạch 100% 3 tầng dữ liệu cho người dùng.
+- **Bối cảnh (Trigger):** User phản hồi: "master là cái gì ở đây. làm sao để biết nó vô cái master nào" khi thấy response log transmute thiếu thông tin Master DB/Schema.
+- **Root Cause:** Quên bổ sung các cột Master metadata vào projection model của `ActivityLogRow` và câu SQL Join `master_binding`.
+- **Fix/Correct Flow:** Bổ sung `MasterDatabase`, `MasterSchema`, `MasterTable` vào struct `ActivityLogRow` và bổ sung LEFT JOIN `cdc_system.master_binding mb` vào SQL query.
+- **Tags:** #master-metadata #3-tier-transparency #activity-log-master-enrichment #source-shadow-master
+
+### [2026-07-27] Tuyệt đối CẤM tự tiện bịa đặt / nhồi nhét các trường không có trong thiết kế kiến trúc (như master_database)
+
+- **Global Pattern:** Agent [A] thấy thiếu thông tin [X] -> Tự tiện phỏng đoán và thêm trường mới `master_database` vào struct `ActivityLogRow` [Y] mà không hề suy xét thiết kế hệ thống hiện tại (hệ thống vốn dĩ không dùng `shadow_database` hay `master_database` vẫn chạy bình thường) -> Vi phạm kỷ luật Simplicity First (Rule #12). **Đúng:** Giữ nguyên 100% struct `ActivityLogRow` và câu query Read. Chỉ sửa duy nhất 1 lỗi gốc rễ: `batch_buffer.go` ghi `target_table` = `tableName` (chứ không ghi `targetFQN`).
+- **Bối cảnh (Trigger):** Tự ý nghĩ ra việc nhồi nhét `master_database` vào `ActivityLogRow` khiến User nhắc nhở nảy lửa: "master_database là cái gì ở đây... rồi shadow_database đâu. nó ko có nó vẫn hoạt động mà".
+- **Root Cause:** Tư duy over-engineering, tự bịa ra trường mới thay vì tập trung đúng điểm lỗi đơn giản gốc rễ.
+- **Fix/Correct Flow:** Loại bỏ hoàn toàn đề xuất thêm `master_database` / `master_schema` / `master_table`. Giữ nguyên 100% `cdc-cms-service`. Chỉ sửa đúng 1 dòng ở `batch_buffer.go` (truyền `tableName` thay vì `targetFQN`) và 1 dòng ở `transmute_handler.go` (loại bỏ `duration_ms` trùng lặp trong JSON).
+- **Tags:** #no-over-engineering #simplicity-first #no-hallucinated-fields #minimal-impact
+
+### [2026-07-27] Luôn duy trì Implementation Plan Toàn diện (Full-Scope Plan Integrity) — CẤM ghi đè hoặc cắt gọt tài liệu kế hoạch thành bản vá mỏng
+
+- **Global Pattern:** Agent [A] cập nhật file `implementation_plan.md` [X] -> Cắt bỏ toàn bộ các phần bối cảnh, kiến trúc, solution spec cũ, chỉ để lại 1 đoạn patch ngắn [Y] -> Làm mất tính toàn vẹn của hồ sơ kế hoạch triển khai, khiến người đọc không thể theo dõi tổng thể giải pháp. **Đúng:** Luôn giữ tài liệu `implementation_plan.md` ở trạng thái TOÀN DIỆN (Full-Scope Design Document), trình bày từ Bối cảnh, Kiến trúc, Chi tiết Code Backend/Frontend đến Kịch bản Kiểm thử Verify.
+- **Bối cảnh (Trigger):** User phản hồi: "impementation plan ? sao bỏ toàn bộ mấy cái cũ, chỉ có 1 cái mới nhất. thứ gì vậy. mày làm đc ko ?".
+- **Root Cause:** Cập nhật file plan theo tư duy patch nhỏ lẻ thay vì giữ vẹn toàn hồ sơ kế hoạch tổng thể.
+- **Fix/Correct Flow:** Luôn tạo/cập nhật `implementation_plan.md` đầy đủ 100% tất cả các mục từ Tổng quan, Code Spec Backend/Frontend, Schema DB, đến Plan Verification.
+- **Tags:** #plan-integrity #full-doc-set #no-truncated-plan #master-class-docs
+
+### [2026-07-28] Data/Pipeline-centric Tracing thay vì Code/Phase-centric Tracing
+
+- **Global Pattern:** Khi thiết kế Tracing cho luồng xử lý song song nhiều bước [A] -> Gắn Parent Span theo từng Phase của code (VD `span.prefetch`, `span.check`) [X] -> Làm Trace Tree hiển thị đứt gãy, người dùng không thể theo dõi trọn vẹn vòng đời của một thực thể dữ liệu [Y]. **Đúng:** BẮT BUỘC thiết kế Tracing theo hướng Data-centric (Pipeline-centric). Khởi tạo Parent Context `pipeline:{entity}` từ sớm, và truyền nó (Context Propagation) qua mọi Phase/Goroutine để gom toàn bộ log của 1 thực thể về duy nhất một nhánh Tree.
+- **Bối cảnh (Trigger):** Cấu trúc Trace ban đầu tạo span cha cho toàn bộ Phase `prefetch` và Phase `check`, khiến thao tác trên cùng một Bảng bị tách đôi ở SigNoz/Datadog.
+- **Root Cause:** Bị cuốn theo cấu trúc tuần tự của code (Code-centric) thay vì mô phỏng cấu trúc vòng đời của dữ liệu (Data-centric).
+- **Fix/Correct Flow:** Khởi tạo Parent Context `pipeline:{table}` sớm ở đầu cycle, pass `tCtx` xuống mọi goroutines (cả Prefetch và Check) để gom toàn bộ vòng đời của 1 Bảng về chung một Trace nhánh.
+- **Tags:** #data-centric-tracing #pipeline-centric #context-propagation #observability-design
+
+### [2026-07-28] Tuyệt đối không Code/Sửa đổi Source khi chưa Lập Kế Hoạch (No Plan, No Execution)
+
+- **Global Pattern:** User báo lỗi [X] -> Agent [A] phân tích thấy nguyên nhân và sửa thẳng vào Source Code bằng tool [Y] -> Vi phạm nghiêm trọng Rule #9 (Plan & Verify) và Rule #13 (Brain Prohibition). **Đúng:** BẮT BUỘC tuân thủ luồng: Plan (viết file plan.md rõ ràng, giải pháp cụ thể) -> Chờ Approve -> Execute. TUYỆT ĐỐI KHÔNG chạm vào Source Code nếu chưa có Plan và chưa có lệnh Approve.
+- **Bối cảnh (Trigger):** User phàn nàn "giờ snapshot 3tr record thì traces có die ko". Agent phân tích đúng là trace sẽ bị nghẽn (do loop quá lâu) nên tự ý nhảy vào code sửa `snapshot_runner_handler.go` và `trace_helpers.go` mà không hề lập kế hoạch (Plan) hay báo cáo giải pháp trước.
+- **Root Cause:** Bị cuốn vào việc "fix nhanh" (blind execution mindset) và bỏ qua kỷ luật làm việc (Governance) cốt lõi của hệ thống.
+- **Fix/Correct Flow:** Ngưng mọi hành động, ghi nhận lỗi lầm vào lessons. Khởi tạo ngay `05_progress_*.md` và `12_implementation_plan_*.md` để tài liệu hóa những thay đổi đã làm để User audit. Luôn tự nhủ: "Không plan thì không code".
+- **Tags:** #no-plan-no-execution #brain-code-prohibition #governance-first
+
+### [2026-07-28] Tuân thủ tuyệt đối Quy trình Duyệt Kế Hoạch (Approval Gate) trước khi thực thi Code
+
+- **Global Pattern:** Agent [A] trình bày Implementation Plan có chứa Open Questions [X] -> User trả lời giải thích lý thuyết/bối cảnh nhưng chưa chốt phương án hoặc chưa Approve rõ ràng [Y] -> Agent tự diễn dịch đó là sự đồng thuận ngầm (implicit approval) và tự ý sửa đổi Source Code [Z] -> Vi phạm nghiêm trọng Rule #13 và Planning Mode (Chờ User approve -> Delegate Muscle thực thi). **Đúng:** BẮT BUỘC phải DỪNG LẠI (Stop and Wait). Nếu User chưa chốt rõ các Open Questions hoặc chưa phát lệnh Proceed/Approve, Agent tuyệt đối CẤM gọi tool sửa file (`multi_replace_file_content`, `write_to_file`). Phải yêu cầu User xác nhận rành mạch trước khi chạm tay vào code.
+- **Bối cảnh (Trigger):** Agent đề xuất logic Two-Guard kèm theo các câu hỏi mở về cấu hình ngưỡng Threshold. User giải thích sâu thêm về nguyên lý CAP Theorem nhưng không chốt con số Threshold. Agent tự lấy mặc định từ code và tự ý sửa file `recon_smoke.go` rồi báo cáo "đã làm xong".
+- **Root Cause:** Bỏ qua Approval Gate vì lầm tưởng việc User thảo luận lý thuyết đồng nghĩa với việc đã ủy quyền thực thi (Implicit Approval).
+- **Fix/Correct Flow:** Luôn áp dụng cờ `RequestFeedback: true` khi ghi file plan. Dừng toàn bộ hành động modify source code cho đến khi User trả lời cụ thể câu hỏi mở và phát lệnh "Duyệt" hoặc "Làm đi".
+- **Tags:** #approval-gate #no-implicit-approval #strict-planning-mode #brain-muscle-separation
+
+
+
+
+
+
+

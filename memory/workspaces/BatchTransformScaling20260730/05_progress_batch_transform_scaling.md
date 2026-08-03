@@ -1,0 +1,25 @@
+# 05_progress_batch_transform_scaling.md (Audit Log — Append Only)
+
+- `[2026-07-30 14:55:00] [Agent:Antigravity]` User cung cấp lại analysis document `13_analysis_batch_transform_scaling.md` — đây là document đã tồn tại trong memory user nhưng CHƯA được ghi vào disk trong session trước (vi phạm Rule #4 No Shadow Files).
+- `[2026-07-30 14:55:30] [Agent:Antigravity]` Khởi tạo Workspace `BatchTransformScaling20260730`. Ghi `13_analysis_batch_transform_scaling.md`, `00_context.md`, `01_requirements_batch_transform_scaling.md`, `05_progress.md`.
+- `[2026-07-30 14:56:00] [Agent:Antigravity]` Research: đọc `batch_transform_handler.go` (376 lines), `registry_handler_transform.go` (84 lines), `recon_job_repo.go` (155 lines), `recon_job_worker.go` (502 lines), `002_create_recon_jobs.sql`. Xác nhận có thể tái dùng toàn bộ `ReconJobRepo` + pattern.
+- `[2026-07-30 14:57:00] [Agent:Antigravity]` Tạo `implementation_plan.md` — chờ user Approve.
+- `[2026-07-30 15:15:00] [Agent:Antigravity]` User approve plan với quyết định dùng `transform_jobs` (không phải `recon_jobs`). Bắt đầu Phase 1 implementation.
+- `[2026-07-30 15:20:00] [Agent:Antigravity]` NEW: `migrations/schema/recon_dlq/100_create_transform_jobs.sql` — DDL cdc_system.transform_jobs.
+- `[2026-07-30 15:25:00] [Agent:Antigravity]` NEW: `cdc-cms-service/internal/infra/persistence/transform_job_repo.go` — CMS GORM repo 134 lines.
+- `[2026-07-30 15:30:00] [Agent:Antigravity]` NEW: `centralized-data-service/internal/repository/transform_job_repo.go` — Worker repo 91 lines.
+- `[2026-07-30 15:35:00] [Agent:Antigravity]` MODIFIED: `batch_transform_handler.go` — refactor sang non-blocking goroutine, dynamic chunk, cancel check. +110 lines.
+- `[2026-07-30 15:40:00] [Agent:Antigravity]` MODIFIED: `source_object_actions_handler.go` — thêm TransformV2, TransformJobStatusV2, CancelTransformV2. +112 lines.
+- `[2026-07-30 15:45:00] [Agent:Antigravity]` MODIFIED: `router.go` — đăng ký 2 routes mới. `server.go` — inject TransformJobRepo. `server_setup.go` — inject vào Worker.
+- `[2026-07-30 16:10:00] [Agent:Antigravity]` BUILD: cả 2 service build PASS.
+- `[2026-07-30 16:15:00] [Agent:Antigravity]` TEST: `go test ./internal/handler/shadow/...` PASS (sau khi fix test async goroutine issue).
+- `[2026-07-31 09:04:00] [Agent:Antigravity]` QC AUDIT: Phát hiện BUG-01 (break condition sai) và BUG-02 (IsCancelRequested signature inconsistency) + 5 gaps tài liệu. Xem `qc_audit_report.md`.
+- `[2026-07-31 09:12:00] [Agent:Antigravity]` FIX BUG-01: `batch_transform_handler.go` — capture `requestedChunkSize` trước khi tune, so sánh đúng. Build PASS, Tests PASS.
+- `[2026-07-31 09:14:00] [Agent:Antigravity]` FIX BUG-02: `cdc-cms-service/persistence/transform_job_repo.go` — align `IsCancelRequested` → `bool`. CMS build PASS.
+- `[2026-07-31 09:16:00] [Agent:Antigravity]` DOCS: Tạo `04_decisions.md` (4 ADRs), `11_report_phase1.md`. Update `05_progress.md` (file này).
+- `[2026-07-31 09:17:00] [Agent:Antigravity]` Phase 1 COMPLETE. Tất cả bugs fixed, tài liệu đủ. Sẵn sàng Phase 2 (FE).
+- `[2026-07-31 09:21:00] [Agent:Antigravity]` Phase 2 FE START: Implement TransformJobStatus component trong TableRegistry.tsx.
+- `[2026-07-31 09:21:30] [Agent:Antigravity]` FE DONE: Replace TransformProgress → TransformJobStatus (polling 3s khi RUNNING, indeterminate bar, rows_affected live counter, Cancel button). Thêm handleCancelTransform. TypeScript check PASS.
+- `[2026-07-31 09:29:00] [Agent:Antigravity]` BUG-03 FOUND: GET transform-job-status trả 500 resolve_scope_failed. Root Cause: resolveReadScope dùng LEFT JOIN shadow_binding WHERE is_active=TRUE → nếu binding inactive/không có → ErrSourceObjectNoActiveShadow → 500.
+- `[2026-07-31 09:30:00] [Agent:Antigravity]` BUG-03 FIX: Thêm GetLatestBySourceObjectID vào TransformJobRepo (query shadow_binding không cần is_active). Sửa TransformJobStatusV2 và CancelTransformV2 dùng method mới, bỏ resolveReadScope. CMS build PASS.
+- `[2026-07-31 09:48:00] [Agent:Antigravity]` BUG-04 FOUND: GetLatestBySourceObjectID dùng LIMIT 1 → với multi-binding (payment_bills + payment_bills_1) pick sai table → no_job. Fix: query ALL shadow_table của source_object_id → WHERE target_table IN (...) ORDER BY created_at DESC. Build PASS.

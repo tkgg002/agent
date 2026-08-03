@@ -1,0 +1,19 @@
+- [2026-07-20T13:45:00+07:00] [Agent:Gemini-3.5-Flash] Khởi tạo workspace DeleteShadowMasterBinding20260720
+- [2026-07-20T13:46:00+07:00] [Agent:Gemini-3.5-Flash] Phân tích code MasterRegistry.tsx để chuẩn bị tích hợp modal ConfirmDestructiveModal đúng cách
+- [2026-07-20T14:11:00+07:00] [Agent:Gemini-3.5-Flash] Bổ sung nút Delete vào cột Shadow Actions trong tab Shadow Objects (FE)
+- [2026-07-20T14:12:00+07:00] [Agent:Gemini-3.5-Flash] Bổ sung method DropPhysicalTable trong MasterRepo (BE) để thực thi DROP TABLE CASCADE bảng vật lý ở DB Master khi xoá Master Binding
+- [2026-07-20T14:13:00+07:00] [Agent:Gemini-3.5-Flash] Sửa lỗi thiếu dấu ngoặc đóng ở file SourceConnectors.tsx (FE) từ phiên trước
+- [2026-07-20T14:48:00+07:00] [Agent:Gemini-3.5-Flash] Sửa đổi cơ chế drop table: chuyển sang dùng NATS `cdc.cmd.master-alter-column` với `action="drop_table"`. Worker nhận lệnh sẽ load connection key chính xác và thực hiện DROP TABLE trên database Master đích.
+- [2026-07-20T14:49:00+07:00] [Agent:Gemini-3.5-Flash] Fix lỗi typescript TS6133 unused variable ở file SourceConnectors.tsx (FE)
+- [2026-07-20T14:58:00+07:00] [Agent:Gemini-3.5-Flash] Cấu trúc lại lệnh xoá Shadow: thêm logic thực thi `DROP TABLE IF EXISTS shadow_table CASCADE` trực tiếp trên database Shadow, xoá sạch dòng tương ứng trong bảng `cdc_table_registry` (V1) và `source_object_registry` (V2) để tránh lỗi trùng lặp khi đăng ký lại.
+- [2026-07-20T15:05:00+07:00] [Agent:Gemini-3.5-Flash] Sửa bug ẩn nút Delete khi `shadow_binding_id` bằng null ở tab Shadow Objects. Bổ sung tham số truy vấn `source_object_id` và `registry_id` qua API DELETE và cấu trúc lại backend để cho phép xoá dọn dẹp các record mồ côi (orphaned) này.
+- [2026-07-20T15:26:00+07:00] [Agent:Gemini-3.5-Flash] Thêm logic validation chặn xoá Shadow Binding nếu vẫn còn bất kỳ Master Binding nào ở trạng thái Active, trả lỗi HTTP 409 yêu cầu người dùng tắt active master trước.
+- [2026-07-20T15:35:00+07:00] [Agent:Gemini-3.5-Flash] Implement cơ chế Transaction Saga cho cả 2 luồng xoá Shadow và xoá Master. Nếu các lệnh DROP TABLE vật lý qua NATS/Worker thất bại, hệ thống sẽ thực hiện Rollback toàn bộ các thay đổi trong metadata database để tránh tạo bảng rác mồ côi.
+- [2026-07-20T15:39:00+07:00] [Agent:Gemini-3.5-Flash] Fix lỗi biên dịch trùng lặp khai báo ErrMasterBindingNotFound ở package master.
+- [2026-07-20T15:49:00+07:00] [Agent:Gemini-3.5-Flash] Kill tiến trình server cũ đang chiếm port 8083, khởi động lại API Service và Worker Service mới chạy mã nguồn mới nhất.
+- [2026-07-20T16:15:00+07:00] [Agent:Gemini-3.5-Pro] Sửa thứ tự ưu tiên parse lỗi ở apiError.ts để hiển thị câu tiếng Việt chi tiết từ backend thay vì code tiếng Anh.
+- [2026-07-20T16:20:00+07:00] [Agent:Gemini-3.5-Pro] Uỷ quyền Muscle Engineer thực hiện thay đổi code trên delete_shadow_binding.go và apiError.ts. Thực hiện verify build thành công.
+- [2026-07-20T16:24:00+07:00] [Agent:Gemini-3.5-Pro] Tạo database helper script scratch/check_bindings.go để hỗ trợ User kiểm tra nhanh các bản ghi metadata.
+- [2026-07-20T16:26:00+07:00] [Agent:Gemini-3-Pro] Rút ra bài học kinh nghiệm và cập nhật lessons.md.
+- [2026-07-20T16:45:00+07:00] [Agent:Gemini-3-Flash] Muscle Engineer lập kế hoạch và sửa đổi hàm Register trong source_repo_gorm.go để tự động dọn dẹp bản ghi cdc_table_registry mồ côi khi đăng ký.
+- [2026-07-20T16:47:00+07:00] [Agent:Gemini-3-Flash] Thực hiện chạy verify build backend go build ./... trong cdc-cms-service.
