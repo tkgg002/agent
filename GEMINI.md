@@ -10,6 +10,7 @@
 - **Bước 2 (Khởi động):** Đọc `lessons.md` trước TẤT CẢ mọi việc.
 - **Bước 3 (Xác nhận):** Phải có bước xác nhận nội tâm "Đã đọc GEMINI.md và lessons.md" trước khi đưa ra bất kỳ phản hồi nào.
 - Khi trả lời 1 vấn đề, luôn làm planning trước, chi tiết.
+- không đoán mò, không suy diễn
 - Khi trả lời 1 vấn đề xong, phải đi kiểm tra các lesson và liệt kê ra những lesson đã mắc phải nếu có.
 - Khi trả lời 1 vấn đề, hãy liệt kê những skill (kỹ năng/công cụ) đã sử dụng ở cuối câu trả lời.
 

@@ -1,0 +1,24 @@
+# 05 - Progress Log (Immutable Audit Log)
+
+- [2026-08-19 11:43:00] [Agent:Gemini] Khởi động audit drift Kafka Consumer cho 11 pipelines. Phát hiện 2 pipeline lệch (bank-requests, payments).
+- [2026-08-19 11:55:00] [Agent:Gemini] Đối soát DB registry, xác nhận 4 gate-checks đều PASS trong DB. Xác định nguyên nhân lệch nằm ở topic naming convention.
+- [2026-08-19 11:58:33] [User] Báo topic thực tế trên broker là `cdc.goopay.payment_service.payment-service.payments`.
+- [2026-08-19 13:08:32] [User] Chỉ rõ nguyên nhân do FE CMS tự ghép service name vào topic prefix. Yêu cầu lên code demo và fix.
+- [2026-08-19 13:11:00] [Agent:Gemini] Sửa code `SourceConnectors.tsx` (dòng 394, 435, 484-490).
+- [2026-08-19 13:18:58] [User] Cảnh báo edge-case va chạm topic khi nhiều DB cùng tên.
+- [2026-08-19 13:20:20] [Agent:Gemini] Mở khóa input `topicPrefix` (`disabled={dbKind === 'sftp'}`) kèm tooltip giải thích. Compile check pass.
+- [2026-08-19 13:21:57] [User] Nhắc nhở tuân thủ quy trình Governance `/agent/GEMINI.md`, yêu cầu planning, code demo, phản tỉnh bài học.
+- [2026-08-19 13:22:10] [Agent:Gemini] Dừng lại thực hiện Mid-Session Fix: Ghi bài học mới vào `agent/memory/global/lessons.md`, chụp snapshot `wc -l` trước/sau.
+- [2026-08-19 13:23:00] [Agent:Gemini] Khởi tạo trọn bộ workspace document set tại `agent/memory/workspaces/fix-cms-topic-prefix-debezium/`.
+- [2026-08-19 14:01:31] [User] Từ chối phương án mở khóa ô nhập liệu Topic Prefix (disabled={false}) cho Debezium. Yêu cầu giữ khóa cứng (disabled={true}) tự động chuẩn hóa 100%, giữ nguyên cơ chế SFTP.
+- [2026-08-19 14:02:00] [Agent:Gemini] Lập Plan, cập nhật ADR-002, cập nhật 09_tasks_solution.md với Code Demo duy nhất để trình User Approve trước khi sửa code.
+- [2026-08-19 14:05:02] [User] Yêu cầu Brain phân tích và giải quyết bài toán cốt lõi: 3 nguồn (Mongo 1, Postgres 1, Mongo 2) cùng có DB payment-services và collection/table payments.
+- [2026-08-19 14:06:00] [Role:Brain] Xuất bản Báo cáo Kiến trúc Chuyên sâu (Connection-Scoped Namespace Architecture) và đề xuất bộ skill chuyên gia.
+- [2026-08-19 14:10:14] [User] Thách thức Brain về phạm vi tác động (dám chắc chỉ có 1 nơi event_handler.go không?).
+- [2026-08-19 14:11:00] [Role:Brain] Rà soát toàn bộ Callchain repository, phát hiện chính xác 7 Điểm chạm (7 Touchpoints) phụ thuộc vào cấu trúc topic. Xuất bản 10_gap_analysis.md.
+- [2026-08-19 14:30:30] [User] Chỉ thị: Tạm thời hoãn bài toán đa cluster (Mongo 1 vs Mongo 2). Tập trung hoàn thiện chuẩn hóa FE CMS: SFTP giữ nguyên cdc.sftp.<name>, các loại còn lại (Mongo, Postgres, MySQL) là base prefix (cdc.goopay, cdc.gpay, cdc.mariadb) và khóa cứng UI (disabled).
+- [2026-08-19 14:31:00] [Role:Brain] Cập nhật ADR, Kế hoạch triển khai và Code Demo chi tiết trình User Approve.
+- [2026-08-19 14:32:09] [User] APPROVE implementation_plan.md.
+- [2026-08-19 14:32:30] [Role:Muscle] Triển khai code vào SourceConnectors.tsx. Chạy npx tsc --noEmit pass 100%. Hoàn tất task.
+- [2026-08-19 14:34:55] [User] APPROVE clean-up dòng 435 (xóa bỏ fallback thừa TOPIC_PREFIX_POSTGRESQL).
+- [2026-08-19 14:35:05] [Role:Muscle] Sửa dòng 435, chạy typecheck tsc pass 100%.

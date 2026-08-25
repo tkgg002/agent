@@ -116,6 +116,8 @@
 | feat-metrics-active-count-shadow-master-2026-06-30 | centralized-data-service | ✅ Done | 2026-06-30 |
 | bug-export-jobs-reconciliation-drift-2026-06-30 | centralized-data-service | 🟡 Active | 2026-06-30 |
 | tier2-xor-hash-check | centralized-data-service | 🟡 Active | 2026-07-01 |
+| 20_tasks_summary_report_20260805 | data-hub | ✅ Saved (Archived) | 2026-08-05 |
+
 
 
 

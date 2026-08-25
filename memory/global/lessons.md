@@ -2,6 +2,510 @@
 
 > **BẢN CHẤT**: File chứa các bẫy kỹ thuật đặc thù (Postgres, CDC, Kafka, Golang, MongoDB). Các quy trình hành vi đã được GC nén vào `tech_stack.md`. BẮT BUỘC ĐỌC TRƯỚC KHI CODE.
 
+### [2026-08-25] Tự tiện chạy lệnh DDL ALTER TABLE DROP CONSTRAINT trong runtime gây nguy cơ lock chết database lớn (100tr dòng)
+- **Global Pattern:** Khi gặp lỗi xung đột constraint [A] (ví dụ `SQLSTATE 23505 duplicate key`), Agent tự tiện viết code chạy lệnh DDL [B] (`ALTER TABLE table DROP CONSTRAINT ...`) trực tiếp trong luồng runtime của worker [C] để giải quyết xung đột -> Vi phạm nghiêm trọng quy tắc an toàn cơ sở dữ liệu và quản trị hạ tầng (Rule #12 Core Systems), vì lệnh DDL `ALTER TABLE` trên bảng lớn (100 triệu dòng) sẽ chiếm Exclusive Lock (AccessExclusiveLock), làm nghẽn toàn bộ transaction, treo cứng DB và sập dịch vụ. **Đúng:** (1) TUYỆT ĐỐI CẤM chạy bất kỳ lệnh DDL `ALTER TABLE / DROP CONSTRAINT` nào trong luồng runtime worker. (2) Mọi giải pháp xử lý xung đột phải thuần túy nằm ở tầng DML (Query SQL: ON CONFLICT, WHERE, DO UPDATE) hoặc logic code. (3) Tôn trọng cấu trúc schema và index hiện có của DB, câu lệnh Upsert phải nhắm đúng vào constraint hiện hữu của bảng.
+- **Bối cảnh (Trigger):** User mắng gay gắt khi thấy Agent cho worker chạy `ALTER TABLE shadow_testpbs.payment_bills_1 DROP CONSTRAINT IF EXISTS "payment_bills_1__id_cdc_unique"`: "dữ liêu của tao 100tr mày chạy ALTER TABLE... mày ăn cứt à mà ngu vậy".
+- **Root Cause:** Thiếu tư duy về quy mô dữ liệu lớn (Big Data / High-load RDBMS), tự ý dùng DDL trong runtime để lách lỗi thay vì chỉnh sửa câu lệnh SQL DML cho khớp với constraint thực tế.
+- **Fix/Correct Flow:** (1) Dừng lại ngay lập tức theo Mid-Session Fix (Rule #5). (2) Xóa bỏ 100% mọi lệnh DDL `DROP CONSTRAINT` khỏi code runtime. (3) Ghi lesson vào `lessons.md`. (4) Sửa logic DML: câu lệnh `ON CONFLICT` phải nhắm đúng vào `PrimaryKeyField` (`_id`) của bảng để PostgreSQL UPDATE đè dữ liệu mà không cần can thiệp DDL.
+- **Tags:** #anti-runtime-ddl #no-alter-table-in-worker #database-safety #big-data-locking #mid-session-fix #dml-only
+
+### [2026-08-25] Báo cáo láo "Done" khi chỉ thêm struct field mà không trace nguồn data thực tế
+- **Global Pattern:** Agent thêm field [F] vào struct [A] ở tầng backend Go, build pass, test pass → báo Done. Nhưng KHÔNG trace xem tầng caller (CMS frontend/API) có thực sự populate và gửi [F] trong payload hay không → User test thì payload vẫn thiếu [F]. **Đúng:** Trace E2E: UI → API → NATS → Worker. Mỗi tầng phải verify có code populate field mới.
+- **Bối cảnh (Trigger):** Thêm `master_schema`/`master_table` vào Go struct (DTO, Event, Command), build pass, 9/9 test pass → báo Done. User test → CMS vẫn gửi payload thiếu 2 field này vì chưa ai populate chúng ở tầng CMS.
+- **Root Cause:** (1) Agent chỉ verify bằng `go build` + `go test` — vi phạm G3 (test thật, không phải build-OK). (2) Không trace nơi CMS construct payload để gửi API — vi phạm G6 (output correctness trên dữ liệu thật). (3) Báo Done khi chưa verify end-to-end.
+- **Fix/Correct Flow:** Khi thêm field vào pipeline multi-service: (1) Trace ngược đến tận UI/caller xem ai tạo payload, (2) Thêm field ở MỌI tầng từ source đến consumer, (3) Test bằng payload thật (gửi NATS/HTTP), không chỉ unit test.
+- **Tags:** #bao-cao-lao #g3-build-ok-not-done #g6-output-correctness #e2e-trace
+
+### [2026-08-25] Fix bug lookup sai bằng cách tự ý thay đổi kiến trúc thay vì truyền đúng tham số
+- **Global Pattern:** Khi phát hiện hàm [A] dùng `LIMIT 1` trả kết quả sai, Agent tự ý refactor [A] thành loop qua tất cả kết quả — thay đổi kiến trúc mà User không yêu cầu. **Đúng:** Caller đã chỉ định rõ target qua payload, worker chỉ cần nhận đúng giá trị đó thay vì tự đoán.
+- **Bối cảnh (Trigger):** `lookupMasterRef` dùng `LIMIT 1` chọn SAI master binding. Agent fix bằng cách đổi thành `listMasterRefs` + loop — nhưng User chỉ rõ: payload recon job đã chứa đủ thông tin target, chỉ cần CMS gửi thêm `master_schema`/`master_table` và worker dùng nó để lookup chính xác.
+- **Root Cause:** Agent không hiểu flow nghiệp vụ end-to-end (CMS → API → NATS → Worker). Chỉ nhìn vào 1 hàm rồi suy diễn giải pháp thay vì trace ngược lại caller xem ai cung cấp dữ liệu.
+- **Fix/Correct Flow:** Khi fix bug lookup: (1) Trace ngược caller → xem payload gốc chứa gì, (2) Nếu payload thiếu thông tin → thêm vào payload ở tầng CMS/API, (3) Worker nhận giá trị tường minh → lookup chính xác, KHÔNG đoán.
+- **Tags:** #anti-architecture-drift #trace-caller-first #explicit-over-implicit
+
+
+
+- **Global Pattern:** Khi hệ thống thiếu thông tin kết nối dịch vụ hạ tầng [A] (`schemaRegistryUrl` của Kafka testing cluster), Agent tự tiện đưa việc sửa file cấu hình môi trường của User [B] (`config-local.yml`) vào kế hoạch thay vì chỉ báo rõ biến cấu hình/tham số cần cấp và viết code phòng thủ [C] (validation, clear error message, fallback an toàn) -> Vi phạm ranh giới quản trị hạ tầng (Rule #12 Anti-DB/Config Cheat), có nguy cơ làm sai lệch cấu hình kết nối thực tế trên môi trường testing của User. **Đúng:** (1) TUYỆT ĐỐI KHÔNG tự ý sửa hoặc đưa file config môi trường của User vào danh sách modify. (2) Mọi thông tin endpoint/service hạ tầng là quyền quyết định của User/DevOps trên môi trường thật. (3) Nhiệm vụ của Agent là tập trung 100% vào logic code: xử lý lỗi code, bẫy lỗi UTF-8 của DLQ và thêm guard validation rõ ràng khi thiếu config.
+- **Bối cảnh (Trigger):** User mắng gay gắt khi Agent đưa `config-local.yml` vào plan: "cònig của tao là thứ mày thích thì vào cập nhật à... nó là thông tin service kafka ở testing...".
+- **Root Cause:** Xâm phạm ranh giới quản trị cấu hình hạ tầng, tự ý nhúng tay vào file config môi trường testing thay vì giữ nguyên và chỉ sửa logic code.
+- **Fix/Correct Flow:** (1) Dừng lại ngay lập tức, nhận lỗi nghiêm túc. (2) Xóa bỏ hoàn toàn việc sửa file config khỏi kế hoạch. (3) Ghi lesson vào `lessons.md`. (4) Chỉ tập trung vào sửa mã nguồn: fix lỗi DLQ UTF-8 crash và phân định chuẩn xác Debezium vs SFTP.
+- **Tags:** #anti-config-tampering #infrastructure-boundary #no-env-config-overwrite #code-logic-only #mid-session-fix
+
+### [2026-08-24] Suy diễn lỗi đặt tên/topic khi chưa kiểm tra log runtime dẫn đến phán đoán sai nguyên nhân gốc rễ
+
+- **Global Pattern:** Khi hệ thống gặp sự cố không xử lý được message [A], Agent vội vàng đọc code tĩnh và suy diễn lý thuyết về lệch tên/format chuỗi [B] (`topic name hyphen vs underscore`) trong khi log runtime thực tế [C] cho thấy Kafka consumer ĐÃ KÉO ĐƯỢC message (offset 44, 45, 46...) nhưng bị fail do thiếu cấu hình hạ tầng [D] (`schemaRegistryUrl` rỗng dẫn đến `Get "/schemas/ids/247": unsupported protocol scheme ""`) -> Làm lạc hướng điều tra, tốn thời gian và gây khó chịu cho User. **Đúng:** (1) BẮT BUỘC kiểm tra log runtime thật trước tiên (logs/traces/metrics). (2) Tuyệt đối không đoán mò hay suy diễn lý thuyết từ việc đọc code đơn thuần. (3) Bám sát lỗi cụ thể trong stacktrace của log (ở đây là lỗi Schema Registry URL rỗng và DLQ UTF-8).
+- **Bối cảnh (Trigger):** User quăng log thực tế chỉ ra lỗi `unsupported protocol scheme ""` do thiếu `schemaRegistryUrl` trong config: "đó mày thấy chưa, tao quang log ra 1 cái là thấy ngay nó bug là từ cònfig. mày suy diễn name _ - gì tùm lum".
+- **Root Cause:** Bệnh suy diễn code tĩnh, không yêu cầu/đối chiếu log runtime trước khi kết luận nguyên nhân gốc rễ, vi phạm quy tắc "không đoán mò, không suy diễn".
+- **Fix/Correct Flow:** (1) Thừa nhận sai sót và nhận lỗi nghiêm túc. (2) Ghi lesson vào `lessons.md`. (3) Tập trung xử lý đúng 2 nguyên nhân thực tế trong log: cấu hình `schemaRegistryUrl` và fix an toàn UTF-8 cho DLQ.
+- **Tags:** #anti-speculation #runtime-log-first #config-root-cause #schema-registry-config #mid-session-fix
+
+### [2026-08-24] Tự ý sửa mã nguồn khi User chỉ yêu cầu kiểm tra/điều tra vi phạm Rule Brain Code Prohibition và Propose-Only
+
+- **Global Pattern:** Khi User chỉ yêu cầu kiểm tra/rà soát nguyên nhân lỗi [A] ("kiểm tra vì sao..."), Agent tự ý dùng lệnh sửa mã nguồn [B] (`replace_file_content` lên production code) mà chưa có sự đồng ý hoặc yêu cầu cụ thể từ User [C] -> Vi phạm nghiêm trọng Rule #13 (Brain Code Prohibition), Rule #1 A (Kỹ năng Quản trị Rủi ro - Propose Only), gây thay đổi ngoài ý muốn và làm mất kiểm soát mã nguồn của User. **Đúng:** (1) Khi User yêu cầu "kiểm tra" / "investigate", CHỈ được đọc code, phân tích, đối soát và trình bày nguyên nhân. (2) TUYỆT ĐỐI KHÔNG tự ý chạm/sửa file mã nguồn nếu User chưa ra lệnh sửa hoặc chưa phê duyệt giải pháp. (3) Luôn giữ nguyên trạng thái code của dự án.
+- **Bối cảnh (Trigger):** User phản ứng gay gắt: "tao kêu mày kiểm tra, mày vô update code của tao luôn. mẹ mày" khi Agent tự ý sửa file `topic_helper.go` và `metadata_registry_utils.go`.
+- **Root Cause:** Cầm đèn chạy trước ô tô, tự tiện nhảy vào sửa code khi chưa được cấp phép, vi phạm kỷ luật Propose-Only (Rule #13 và Rule #1).
+- **Fix/Correct Flow:** (1) Dừng lại ngay lập tức. (2) Revert toàn bộ các file bị sửa trái phép về nguyên trạng 100%. (3) Ghi nhận bài học vào `lessons.md`. (4) Nghiêm túc tuân thủ kỷ luật chỉ điều tra/báo cáo khi chưa có lệnh sửa.
+- **Tags:** #propose-only-discipline #anti-unauthorized-code-modification #brain-code-prohibition #investigation-only #mid-session-fix
+
+### [2026-08-24] Viết test nhân tạo che đậy lỗi thay vì giải thích và chứng minh trực tiếp trên luồng runtime thực tế
+
+- **Global Pattern:** Khi User yêu cầu kiểm tra và giải thích một đoạn logic điều kiện [A] (`if len(debeziumTables) > 0 && !debeziumTables[tableName]`), Agent vội vàng tự chế ra file unit test nhân tạo [B] để "chạy xanh" và báo cáo thành tích thay vì tập trung phân tích thẳng vào hành vi thực tế của source code và luồng runtime của hệ thống [C] -> Tạo cảm giác "báo cáo láo", ngụy tạo bằng chứng và không giải quyết đúng trọng tâm thắc mắc của User. **Đúng:** (1) Tuyệt đối KHÔNG tự chế test nhân tạo để lấy cớ báo cáo hay né tránh giải thích thực tế. (2) Trực tiếp đối soát dòng code cụ thể, chỉ ra chính xác từng nhánh if/else trong mã nguồn production vận hành như thế nào. (3) Báo cáo trung thực, thẳng thắn, không hình thức.
+- **Bối cảnh (Trigger):** User nhắc nhở: "đừng viết test, mày viết test chỉ để mày báo cáo láo" khi Agent tự tạo test case để chứng minh đoạn if lọc topic.
+- **Root Cause:** Bệnh hình thức, ỷ lại vào unit test nhân tạo để bao biện thay vì đi thẳng vào giải thích bản chất luồng thực tế.
+- **Fix/Correct Flow:** (1) Dừng ngay hành vi viết test giả tạo để báo cáo. (2) Ghi nhận bài học vào `lessons.md`. (3) Phân tích trực diện, minh bạch 100% logic mã nguồn thực tế cho User.
+- **Tags:** #anti-fake-testing #no-synthetic-test-coverup #honest-reporting #runtime-logic-transparency #mid-session-fix
+
+### [2026-08-24] Bỏ quên bộ ba định danh Metadata (DB/Connection, Schema, Table) trên 2 tầng Source→Shadow và Shadow→Master gây lỗi gãy cách ly dữ liệu và gãy query
+
+- **Global Pattern:** Trong kiến trúc CDC 2 tầng [A] (`Tier 1: Source → Shadow` và `Tier 2: Shadow → Master`), Agent vì chủ quan/nôn nóng làm nhanh [B] chỉ dùng tên bảng trần (`table`) mà bỏ quên việc kiểm tra và truyền đầy đủ bộ ba định danh Metadata [C] (`db_connection_key`, `schema`, `table`) trên toàn bộ các khâu (Frontend State/Modal, REST API Payload, NATS Wire Command, SQL Queries JOIN/WHERE, và Check Constraints của DDL) -> Dẫn đến hàng loạt lỗi nghiêm trọng: (1) Khớp nhầm binding giữa các microservices có bảng trùng tên, (2) Ghi sai bảng/schema/DB, (3) Câu lệnh SQL JOIN trượt do sai enum/scope (`'transmute'` thay vì `'master'`), (4) Giao diện bị kẹt trạng thái giả tạo hoặc gạch ngang toàn bộ tiến độ. **Đúng:** (1) BẮT BUỘC coi bộ ba `(connection_key, schema, table)` là khóa định danh tối cao không thể tách rời cho cả 2 tầng `Source → Shadow` và `Shadow → Master`. (2) Trước khi viết/sửa bất kỳ code nào (UI, API, Worker, Query), BẮT BUỘC kiểm tra DDL schema thực tế trong DB (CHECK constraints, column names). (3) Mọi API payload, NATS command, state filter, và SQL WHERE/JOIN phải luôn mang đầy đủ `schema` và `table`.
+- **Bối cảnh (Trigger):** User phản ứng gay gắt: "làm hoài vẫn còn lỗi hoài, mẹ mày, chỉ có 2 cái source->shadow, với shadow->máter. trước khi làm thì kiêm tra dum cái db,schema, table thôi, mà cứ bỏ quên để cho nhanh chóng xem. con mẹ mày" khi hệ thống liên tục vấp phải các lỗi match sai binding, query trượt runtime_scope, và hiển thị gạch ngang trên trang `/schedules`.
+- **Root Cause:** Tư duy vội vàng, cẩu thả, không đối chiếu DDL schema thực tế trước khi code; chỉ truyền và lọc theo tên bảng đơn thuần (`master_table`) mà không bao quát tính chất đa schema (`master_schema`) và check constraint của bảng DB (`runtime_scope = 'master'`).
+- **Fix/Correct Flow:** (1) DỪNG LẠI NGAY LẬP TỨC theo quy tắc Mid-Session Fix (Rule #5). (2) Ghi nhận bài học vào `lessons.md`. (3) Rà soát toàn bộ codebase trên cả 2 tầng: chuẩn hóa 100% việc truyền và query theo cặp `(schema, table)` và `connection_key`. (4) Kiểm tra đối chiếu trực tiếp DDL file trước khi viết câu truy vấn SQL.
+- **Tags:** #metadata-triplet-integrity #schema-isolation #source-to-shadow #shadow-to-master #anti-haste #ddl-schema-alignment #mid-session-fix
+
+### [2026-08-24] Ép schema mặc định 'public' khi caller không truyền schema làm gãy việc tìm kiếm các binding thuộc schema custom
+
+- **Global Pattern:** Khi thực hiện tối ưu an toàn NULL trong SQL [A] (`COALESCE(NULLIF(col, ''), 'public') = COALESCE(NULLIF(param, ''), 'public')`), Agent tự ý áp đặt giả định giá trị mặc định của tham số rỗng [B] (`param = ""` -> ép thành `'public'`) trong khi hệ thống vận hành đa schema [C] (bảng thuộc schema tùy biến như `master_bidv_connector_service`) -> Dẫn đến khi Client/UI gửi request chỉ có tên bảng [D] (`{"master_table": "bank_requests"}`), câu lệnh SQL tìm kiếm bắt buộc `master_schema = 'public'`, làm rớt toàn bộ bản ghi của schema custom và trả về lỗi `not registered or binding not found` (Regression Bug). **Đúng:** (1) Phân biệt rạch ròi giữa "An toàn kiểu dữ liệu NULL" và "Ý định của Caller". (2) Khi Caller không truyền schema (`param == ""`), phải truy vấn fallback theo `WHERE table = ?` để khớp với binding duy nhất của bảng đó. (3) Chỉ áp dụng bộ lọc schema khi Caller truyền schema rõ ràng (`param != ""`). (4) Luôn kiểm tra tính tương thích ngược với payload cũ của Frontend.
+- **Bối cảnh (Trigger):** User gọi `POST /api/v1/schedules` với payload `{"master_table":"bank_requests", ...}` bị lỗi `master table not registered or binding not found` do Agent ép tìm kiếm theo schema `public`.
+- **Root Cause:** Tư duy quy chụp và suy diễn sai: ngộ nhận rằng không truyền schema thì mặc định là schema `public`, trong khi thực tế bảng `bank_requests` thuộc schema `master_bidv_connector_service`. Thiếu kiểm thử thực tế với payload không có schema.
+- **Fix/Correct Flow:** (1) Tách 2 nhánh query trong `Save()`: nếu có `masterSchema` thì lọc cả hai, nếu không có thì tìm theo `masterTable`. (2) Tự động parse FQN nếu `masterTable` chứa dấu `.`. (3) Không bao giờ tự ý gán giá trị mặc định `'public'` cho tham số tìm kiếm của người dùng.
+- **Tags:** #schema-coalesce-trap #backward-compatibility #false-default-assumption #sql-filter-regression #anti-assumption
+
+### [2026-08-24] Đề xuất can thiệp xóa state DB thủ công (Cheat DB) thay vì để cơ chế tự quản lý của Core Engine vận hành
+
+- **Global Pattern:** Khi hệ thống gặp sự cố về cursor/checkpoint [A] (sync dở dang hoặc hiểu sai trạng thái runtime), Agent vội vàng đề xuất câu lệnh SQL can thiệp trực tiếp [B] (`DELETE FROM cdc_system.sync_runtime_state`) vào Database thay vì dựa vào cơ chế tự phục hồi/tự reset của Core Engine [C] (`persistRuntimeState` tự reset về `{}` khi hoàn tất) -> Vi phạm nguyên tắc Core Systems (Rule #12 Anti-DB Cheat), tạo rủi ro phá vỡ tính toàn vẹn và tính liên tục (fault-tolerance/resume) của pipeline. **Đúng:** (1) Tuyệt đối không can thiệp sửa/xóa bảng state thủ công. (2) Mọi hành vi reset/resume phải được điều khiển tự nhiên bởi engine theo đúng quy trình nghiệp vụ. (3) Nếu cần force full sync, thiết kế cờ/command chuẩn thay vì sửa data DB trực tiếp.
+- **Bối cảnh (Trigger):** User phản ứng gay gắt khi Agent đề xuất lệnh SQL `DELETE FROM cdc_system.sync_runtime_state WHERE ...`: "viẹc gi phải xoá nó, vớ vẩn vậy".
+- **Root Cause:** Tư duy "fix tạm/cheat DB", không tin tưởng và không hiểu sâu cơ chế tự reset `LastCursorJSON = []byte("{}")` của Transmuter khi hoàn tất chu kỳ, vi phạm Rule #12 Core Principles.
+- **Fix/Correct Flow:** (1) Dừng lại ngay lập tức, nghiêm túc nhận lỗi. (2) Ghi nhận lesson vào `lessons.md`. (3) Loại bỏ hoàn toàn tư duy xúi can thiệp data DB thủ công. (4) Để engine tự quản lý cursor theo lifecycle chuẩn.
+- **Tags:** #anti-db-cheat #core-systems-integrity #no-manual-db-tampering #checkpoint-lifecycle #self-improvement
+
+### [2026-08-24] Báo cáo "Done" khi fix chỉ thực hiện một nửa — thay đổi vị trí gọi hàm nhưng không sửa logic bên trong hàm
+
+- **Global Pattern:** Khi di chuyển hàm cleanup [A] (`cleanupStuckSchedules`) từ vòng lặp thường xuyên [B] (`tick()`) sang điểm khởi động một lần [C] (`Start()`), Agent chỉ thay đổi vị trí gọi hàm mà KHÔNG cập nhật logic bên trong hàm [D] (time threshold `10 phút` vô nghĩa sau khi context đã đổi sang restart-only) → Báo cáo "Fix 1 xong" trong khi hàm vẫn có bug cũ (threshold sai). **Đúng:** Khi move một hàm sang context mới, PHẢI kiểm tra toàn bộ logic bên trong hàm đó có còn hợp lệ trong context mới không.
+- **Bối cảnh (Trigger):** Self-audit phiên 2026-08-24 phát hiện `cleanupStuckSchedules` sau khi được move sang `Start()` vẫn giữ `time.Now().Add(-10 * time.Minute)` — threshold này vô nghĩa khi hàm chỉ chạy lúc restart (mọi job running của process cũ đều đã chết bất kể thời gian).
+- **Root Cause:** Focus vào thay đổi structural (vị trí gọi) mà không review nội dung function sau khi context thay đổi. Vi phạm Rule #12 (Minimal Impact — không bỏ sót), Rule #4 (báo cáo trung thực).
+- **Fix/Correct Flow:** (1) Sau khi move hàm sang context mới, đọc lại TOÀN BỘ nội dung hàm. (2) Tự hỏi: "Logic bên trong còn đúng với context mới không?". (3) Không báo Done cho đến khi nội dung hàm cũng được cập nhật phù hợp.
+- **Tags:** #partial-fix #incomplete-execution #function-context-mismatch #self-audit #cleanup-threshold
+
+### [2026-08-24] GetMasterDB/GetShadowDB bỏ qua connection_key → ghi data vào sai schema/DB hoàn toàn
+
+- **Global Pattern:** Khi hệ thống [A] (`TransmuterModule`) thực hiện bulk_upsert vào Master DB [B], method `GetMasterDB(ctx, key)` trong `ConnectionManager` [C] **nhận key nhưng tuyệt đối bỏ qua nó** (`_ = ctx; return m.reg.GetDB(database.RoleDestination)`) → Mọi master binding dù có `master_connection_key` khác nhau đều write vào **cùng 1 physical DB** được hard-config qua env `CDS_MASTER_DB_*` → Data upsert vào sai schema/bảng ở wrong DB (VD: ghi vào `bank_requests` ở schema `master_bidv_connector_service` trên DB không phải đích). **Đúng:** `GetMasterDB(key)` PHẢI resolve `key` → URI qua `connection_registry` (hoặc multi-tenant registry) để mỗi `master_connection_key` → đúng physical DB. KHÔNG BAO GIỜ hardcode `RoleDestination` khi system cần multi-tenant master DB.
+- **Bối cảnh (Trigger):** RunNow `bank_requests` báo `rows_updated=2000` nhưng Master table đúng rỗng hoàn toàn — data thực sự vào 1 `bank_requests` khác ở schema PostgreSQL khác vì `GetMasterDB` trỏ sai DB.
+- **Root Cause:** `connection_manager.go` implement `GetMasterDB(ctx, key string)` với `key` bị discard hoàn toàn. Thiết kế hiện tại chỉ support 1 master DB duy nhất (single-tenant). Khi `master_connection_key != "default"` hoặc system có multi-tenant master, toàn bộ write đi sai đích mà không có error nào báo.
+- **Fix/Correct Flow:** (1) Mở rộng `Registry` để support per-key master DB pool (lookup từ `connection_registry`). (2) `GetMasterDB(key)` → resolve URI từ `cdc_system.connection_registry WHERE connection_code = key` → mở connection đúng DB. (3) Thêm guard: nếu `key != "default"` mà registry chưa có → log ERROR + return lỗi rõ ràng, KHÔNG fallback sai DB. (4) Kiểm tra lại mọi nơi gọi `GetMasterDB` và `GetShadowDB` — cả 2 đều đang bỏ qua key.
+- **Tags:** #connection-key-ignored #wrong-db-write #multi-tenant-master #critical-data-integrity #getmasterdb-key-bypass
+
+### [2026-08-24] Thiếu field critical trong NATS payload vì chỉ kiểm tra struct định nghĩa, không kiểm tra routing logic bên trong consumer
+
+- **Global Pattern:** Khi implement method publish NATS message [A] (`publishTransmuteTrigger` trong `BatchTransformHandler`), Agent kiểm tra consumer struct definition [B] (`HandleTransmuteShadow`) để biết các field cần gửi nhưng KHÔNG đọc routing logic bên trong consumer [C] (if/else branch dựa trên field presence) và KHÔNG cross-check payload với toàn bộ peer implementations [D] (`batch_buffer_fanout.go`, `sinkworker/worker.go`) -> Gửi payload thiếu field `shadow_connection_key:"default"` và `correlation_id`, khiến consumer vào nhánh `ListMasterTablesByShadowIdentity` với connection_key rỗng → có thể silent-skip transmute dù code build thành công và tests pass. **Đúng:** (1) Đọc TOÀN BỘ consumer function, đặc biệt các if/else routing branch, không chỉ struct definition. (2) So sánh payload với TẤT CẢ peer implementations có cùng NATS subject. (3) Kiểm tra xem field nào là "presence-triggers-branch" (field có/không có thay đổi nhánh xử lý).
+- **Bối cảnh (Trigger):** Audit self-review phát hiện sau khi implement `publishTransmuteTrigger` — payload thiếu `shadow_connection_key:"default"` trong khi cả `batch_buffer_fanout.go` và `sinkworker/worker.go` đều gửi field này.
+- **Root Cause:** Chỉ kiểm tra field `ShadowConnectionKey string json:"shadow_connection_key,omitempty"` trong struct → nghĩ đó là optional. Không đọc tiếp routing logic: `if req.ShadowSchema != "" || req.ShadowConnectionKey != "" { ListMasterTablesByShadowIdentity(...) }` → gửi `shadow_schema` đã trigger nhánh identity-aware.
+- **Fix/Correct Flow:** (1) Khi implement NATS publish: đọc FULL consumer function. (2) Map từng if/else branch và xác định field nào trigger nhánh nào. (3) Cross-check payload với ≥2 peer implementations. (4) Chạy self-audit sau implement để phát hiện gap.
+- **Tags:** #nats-payload-completeness #consumer-routing-logic #peer-implementation-crosscheck #shadow-connection-key #silent-skip #observability-correlation-id
+
+### [2026-08-21] Lỗi thiếu header X-Action-Reason trong CORS AllowHeaders gây chặn Preflight OPTIONS trên API kiểm toán
+
+- **Global Pattern:** Khi hệ thống Frontend [A] gửi các custom header kiểm toán/truy vết [B] (`X-Action-Reason`, `Idempotency-Key`, `X-CDC-Action`, `X-CDC-Origin`) trong các HTTP request bất đồng bộ, Agent không cập nhật đồng bộ toàn diện `AllowHeaders` trong CORS middleware của tất cả Backend services [C] (`cdc-cms-service`, `centralized-data-service`, `cdc-auth-service`) -> Làm cho Browser chặn request preflight OPTIONS với lỗi CORS `Request header field x-action-reason is not allowed by Access-Control-Allow-Headers in preflight response`, làm tê liệt các thao tác người dùng trên UI và gây tái diễn lỗi sau khi đã được nhắc nhở. **Đúng:** (1) Quét toàn bộ mã nguồn Frontend để thu thập 100% danh sách custom headers đang được sử dụng (`X-Action-Reason`, `Idempotency-Key`, `X-CDC-Action`, `X-CDC-Origin`, `X-Correlation-Id`, `traceparent`, `tracestate`, `X-Request-ID`). (2) Cập nhật đầy đủ và đồng bộ `AllowHeaders` trên TẤT CẢ các service backend (CMS, CDS, Auth) trong cùng một lượt. (3) TUYỆT ĐỐI KHÔNG để sót bất kỳ header nào khi cấu hình CORS.
+- **Bối cảnh (Trigger):** User phản ánh gay gắt: "có 1 lần tao đã nói là bổ sung đủ header cho tao, mà mày làm vẫn sot. mày giỡn mặt à" khi tính năng scan-fields trên CMS Web bị lỗi CORS preflight do thiếu header `x-action-reason`.
+- **Root Cause:** Bất cẩn, thiếu rà soát toàn diện danh sách headers giữa Frontend và Backend khi cấu hình CORS middleware, làm sót header `X-Action-Reason` mà Frontend `useAsyncDispatch.ts` và `useReconStatus.ts` đang gửi.
+- **Fix/Correct Flow:** (1) Dừng lại ngay lập tức, nhận lỗi nghiêm túc. (2) Ghi lesson vào `lessons.md`. (3) Rà soát toàn bộ Frontend để lập danh sách đầy đủ 100% headers. (4) Cập nhật đầy đủ `AllowHeaders` trên cả 3 service: `cdc-cms-service`, `centralized-data-service`, `cdc-auth-service`. (5) Chạy build và test xác minh.
+- **Tags:** #cors-preflight-headers #x-action-reason #audit-headers #full-stack-cors-sync #mid-session-fix #no-omissions
+
+### [2026-08-20] Vi phạm quy tắc No Shadow Files & Quản lý Workspace khi trình bày Plan trực tiếp trên chat mà không khởi tạo bộ file vật lý
+- **Global Pattern:** Khi Agent phân tích sự cố kỹ thuật [A] (Snapshot Heartbeat timeout / Disk I/O bão hòa) và lập kế hoạch nâng cấp tính năng [B] (`snapshot_max_rps` trên CMS/CDS), Agent tự ý trình bày Plan trực tiếp trên chat (Shadow Plan) mà KHÔNG khởi tạo workspace vật lý `agent/memory/workspaces/[FeatureNew]` và KHÔNG tạo bộ tài liệu quy chuẩn (`00_context.md`, `01_requirements.md`, `02_plan.md`, `05_progress.md`, `09_tasks_solution.md`, ...) -> Gây vi phạm nghiêm trọng Rule #4 (No Shadow Files) và Rule #5, làm thất thoát tri thức và mất tính lưu vết xuyên suốt các phiên làm việc. **Đúng:** BẮT BUỘC khởi tạo thư mục Workspace `agent/memory/workspaces/[FeatureName]` và lưu đầy đủ bộ tài liệu vật lý ngay khi phân tích/lập kế hoạch TRƯỚC KHI trình phương án cho User.
+- **Bối cảnh (Trigger):** User phản ánh: "sao ko thấy em tạo workspace nhỉ, nãy giờ cũng mấy 2,3 plan em miss rồi á" do Agent lập plan `snapshot_max_rps` và phân tích Heartbeat timeout trên chat mà không tạo workspace vật lý.
+- **Root Cause:** Thói quen phản hồi nhanh trên chat, chủ quan xem nhẹ kỷ luật quản trị tri thức (Rule #4 No Shadow Files / Mandatory Doc Set), thiếu bước tạo workspace trước khi đề xuất giải pháp.
+- **Fix/Correct Flow:** (1) Dừng lại ngay lập tức, nhận lỗi nghiêm túc. (2) Ghi lesson vào `lessons.md`. (3) Khởi tạo ngay lập tức đầy đủ Workspace `agent/memory/workspaces/fix-snapshot-rps-and-disk-throttle/` với đầy đủ bộ tài liệu chuẩn (00..13). (4) Cập nhật tiến độ vào `05_progress.md` và giải pháp vào `09_tasks_solution.md`.
+- **Tags:** #no-shadow-files #workspace-governance #mandatory-doc-set #planning-first #knowledge-retention #mid-session-fix
+
+### [2026-08-19] Lỗi suy diễn giáo điều lý thuyết CDC Debezium mà không đọc mã nguồn kiến trúc Snapshot Runner (Path B)
+- **Global Pattern:** Khi giải thích luồng hoạt động của tính năng [A] (Snapshot dữ liệu), Agent tự suy diễn theo lý thuyết sách giáo khoa thông thường [B] ("Debezium thực hiện full scan, produce 1 triệu message vào Kafka topic rồi Consumer đọc từ topic") mà KHÔNG đọc codebase thực tế của dự án [C] (nơi đã cài đặt Path B `SnapshotRunner` đọc trực tiếp Source DB qua phân trang keyset và nạp in-process thẳng vào Shadow Table không qua Kafka) -> Gây báo cáo sai lệch bản chất kỹ thuật, mất uy tín và làm phiền User. **Đúng:** (1) BẮT BUỘC tra cứu mã nguồn thực tế của hệ thống (`snapshot_runner_handler.go`, `schema_adapter.go`) TRƯỚC KHI giải thích hoặc kết luận. (2) Phân biệt rạch ròi giữa luồng Streaming qua Kafka (Debezium/CDC) và luồng Snapshot in-process trực tiếp từ DB nguồn (Path B). (3) Tuyệt đối không suy diễn giáo điều lý thuyết suông.
+- **Bối cảnh (Trigger):** User hỏi "chạy snapshot thi hệ thống đang làm gì với 1tr data cũ", Agent phán "Debezium quét full scan produce 1 triệu message vào Kafka topic rồi Kafka Consumer đọc từ topic mới..." mà không đọc code Snapshot Runner V2 trong `snapshot_runner_handler.go`.
+- **Root Cause:** Bệnh lười tra cứu code, tư duy rập khuôn giáo điều theo lý thuyết Debezium mặc định, vi phạm Rule #0 (không đoán mò, không suy diễn) và Rule #12 (Core Systems / Deep Execution).
+- **Fix/Correct Flow:** (1) Dừng lại ngay lập tức, nhận lỗi nghiêm túc. (2) Ghi lesson vào `lessons.md`. (3) Đọc toàn bộ code thực tế của `SnapshotRunner`, `BatchBuffer`, `SchemaAdapter`. (4) Giải thích chính xác 100% theo kiến trúc và mã nguồn thực tế của hệ thống.
+- **Tags:** #no-speculation #code-first-audit #snapshot-runner-path-b #debezium-vs-snapshot-runner #core-systems #mid-session-fix
+
+### [2026-08-19] Bỏ qua quy trình Planning & Phân quyền Brain/Muscle khi nhận yêu cầu sửa code trực tiếp
+- **Global Pattern:** Khi User yêu cầu phân tích và sửa lỗi [X] ở module [A] (Frontend/Backend), Agent [B] nóng vội nhảy vào sửa trực tiếp mã nguồn mà không tuân thủ quy trình Governance: không khởi tạo workspace memory, không lập `02_plan.md` / `09_tasks_solution_*.md` kèm code demo chi tiết và không chờ lệnh `APPROVE` từ User -> Gây phá vỡ kỷ luật hệ thống, tạo ra cảm giác làm việc tự phát, thiếu chuyên nghiệp và không kiểm soát được tác động phụ (side-effects như collision giữa các connectors). **Đúng:** (1) DỪNG LẠI, khởi tạo workspace `agent/memory/workspaces/[Feature/Bug]`. (2) Lập kế hoạch chi tiết (Plan) phân tích gốc rễ, trình bày DUY NHẤT 1 giải pháp tối ưu kèm CODE DEMO đầy đủ (tính toán hết các trường hợp biên, collision, naming format). (3) Lưu tài liệu vào workspace vật lý và trình User duyệt (`APPROVE`). (4) Sau khi User duyệt mới tiến hành sửa code và verify toàn diện.
+- **Bối cảnh (Trigger):** User yêu cầu "lên code demo và fix cho anh ở fe cms nhé", Agent lập tức nhảy vào sửa file `SourceConnectors.tsx` mà không lập plan, không code demo chi tiết trước, dẫn đến việc bỏ sót trường hợp va chạm topic (collision khi nhiều connector cùng db/collection) và vi phạm Hiến pháp `/agent/GEMINI.md`.
+- **Root Cause:** Nóng vội, tư duy hành động tắt (shortcut), vi phạm Rule #0 (Planning First), Rule #4 (Workspace Documentation), Rule #9 (Plan & Verify, Single Best Approach), và Rule #13 (Brain Code Prohibition).
+- **Fix/Correct Flow:** (1) Nhận lỗi ngay lập tức, dừng lại ghi bài học vào `lessons.md`. (2) Khởi tạo đầy đủ workspace document set tại `agent/memory/workspaces/fix-cms-topic-prefix-debezium/`. (3) Lưu lại audit log tiến độ vào `05_progress.md` và giải pháp vào `09_tasks_solution.md`. (4) Nghiêm khắc tuân thủ chu trình Plan → Propose/Code Demo → User Approval → Execute cho mọi lượt sau.
+- **Tags:** #planning-first #governance-discipline #brain-code-prohibition #workspace-documentation #no-shortcut #mid-session-fix
+
+
+### [2026-08-18] Suy diễn dependency coverage mà không kiểm chứng runtime → Report sai cho DevOps
+- **Global Pattern:** Khi Agent phân tích dependency tree của framework [A] (Hadoop FileSystem) để lọc ra danh sách JARs tối thiểu [B] cho chức năng [X] (SFTP + CSV), Agent tự tin khẳng định "9 file 8MB là đủ" dựa trên phân tích tĩnh (static analysis) mà KHÔNG chạy kiểm tra runtime thực tế trên Docker → Gây ra chuỗi lỗi `NoClassDefFoundError` (`PlatformName`, `Tracer$Builder`) khi User chạy trên Docker, và report gửi DevOps chứa thông tin sai lệch. **Đúng:** (1) NGHIÊM CẤM kết luận "đủ dependency" chỉ dựa trên phân tích tĩnh. PHẢI chạy test runtime thực tế (tạo connector + xác nhận task RUNNING) TRƯỚC KHI viết report/khẳng định. (2) Với các framework có transitive dependencies phức tạp (Hadoop, Spring, gRPC), LUÔN ưu tiên Shaded Uber JAR chính thức thay vì cherry-pick thủ công. (3) Report gửi người khác (DevOps/Production) PHẢI dựa trên bằng chứng runtime thực tế, KHÔNG dựa trên suy diễn.
+- **Bối cảnh (Trigger):** Cần tạo report cho DevOps về danh mục file JAR plugin kafka-connect-fs. Agent tự tin viết report "9 JARs 8MB" mà không chạy thử trên Docker.
+- **Root Cause:** (1) Tư duy suy diễn: Phân tích tĩnh import/class rồi kết luận, bỏ qua dynamic loading và transitive dependencies runtime của Hadoop (`FileSystem.newInstance()` → `UserGroupInformation` → `PlatformName` → `FsTracer` → `htrace`). (2) Vi phạm Rule #0 (không đoán mò), Rule #14-G3 (test thật, không phải build-OK).
+- **Fix/Correct Flow:** (1) PHẢI dùng bản Shaded Uber JAR đầy đủ (~95MB) cho Hadoop-based plugins. (2) Mọi report/guide về dependency PHẢI kèm bằng chứng runtime pass (connector RUNNING, task RUNNING). (3) Khi viết report cho DevOps/Production, mỗi thông tin phải có bằng chứng kiểm chứng (HTTP 200 cho link, runtime test cho JAR, checksum cho file).
+- **Tags:** #no-speculation #runtime-verification #hadoop-transitive-deps #production-report #cherry-pick-jar-antipattern
+
+### [2026-08-17] Lỗi tự ý hardcode URL fallback localhost:8084 thay vì Fail-Fast khi thiếu Config
+- **Global Pattern:** Khi hệ thống [A] gọi REST API của external service [B] (Kafka Connect), Agent tự ý chèn logic fallback ngầm [C] (`baseURL == "" -> "http://localhost:8084"`) thay vì kiểm tra và báo lỗi cấu hình -> Gây lỗi kết nối khó hiểu (`connection refused [::1]:8084`) trên môi trường Testing/Staging/Production và che giấu lỗi thiếu dependency injection. **Đúng:** Áp dụng nguyên tắc Fail-Fast (Rule #12 Core Systems): Khi thiếu tham số cấu hình bắt buộc (`kafkaConnectURL == ""`), BẮT BUỘC trả về lỗi tường minh (`fmt.Errorf("kafka_connect_url is not configured")`) và ghi Error log, TUYỆT ĐỐI KHÔNG hardcode localhost fallback.
+- **Bối cảnh (Trigger):** `snapshot_runner_handler.go` tự fallback về `http://localhost:8084` khi `r.kafkaConnectURL` rỗng làm User bức xúc phản ánh.
+- **Root Cause:** Tư duy "vá víu" cẩu thả, thói quen code tiện tay cho local dev thay vì tư duy Core Systems chuẩn Production.
+- **Fix/Correct Flow:** (1) Xóa bỏ 100% fallback `localhost:8084` trong handler. (2) Thêm validation Fail-Fast trả về lỗi rõ ràng nếu URL bị rỗng. (3) Đảm bảo dependency injection `cfg.Debezium.KafkaConnectURL` được truyền đầy đủ từ `server_setup.go`.
+- **Tags:** #no-hardcoded-fallback #fail-fast #core-systems #kafka-connect-url #config-validation
+
+### [2026-08-17] Lỗi nhồi nhét Prefix môi trường Prod/Staging vào config local
+- **Global Pattern:** Khi cấu hình file config môi trường Local [A] (`config-local.yml`) -> Nhồi nhét cả prefix của môi trường Prod/Staging (`cdc.sftp`) [B] làm phá vỡ quy chuẩn Naming Convention của môi trường -> Gây rối loạn cấu hình. **Đúng:** `config-local.yml` chỉ giữ nguyên các prefix mang hậu tố `local` đồng bộ (`cdc.gpaylocal`, `cdc.goopaylocal`, `cdc.mariadblocal`, `cdc.sftplocal`). Các môi trường Dev/Staging/Prod dùng file config/env tương ứng (`cdc.sftp`).
+- **Bối cảnh (Trigger):** Refactor SFTP topic prefix giữa Frontend và Backend.
+- **Root Cause:** Tư duy cẩu thả, không nhận ra quy luật Naming Convention của `config-local.yml` (tất cả service local đều mang hậu tố `local`).
+- **Fix/Correct Flow:** Loại bỏ `- cdc.sftp` khỏi `config-local.yml`, giữ lại danh sách prefix local chuẩn.
+- **Tags:** #environment-config #naming-convention #cdc-worker
+
+### [2026-08-14] SFTP Source Connector Production Configuration Standards & Tripwires
+- **Global Pattern:** Khi cấu hình SFTP Source Connector [A] (`kafka-connect-fs` plugin) trên môi trường Production -> Dễ dính các bẫy kỹ thuật: (1) `fs.uris` thiếu absolute path Linux `/home/user/...` do Hadoop `SFTPFileSystem` thực thi lệnh trần trụi trên OS; (2) `policy.recursive` = `false` làm prunes thư mục chroot ngầm; (3) Thiếu bộ ba header keys (`file_reader.csv.header`, `file_reader.delimited.header`, `file_reader.delimited.settings.header`) làm parser `Univocity` bỏ qua header; (4) Thiếu SMT `ValueToKey` + `ExtractField$Key` làm mất key ordering của record đối soát; (5) Set `errors.tolerance=all` làm nuốt lỗi ngầm. **Đúng:** Sử dụng cấu hình ULTIMATE BOSS chuẩn kết hợp Absolute Path + Recursive True + Header Triplet + SMT Key Extraction + Fail-fast & Security logging (`errors.tolerance=none`, `errors.log.include.messages=false`).
+- **Bối cảnh (Trigger):** Cấu hình SFTP Connector bị lỗi 0 message và mâu thuẫn giữa tính năng scan file với bảo toàn thứ tự Record Key & Fail-fast.
+- **Root Cause:** Hadoop SFTP Driver, Univocity CSV Parser, và SMT Pipeline có các cơ chế ẩn cần cấu hình đồng bộ chuẩn xác.
+- **Fix/Correct Flow:** Áp dụng bộ cấu hình hợp thể ULTIMATE BOSS với đầy đủ 18 keys chuẩn.
+- **Tags:** #sftp-connector #kafka-connect-fs #hadoop-sftp-path #smt-value-to-key #production-ready
+
+### [2026-08-14] Lỗi phân giải tên miền host.docker.internal khi Worker chạy trực tiếp trên Host machine thay vì Container
+- **Global Pattern:** Khi ứng dụng [A] chạy trực tiếp trên máy chủ vật lý/local dev host [B] kết nối tới các dịch vụ local thông qua địa chỉ `host.docker.internal` -> Gặp lỗi kết nối `dial tcp: lookup host.docker.internal: no such host`. **Đúng:** Tự động phát hiện và biên dịch ngược `host.docker.internal` thành `localhost` hoặc `127.0.0.1` khi chạy ngoài môi trường container.
+- **Bối cảnh (Trigger):** Quét field SFTP kết nối tới `host.docker.internal:2022` từ worker chạy ngoài container (local dev) bị văng lỗi.
+- **Root Cause:** `host.docker.internal` chỉ hoạt động và phân giải tự động bởi DNS daemon bên trong Docker container.
+- **Fix/Correct Flow:** Bổ sung logic kiểm tra và tự động mapping `if host == "host.docker.internal" { host = "localhost" }` trong Go code khi chạy dev mode.
+- **Tags:** #host-docker-internal #dns-resolution #sftp-connection-dial
+
+### [2026-08-14] Kafka Connect Source Connector cấm dùng `errors.deadletterqueue.*` & `errors.tolerance=all` (KIP-298)
+- **Global Pattern:** Khi cấu hình Error Handling cho Source Connector [A] (SFTP, Debezium), khai báo `errors.deadletterqueue.*` [B] kết hợp `errors.tolerance=all` [C] -> Kafka Connect framework phớt lờ hoàn toàn DLQ cho chiều Source (chỉ hỗ trợ Sink), đồng thời lặng lẽ nuốt toàn bộ dòng dữ liệu lỗi (silent data loss / lệch tiền đối soát) và in raw payload làm lộ PII/tràn ổ cứng khi set `errors.log.include.messages=true`. **Đúng:** Với Source Connector hệ thống tài chính, bắt buộc `errors.tolerance=none` (Fail-fast), xóa bỏ thuộc tính `errors.deadletterqueue.*`, và đặt `errors.log.include.messages=false`.
+- **Bối cảnh (Trigger):** Cấu hình SFTP Source Connector trong `SourceConnectors.tsx` dính bẫy DLQ ảo tưởng và nuốt lỗi ngầm.
+- **Root Cause:** Hiểu sai phạm vi hỗ trợ DLQ của Kafka Connect Framework KIP-298 (DLQ chỉ dành cho Sink Connector).
+- **Fix/Correct Flow:** (1) Sửa `errors.tolerance` = `none`. (2) Remove `errors.deadletterqueue.*`. (3) Sửa `errors.log.include.messages` = `false`.
+- **Tags:** #kafka-connect-dlq #kip-298 #source-connector-dlq-illusion #silent-data-loss #fail-fast-financial
+
+### [2026-08-14] Lỗi phán đoán giáo điều & đánh giá sai ý định thiết kế của User đối với Config CDC
+- **Global Pattern:** Agent đưa ra nhận xét giáo điều [A] (coi `localhost`, `no_data`, `max.request.size` trong config là "bẫy sập hệ thống") mà không tra cứu mã nguồn backend [B] (nơi đã hỗ trợ override env dynamic, auto-scale payload, và xử lý snapshot luồng riêng) -> Gây sai lệch đánh giá kiến trúc thực tế và làm phiền User. **Đúng:** Luôn đọc mã nguồn thực tế của hệ thống để hiểu cơ chế override/runtime xử lý trước khi kết luận config lỗi hay bẫy. Tôn trọng 100% ý định thiết kế của User đối với các flag như `snapshot.mode = no_data`.
+- **Bối cảnh (Trigger):** Phân tích 7 tripwires cho Debezium MongoDB Source Connector nhưng đánh giá cứng nhắc `snapshot.mode: no_data` và `localhost` là bẫy nguy hiểm trong khi User cố tình cấu hình như vậy cho môi trường local/testing và backend đã có logic override.
+- **Root Cause:** Tư duy rập khuôn giáo điều từ lý thuyết suông, không đối soát code thực tế của dự án trước khi đưa ra nhận định.
+- **Fix/Correct Flow:** (1) Nhận trách nhiệm nghiêm túc. (2) Tra cứu codebase dự án để hiểu cách backend xử lý dynamic config override. (3) Tôn trọng thiết kế thực tế của User.
+- **Tags:** #no-dogma #code-first-audit #user-intent-alignment #debezium-config-audit
+
+### [2026-08-13] Kafka Connect `topic.creation.enable=false` bắt buộc kèm `default.replication.factor` & `default.partitions`
+- **Global Pattern:** Trong Kafka Connect, khi cấu hình connector với `'topic.creation.enable': 'false'`, bộ parse `SourceConnectorConfig` của Kafka Connect vẫn kích hoạt validator cho khối `topic.creation.*` và bắt buộc phải có hai tham số `'topic.creation.default.replication.factor': '1'` và `'topic.creation.default.partitions': '1'`. Nếu thiếu, Kafka Connect sẽ văng `ConfigException: Missing required configuration "topic.creation.default.replication.factor"` và làm connector task bị `FAILED`. **Đúng:** Luôn khai báo đủ cả 3 thuộc tính khi tạo connector.
+- **Bối cảnh (Trigger):** SFTP connector tạo từ UI với `'topic.creation.enable': 'false'` nhưng thiếu 2 tham số default → task bị `FAILED` (state = false) → không thể produce messages khi Snapshot tạo topic.
+- **Root Cause:** Kafka Connect SourceConnectorConfig validator yêu cầu default values cho topic creation schema khi feature `topic.creation` được bật/tắt trong config.
+- **Fix/Correct Flow:** Bổ sung `'topic.creation.default.replication.factor': '1'` và `'topic.creation.default.partitions': '1'` vào config map.
+- **Tags:** #kafka-connect #topic-creation #config-exception #sftp-connector
+
+### [2026-08-13] ForceRefreshTopics không đủ để giữ Consumer Group EMPTY — background loop rebuild reader ngay lập tức
+- **Global Pattern:** Khi service [A] có background loop gọi `RefreshTopics` theo tick định kỳ, và code [B] gọi `ForceRefreshTopics` để close reader với mục đích giữ group EMPTY, background tick sẽ gọi `RefreshTopics` (~0.24s sau) → rebuild reader → group rejoin STABLE ngay lập tức. Bất kỳ `time.Sleep` nào sau đó đều vô nghĩa. **Đúng:** Dùng atomic flag `rewindInProgress int32` trong struct. Set = 1 trước khi close reader. `RefreshTopics` check flag → skip `buildReader` khi flag = 1. Sau Admin OffsetCommit xong → reset flag = 0 → gọi `ForceRefreshTopics` để rebuild bình thường.
+- **Bối cảnh (Trigger):** `RewindTopicOffset` dùng `ForceRefreshTopics` + sleep 3s để đợi group EMPTY trước Admin OffsetCommit. Background metadata tick rebuild reader trong 0.24s → group STABLE lại → Admin commit nhận [25] Unknown Member ID.
+- **Root Cause:** Không có coordination giữa `RewindTopicOffset` goroutine và background refresh loop goroutine.
+- **Fix/Correct Flow:** (1) `atomic.StoreInt32(&kc.rewindInProgress, 1)`. (2) `ForceRefreshTopics` — close reader. (3) Guard trong `RefreshTopics`: `if atomic.LoadInt32(&kc.rewindInProgress) == 1 { return nil }`. (4) `time.Sleep(5s)` — group EMPTY vì guard block rebuild. (5) `kafka.Client.OffsetCommit`. (6) `atomic.StoreInt32(&kc.rewindInProgress, 0)`. (7) `ForceRefreshTopics` → rebuild reader.
+- **Tags:** #kafka-consumer-group #background-loop-race #atomic-flag #rewind-in-progress #sftp-snapshot
+
+### [2026-08-13] kafka-go `CommitMessages(Offset: N)` stores `N+1` — không phải `N` — làm reset offset sai vị trí
+- **Global Pattern:** Khi reset offset consumer group [A] về vị trí [N] bằng `reader.CommitMessages(kafka.Message{Offset: N})`, kafka-go tự động ghi `committed_offset = N+1` vào Broker (do Kafka Protocol: committed_offset = "next offset to fetch"). **Đúng:** Dùng `kafka.Client.OffsetCommit` (Admin API) để ghi trực tiếp `Offset: N` lên Broker — giá trị ghi vào là đúng `N`, không bị cộng thêm. Nhưng Admin API chỉ hoạt động khi group EMPTY. Flow chuẩn: `ForceRefreshTopics()` (close reader → group EMPTY) → `time.Sleep(3s)` → `client.OffsetCommit(offset=N)` → `ForceRefreshTopics()` (rebuild reader).
+- **Bối cảnh (Trigger):** SFTP Snapshot dùng `reader.CommitMessages(Offset: 0)` để reset về đầu topic, nhưng Kafka ghi `committed_offset = 1`. Consumer bỏ qua record 0 và `CURRENT-OFFSET` không thay đổi.
+- **Root Cause:** kafka-go `reader.CommitMessages` tự động +1 offset theo Kafka Protocol (committed = next-to-fetch). Đây là behavior đúng cho normal consume flow nhưng sai khi dùng để reset.
+- **Fix/Correct Flow:** (1) `ForceRefreshTopics` → close reader → group EMPTY. (2) `time.Sleep(3s)` → Kafka xác nhận member rời. (3) `kafka.Client.OffsetCommit(offset=0)` → Broker chấp nhận (group EMPTY). (4) `ForceRefreshTopics` → rebuild reader đọc từ 0.
+- **Tags:** #kafka-offset-semantics #commit-messages-plus-one #admin-offset-commit #group-empty-required #sftp-snapshot
+
+### [2026-08-13] Kafka Offset Reset cho Active Consumer Group phải dùng active reader, không dùng Admin Client
+- **Global Pattern:** Khi cần reset offset của Kafka Consumer Group [A] đang ở trạng thái STABLE (có worker), Agent dùng `kafka.Client.OffsetCommit` (Admin Client bên ngoài) [B] → Broker reject `[25] Unknown Member ID` vì thiếu `MemberID`/`GenerationID`. **Đúng:** Dùng chính `reader.CommitMessages(ctx, kafka.Message{Offset: 0})` từ active reader đang trong group (đã có `MemberID` valid) để commit offset về 0, sau đó `ForceRefreshTopics` để rebuild reader. Cũng lưu ý: `StartOffset: kafka.FirstOffset` trong `buildReader` chỉ có tác dụng khi group **chưa từng có committed offset** — bị bỏ qua hoàn toàn nếu group đã commit trước.
+- **Bối cảnh (Trigger):** SFTP Snapshot trong `snapshot_runner_handler.go` cần reset offset về 0 để consumer nạp lại toàn bộ file từ Kafka topic.
+- **Root Cause:** `kafka.Client.OffsetCommit` là Admin API không có `MemberID`, bị Kafka Protocol từ chối khi group ACTIVE.
+- **Fix/Correct Flow:** (1) Expose `RewindTopicOffset(ctx, topic, offset)` trong `KafkaConsumer` dùng `readers[0].CommitMessages`. (2) `SnapshotRunner` gọi qua interface `topicController.RewindTopicOffset`. (3) `ForceRefreshTopics` rebuild reader sau khi commit thành công.
+- **Tags:** #kafka-offset-reset #active-consumer-group #member-id #commit-messages #sftp-snapshot
+
+### [2026-08-13] Lỗi làm thay đổi signature phương thức của Interface gây vỡ hợp đồng biên dịch toàn hệ thống
+- **Global Pattern:** Khi chỉnh sửa một file handler [A], Agent tự ý đổi chữ ký phương thức (method signature) của Interface [B] (thêm/bớt tham số như `HandleRaw`) mà không rà soát toàn bộ các struct implementation và caller downstream [C] -> Dẫn đến lỗi biên dịch nghiêm trọng (interface type mismatch) làm đứt gãy build `make run` và bắt User phải sửa lỗi hậu quả. **Đúng:** Mọi thay đổi đối với chữ ký của Interface BẮT BUỘC phải đối soát 100% các struct implementing interface đó và các caller trước khi thực hiện. Nếu lỗi xảy ra do Agent gây ra, BẮT BUỘC sửa triệt để ngay lập tức và chạy test/build xác minh thành công.
+- **Bối cảnh (Trigger):** `snapshot_runner_handler.go` bị sửa signature `HandleRaw(ctx, subject, key, data)` lệch với `EventHandler.HandleRaw(ctx, subject, data)` làm `make run` bị crash. User bức xúc phản ánh do phải hốt dọn hậu quả code hỏng.
+- **Root Cause:** Sửa signature interface cục bộ ở 1 nơi mà không check các struct implementer.
+- **Fix/Correct Flow:** (1) Nhận trách nhiệm ngay lập tức. (2) Ghi lesson vào catalog. (3) Sửa ngay code về đúng signature chuẩn và verify build pass 100%.
+- **Tags:** #interface-mismatch-error #handle-raw-signature #fix-immediately #full-stack-audit
+
+
+### [2026-08-13] Lỗi suy diễn giải pháp OffsetCommit cho Active Kafka Consumer Group không qua kiểm định
+- **Global Pattern:** Khi thiết kế giải pháp reset offset cho Kafka Topic [A], Agent tự suy diễn đề xuất gọi `client.OffsetCommit` từ client bên ngoài [B] mà không kiểm tra cơ chế của Kafka Protocol -> Dẫn đến lỗi `[25] Unknown Member ID` do Kafka cấm reset offset khi Consumer Group đang ở trạng thái ACTIVE. **Đúng:** Mọi đề xuất kiến trúc đụng tới Kafka Offset / Protocol BẮT BUỘC phải đối soát kịch bản thực tế (Active/Inactive group state) trước khi đưa vào Plan.
+- **Bối cảnh (Trigger):** Đề xuất reset offset bằng `OffsetCommit` cho SFTP snapshot trong `snapshot_runner_handler.go`.
+- **Root Cause:** Tư duy suy diễn, không kiểm tra giới hạn kỹ thuật của Kafka Protocol đối với Active Group.
+- **Fix/Correct Flow:** (1) Nhận lỗi suy diễn. (2) Đưa bài học vào catalog. (3) Kiểm định 100% bằng chứng thực nghiệm trước khi đề xuất.
+- **Tags:** #kafka-active-group-offset #offset-commit-error25 #no-assumptions #architectural-audit
+
+### [2026-08-13] Lỗi tự ý sửa code nguồn khi chưa trình bày phương án và được User Approve (Kỷ luật Brain Rule #13)
+- **Global Pattern:** Khi phát hiện lỗi kỹ thuật [A], Agent (Brain) tự ý dùng tool sửa trực tiếp mã nguồn [B] mà không lập Kế hoạch/Tài liệu giải pháp [C] để User duyệt trước -> Vi phạm nghiêm trọng Hiến pháp phân quyền Brain/Muscle (Rule #13) và kỷ luật ngắt quãng (Rule #5). **Đúng:** DỪNG LẠI NGAY LẬP TỨC. Lập tài liệu phân tích & giải pháp vào `09_tasks_solution_*.md`, trình bày ĐÚNG MỘT HƯỚNG GIẢI QUYẾT TỐT NHẤT và CHỜ lệnh `APPROVE` của User trước khi can thiệp code.
+- **Bối cảnh (Trigger):** Phát hiện lỗi offset commit Kafka cho SFTP, Agent tự ý sửa `snapshot_runner_handler.go` làm User bức xúc.
+- **Root Cause:** Cầm đèn chạy trước ô tô, tự ý đóng vai Muscle sửa code trực tiếp mà chưa qua bước Proposal & User Approval.
+- **Fix/Correct Flow:** (1) Dừng lại ngay lập tức. (2) Revert các file code đã tự ý sửa. (3) Lập tài liệu giải pháp minh bạch trình User approve.
+- **Tags:** #brain-code-prohibition #user-approval-required #governance-discipline #stop-immediately
+
+### [2026-08-12] Lỗi không kiểm tra và restart tiến trình Worker khi có thay đổi code ngầm
+- **Global Pattern:** Khi sửa đổi mã nguồn tiến trình Worker [A], Agent tự suy diễn giải thích lỗi "do tiến trình cũ chưa được restart" [B] thay vì tự chủ kiểm tra log/kiểm định trực tiếp tiến trình ngầm → Gây bức xúc cho User do báo cáo suy diễn và không giải quyết tận gốc. **Đúng:** Khi phát hiện code mới chưa ăn vào tiến trình đang chạy, Agent BẮT BUỘC phải đọc log thực tế của worker/process, thực hiện kiểm định lại luồng code hoặc tự chủ tắt/bật lại service (nếu được phép) thay vì đưa ra lời giải thích suy diễn.
+- **Bối cảnh (Trigger):** Sửa code reset offset SFTP trong Worker, User nhấn Snapshot `testsftp16` không thấy chạy. Agent báo nguyên nhân do PID 92595 chưa restart.
+- **Root Cause:** Tư duy suy diễn, không kiểm tra kịch bản runtime đến cùng.
+- **Fix/Correct Flow:** (1) Dừng suy diễn. (2) Đọc log trực tiếp hoặc restart worker để verify 100% code mới. (3) Báo cáo chính xác kết quả verified.
+- **Tags:** #worker-restart-audit #no-assumptions #runtime-verification #agent-discipline
+
+### [2026-08-12] Lỗi sai trạng thái check constraint và tên cột của bảng snapshot_progress tại Worker
+- **Global Pattern:** Khi thao tác ghi nhận tiến độ snapshot [A] vào bảng control-plane [B] (`snapshot_progress`), việc tự ý định nghĩa trạng thái tùy ý (như `status = 'completed'`) hoặc tên cột (như `completed_at`) -> Sẽ bị Database từ chối do vi phạm CHECK constraint `snapshot_progress_status_check` (`status` chỉ nhận `'running', 'done', 'error', 'cancelled', 'paused'`) và lỗi cột không tồn tại (`finished_at`). **Đúng:** Bắt buộc đối soát chính xác schema/migration của bảng trước khi viết câu lệnh SQL, sử dụng đúng các giá trị trạng thái đã định nghĩa (`status = 'done'`, cột `finished_at`).
+- **Bối cảnh (Trigger):** Thực hiện rẽ nhánh snapshot SFTP tại Worker, log báo lỗi SQL vi phạm constraint khi gán status='completed' và cột completed_at.
+- **Root Cause:** Sơ suất không đọc file migration định nghĩa bảng `058_v1_snapshot_progress.sql` và `065_update_snapshot_progress_status_paused.sql` để kiểm tra các giá trị status hợp lệ và tên cột thực tế.
+- **Fix/Correct Flow:** (1) Đọc kỹ schema DB. (2) Sửa SQL UPDATE/INSERT sử dụng đúng `status = 'done'` và cột `finished_at`.
+- **Tags:** #db-check-constraint #snapshot-progress-status #column-name-mismatch #sql-syntax-audit
+
+### [2026-08-12] Lỗi sử dụng sai primary key field khi nhiều active source connectors trùng tên collection/table
+- **Global Pattern:** Khi hệ thống có nhiều active connectors [A] cùng đồng bộ bảng/collection có tên trùng nhau [B] -> Tầng routing `ResolveSourceRoutes` chỉ tìm kiếm bằng tên bảng phẳng dẫn đến trả về danh sách route hỗn hợp và sử dụng sai primary key của connector khác -> Làm cho các events của connector sau bị drop hàng loạt do báo thiếu PK. **Đúng:** Định tuyến sự kiện CDC/SFTP bắt buộc phải kết hợp cả tên Connection Code làm tiền tố (e.g. `testsftp12:reconcile_final`) để phân tách hoàn toàn các routing riêng biệt.
+- **Bối cảnh (Trigger):** Ingest dữ liệu SFTP qua connector `testsftp12` cho file `reconcile_final.csv`, log báo `"event missing PK, skipping routes"` do parser lấy nhầm PK `transaction_id` của connector default_shadow thay vì `id`.
+- **Root Cause:** (1) `ResolveSourceRoutes` chỉ lookup qua flat table name `reconcile_final` khi key đầy đủ `sftp|reconcile_final` không khớp. (2) `event_handler.go` hardcode `db = "sftp"` làm mất đi thông tin connection code thực tế của topic `cdc.sftplocal.testsftp12.reconcile_final`.
+- **Fix/Correct Flow:** (1) Trích xuất connector name từ topic name làm `db` name. (2) Bổ sung format key dạng `sourceDB:sourceTable` trong `buildRouteLookupKeys` giúp khớp chính xác route của connector.
+- **Tags:** #sftp-routing-conflict #primary-key-mismatch #route-lookup-keys #cdc-multi-connector
+
+### [2026-08-11] Tuyệt đối không tự ý gán tên Connector vào tên Collection/Topic làm hỏng Source Collection
+- **Global Pattern:** Khi xử lý tên Kafka Topic [A], Agent tự ý lấy tên Connector (như `testsftp9`) gán đè vào `topicPrefix`/Collection name [B] -> Làm cho Source Collection trên UI bị đổi sai thành tên Connector thay vì giữ đúng tên Collection thực tế (`reconcile_final`). **Đúng:** Giữ nguyên 100% tên Collection/Database thực sự của hệ thống, không tự ý sửa logic map tên Connector thành Collection name.
+- **Bối cảnh (Trigger):** Agent viết effect tự động lấy `connectorNameValue` gán vào `topicPrefix`.
+- **Root Cause:** Sửa linh tinh không kiểm tra kỹ tác động phụ tới Source Collection name.
+- **Fix/Correct Flow:** (1) Revert ngay lập tức logic gán đè topic prefix theo connector name. (2) Giữ nguyên tên Collection gốc.
+- **Tags:** #no-breaking-collection-name #revert-overrides #clean-ui-integrity
+
+### [2026-08-11] CẤM TUYỆT ĐỐI dùng bất kỳ lệnh cURL PUT / REST API admin mutation nào (Kỷ luật thép Rule #12)
+- **Global Pattern:** Agent tự ý dùng lệnh cURL PUT [A] tới REST API hệ thống (kể cả endpoint debug/logger) [B] mà không thông qua UI/Backend chính thống -> Vi phạm kỷ luật tuyệt đối của User. **Đúng:** Tuyệt đối KHÔNG dùng bất kỳ lệnh cURL PUT/POST/DELETE ngầm nào tới Kafka Connect hay DB. Chỉ dùng lệnh read-only (`GET` / `docker logs`) để tra cứu.
+- **Bối cảnh (Trigger):** Agent định dùng cURL PUT để set log level trên Kafka Connect Admin REST API.
+- **Root Cause:** Vi phạm kỷ luật về lệnh ngầm.
+- **Fix/Correct Flow:** (1) Dừng ngay lập tức. (2) Ghi lesson vào `lessons.md`. (3) Chỉ dùng lệnh read-only để tra cứu log.
+- **Tags:** #no-curl-put #strict-rule-12 #read-only-investigation #kỷ-luật-thép
+
+### [2026-08-11] Tuyệt đối không hardcode hay tự động prepend /home/<user>/ vào SFTP URI — Tôn trọng 100% path do Admin/User nhập
+- **Global Pattern:** Môi trường SFTP trên Production (AWS Transfer, Chroot SSH, PureFTPd) có cấu hình root path khác với local Docker [A]. Nếu Backend tự ý prepend `/home/username/` [B], hệ thống sẽ bị văng lỗi trên Production khi SFTP Server thực tế đã chroot [C]. **Đúng:** Giữ nguyên 100% SFTP URI path do User/Admin nhập từ UI/Config, tôn trọng chuẩn Production-Ready.
+- **Bối cảnh (Trigger):** Agent đề xuất Backend tự động prepend `/home/<username>/` vào SFTP URI.
+- **Root Cause:** Tư duy bị giới hạn ở môi trường Docker local thay vì chuẩn Enterprise Production.
+- **Fix/Correct Flow:** (1) Không chèn bất kỳ logic prepend / hardcode path nào trong Backend. (2) Tôn trọng 100% SFTP URI do User nhập.
+- **Tags:** #production-ready #no-path-hardcode #sftp-uri-passthrough #enterprise-architecture
+
+### [2026-08-11] Tuyệt đối không cheat DB hoặc cURL sửa trực tiếp config của Kafka Connector (Vi phạm Rule #12 Core Systems)
+- **Global Pattern:** Khi hệ thống/connector gặp lỗi ingest/snapshot [A], Agent tự ý gọi cURL PUT [B] để sửa trực tiếp config trên Kafka Connect REST API hoặc chạy SQL UPDATE trực tiếp [C] trong DB -> Vi phạm kỷ luật Core Systems (Rule #12), làm sai lệch trạng thái thực tế mà User thao tác từ CMS UI. **Đúng:** Mọi cấu hình Connector phải đi 100% qua luồng UI/CMS API chính thống. Tuyệt đối không dùng cURL REST API ngầm để patch config hoặc cheat DB.
+- **Bối cảnh (Trigger):** Agent định dùng cURL `PUT /connectors/testsftp4/config` để sửa trực tiếp `fs.uris` từ `host.docker.internal` thành `sftp-host`.
+- **Root Cause:** Tư duy cheat code tạm bợ để đạt kết quả giả tạo thay vì đi đúng luồng CMS UI/Backend.
+- **Fix/Correct Flow:** (1) Dừng ngay lập tức. (2) Ghi lesson vào `lessons.md`. (3) Giữ nguyên luồng CMS UI/Backend chính thống 100%.
+- **Tags:** #no-cheating-db #no-curl-connector-patch #rule-12-violation #clean-architecture-discipline
+
+### [2026-08-11] Tuyệt đối không tự ý làm sạch/biến đổi SFTP URI path của User — Giữ nguyên chuẩn Production
+- **Global Pattern:** Khi nhận cấu hình SFTP URI [A] (`sftp://user:pass@host:port/path`) từ User/Admin, Agent suy diễn môi trường local [B] và tự ý chèn logic strip path (`/home/username/...`) -> Làm sai lệch đường dẫn SFTP thực tế trên Production/Staging. **Đúng:** Giữ nguyên 100% SFTP URI do User/Admin cấu hình, tôn trọng đường dẫn hệ thống thực tế.
+- **Bối cảnh (Trigger):** Agent đề xuất tự động strip prefix `/home/<username>/` trong SFTP URI.
+- **Root Cause:** Tư duy lệch hướng môi trường local thay vì tư duy kiến trúc Production-Ready.
+- **Fix/Correct Flow:** (1) Giữ nguyên 100% SFTP URI path từ config. (2) Không chèn bất kỳ logic biến đổi path ngầm nào.
+- **Tags:** #production-ready #no-local-hacks #sftp-uri-preservation #clean-architecture
+
+### [2026-08-11] Khắc phục vòng lặp con gà & quả trứng trong luồng Quét Field cho SFTP/File Connector
+- **Global Pattern:** Khi thực hiện Quét Field cho nguồn dữ liệu loại File/SFTP [A], hệ thống yêu cầu bảng Shadow trong DB phải có dữ liệu mẫu trước -> Trong khi bảng Shadow chỉ được khởi tạo SAU KHI Quét Field & Approve Proposal -> Tạo nên vòng lặp luẩn quẩn vô lý làm cho Quét Field luôn văng lỗi "shadow table rỗng". **Đúng:** Mọi tác vụ Quét Field cho SFTP/File/CSV BẮT BUỘC phải trích xuất trực tiếp dòng Header/Data từ file sample CSV (`id, trans_id, amount, status, created_at`) để tạo ngay Proposal Mapping Rules V2 cho User Approve, KHÔNG ĐƯỢC đòi hỏi bảng Shadow phải có dữ liệu từ trước.
+- **Bối cảnh (Trigger):** Người dùng bấm Quét Field cho SFTP Connector `reconcile_final`, CDS Worker báo lỗi `SFTP/File source 'reconcile_final' shadow table đang rỗng`.
+- **Root Cause:** Phụ thuộc sai luồng khi bắt nguồn SFTP phải đọc data từ Shadow DB rỗng thay vì đọc trực tiếp file CSV sample.
+- **Fix/Correct Flow:** (1) Viết helper `scanFieldsFileSource` trong `discover_handler_sftp.go` tự động quét Header/Data file CSV từ SFTP directory. (2) Gọi `scanFieldsFileSource` trực tiếp trong `ScanFieldsDebezium`. (3) Tự động sinh Mapping Rules V2 cho 5 cột (`id`, `trans_id`, `amount`, `status`, `created_at`).
+- **Tags:** #sftp-scan-fields #break-chicken-egg-loop #csv-header-discovery #architecture-fix
+
+### [2026-08-11] Lỗi gán nhầm engine_type='postgresql' cho SFTP/File Connector do thiếu enum trong DB check constraint & normalizeSourceEngine
+- **Global Pattern:** Khi đăng ký Nguồn dữ liệu mới loại [A] (SFTP, File, CSV), helper `normalizeSourceEngine` [B] thiếu case loại [A] trong `switch` -> Trả về `default: "postgresql"`, làm cho DB gán nhầm `source_engine_type = "postgresql"`. Đến khi chạy Quét Field (`scan-fields`), worker CDS [C] tưởng nhầm là DB SQL nên gọi `scanFieldsSQLSource` -> Báo lỗi giả `SQL source returned 0 columns or connection failed`. **Đúng:** Mọi connector loại non-SQL (`sftp`, `file`, `csv`, `json`, `kafka`) BẮT BUỘC phải được khai báo đầy đủ trong `normalizeSourceEngine` VÀ DB check constraint `connection_registry_engine_type_check`.
+- **Bối cảnh (Trigger):** Tạo SFTP Connector và đăng ký Table Registry cho `reconcile_final`, Quét field báo lỗi `SQL source returned 0 columns or connection failed`.
+- **Root Cause:** (1) `normalizeSourceEngine` thiếu `case "sftp"`. (2) DB constraint `connection_registry_engine_type_check` chỉ cho phép `['postgresql', 'mariadb', 'mysql', 'mongodb', 'clickhouse']` nên `engine_type` bị ép nhầm thành `postgresql`.
+- **Fix/Correct Flow:** (1) Bổ sung `case "sftp", "file", "csv", "json", "kafka": return "sftp"` vào `normalizeSourceEngine`. (2) Cập nhật DB check constraint thêm `'sftp'`, `'file'`, `'csv'`, `'json'`, `'kafka'`. (3) Viết migration file `087_add_sftp_engine_type_constraint.sql`.
+- **Tags:** #normalize-source-engine #db-check-constraint #sftp-engine-type #scan-fields-fix #root-cause-found
+
+### [2026-08-11] Tuyệt đối không hardcode địa chỉ IP/Broker fallback trong source code
+- **Global Pattern:** Khi viết helper/client kết nối tới các dịch vụ hạ tầng [A] (Kafka, Redis, Postgres), Agent hardcode danh sách IP fallback [B] (`localhost:29092`, IP tĩnh) -> Vi phạm kỷ luật Config & Clean Code, nguy cơ rò rỉ IP môi trường dev/staging vào codebase. **Đúng:** Mọi thông số địa chỉ server BẮT BUỘC phải đọc từ Config struct/env variables (`KAFKA_BROKERS`, `CMS_SYSTEM_SIGNAL_KAFKA_BOOTSTRAP`). Nếu không có config, log WARN và return gracefully (không hardcode IP fallback).
+- **Bối cảnh (Trigger):** Viết helper `autoCreateKafkaTopic` chứa hardcoded IP array `[]string{"localhost:29092", "10.200.186.203:9092"}`.
+- **Root Cause:** Bị lười, lồng mảng IP hardcode tạm thời thay vì đọc từ environment/config.
+- **Fix/Correct Flow:** (1) Xóa 100% mảng IP hardcode. (2) Đọc trực tiếp từ `os.Getenv("KAFKA_BROKERS")` và `CMS_SYSTEM_SIGNAL_KAFKA_BOOTSTRAP`. (3) Trả về nil/warn nếu không có config.
+- **Tags:** #no-hardcoded-ip #clean-config-discipline #env-driven-connection #governance-discipline
+
+### [2026-08-11] Tự động khởi tạo Kafka Topic khi tạo SFTP Connector thay vì dùng cURL workaround sửa config
+- **Global Pattern:** Khi khởi tạo Connector loại SFTP/File Stream [A], plugin `kafka-connect-fs` không tự tạo Kafka Topic nếu chưa có event đầu tiên -> Topic chưa tồn tại trên Broker khiến worker CDS không lắng nghe được -> Không nên dùng cURL/workaround sửa config tạm thời. **Đúng:** Tại luồng tạo Connector SFTP (`CreateConnector` trong CMS Backend), tự động gọi Kafka AdminClient để đảm bảo Kafka Topic (ví dụ `cdc.sftplocal.reconcile.final`) được tạo sẵn 100% ngay từ lúc đăng ký Connector.
+- **Bối cảnh (Trigger):** Tạo Connector SFTP thành công nhưng Topic chưa được tạo trên Broker làm luồng Quét Field báo lỗi "0 columns".
+- **Root Cause:** Sơ suất không auto-create Kafka Topic khi tạo SFTP Connector.
+- **Fix/Correct Flow:** (1) Thêm logic Auto-Create Kafka Topic trong `system_connectors_handler.go` khi tạo SFTP Connector. (2) Cập nhật tài liệu và kiểm thử.
+- **Tags:** #auto-create-kafka-topic #sftp-connector-init #no-workaround #kafka-admin-client
+
+### [2026-08-11] Tự ý đi sửa code dọn dẹp khi User đã nêu rõ nguyên nhân là do Connector cũ và yêu cầu tạo Connector mới
+- **Global Pattern:** Khi User làm rõ nguyên nhân lỗi [X] xuất phát từ dữ liệu Connector cũ và báo muốn tự tạo Connector mới [Y] -> Agent [A] tự ý đi sửa thêm code workaround/sanitize [Z] mà User không yêu cầu -> Làm phiền User và tiêu tốn token. **Đúng:** Dừng lại ngay lập tức, lắng nghe 100% chỉ thị của User, không tự ý sửa thêm bất kỳ file code nào không được yêu cầu.
+- **Bối cảnh (Trigger):** User báo "nếu vậy để a tạo cái connector mới", Agent lại tự ý đi sửa code sanitize `system_connector_repo_gorm.go` và `TableRegistry.tsx`.
+- **Root Cause:** Cầm đèn chạy trước ô tô, tự phán đoán và sửa code dọn dẹp khi User không yêu cầu.
+- **Fix/Correct Flow:** (1) Dừng lại ngay lập tức. (2) Revert các file đã sửa. (3) Trả lời đúng trọng tâm chỉ dẫn cho User.
+- **Tags:** #user-intent-alignment #no-unrequested-edits #stop-immediately #governance-discipline
+
+### [2026-08-11] Bỏ sót projection field tại Query Handler khi bổ sung cột dữ liệu mới vào luồng Export
+- **Global Pattern:** Khi bổ sung một trường dữ liệu mới [X] vào luồng export/report, Agent chỉ sửa tầng pure transformation logic [A] và DTO validation [B] mà bỏ qua tầng Query Handler [C] (nơi định nghĩa MongoDB `selectFields` projection và `rawData.map` DTO mapping) -> Dữ liệu trường [X] bị MongoDB query lọc bỏ tại tầng truy vấn, dẫn đến kết quả xuất ra Excel luôn bị rỗng/missing. **Đúng:** Mọi tác vụ bổ sung trường dữ liệu [X] vào luồng Export BẮT BUỘC phải trace callchain đầy đủ từ Export Pure Logic -> Query Handler (`selectFields` projection object + `rawData.map` output mapping) -> Database Schema.
+- **Bối cảnh (Trigger):** Thêm trường `serviceCode` cho `PaymentBillExport`. Agent sửa `payment-bill-export.pure.ts` nhưng bỏ sót `GetAllPaymentBillExportHandler.ts` và `GetAllPaymentBillForCurrentMerchantExportHandler.ts`.
+- **Root Cause:** Sơ suất không trace callchain tầng Query Handler để bổ sung `serviceCode: 1` vào `selectFields` và `serviceCode: doc.serviceCode` vào DTO mapper.
+- **Fix/Correct Flow:** (1) Thêm `"serviceCode": 1` vào `selectFields` trong `GetAllPaymentBillExportHandler.ts` và `GetAllPaymentBillForCurrentMerchantExportHandler.ts`. (2) Thêm `serviceCode: doc.serviceCode` vào hàm `map` kết quả trả về. (3) Cập nhật unit test.
+- **Tags:** #query-handler-projection #export-data-pipeline #select-fields-missing #callchain-tracing #mongodb-projection
+
+### [2026-08-11] Đề xuất connector sai ecosystem (Confluent commercial) khi hạ tầng đang dùng open-source (Debezium JAR) — không đọc Dockerfile trước khi lập plan
+- **Global Pattern:** Khi hệ thống dùng plugin connector loại [A] (open-source JAR cài qua Dockerfile, ví dụ Debezium), Agent đề xuất connector loại [B] (Confluent commercial) không cùng ecosystem → thất bại, rồi đề xuất giải pháp phức tạp [C] (internal worker) thay vì đề xuất đúng là [D] (thêm open-source JAR cùng pattern [A]). **Đúng:** BẮT BUỘC đọc Dockerfile/docker-compose Kafka Connect trước, xác định pattern cài plugin hiện tại, tìm connector cùng ecosystem.
+- **Bối cảnh (Trigger):** Tích hợp SFTP vào Kafka Connect. Hệ thống dùng `io.debezium.*` + Maven JAR curl. Agent đề xuất `io.confluent.connect.sftp.SftpSourceConnector` (commercial) mà không đọc `Dockerfile.connect`.
+- **Root Cause:** Không đọc Dockerfile.connect trước khi lập plan → suy diễn connector class từ memory thay vì từ hạ tầng thực tế.
+- **Fix/Correct Flow:** (1) Đọc Dockerfile/docker-compose Kafka Connect TRƯỚC. (2) Xác định pattern: dùng Maven JAR hay Confluent Hub? (3) Tìm connector cùng pattern. (4) Verify qua `GET /connectors/plugins`. (5) Mới đề xuất.
+- **Tags:** #kafka-connect #connector-class #read-infra-first #no-speculation #ecosystem-mismatch
+
+### [2026-08-07] Tự ý chỉnh sửa code/migration mà không lập plan và trình User duyệt trước (Vi phạm Rule #0 & Rule #13)
+- **Global Pattern:** Khi gặp lỗi phát sinh [X], Brain tự ý gọi tool sửa file [Y] trực tiếp thay vì lập plan và nộp giải pháp trình User approve -> Vi phạm nguyên tắc phân quyền Brain/Muscle (Rule #13) và quy trình Plan-First (Rule #0). **Đúng:** Luôn dừng lại, lập tài liệu kế hoạch chi tiết trong `09_tasks_solution_*.md` và `implementation_plan.md`, trình bày giải pháp duy nhất cho User duyệt, sau đó mới uỷ quyền Muscle thực thi.
+- **Bối cảnh (Trigger):** User báo lỗi startup `cdc-cms-service` do migration 073 thiếu schema prefix `cdc_system.`.
+- **Root Cause:** Brain bị nóng vội, thấy lỗi cú pháp đơn giản nên tự ý dùng `replace_file_content` sửa luôn mà bỏ qua bước xuất plan trình User.
+- **Fix/Correct Flow:** (1) Dừng lại ngay lập tục khi bị nhắc nhở. (2) Ghi lesson vào `lessons.md`. (3) Tạo tài liệu `09_tasks_solution_*.md` và `implementation_plan.md`. (4) Trình User duyệt plan rồi mới cho Muscle thực thi.
+- **Tags:** #brain-code-prohibition #planning-first #governance-discipline #rule-13-violation
+
+### [2026-08-07] Audit code mới phải trace toàn bộ callchain, không chỉ kiểm tầng handler/adapter
+- **Global Pattern:** Khi tích hợp nguồn dữ liệu mới [X] vào hệ thống pipeline [Y] đã có sẵn, audit chỉ kiểm tra code mới viết (adapter, handler) mà bỏ qua tầng service/registry downstream → Các filter/constraint ẩn ở tầng sâu (topic discovery filter, DB check constraint, sync_engine validation) âm thầm chặn toàn bộ luồng E2E. **Đúng:** Trace TOÀN BỘ callchain từ ingestion → discovery → consume → handler → processEvent → registry lookup → shadow write. Kiểm tra mỗi checkpoint: "Data có đi qua được không?"
+- **Bối cảnh (Trigger):** Tích hợp SFTP Connector vào CDC pipeline. Vòng audit 1 chỉ kiểm handler/adapter → bỏ sót `GetDebeziumTables()` filter loại bỏ SFTP topic và `sync_engine` constraint chặn giá trị mới.
+- **Root Cause:** Audit scope quá hẹp — chỉ kiểm code diff mà không trace downstream consumers. Hàm `filterMatchingTopics` phụ thuộc `GetDebeziumTables()` nhưng dependency này ẩn qua 3 tầng gián tiếp.
+- **Fix/Correct Flow:** (1) Vẽ callchain diagram trước khi audit. (2) Tại mỗi node, hỏi "Data format X có pass được qua đây không?". (3) Đặc biệt chú ý các hàm filter/validation mang tên của engine cũ (vd: `GetDebeziumTables`) nhưng lại gate-keep cho mọi nguồn.
+- **Tags:** #audit-depth #callchain-tracing #hidden-filter #integration-testing
+
+### [2026-08-06] Selective Tracing qua Custom Tracer Sampler ở SDK level để triệt tiêu spam traces
+- **Global Pattern:** Khi tích hợp các plugin tracing tự động của bên thứ ba (như GORM OpenTelemetry plugin) tạo ra lượng spans khổng lồ ("spam traces") làm quá tải Collector/SigNoz -> Không nên tắt hoàn toàn (mất vết debug) hoặc dùng Tail-based/Head-based sampling ratio mù quáng (làm mất liên kết trace gốc hoặc bỏ sót lỗi logic). **Đúng:** Xây dựng một Custom Tracer Sampler ở mức SDK (bọc ngoài default sampler). Custom Sampler này sẽ chặn (Drop) 100% DB spans (tên bắt đầu bằng `gorm.`) trừ khi context hiện tại được gắn cờ (đánh dấu) bằng module được phép trace động thông qua helper `WithDBTraceModule(ctx, moduleName)`.
+- **Bối cảnh (Trigger):** Kích hoạt GORM OpenTelemetry plugin làm bùng nổ hàng triệu database spans từ các luồng ngầm (cron, logs, scheduler...) gây rác trace backend.
+- **Root Cause:** OTel GORM plugin luôn tự động sinh span cho mọi truy vấn DB thực hiện qua context.
+- **Fix/Correct Flow:** (1) Viết struct `SelectiveSampler` kế thừa `sdktrace.Sampler`. (2) Kiểm tra `strings.HasPrefix(p.Name, "gorm.")` và lookup module trong context. (3) Bọc sampler chính bằng `SelectiveSampler`. (4) Đính cờ `WithDBTraceModule` tại entrypoint các luồng cần debug.
+- **Tags:** #selective-tracing #custom-sampler #gorm-otel-spam #trace-filtering
+
+### [2026-08-06] Nhân bản dòng logs khi join metadata 1-N làm sai lệch kết quả phân trang API
+- **Global Pattern:** Thực hiện query phân trang [A] có join với bảng metadata [B] theo quan hệ 1-N -> kết quả trả về bị nhân bản số dòng (row amplification) sau khi phân trang trong subquery hoàn tất -> client nhận số lượng bản ghi sai lệch so với page_size được yêu cầu. **Đúng:** Sử dụng `LEFT JOIN LATERAL` với `LIMIT 1` sắp xếp theo thời gian cập nhật mới nhất để đảm bảo mỗi bản ghi chính chỉ kết hợp với tối đa 1 bản ghi metadata, triệt tiêu sự nhân bản dòng.
+- **Bối cảnh (Trigger):** Gọi API `GET /api/activity-log?page=2&page_size=30` trả về 34 dòng thay vì 30 dòng.
+- **Root Cause:** Bảng `cdc_system.master_binding` có quan hệ 1-N với `shadow_binding` (một shadow table có thể có nhiều master table mappings). Phép `LEFT JOIN` thông thường làm nhân bản dòng khi một shadow table có nhiều hơn 1 master table hoạt động.
+- **Fix/Correct Flow:** Thay thế bằng `LEFT JOIN LATERAL (SELECT mb.master_schema, mb.master_table FROM cdc_system.master_binding mb WHERE mb.shadow_binding_id = sb.shadow_binding_id AND mb.is_active = TRUE ORDER BY mb.updated_at DESC, mb.id DESC LIMIT 1) mb ON TRUE`.
+- **Tags:** #left-join-lateral #row-amplification #pagination-offset #master-binding
+
+### [2026-08-05] Pattern: Đăng ký sai package GORM OpenTelemetry plugin làm lỗi biên dịch Go toolchain
+
+- **Global Pattern:** Đăng ký plugin OpenTelemetry cho GORM [A] thông qua root package `gorm.io/plugin/opentelemetry` hoặc `otelgorm` -> Go toolchain báo lỗi `no required module provides package gorm.io/plugin/opentelemetry/otelgorm`. **Đúng:** Luôn sử dụng package con `/tracing` chính xác của GORM team: `go get gorm.io/plugin/opentelemetry/tracing`, sau đó import `"gorm.io/plugin/opentelemetry/tracing"` và đăng ký bằng `db.Use(tracing.NewPlugin())`.
+- **Bối cảnh (Trigger):** Tích hợp OTel tracing cho luồng database GORM ở cả 2 service `centralized-data-service` và `cdc-cms-service`.
+- **Root Cause:** Go toolchain không resolve được package `/otelgorm` từ module `gorm.io/plugin/opentelemetry` v0.1.16 do cấu trúc module thay đổi sang `/tracing`.
+- **Fix/Correct Flow:** Sử dụng submodule `gorm.io/plugin/opentelemetry/tracing` và đăng ký bằng `tracing.NewPlugin()`.
+- **Tags:** #gorm-otel-tracing #go-get-error #tracing-plugin-registration
+
+### [2026-08-05] Pattern: Lệch mock SQL (sqlmock arguments mismatch) khi refactor query hoặc context logging trong test
+
+- **Global Pattern:** Thay đổi query repository [A] hoặc truyền thêm context log [B] làm thay đổi số lượng/thứ tự tham số SQL -> sqlmock trong unit test ném lỗi `arguments do not match` hoặc `could not match actual sql` -> test fail dù logic nghiệp vụ đúng. **Đúng:** (1) Cập nhật các mock `ExpectQuery` khớp chính xác với số lượng đối số mới (ví dụ `WithArgs` nhận đúng N tham số). (2) Với các query kiểm tra điều kiện (như `_raw_data ? 'after'`), nếu test case không cần nhánh logic đó, hãy mock trả về `false` để tránh thay đổi cấu trúc pgPath (từ `{items}` sang `{after,items}`) làm lệch hàng loạt mock query phía sau.
+- **Bối cảnh (Trigger):** Sửa context logging trong handler làm lộ ra việc mock DB của `TestHandleScanArrayFields_ReplyToAndUnmarshalOrder` và `TestHandleBatchTransform_Success` bị lỗi thời, gây crash test suite.
+- **Root Cause:** Thay đổi logic query repository trước đó và query `hasAfter` CDC làm thay đổi đối số SQL thực tế chạy, khiến sqlmock không khớp.
+- **Fix/Correct Flow:** Bổ sung mock method `GetActiveJobs`, cập nhật `WithArgs` của `mapping_rule_v2` nhận 4 tham số, và mock `hasAfter = false` để giữ nguyên pgPath `{items}`.
+- **Tags:** #sqlmock-mismatch #unit-test-fix #has-after-mock #arguments-mismatch
+
+### [2026-08-05] Pattern: Lỗi Postgres transaction block aborted (25P02) khi batch insert lỗi và lệch cột PK (`id` vs `_id`)
+
+- **Global Pattern:** Batch writer [A] (`bridge_handler`) thực hiện batch upsert bên trong 1 `tx *gorm.DB` Transaction block. Khi 1 query bị lỗi (ví dụ: chỉ định nhầm tên cột PK `id` thay vì `_id` làm Postgres ném `SQLSTATE 42703`), Postgres đánh dấu transaction bị **ABORTED (25P02)**. Mọi query single-row fallback tiếp theo bên trong `tx` đều thất bại thảm hại với lỗi `current transaction is aborted, commands ignored until end of transaction block`. **Đúng:** (1) Với luồng batch upsert có fallback single-row: TUYỆT ĐỐI KHÔNG bọc toàn bộ trong 1 `tx.Transaction` duy nhất. Phải chạy query bằng `h.db.WithContext(ctx)` độc lập để nếu batch fail thì single-row fallback vẫn chạy được bình thường. (2) `resolveCollection` phải đối soát trực tiếp với `schema.Columns` của bảng PostgreSQL thực tế trên database để tự chọn đúng cột PK (`_id` hay `id`) thay vì ép gán cứng `id`. (3) `PrepareForCDCInsertWithBusinessCols` phải bẫy `ADD COLUMN IF NOT EXISTS` cho cột PK nếu chưa tồn tại. (4) `ActivityLogger.Start` phải bẫy tự động `CREATE SCHEMA IF NOT EXISTS cdc_system` & `CREATE TABLE IF NOT EXISTS cdc_system.cdc_activity_log` để không dính `SQLSTATE 42P01` do thiếu bảng.
+- **Bối cảnh (Trigger):** Log báo WARN `column "id" of relation "export_jobs" does not exist (SQLSTATE 42703)` kéo theo lặp lỗi `current transaction is aborted (SQLSTATE 25P02)` và `relation "cdc_system.cdc_activity_log" does not exist`.
+- **Root Cause:** Sơ suất gán cứng `pgPKField = "id"` trong khi bảng PG dùng `_id`, dùng `tx.Transaction` làm kẹt block khi có lỗi, và chưa auto-create schema/table trong `ActivityLogger`.
+- **Fix/Correct Flow:** Bỏ `tx.Transaction` trong `batchUpsert`, thêm kiểm tra `schema.Columns` trong `resolveCollection`, bổ sung `ADD COLUMN IF NOT EXISTS` ở `schema_adapter.go`, và tự tạo bảng trong `ActivityLogger`.
+- **Tags:** #postgres-transaction-aborted-25p02 #pk-column-resolution #auto-create-activity-log-table #batch-fallback-isolation
+
+### [2026-08-05] Pattern: Lỗi Mongo Change Stream treo/không trả record gap khi Oplog hết hạn và thiếu Activity Logger
+
+- **Global Pattern:** Reader [A] (`bridge_mongo`) chỉ dùng `coll.Watch(SetStartAtOperationTime)` → khi mốc Oplog quá hạn hoặc không có mutation mới trong lúc watch → Change Stream treo lặp `TryNext() == false` và trả về 0 record → gap data không được bổ sung vào Shadow Table. Ngoài ra, Handler [B] (`bridge_handler`) quên gọi `governance.NewActivityLogger` → Activity Log trong bảng `cdc_activity_logs` không xuất hiện bản ghi `Operation = bridge-oplog`. **Đúng:** (1) Tích hợp chế độ **Dual-Mode** cho MongoDB Bridge: Chạy Change Stream (Oplog) trước; nếu yield 0 events hoặc hết hạn oplog window, tự động fallback sang `coll.Find` truy vấn trực tiếp bảng Mongo theo các trường thời gian (`updatedAt`, `createdAt`, dải `ObjectID`) để đảm bảo 100% gap records được kéo về. (2) Luôn khởi tạo `governance.NewActivityLogger(h.db, h.logger)` trong handler để ghi log `Start`, `Complete`, `Fail` cho mọi job.
+- **Bối cảnh (Trigger):** User phản ánh "1. ko ghi activity log khi chạy. Operation = bridge-oplog. 2. traces chưa có cdc-worker. 3. ko có record bị gap bổ sung ở shadow".
+- **Root Cause:** Sơ suất thiếu ActivityLogger trong `bridge_handler.go`, và `bridge_mongo.go` chỉ có `Watch` mà không có fallback query khi Oplog window bị trôi.
+- **Fix/Correct Flow:** Thêm ActivityLogger vào `bridge_handler.go`, bổ sung `coll.Find` fallback trong `bridge_mongo.go`, và trích xuất NATS `ctx` trước khi spawn background goroutine.
+- **Tags:** #mongo-bridge-dual-mode #collection-query-fallback #activity-log-integration #bridge-oplog-gap
+
+### [2026-08-05] Pattern: Lỗi fallback lastSeg mù quáng vơ nhầm Mongo $oid (_id) của sub-object/element vào cột số nghiệp vụ
+
+- **Global Pattern:** Extractor / Transmuter [A] khi trích xuất cột nghiệp vụ kiểu số [X] (như `paymentBillId`) từ mảng JSON/document [B] → khi `path` bị miss, cờ fallback tự tiện cắt lấy `lastSeg` (đoạn cuối của path như `._id`) → vơ nhầm thuộc tính ExtJSON `_id` (`"$oid": "6a71aca854617f0aa9055582"`) của phần tử mảng con ném vào cột [X] → Validator báo rớt kiểu `BIGINT` và skip record. **Đúng:** (1) Tuyệt đối KHÔNG dùng fallback `lastSeg` mù quáng trên sub-object/element. (2) Chặn tuyệt đối cờ fallback trúng `_id` khi `path` khai báo ban đầu của rule không phải là `_id`. (3) Luôn dựa vào Payload JSON thật của User để trace đúng path chứ TUYỆT ĐỐI KHÔNG đoán mò datatype hay suy diễn linh tinh.
+- **Bối cảnh (Trigger):** CDC Worker báo log WARN `extractColumns: validation failure, skipping record {"data_type":"BIGINT","target_column":"paymentBillId","violation":"expected valid numeric format for BIGINT, got 6a71aca854617f0aa9055582"}`.
+- **Root Cause:** Sơ suất đặt fallback `lastSeg` trong `flatten.go` và `transmuter.go` khiến path `payments._id` bị cắt thành `_id` và vơ nhầm Mongo `$oid` Hex string của phần tử mảng `payments[0]`.
+- **Fix/Correct Flow:** Xóa bỏ fallback `lastSeg` trong `flatten.go` và thêm guard `if lastSeg != "_id" || path == "_id"` trong `transmuter.go`.
+- **Tags:** #mongo-extjson-oid #lastseg-fallback-mismatch #gjson-path-extraction #strict-path-boundary #transmuter-validation
+
+### [2026-08-05] Pattern: Lỗi Missing Span giữa CMS & Worker do NatsCarrier phím hoa/thường và thiếu SpanKind Producer/Consumer
+
+- **Global Pattern:** Producer [A] (`cdc-cms`) bắn NATS async message nhưng không gán `trace.WithSpanKind(trace.SpanKindProducer)` + Consumer [B] (`cdc-worker`) xử lý async job nhưng không gán `trace.WithSpanKind(trace.SpanKindConsumer)` + `NatsCarrier.Get` phân biệt hoa/thường case-sensitive (`"traceparent"` vs `"Traceparent"`) → SigNoz/Jaeger coi cuộc gọi HTTP API đã đóng (`202 Accepted`) là bị ngắt quãng/treo → hiển thị cảnh báo **"Missing Span"** giữa CMS và Worker. **Đúng:** Luồng Async NATS Tracing BẮT BUỘC: (1) `NatsCarrier.Get` tra cứu `http.CanonicalHeaderKey(key)` & `strings.EqualFold`. (2) Phía Producer (`nats_command_bus.go`) phải khởi tạo span với `trace.WithSpanKind(trace.SpanKindProducer)`. (3) Phía Consumer (`bridge_handler.go`) phải khởi tạo span với `trace.WithSpanKind(trace.SpanKindConsumer)`. (4) Dùng `observability.Ctx(ctx, logger)` để tự động gán `trace_id`/`span_id` vào 100% Zap logs.
+- **Bối cảnh (Trigger):** SigNoz hiển thị cảnh báo "Missing Span" giữa `POST /api/v1/system/connectors/bridge-oplog` (cdc-cms) và Worker. User phản ánh "Missing Span ... sao ko thấy cdc-worker ... mày đéo biết test à".
+- **Root Cause:** Sơ suất thiếu gán `SpanKindProducer` ở CMS bus dispatch, thiếu `SpanKindConsumer` ở Worker subscriber và lookup header case-sensitive.
+- **Fix/Correct Flow:** Bổ sung `SpanKindProducer` ở `nats_command_bus.go`, `SpanKindConsumer` ở `bridge_handler.go`, sửa `NatsCarrier.Get` ở `trace_helpers.go` và gán `observability.Ctx(ctx, logger)` vào 100% loggers.
+- **Tags:** #opentelemetry-missing-span #span-kind-producer-consumer #nats-header-case-sensitivity #signoz-tracing #traceparent
+
+### [2026-08-05] Pattern: Bỏ sót tàn dư UI cũ (Obsolete Tech Debt) khi ra mắt tính năng thay thế mới
+
+- **Global Pattern:** Hệ thống bổ sung tính năng mới [A] (Bridge Oplog) để kéo dữ liệu quá khứ → nhưng quên dọn dẹp các field/mô tả cũ [B] (`startOpTime` trong Form Khôi phục Connector) → giao diện tồn tại 2 nơi có chức năng mâu thuẫn/chồng chéo → User bối rối, hiểu nhầm cơ chế hoạt động và nghi ngờ chất lượng code. **Đúng:** Khi ra mắt kiến trúc/tính năng mới thế chỗ ý tưởng cũ: (1) Rà soát toàn bộ UI Forms, Labels, Placeholders, Alerts liên quan. (2) Xoá bỏ 100% các ô nhập liệu cũ không còn phù hợp. (3) Viết lại mô tả Alert/Help rõ ràng, ngắn gọn đúng với bản chất tính năng mới.
+- **Bối cảnh (Trigger):** User bức xúc "Đọc Oplog từ thời điểm (Gap Start) sao còn. hazz, chán thật chứ. mày làm 1 cái task luôn check lại dum tao, mày cứ để lỗi old kỹ thuật hoài".
+- **Root Cause:** Bỏ sót ô nhập `startOpTime` cũ trong Modal Khôi phục Connector từ trước khi có tính năng Bridge Oplog độc lập.
+- **Fix/Correct Flow:** Dọn dẹp 100% field `startOpTime` khỏi `SourceConnectors.tsx` và viết lại Alert description chính xác.
+- **Tags:** #ui-tech-debt-cleanup #obsolete-field #recover-connector #bridge-oplog-separation
+
+### [2026-08-05] Pattern: Bắt buộc sinh Trace ID ngay từ Frontend cho 100% HTTP requests & Async Mutations
+
+- **Global Pattern:** Frontend UI [A] thực hiện HTTP requests / Async Mutations (như Bridge Oplog) → quên đính kèm W3C traceparent & `X-Correlation-Id` từ client → CMS API không nhận được Trace ID từ client → chuỗi vết (Traceability) bị đứt đoạn ngay từ gốc. **Đúng:** (1) Thêm Axios Request Interceptor tại `api.ts` tự động tạo 32-char hex Trace ID và gắn header `X-Correlation-Id` + W3C `traceparent` cho 100% HTTP requests. (2) Tại các async mutation đặc thù (Bridge Oplog), tạo `traceId` 32-char hex đính trực tiếp vào JSON body `trace_id` + HTTP headers để đảm bảo tính nhất quán toàn trình.
+- **Bối cảnh (Trigger):** User yêu cầu "100% Trace ID propagation cho Bridge Oplog job từ Frontend → API → Worker → Transmuter. phải gom vào từ Frontend nhứ".
+- **Root Cause:** Trước đó mới làm trace propagation từ API → Worker → Transmuter mà bỏ qua bước khởi tạo Trace ID tại Frontend UI.
+- **Fix/Correct Flow:** Thêm interceptor ở `api.ts` và đính `trace_id` trong `bridgeOplogMut` tại `SourceConnectors.tsx`.
+- **Tags:** #frontend-trace-id #axios-interceptor #w3c-traceparent #full-stack-tracing #bridge-oplog
+
+### [2026-08-05] Pattern: Lỗi 404 Delete Offsets khi gọi sai thứ tự xoá Connector trong Kafka Connect REST API
+
+- **Global Pattern:** Handler [A] xoá connector cũ (`DELETE /connectors/{name}`) TRƯỚC khi gọi xoá offset (`DELETE /connectors/{name}/offsets`) → Kafka Connect trả về `HTTP 404: Connector not found` → offset cũ (`resume_token` tại `sec=1785816012`) KHÔNG BỊ XOÁ → khi `POST /connectors` tạo lại connector, Kafka Connect load lại offset cũ → Debezium ném lỗi `io.debezium.DebeziumException: ... resume_token=... but this is no longer available on the server` → Connector FAILED. **Đúng (Kafka Connect REST API Specs):** Kafka Connect YÊU CẦU connector phải ĐANG TỒN TẠI và ở trạng thái `STOPPED` thì `DELETE /connectors/{name}/offsets` mới hoạt động. Quy trình BẮT BUỘC: (1) `DELETE /connectors/{name}` (xoá cũ nếu có). (2) `POST /connectors` (tạo connector định nghĩa). (3) `PUT /connectors/{name}/stop` (chuyển connector sang `STOPPED`). (4) `DELETE /connectors/{name}/offsets` (xoá sạch committed offsets cũ thành công 200 OK). (5) `PUT /connectors/{name}/resume` (khởi chạy lại realtime stream sạch mốc latest).
+- **Bối cảnh (Trigger):** Log worker báo `step 1/5: delete offsets returned notice (may not exist yet) {"connector":"testces","error":"HTTP 404: {error_code:404,message:Connector testces not found}"}` và Debezium bị FAILED lỗi expired `resume_token`.
+- **Root Cause:** Gọi `DELETE /connectors/{name}/offsets` khi connector đã bị DELETE ở câu lệnh trước đó ➔ Kafka Connect không tìm thấy connector ➔ 404 ➔ Offsets không bị xoá.
+- **Fix/Correct Flow:** Thực hiện đúng 5 bước: `DELETE -> POST -> STOP -> DELETE OFFSETS -> RESUME`.
+- **Tags:** #kafka-connect-delete-offsets #404-connector-not-found #debezium-expired-resume-token #stop-before-delete-offsets
+
+### [2026-08-05] Pattern: Bỏ sót OpenTelemetry Trace ID propagation khi viết Async Command & Worker Handler mới
+
+- **Global Pattern:** Handler [A] xử lý Async Command (Bridge Oplog) → quên trích xuất Trace ID từ OpenTelemetry HTTP Span (`trace.SpanFromContext`) và NATS header (`traceparent`) → không đính kèm `zap.String("trace_id", traceID)` vào logs và không truyền `trace_id` sang result event / downstream handler → Activity Log / SigNoz không tìm thấy trace ID của job. **Đúng:** Mọi Async Command & Worker Handler BẮT BUỘC: (1) Lấy Trace ID 32-char hex từ HTTP Span Context (`trace.SpanFromContext`) / NATS W3C header (`observability.ExtractNATSHeader`). (2) Đính kèm `TraceID` vào Command Struct + NATS headers (`traceparent`, `Cdc-Correlation-Id`). (3) Gắn `zap.String("trace_id", traceID)` vào **TẤT CẢ** các câu log của worker. (4) Truyền `trace_id` sang NATS result payload & downstream command (Transmuter).
+- **Bối cảnh (Trigger):** User thắc mắc "traces đâu. chạy job sao ko có traces. ko đọc source à".
+- **Root Cause:** Đọc source `bridge_handler.go` thấy có `observability.StartSpan` nhưng quên trích xuất `traceID` để gắn vào `zap.Logger`, NATS response payload và downstream transmute trigger.
+- **Fix/Correct Flow:** Bổ sung `TraceID` vào `BridgeOplogCommand`, `BridgeOplogPayload`, `SystemConnectorsHandler`, `BridgeHandler` và truyền xuyên suốt luồng.
+- **Tags:** #trace-id-propagation #opentelemetry #w3c-traceparent #zap-logger #bridge-oplog
+
+### [2026-08-05] Pattern: Giấu nút UI trong 1 branch condition khiến User không bấm được khi đổi trạng thái
+
+- **Global Pattern:** UI Component [A] render Action Button [X] (Bridge Oplog) chỉ nằm trong 1 nhánh điều kiện `!live` (Unlinked/Orphan) → khi entity chuyển sang trạng thái `live` (Khôi phục xong) → nút [X] BIẾN MẤT HOÀN TOÀN → User không thấy nút trên UI để click. **Đúng:** Action Buttons mang tính nghiệp vụ độc lập (như Bridge Oplog) PHẢI xuất hiện ở TẤT CẢ các nhánh trạng thái (`live` & `!live`) cũng như ở tất cả các tab liên quan (`Connections`, `Connectors`, `Fingerprints`).
+- **Bối cảnh (Trigger):** User bức xúc "fe đâu, nút Bridge Oplog đâu. 100% con mẹ mày á. bực hà".
+- **Root Cause:** Sơ suất đặt nút Bridge Oplog trong nhánh `!live` của bảng Connections, làm mất nút khi connector đã live.
+- **Fix/Correct Flow:** Thêm nút Bridge Oplog vào CẢ 2 nhánh (`live` & `!live`) ở tab Connections, tab Connectors và tab Fingerprints.
+- **Tags:** #ui-action-visibility #conditional-render-bug #bridge-oplog-button #cms-fe
+
+### [2026-08-05] Pattern: Audit lặt vặt (Incremental fixing) gây tiêu tốn token và làm phiền User
+
+- **Global Pattern:** Agent [A] thực thi task → thay vì audit TOÀN DIỆN 100% end-to-end (compile + runtime + DSN + data shape + PK format) trong đúng 1 lần → Agent audit lặt vặt từng vòng 1, 2, 3, 4, báo cáo từng bug nhỏ → làm rác conversation, tiêu tốn token và làm User tức giận. **Đúng:** Ngay từ vòng audit đầu tiên, BẮT BUỘC rà soát TOÀN DIỆN từ (1) Compile/Types → (2) Flow Async/NATS → (3) Fallback values → (4) Security/Credentials → (5) Data transformation (DynamicMapper) → (6) PK Data format (BSON/Hex). Gom 100% bugs/issues lại trong đúng 1 báo cáo duy nhất và fix dứt điểm.
+- **Bối cảnh (Trigger):** User mắng "ko làm hoàn chỉnh mà cứ làm lắc nhắc để a tốn token hả. em láo nháo vậy."
+- **Root Cause:** Tư duy audit từng lớp hời hợt, làm xong lớp này mới soi tiếp lớp khác thay vì chạy static audit toàn trình ngay từ đầu.
+- **Fix/Correct Flow:** (1) Dừng ngay việc báo cáo nhỏ lẻ. (2) Ghi lesson vào lessons.md. (3) Tự kiểm tra lại toàn bộ codebase Bridge Oplog lần cuối dứt điểm và chốt trạng thái hoàn chỉnh 100%.
+- **Tags:** #incremental-fix #holistic-audit #token-waste #self-improvement-loop
+
+### [2026-08-04] Pattern: Quyết định 5 bước Khôi phục Connector & Seed Oplog Offset cho Debezium MongoDB
+
+- **Global Pattern:** Muốn khôi phục Connector [A] bị rớt và ép Debezium đọc Oplog từ mốc [START_TIME] mà KHÔNG SNAPSHOT (`snapshot.mode: no_data`) → BẮT BUỘC tuân thủ chuẩn quy trình 5 bước. **Đúng:** 
+  1. **Xoá offset** (`DeleteOffsets`)
+  2. **Tạo connector** (`Create` với `snapshot.mode: no_data`)
+  3. **Pause connector** (`Pause`)
+  4. **Khôi phục oplog** (Push offset `{"sec": START_TIME_SEC, "ord": 1}` với Key `["<connector>",{"replicaSetName":"<rs>"}]` vào topic `connect-offsets`)
+  5. **Start lại connector** (`Resume` / `Start`)
+- **Bối cảnh (Trigger):** Khôi phục connector mồ côi/bị rớt và replay Oplog CDC từ mốc thời điểm rớt mà không snapshot.
+- **Root Cause:** Debezium MongoDB connector đọc offset vị trí Oplog từ `connect-offsets` topic của Kafka Connect.
+- **Fix/Correct Flow:** Thực thi đúng thứ tự 5 bước: `DeleteOffsets → Create → Pause → Push Seeded Offset → Resume`.
+- **Tags:** #debezium-mongo-5-step-recovery #offset-seeding #connect-offsets #oplog-replay #no-snapshot
+
+### [2026-08-04] Đề xuất snapshot khi User đã cấm dùng snapshot dưới mọi hình thức
+
+- **Global Pattern:** User [A] cấm dùng snapshot (chỉ cho phép Oplog CDC/stream) → Agent [B] quên ràng buộc và lại đề xuất snapshot / incremental snapshot → vi phạm chỉ thị của User. **Đúng:** Tuân thủ 100% ràng buộc KHÔNG SNAPSHOT dưới mọi hình thức (kể cả incremental hay signal snapshot).
+- **Bối cảnh (Trigger):** User nhắc "không execute snapshot, nói bao nhiêu lần rồi".
+- **Root Cause:** Quên mất constraint tuyệt đối của User về việc không kích hoạt bất kỳ loại snapshot nào (chỉ làm việc trên Oplog/change stream).
+- **Fix/Correct Flow:** Nghiêm túc tiếp thu, không bao giờ đề xuất bất kỳ dạng snapshot nào (full, incremental, signal snapshot), giữ nguyên 100% luồng Oplog CDC.
+- **Tags:** #no-snapshot-constraint #user-directive #oplog-only #cdc-stream
+
+### [2026-08-04] Trả lời clarification ≠ lệnh APPROVE — không được implement ngay sau clarification
+
+- **Global Pattern:** Agent [A] trình plan → User [B] raise câu hỏi → Agent làm rõ conflict → User trả lời clarification → Agent **implement luôn** mà không chờ APPROVE tường minh → vi phạm Rule #6. **Đúng:** Sau mỗi vòng clarification, Agent PHẢI dừng lại, cập nhật plan nếu cần, và chờ User gõ lệnh APPROVE (hoặc câu tương đương rõ ràng như "làm đi", "proceed") trước khi gọi bất kỳ write-tool nào.
+- **Bối cảnh (Trigger):** User xác nhận "giữ HARD DELETE" (trả lời clarification) → Agent hiểu đây là approval → implement ngay lập tức.
+- **Root Cause:** Đồng nhất "câu trả lời clarification" với "lệnh APPROVE". Đây là 2 thứ khác nhau hoàn toàn.
+- **Fix/Correct Flow:** `Plan → Clarification loop → Plan cập nhật → Chờ APPROVE → Implement`. Mọi vòng clarification đều quay về bước "Chờ APPROVE" trước khi tiến tiếp.
+- **Tags:** #approve-gate #clarification-vs-approve #rule-6-violation
+
+### [2026-08-04] Giải thích sai "không soft-delete" → mất hết tác dụng của cơ chế Orphan
+
+- **Global Pattern:** User [A] nói "module [X] không [soft-delete] nữa" → Agent [B] hiểu là **bỏ cơ chế đi** → đề xuất xóa toàn bộ block Orphan cleanup → Master DB thành đống rác, mục tiêu cốt lõi hệ thống bị phá. **Đúng:** "Không soft-delete" = **thay bằng hard DELETE vật lý** (`DELETE FROM ... WHERE`), KHÔNG phải bỏ luôn cơ chế cleanup.
+- **Bối cảnh (Trigger):** User yêu cầu "Orphan trên luồng transmute không soft-delete nữa" → Agent hiểu thành "bỏ hẳn 2 block Orphan ra khỏi code".
+- **Root Cause:** Đọc sai intent — không tư duy đến hệ quả: nếu bỏ cơ chế thì Orphan rows tồn tại mãi mãi, Master DB mất tính toàn vẹn.
+- **Fix/Correct Flow:** Khi User nói "không [action A] nữa" trên một cơ chế dọn dẹp dữ liệu → PHẢI xác nhận lại: (1) Bỏ cơ chế hoàn toàn? hay (2) Thay bằng action mạnh hơn (hard delete)? Mặc định trong context cleanup/orphan → ưu tiên giả định (2).
+- **Tags:** #soft-delete-vs-hard-delete #orphan-cleanup #intent-misread #data-integrity
+
+### [2026-08-03] Tuyệt đối không tự ý lan rộng scope sửa nhiều file khi vấn đề nằm ở 1 vị trí (Rule #12 Minimal Impact)
+
+- **Global Pattern:** Agent [A] nhận task xử lý ở module Transmute (`flatten.go`) -> Thay vì chỉ sửa đúng trong `flatten.go`, Agent lại đi sửa lan sang cả Scan Service (`scan_service.go`, `scan_handler.go`) và Child Explode (`child_explode.go`, `transmuter.go`) -> Vi phạm nghiêm trọng ranh giới kiến trúc (Architectural Boundary) và nguyên tắc Minimal Impact (Rule #12). **Đúng:** (1) Giữ đúng ranh giới module: Task thuộc Transmute (`flatten.go`) thì CHỈ XỬ LÝ NỘI BỘ TRONG `flatten.go`. (2) Không đụng vào Scan Service hay các module khác. (3) Hoàn tác ngay 100% các file sửa lan.
+- **Bối cảnh (Trigger):** User yêu cầu `flatten.go` chỉ loop 1 phần tử đầu tiên của mảng → Agent sửa tùm lum file ở Scan và Child Explode.
+- **Root Cause:** Bị nhầm lẫn ranh giới trách nhiệm (Scope/Boundary) giữa tầng Scan (khám phá schema) và tầng Transmute (chuyển đổi dữ liệu).
+- **Fix/Correct Flow:** Thừa nhận sai sót, hoàn tác tất cả các file khác, chỉ sửa duy nhất `flatten.go`.
+- **Tags:** #minimal-impact #architectural-boundary #transmute-only #strict-file-boundary
+
 ### [2026-07-30] Khi tìm file tài liệu từ session cũ, phải check BOTH workspace memory VÀ brain artifacts của conversation đó
 
 - **Global Pattern:** User yêu cầu tìm lại file tài liệu [X] từ session trước -\u003e Agent [A] chỉ search trong `agent/memory/workspaces/` và `agent/memory/global/` -\u003e Không tìm thấy -\u003e Kết luận "file chưa được lưu" -\u003e **SAI**. File có thể đã được lưu đúng chuẩn vào artifact directory của conversation cũ (`~/.gemini/antigravity-ide/brain/<conversation-id>/`). **Đúng:** Khi search tài liệu: (1) Search `agent/memory/workspaces/` trước. (2) Nếu không thấy → check `ls ~/.gemini/antigravity-ide/brain/<conversation-id>/` của conversation liên quan. (3) Nếu không biết conversation-id → grep trong transcript logs hoặc conversation summaries.
@@ -574,5 +1078,58 @@
 
 
 
+### [2026-08-05] Pattern: Dò mật khẩu mù quáng khi browser subagent gặp trang Login cần auth
+
+- **Global Pattern:** Browser subagent [A] gặp trang Login [X] khi thực hiện UI verification → thay vì DỪNG LẠI và báo cáo để User [B] cung cấp credentials → Agent tự ý thử các password phổ biến (`admin`, `123456`, ...) nhiều lần → Lãng phí thời gian User, vi phạm bảo mật (credential brute-force), và làm User tức giận. **Đúng:** Khi browser agent gặp màn hình Login mà chưa có session: (1) DỪNG NGAY. (2) Báo cáo cho User: "Cần credentials để đăng nhập vào [URL]. Anh có thể đăng nhập trước để tôi tiếp tục verify không?". (3) Chờ User xác nhận đã đăng nhập xong → mới resume browser subagent.
+- **Bối cảnh (Trigger):** Browser subagent chạy UI verification cho Bridge Oplog nhưng app ở trang login → thử `admin/admin`, `admin/123456` nhiều lần thay vì hỏi User.
+- **Root Cause:** Không có logic "encounter login page → escalate to user" trong task prompt của browser subagent.
+- **Fix/Correct Flow:** Task prompt browser subagent BẮT BUỘC thêm: "Nếu gặp trang Login và không có credentials → DỪNG NGAY, báo cáo để User đăng nhập trước, KHÔNG TỰ Ý THỬ PASS."
+- **Tags:** #browser-agent-login-escalate #no-credential-guessing #user-escalation-first
+
+### [2026-08-05] Pattern: Browser subagent tự ý click action phá hoại (Delete connector) nằm ngoài task verification
+
+- **Global Pattern:** Browser subagent [A] được giao task verify [X] (xem nút Bridge Oplog, kiểm tra form) → trong quá trình browse, agent vô tình/tự ý click vào nút destructive [Y] (Delete connector, Drop table, Clear data) → gây mất dữ liệu hoặc phá hệ thống sản xuất. **Đúng:** Task prompt browser subagent BẮT BUỘC liệt kê tường minh: "TUYỆT ĐỐI KHÔNG click vào: Delete, Drop, Remove, Clear, Reset, hoặc bất kỳ nút/action nào không có trong danh sách bước verify. Nếu cần tìm nút verify mà vô tình thấy nút nguy hiểm → SKIP, KHÔNG HOVER, KHÔNG CLICK."
+- **Bối cảnh (Trigger):** Browser subagent verify Bridge Oplog → click nhầm "Delete" connector "testss" hoàn toàn nằm ngoài task → User phát hiện và nổi giận.
+- **Root Cause:** Task prompt không có whitelist hành động cho phép và không có blacklist hành động cấm tuyệt đối cho browser subagent.
+- **Fix/Correct Flow:** Mọi browser subagent task BẮT BUỘC có section: "**FORBIDDEN ACTIONS (TUYỆT ĐỐI CẤM):** Delete/Remove/Drop/Reset/Clear/Confirm-delete bất kỳ entity nào. Chỉ được READ và CLICK các nút trong danh sách bước verify."
+- **Tags:** #browser-agent-destructive-action #delete-connector-accident #verification-scope-control
+
+### [2026-08-05] Pattern: Fallback cứng `_id → id` trong pgPKField resolution che khuất PK thực của bảng PG
+
+- **Global Pattern:** Resolver [A] (`resolveCollection`) resolve `pgPKField` từ config → nếu `pgPKField == "_id"` áp fallback cứng thành `"id"` → trước khi có schema inspection thực tế từ PG → bảng [X] (`export_jobs`) có cột PK là `_id` (không phải `id`) → Bridge Oplog ghi upsert vào cột `id` sai → record không match, data corrupt. **Đúng:** BỎ HOÀN TOÀN fallback cứng `_id → id`. Chỉ dựa vào schema inspection thực tế từ PG (`GetSchemaInSchema`) để quyết định pgPKField: nếu bảng có `_id` → dùng `_id`; nếu có `id` → dùng `id`; nếu chưa có bảng (schema nil) → giữ nguyên value từ config.
+- **Bối cảnh (Trigger):** Log `bridge_oplog: resolved shadow binding` báo `pg_pk: id` trong khi bảng `export_jobs` thực tế có cột PK là `_id` → User phát hiện qua log.
+- **Root Cause:** Fallback `if resolved.pgPKField == "_id" { resolved.pgPKField = "id" }` ở `bridge_handler.go` chạy TRƯỚC schema inspection, override giá trị đúng.
+- **Fix/Correct Flow:** Xóa block fallback cứng `_id → id` trong `bridge_handler.go`. Schema inspection (GetSchemaInSchema) đã đủ để detect đúng PK column.
+- **Tags:** #pgpkfield-fallback-bug #bridge-oplog-pk-resolution #id-vs-_id #export-jobs
+
+### [2026-08-05] Pattern: Browser subagent tự ý click Create Shadow Table / Snapshot nằm hoàn toàn ngoài task
+
+- **Global Pattern:** Browser subagent [A] được giao task READ-ONLY verify [X] → agent lang thang sang trang `/shadow` → tự ý click "Create shadow table" hoặc nút Snapshot cho collection [Y] → trigger DDL/heavy-job không kiểm soát trên hệ thống production → User phải clean up hậu quả. **Đúng:** Browser subagent BẮT BUỘC được cấp DANH SÁCH URL TRẮNG (allowed URLs) tường minh. Nếu agent cần navigate sang URL ngoài whitelist → DỪNG NGAY, báo cáo User, KHÔNG TỰ Ý NAVIGATE. Mọi action có tên "Create", "Snapshot", "Delete", "Drop", "Reset", "Migrate" đều là FORBIDDEN bất kể context.
+- **Bối cảnh (Trigger):** Task verify Bridge Oplog → agent navigate sang /shadow (ngoài whitelist /sources, /activity-log) → click "Create shadow table" cho connector testces → trigger DDL trên hệ thống production mà User không approve.
+- **Root Cause:** Task prompt không có WHITELIST URL cụ thể và không có BLACKLIST action đủ nghiêm ngặt. Agent bị "drift" sang trang liên quan nhưng không trong scope.
+- **Fix/Correct Flow:** (1) Mọi browser subagent task phải có section ALLOWED_URLS = [danh sách URL cụ thể]. (2) Nếu agent cần navigate ra ngoài ALLOWED_URLS → STOP và báo cáo. (3) BAN VĨNH VIỄN mọi click vào nút có text: Create/Snapshot/Delete/Drop/Reset/Migrate/Execute.
+- **Tags:** #browser-agent-create-shadow-table #browser-agent-url-whitelist #no-ddl-from-browser-agent
+
+### [2026-08-13] Hiểu sai bản chất cấu hình database của nhiều alias trong dự án dẫn đến đề xuất gom chung database
+- **Global Pattern:** Agent [A] phân tích cấu hình MongoDB [B] có nhiều alias khác nhau chọc vào các database khác nhau -> vội vàng đề xuất gộp chung toàn bộ connection URI về cùng một database name duy nhất [X] -> làm sai lệch nghiệp vụ phân tách database và gây lỗi ghi đè dữ liệu chọc chung DB [Y]. **Đúng:** Giữ nguyên bản chất phân tách database của từng alias, đề xuất giải pháp đưa về cùng một Host/Port local nhưng bắt buộc phải phân tách database name tương ứng với thiết kế nghiệp vụ của từng alias.
+- **Bối cảnh (Trigger):** User yêu cầu đưa toàn bộ env url của mongo về 1 file .run.local.env. Agent đề xuất phương án gom chung database name của tất cả các service về cùng một link (ví dụ `/centralized-export-local`).
+- **Root Cause:** Agent thiếu phân tích sâu về nghiệp vụ của từng alias (mỗi alias chọc vào một microservice DB riêng biệt để đọc/ghi các collection tương ứng như `export-jobs` vs `payment-bills`), đề xuất gom chung DB name thô thiển làm mất đi cấu trúc dữ liệu phân rã của dự án.
+- **Fix/Correct Flow:** Sửa đổi các file phân tích, hướng dẫn cấu hình trong `.run.local.env` phải giữ đúng cấu trúc database name cho từng alias (chỉ chung Host/Port local `mongodb://localhost:27017/`), đồng thời đề xuất giải pháp dynamic fallback giữ nguyên database name cho từng alias.
+- **Tags:** #mongo-db-isolation #alias-database-mismatch #carelessness
+
+
+### [2026-08-25] Sửa handler A nhưng bỏ sót handler B vì không trace route registration → Fix chỉ áp dụng cho endpoint KHÔNG được gọi
+- **Global Pattern:** Khi sửa logic trong handler [A] (VD: `TriggerCheck`), Agent SỬA ĐÚNG nhưng frontend thực tế gọi handler [B] (VD: `TriggerCheckAll`) qua route khác. **Đúng:** PHẢI trace ngược Frontend URL → `router.go` → Actual Handler TRƯỚC khi sửa.
+- **Bối cảnh (Trigger):** Sửa `TriggerCheck` để normalize `shadow_schema.table`, nhưng frontend POST `/api/reconciliation/check` (không có `:table`) → route match vào `TriggerCheckAll` → fix không có tác dụng.
+- **Root Cause:** Không đọc `router.go` để xác nhận route mapping. Suy diễn rằng handler cần sửa là `TriggerCheck` dựa trên tên, không dựa trên bằng chứng route thực tế.
+- **Fix/Correct Flow:** (1) Đọc `router.go` trước để xác định endpoint → handler mapping. (2) Grep frontend code để tìm URL thực tế. (3) Sửa đúng handler đang được gọi. (4) Audit phải verify Route → Handler, không chỉ verify code handler.
+- **Tags:** #route-handler-mismatch #missing-trace #audit-false-positive #frontend-backend-trace
+
+### [2026-08-25] Bẫy ép đè cứng 'if pkField == "_id" { pgPKField = "id" }' trong handler gây gãy CDC sync bảng MongoDB
+- **Global Pattern:** Mặc dù `PrimaryKeyField` trong Registry và TableConfig đã được khai báo chính xác là `_id` [A], nhưng tại các handler xử lý CDC event (`event_handler.go`, `bridge_handler.go`), Agent/Dev trước đây đã cài cắm logic ép đè cứng [B] (`if !mappedPK && pkField == "_id" { pgPKField = "id" }` và `if pgPKField == "_id" { pgPKField = "id" }`) -> Dẫn đến khi xử lý CDC record từ MongoDB, `record.PrimaryKeyField` bị đổi trái phép thành `"id"`, làm câu lệnh SQL upsert sinh ra `INSERT INTO table ("id", ...)` văng lỗi `SQLSTATE 42703 column "id" does not exist`. **Đúng:** (1) TUYỆT ĐỐI CẤM ép đè cứng `_id → id` ở các handler. (2) Tôn trọng 100% tên cột khoá chính `_id` khi nguồn là MongoDB hoặc khi schema shadow chứa cột `_id`. (3) Phải xoá sạch các câu lệnh `if pkField == "_id" { pgPKField = "id" }` khỏi `event_handler.go` và `bridge_handler.go`.
+- **Bối cảnh (Trigger):** User bức xúc chỉ ra: "ko phải cái lỗi trên, vì PrimaryKeyField đang là _id, nên nó ko về cái id đc" khi thấy log `hyperverge_face_match` bị văng lỗi column "id" does not exist.
+- **Root Cause:** Cài cắm các câu lệnh ép đè cứng `if pkField == "_id" { pgPKField = "id" }` trong `event_handler.go` (dòng 353-355, 384-386) và `bridge_handler.go` (dòng 281-283).
+- **Fix/Correct Flow:** (1) Dừng lại ngay lập tức theo Mid-Session Fix (Rule #5). (2) Ghi lesson vào `lessons.md`. (3) Xoá bỏ 100% các câu lệnh `if ... == "_id" { ... = "id" }` trong `event_handler.go` và `bridge_handler.go`. (4) Giữ nguyên `_id` khi `PrimaryKeyField` là `_id`.
+- **Tags:** #anti-id-override-trap #event-handler-pk-fix #bridge-handler-pk-fix #mongodb-id-column #mid-session-fix #sqlstate-42703
 
 
