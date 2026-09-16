@@ -26,3 +26,10 @@
   - Cập nhật `TableRegistry.tsx` (`TransformJobStatus`): Hiển thị live % + `<hoàn_thành> / <tổng_số> rows` khi chạy, hiển thị kết quả sau F5 và nút icon copy `<CopyOutlined />` SigNoz Trace ID siêu gọn.
   - Cập nhật `MasterRegistry.tsx` (`TransmuteJobStatus`): Hiển thị live % + `<hoàn_thành> / <tổng_số> rows` khi chạy, hiển thị kết quả sau F5 và nút icon copy `<CopyOutlined />` SigNoz Trace ID siêu gọn.
   - `npm run build` PASS 100% không warning/lỗi TypeScript.
+
+- [2026-08-27 13:35] [Muscle:Gemini-3.7-Flash] Fix triệt để vấn đề không phân lập Transform Progress giữa các shadow binding cùng source_object_id:
+  1. Sửa LATERAL JOIN trong `source_object_read_repo_gorm.go` để bắt buộc match `tj.target_table` với `shadow_table` của từng binding.
+  2. Bổ sung method `GetLatestBySourceObjectIDAndTable` trong `transform_job_repo.go`.
+  3. Cập nhật `TransformJobStatusV2` trong `source_object_actions_handler.go` để hỗ trợ query param `binding_id` và `target_table`.
+  4. Cập nhật `TableRegistry.tsx` để truyền `bindingId` và `targetTable` vào `TransformJobStatus` ở cả bảng chính và bảng con expanded.
+  5. Build verify backend và frontend: PASS.

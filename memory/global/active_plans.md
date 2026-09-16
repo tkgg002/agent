@@ -6,6 +6,8 @@
 
 | Workspace | Project | Status | Last Active |
 |-----------|---------|--------|-------------|
+| feat-clickhouse-master-destination | data-hub | 🟡 Active (Planning) | 2026-09-11 |
+| feat-cdc-postgres-to-mongo-3tables | data-hub | 🟡 Active (Planning) | 2026-09-10 |
 | bug-delete-connector-cleanup-bindings-2026-06-30 | data-hub | 🟡 Active (Planning) | 2026-06-30 |
 | bug-recon-heal-missing-shadow-2026-06-30 | data-hub | ✅ Done | 2026-06-30 |
 | bug-transmuter-bigint-casting-2026-06-30 | centralized-data-service | ✅ Done | 2026-06-30 |

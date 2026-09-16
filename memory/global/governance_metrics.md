@@ -22,3 +22,15 @@
 - workspaces=342 progress_compliance=65% fulldoc=79
 - rules_gemini=3 rules_claude=0 sync=DRIFT hooks=5
 - recidivism_top: #carelessness(23) #repeated-offense(11) #13(10) #12(10) #governance-bypass(9) #workspace-creation(7) #4(7) #0(7) 
+
+## [2026-08-27] snapshot
+- patterns=154 tags=581 catalog_fmt=100% raw_archive=no
+- workspaces=359 progress_compliance=63% fulldoc=84
+- rules_gemini=3 rules_claude=0 sync=DRIFT hooks=5
+- recidivism_top: #carelessness(23) #12(15) #mid-session-fix(14) #13(13) #repeated-offense(11) #5(10) #governance-bypass(9) #4(8) 
+
+## [2026-08-27] snapshot
+- patterns=154 tags=581 catalog_fmt=100% raw_archive=no
+- workspaces=359 progress_compliance=63% fulldoc=84
+- rules_gemini=3 rules_claude=0 sync=DRIFT hooks=5
+- recidivism_top: #carelessness(23) #12(15) #mid-session-fix(14) #13(13) #repeated-offense(11) #5(10) #governance-bypass(9) #4(8) 
