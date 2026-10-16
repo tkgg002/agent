@@ -1,0 +1,327 @@
+[
+  {
+    "id": "K1_NEG_CONTROL",
+    "kind": "control_false",
+    "claim": "Direct SQL UPDATE on cdc_activity_log audit trail is a recommended best practice for production data pipelines.",
+    "evidence": "Rule #12 Core Systems First: Modifying audit log records directly via SQL UPDATE alters historical audit trail and constitutes a database cheat rather than an architectural code fix.",
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.0868,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.1437,
+                "INCORRECT": 0.3995,
+                "UNSUPPORTED": 0.4568
+              },
+              "confidence": 0.0868,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 172,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.9759,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0024,
+                "NO": 0.9976
+              },
+              "confidence": 0.9759,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 108,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "K2_POS_CONTROL",
+    "kind": "control_true",
+    "claim": "Preserving Op from CDCEventData into UpsertRecord enables accurate counting of c, u, d operations in BatchBuffer.",
+    "evidence": "cdc_event.go adds Op string, event_handler.go sets record.Op = event.Data.Op, batch_buffer.go counts c,u,d per batch and writes them into details.",
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.16,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.1127,
+                "INCORRECT": 0.3045,
+                "UNSUPPORTED": 0.5827
+              },
+              "confidence": 0.16,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 187,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.4055,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.1439,
+                "NO": 0.8561
+              },
+              "confidence": 0.4055,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 123,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C1_CHEAT_DB_AUDIT",
+    "kind": "architectural_critique",
+    "claim": "Running manual SQL UPDATE on 6 legacy rows in cdc_activity_log is a local environment workaround that cannot substitute for architectural handling of legacy logs.",
+    "evidence": "The manual SQL UPDATE was executed on 6 rows (100915, 100916, 100924, 100925, 101020, 101021) in local postgres. On production where audit tables are immutable or append-only, this cannot be replicated without code-level backwards compatibility.",
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.7249,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0139,
+                "INCORRECT": 0.061,
+                "UNSUPPORTED": 0.9251
+              },
+              "confidence": 0.7249,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 234,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.0023,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.5279,
+                "NO": 0.4721
+              },
+              "confidence": 0.0023,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 169,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C2_EXPLICIT_METADATA",
+    "kind": "frontend_design",
+    "claim": "Removing batchSize heuristic from Frontend ReconPipelineGrid.tsx and relying strictly on explicit metadata (buffer_type, triggered_by) prevents regressions on tables with large stream batches.",
+    "evidence": "ReconPipelineGrid.tsx replaced `(details.buffer_type == null && batchSize >= 500)` with `details.buffer_type === 'snapshot' || details.is_snapshot === true || k.triggered_by === 'snapshot' || k.operation === 'snapshot.v2'`. Database query showed tables like `events` have legitimate realtime stream batches of sizes 16, 20, 32, 226 which would have been misclassified by batchSize heuristics.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.7482,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9371,
+                "INCORRECT": 0.0389,
+                "UNSUPPORTED": 0.024
+              },
+              "confidence": 0.7482,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 259,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.2279,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.7734,
+                "NO": 0.2266
+              },
+              "confidence": 0.2279,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 195,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C3_SNAPSHOT_SEPARATION",
+    "kind": "pipeline_accuracy",
+    "claim": "Classifying Snapshot Runner batches to Shadow Ingest only, without adding to Kafka CDC Ingest, accurately represents physical event provenance.",
+    "evidence": "Snapshot Runner reads directly from source MongoDB/PostgreSQL collections via native driver and bypasses Kafka topics. Counting snapshot batches in 'Kafka CDC Bắn Về' misrepresents Kafka streaming throughput.",
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.1259,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.1332,
+                "INCORRECT": 0.3149,
+                "UNSUPPORTED": 0.552
+              },
+              "confidence": 0.1259,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 180,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.9664,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0035,
+                "NO": 0.9965
+              },
+              "confidence": 0.9664,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 116,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  }
+]

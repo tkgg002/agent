@@ -1,0 +1,306 @@
+[
+  {
+    "id": "R2_FINDING_1_TRACKER_STATE_DIVERGENCE",
+    "kind": "adversarial_finding",
+    "claim": "Khi gọi CalculateSafeCommitOffsets(groupResults) chỉ với mẻ xả của 1 bảng (chứa offset 501), việc tracker cập nhật nội bộ t.lastCommitted[tp] = 501 sẽ làm lệch pha trạng thái nếu bên ngoài chỉ commit 499 do offset 500 của bảng khác còn kẹt trong RAM. Ở đợt xả sau khi offset 500 hoàn tất, tracker sẽ từ chối emit offset 500 vì không lớn hơn 501, khiến Kafka commit bị đóng băng ở 499 cho đến khi có offset mới lớn hơn 501.",
+    "file": "internal/handler/shadow/watermark_tracker.go",
+    "objective": "Vạch trần rủi ro đóng băng Kafka Commit Lag do sự lệch pha giữa state nội bộ của StatefulWatermarkTracker và offset thực tế được commit bên ngoài.",
+    "flow": "Partial flush table B (off 501) -> Tracker records lastCommitted=501 -> Outer buffer commits 499 -> Table A (off 500) flushes later -> Tracker sees 500 <= 501 -> Suppresses commit 500.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3196,
+      "probabilities": {
+        "CORRECT": 0.7132,
+        "INCORRECT": 0.226,
+        "UNSUPPORTED": 0.0608
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7132,
+                "INCORRECT": 0.226,
+                "UNSUPPORTED": 0.0608
+              },
+              "confidence": 0.3196,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 880,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6553,
+      "probabilities": {
+        "YES": 0.9356,
+        "NO": 0.0644
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9356,
+                "NO": 0.0644
+              },
+              "confidence": 0.6553,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 675,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "R2_FINDING_2_JETSTREAM_DELIVERGROUP_IMMUTABLE",
+    "kind": "adversarial_finding",
+    "claim": "Trong NATS JetStream, cấu hình Consumer DeliverGroup của một Durable Consumer là trường bất biến (immutable). Nếu consumer đã được tạo từ trước mà không có DeliverGroup, lệnh UpdateConsumer sẽ bị broker từ chối với lỗi 'consumer configuration is immutable', khiến pool tiếp tục chạy với consumer cũ thiếu DeliverGroup nếu không xóa và tạo lại.",
+    "file": "internal/handler/master/transmute_consumer_pool.go",
+    "objective": "Xác định nguy cơ thất bại ngầm khi cố gắng cập nhật DeliverGroup trên một Consumer JetStream đã tồn tại từ trước.",
+    "flow": "ConsumerInfo finds existing consumer -> DeliverGroup is empty -> UpdateConsumer called -> NATS rejects immutable field change -> Warn logged but pool runs on single subscriber.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1476,
+      "probabilities": {
+        "CORRECT": 0.6122,
+        "INCORRECT": 0.1959,
+        "UNSUPPORTED": 0.1919
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6122,
+                "INCORRECT": 0.1959,
+                "UNSUPPORTED": 0.1919
+              },
+              "confidence": 0.1476,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 904,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.3644,
+      "probabilities": {
+        "YES": 0.8395,
+        "NO": 0.1605
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8395,
+                "NO": 0.1605
+              },
+              "confidence": 0.3644,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 733,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "R2_CLAIM_3_IS_SNAPSHOT_BUFFER_ISOLATION",
+    "kind": "architecture_boundary",
+    "claim": "Trong mã nguồn hiện tại, FlushTableWithContext chỉ được gọi bởi luồng Recon Heal thông qua snapshotEventHandler (nơi isSnapshotBuffer = true). Điều kiện if !bb.isSnapshotBuffer bảo đảm tuyệt đối không có offset Kafka nào bị commit trong luồng Heal, nên rủi ro kẹt lag watermark chưa xảy ra trong luồng Recon Heal thực tế.",
+    "file": "internal/handler/recon/recon_heal_fetch.go",
+    "objective": "Xác nhận ranh giới cách ly an toàn hiện tại của luồng Recon Heal.",
+    "flow": "Recon Heal -> FetchAndWriteByIDs -> FlushTableBatchBuffer -> snapshotBatchBuffer -> isSnapshotBuffer is true -> Commit block completely bypassed.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1625,
+      "probabilities": {
+        "CORRECT": 0.4729,
+        "INCORRECT": 0.4448,
+        "UNSUPPORTED": 0.0824
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4729,
+                "INCORRECT": 0.4448,
+                "UNSUPPORTED": 0.0824
+              },
+              "confidence": 0.1625,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 530,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6983,
+      "probabilities": {
+        "YES": 0.9463,
+        "NO": 0.0537
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9463,
+                "NO": 0.0537
+              },
+              "confidence": 0.6983,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 371,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "R2_CLAIM_4_RUNTIME_TRACE_MANDATE",
+    "kind": "governance_truth",
+    "claim": "Chỉ có việc trace trực tiếp OpenTelemetry span context và Kafka lag trên cụm staging/production đang chạy dữ liệu thật mới là bằng chứng duy nhất đáng tin cậy để khẳng định không còn hiện tượng span pollution giữa payment_bills và order_updates. Mọi unit test in-memory không thể thay thế cho runtime verification.",
+    "file": "GEMINI.md",
+    "objective": "Khẳng định nguyên tắc đạo đức kỹ sư: Không được suy diễn kết quả production từ unit test mock.",
+    "flow": "Code implementation -> Unit tests (compile/logic only) -> Real runtime trace on live cluster with actual traffic.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5066,
+      "probabilities": {
+        "CORRECT": 0.8432,
+        "INCORRECT": 0.0874,
+        "UNSUPPORTED": 0.0695
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8432,
+                "INCORRECT": 0.0874,
+                "UNSUPPORTED": 0.0695
+              },
+              "confidence": 0.5066,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 431,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.122,
+      "probabilities": {
+        "YES": 0.2973,
+        "NO": 0.7027
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.2973,
+                "NO": 0.7027
+              },
+              "confidence": 0.122,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 284,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  }
+]

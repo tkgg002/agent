@@ -1,0 +1,457 @@
+[
+  {
+    "id": "K1_NEG",
+    "kind": "control_false",
+    "claim": "source_router.go InferTypeFromRawData still contains manual checks for $date and $oid instead of delegating to IsCanonicalMongoExtJSON.",
+    "evidence": "source_router.go:56-63:\ncase map[string]interface{}:\n    if pgType, ok := IsCanonicalMongoExtJSON(v); ok {\n        return pgType\n    }\n    return \"JSONB\"\nAll manual checks for $date, $oid, $numberLong, etc. were removed and replaced with a single call to IsCanonicalMongoExtJSON.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.9056,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9818,
+                "INCORRECT": 0.009,
+                "UNSUPPORTED": 0.0092
+              },
+              "confidence": 0.9056,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 531,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.9675,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9966,
+                "NO": 0.0034
+              },
+              "confidence": 0.9675,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 466,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "K2_POS",
+    "kind": "control_true",
+    "claim": "unwrapExtJSON in flatten.go coerces $numberInt string '100' into Go int64(100) using mongoNumberToGo.",
+    "evidence": "flatten.go:214-222, 288-292:\nfunc mongoNumberToGo(n any) any {\n\tif s, ok := n.(string); ok {\n\t\tif i, err := strconv.ParseInt(s, 10, 64); err == nil {\n\t\t\treturn i\n\t\t}\n\t\treturn s\n\t}\n\treturn n\n}\nIn unwrapExtJSON:\nif n, ok := m[\"$numberInt\"]; ok {\n    return mongoNumberToGo(n)\n}\nWhen n is \"$numberInt\": \"100\", mongoNumberToGo parses \"100\" to int64(100). Tested in TestUnwrapExtJSON.",
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.2999,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.2301,
+                "INCORRECT": 0.0679,
+                "UNSUPPORTED": 0.702
+              },
+              "confidence": 0.2999,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 396,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8295,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9746,
+                "NO": 0.0254
+              },
+              "confidence": 0.8295,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 332,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C1_DRY_CONSOLIDATION",
+    "kind": "diff_audit",
+    "claim": "IsCanonicalMongoExtJSON is exported from scan_service.go and reused directly by scan_handler.go and source_router.go, eliminating duplicate helper definitions.",
+    "evidence": "scan_service.go:590:\nfunc IsCanonicalMongoExtJSON(m map[string]interface{}) (string, bool)\nscan_handler.go:87-95:\nfunc flattenJSONWithTypes(prefix string, value interface{}, result map[string]string) {\n\tswitch v := value.(type) {\n\tcase map[string]interface{}:\n\t\tif prefix != \"\" {\n\t\t\tif pgType, isExt := source.IsCanonicalMongoExtJSON(v); isExt {\n\t\t\t\tresult[prefix] = pgType\n\t\t\t\treturn\n\t\t\t}\n\t\t}\nsource_router.go:58-62:\nif pgType, ok := IsCanonicalMongoExtJSON(v); ok {\n    return pgType\n}\nThe duplicate 55-line function in scan_handler.go was removed completely.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.8375,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9643,
+                "INCORRECT": 0.0161,
+                "UNSUPPORTED": 0.0196
+              },
+              "confidence": 0.8375,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 604,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6825,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9425,
+                "NO": 0.0575
+              },
+              "confidence": 0.6825,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 535,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C2_ROUTER_SIMPLIFICATION",
+    "kind": "diff_audit",
+    "claim": "InferTypeFromRawData in source_router.go replaced 50 lines of duplicate checks with a single delegation to IsCanonicalMongoExtJSON.",
+    "evidence": "source_router.go:56-64:\ncase map[string]interface{}:\n    if pgType, ok := IsCanonicalMongoExtJSON(v); ok {\n        return pgType\n    }\n    return \"JSONB\"\nReplaced separate checks for $date, $timestamp, $oid, $binary, $regularExpression, $symbol, $code, $undefined, $numberDecimal, $numberDouble, $numberLong, $numberInt, and dual-keys ($binary+$type, $regex+$options).",
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.1764,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.4374,
+                "INCORRECT": 0.4883,
+                "UNSUPPORTED": 0.0743
+              },
+              "confidence": 0.1764,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 502,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6327,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9296,
+                "NO": 0.0704
+              },
+              "confidence": 0.6327,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 431,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C3_COERCION_NUMERIC",
+    "kind": "diff_audit",
+    "claim": "unwrapExtJSON in flatten.go converts $numberInt and $numberLong to Go int64 and $numberDouble to Go float64, preventing string-to-number mismatch errors in Postgres.",
+    "evidence": "flatten.go:287-305:\nif n, ok := m[\"$numberLong\"]; ok {\n    return mongoNumberToGo(n)\n}\nif n, ok := m[\"$numberInt\"]; ok {\n    return mongoNumberToGo(n)\n}\nif n, ok := m[\"$numberDouble\"]; ok {\n    if s, ok := n.(string); ok {\n        if f, err := strconv.ParseFloat(s, 64); err == nil {\n            return f\n        }\n        return s\n    }\n    return n\n}\nmongoNumberToGo parses string representation to int64 via strconv.ParseInt(s, 10, 64).",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4711,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8217,
+                "INCORRECT": 0.0578,
+                "UNSUPPORTED": 0.1204
+              },
+              "confidence": 0.4711,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 390,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7193,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9513,
+                "NO": 0.0487
+              },
+              "confidence": 0.7193,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 319,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C4_COERCION_DATE_TIMESTAMP",
+    "kind": "diff_audit",
+    "claim": "unwrapExtJSON in flatten.go converts RFC3339 strings, epoch milliseconds, and BSON $timestamp objects into UTC time.Time instances.",
+    "evidence": "flatten.go:235-285:\nHandles $date:\n- string: parses with time.RFC3339Nano and time.RFC3339 into time.Time.UTC(), or parses numeric string millis.\n- float64 / int64 / int: converts with time.UnixMilli(ms).UTC().\n- map containing $numberLong: extracts millis and converts with time.UnixMilli.\nHandles $timestamp:\n- submap with 't' seconds: converts with time.Unix(sec, 0).UTC().\nUnit tests in strategy_test.go verify both date epoch millis and timestamp produce time.Time in UTC.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.7357,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9335,
+                "INCORRECT": 0.0305,
+                "UNSUPPORTED": 0.036
+              },
+              "confidence": 0.7357,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 321,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.9087,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9884,
+                "NO": 0.0116
+              },
+              "confidence": 0.9087,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 254,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C5_SCOPE_CLEANLINESS",
+    "kind": "governance_audit",
+    "claim": "metadata_registry_utils.go has zero git diffs and remains completely unmodified from its original repository state.",
+    "evidence": "git diff internal/service/source/metadata_registry_utils.go outputs 0 lines (empty).\ngit status shows metadata_registry_utils.go is clean and not tracked as modified.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.8522,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9681,
+                "INCORRECT": 0.0119,
+                "UNSUPPORTED": 0.02
+              },
+              "confidence": 0.8522,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 213,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4183,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.861,
+                "NO": 0.139
+              },
+              "confidence": 0.4183,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 144,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  }
+]

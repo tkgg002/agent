@@ -1,0 +1,382 @@
+[
+  {
+    "id": "R2_AUDIT_1_SCHEDULE_NEXT_RUN_AND_SANITIZE",
+    "kind": "backend_fix_and_security",
+    "claim": "Trong Lượt Audit 2, phát hiện khi tạo mới lịch trình (POST /api/worker-schedule) cột NextRunAt bị để nil khiến UI hiển thị '-' suốt cả ngày và thiếu ghi log schedule-create; khi sửa run_at_time hoặc interval_minutes (PATCH /api/worker-schedule/:id không kèm run_now) hệ thống không tính lại next_run_at; đồng thời json.Marshal(updates) ghi thẳng params.confluence.api_token dạng plain-text vào bảng cdc_activity_log. Việc bổ sung hàm ComputeNextScheduledRun và sanitizeScheduleParamsForLog (che api_token thành prefix 4 ký tự + '****') đã khắc phục triệt để cả 3 lỗ hổng trên và được kiểm chứng runtime trên cổng :8083.",
+    "file": "cdc-cms-service/internal/app/commands/scheduler/create_worker_schedule.go & update_schedule.go",
+    "objective": "Khởi tạo next_run_at ngay khi tạo mới hoặc sửa lịch trình (run_at_time / interval_minutes) và che (mask) api_token của Confluence trước khi ghi vào cdc_activity_log.",
+    "flow": "POST/PATCH /api/worker-schedule -> ComputeNextScheduledRun(time.Now(), effRunAt, effInterval) -> sanitizeScheduleParamsForLog(updates) -> Insert cdc_activity_log.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2663,
+      "probabilities": {
+        "CORRECT": 0.5998,
+        "INCORRECT": 0.3589,
+        "UNSUPPORTED": 0.0413
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5998,
+                "INCORRECT": 0.3589,
+                "UNSUPPORTED": 0.0413
+              },
+              "confidence": 0.2663,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 750,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5259,
+      "probabilities": {
+        "YES": 0.8984,
+        "NO": 0.1016
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8984,
+                "NO": 0.1016
+              },
+              "confidence": 0.5259,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 722,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "R2_AUDIT_2_MANUAL_TRIGGER_WINDOW_AND_LEGACY_JOBS",
+    "kind": "backend_fix",
+    "claim": "Khi create_worker_schedule.go khởi tạo sẵn NextRunAt = targetToday (ví dụ 00:05) với LastRunAt = nil, nếu worker tắt qua đêm và bật lại lúc 08:00 sáng, điều kiện cũ 'LastRunAt == nil && NextRunAt <= now' sẽ nhận diện nhầm lịch mới tạo bị trễ giờ là lệnh Run Now thủ công. Việc bổ sung hàm isManualRunNowTrigger kiểm tra độ tươi 'now.Sub(*sched.NextRunAt) <= 5*time.Minute' và loại trừ trường hợp 'sched.NextRunAt.In(locHCM).Equal(targetToday)' chặn đứng hoàn toàn false trigger (đã kiểm chứng bằng unit test 6/6 PASS). Đồng thời 5 job legacy trong server_jobs.go đã được cập nhật resolveJobTriggeredBy(ctx) và updateScheduleLastError.",
+    "file": "centralized-data-service/internal/server/server_scheduler.go & server_jobs.go",
+    "objective": "Chống nhận diện nhầm lệnh Run Now khi lịch trình mới tạo bị lỡ cửa sổ qua đêm (isManualRunNowTrigger) và đồng bộ triggered_by / last_error cho toàn bộ 5 job legacy.",
+    "flow": "startScheduler -> isManualRunNowTrigger checks LastRunAt==nil, now-NextRunAt <= 5m, and NextRunAt != targetToday -> Legacy jobs read resolveJobTriggeredBy(ctx) and call updateScheduleLastError.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.7008,
+      "probabilities": {
+        "CORRECT": 0.9218,
+        "INCORRECT": 0.0385,
+        "UNSUPPORTED": 0.0397
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9218,
+                "INCORRECT": 0.0385,
+                "UNSUPPORTED": 0.0397
+              },
+              "confidence": 0.7008,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 738,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7523,
+      "probabilities": {
+        "YES": 0.9588,
+        "NO": 0.0412
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9588,
+                "NO": 0.0412
+              },
+              "confidence": 0.7523,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 710,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "R2_AUDIT_3_SOURCE_COUNT_SQL_DIALECT_AND_URI_MASKING",
+    "kind": "backend_fix_and_security",
+    "claim": "Trong source_count_runner.go, việc bổ sung alias 'postgres' bên cạnh 'postgresql' và sử dụng dấu backtick (`schema`.`table`) khi engine_type là 'mysql' hoặc 'mariadb' giúp câu lệnh COUNT(*) tương thích chuẩn xác với cả hai hệ quản trị CSDL SQL. Ngoài ra, trong master_repo_gorm.go, việc tách phần authority trước dấu '/' hoặc '?' rồi dùng strings.LastIndex(authority, '@') đảm bảo mật khẩu chứa ký tự '@' vẫn được che kín hoàn toàn thành '***:***@host'.",
+    "file": "centralized-data-service/internal/service/sourcecount/source_count_runner.go & cdc-cms-service/internal/infra/persistence/master/master_repo_gorm.go",
+    "objective": "Hỗ trợ đầy đủ alias engine 'postgres', trích dẫn định danh bằng backtick cho MySQL/MariaDB, và xử lý mật khẩu chứa ký tự '@' trong sanitizeConnectionHost.",
+    "flow": "countSQL checks engineType ('postgresql'|'postgres' vs 'mysql'|'mariadb') -> quotes identifiers appropriately; sanitizeConnectionHost splits authority before '/' or '?' and uses strings.LastIndex(authority, '@').",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.8599,
+      "probabilities": {
+        "CORRECT": 0.9704,
+        "INCORRECT": 0.0134,
+        "UNSUPPORTED": 0.0163
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9704,
+                "INCORRECT": 0.0134,
+                "UNSUPPORTED": 0.0163
+              },
+              "confidence": 0.8599,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 601,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8165,
+      "probabilities": {
+        "YES": 0.9722,
+        "NO": 0.0278
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9722,
+                "NO": 0.0278
+              },
+              "confidence": 0.8165,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 573,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "R2_AUDIT_4_CONFLUENCE_GORM_SCAN_AND_KEBAB_SNAKE",
+    "kind": "backend_fix",
+    "claim": "Trong GORM, phương thức .Scan(&countRecord) không trả về gorm.ErrRecordNotFound khi truy vấn có 0 dòng khớp (scanRes.Error == nil, scanRes.RowsAffected == 0, countRecord.CreationCount == 0), khiến điều kiện cũ 'countErr == nil && countRecord.CreationCount >= 0' luôn đúng và hiển thị sai '0' thay vì 'Chưa đếm' trên báo cáo Confluence. Đồng thời source_object_registry lưu collection MongoDB dạng kebab-case ('export-jobs') trong khi selected_tables lưu snake_case ('export_jobs'). Việc kiểm tra 'scanRes.RowsAffected > 0 && countRecord.LayerType != \"\"' kết hợp tìm kiếm theo candidateNames (cả '_' và '-') giải quyết triệt để cả hai lỗi này.",
+    "file": "centralized-data-service/internal/service/confluence/confluence_runner.go",
+    "objective": "Khắc phục lỗi GORM .Scan() trả về nil error khi 0 dòng khớp (báo sai '0' thay vì 'Chưa đếm') và đối sánh cả tên bảng dạng snake_case lẫn kebab-case.",
+    "flow": "Build candidateNames (snake_case & kebab-case) -> Query daily_source_counts with Order(layer_type priority, calculated_at DESC) -> Check scanRes.Error == nil && scanRes.RowsAffected > 0 && countRecord.LayerType != ''.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.6266,
+      "probabilities": {
+        "CORRECT": 0.8925,
+        "INCORRECT": 0.071,
+        "UNSUPPORTED": 0.0365
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8925,
+                "INCORRECT": 0.071,
+                "UNSUPPORTED": 0.0365
+              },
+              "confidence": 0.6266,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 722,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6787,
+      "probabilities": {
+        "YES": 0.9416,
+        "NO": 0.0584
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9416,
+                "NO": 0.0584
+              },
+              "confidence": 0.6787,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 694,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "R2_AUDIT_5_FRONTEND_RUNTIME_SCHEMA_AND_APPROVED_CREATION_COLUMN",
+    "kind": "frontend_fix",
+    "claim": "Qua đối chiếu payload runtime thực tế trên cổng :8083, API /api/v1/source-objects trả về timestamp_field = 'lastUpdatedAt' (cột watermark cập nhật, không phải cột ngày tạo), và trên bảng shadow_traitestpbs.payment_bills cột createdAt đang có status = 'rejected' (chỉ tồn tại cột hệ thống _created_at). Việc loại bỏ toàn bộ các thuộc tính suy diễn không tồn tại (m.master_table, m.master_connection_id, m.source_object_id, m.timestamp_field) và tra cứu trực tiếp từ mapping-rules / master-mapping-rules theo điều kiện status === 'approved' (fallback về '_created_at' ở Shadow/Master khi chưa approved) đảm bảo câu lệnh SQL đếm dòng không bao giờ gặp lỗi 42703 column does not exist.",
+    "file": "cdc-cms-web/src/pages/ActivityManager.tsx",
+    "objective": "Loại bỏ các trường JSON suy diễn không tồn tại trên /api/v1/masters và tự động suy diễn đúng cột ngày tạo đã được phê duyệt (status === 'approved') cho cả 3 tầng Source, Shadow, Master.",
+    "flow": "Query /api/v1/mapping-rules & /api/v1/master-mapping-rules -> Resolve creation column matching /^(created_?at|create_?time|created_?date)$/i -> For Shadow/Master require status==='approved' else fallback to system column '_created_at'.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.775,
+      "probabilities": {
+        "CORRECT": 0.9456,
+        "INCORRECT": 0.0204,
+        "UNSUPPORTED": 0.034
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9456,
+                "INCORRECT": 0.0204,
+                "UNSUPPORTED": 0.034
+              },
+              "confidence": 0.775,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 684,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7957,
+      "probabilities": {
+        "YES": 0.968,
+        "NO": 0.032
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.968,
+                "NO": 0.032
+              },
+              "confidence": 0.7957,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 656,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  }
+]

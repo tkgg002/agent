@@ -1,0 +1,37 @@
+# Danh sách Task: Audit c,u,d & Bỏ Read(r)
+
+- [x] Task 1: Audit dữ liệu thực tế tại DB cdc_dw cho ngày 2026-09-30 (chứng minh 1,562 và 2,084).
+- [x] Task 2: Xác định nguyên nhân c,u,d bị ép về c và bảng có 536 records nhưng throughput cao.
+- [x] Task 3: Chỉnh sửa ReconPipelineGrid.tsx:
+  - [x] 3.1: Xóa kafkaR khỏi totals useMemo hook.
+  - [x] 3.2: Xóa r: khỏi Box tổng hợp Card 1 bên ngoài.
+  - [x] 3.3: Xóa cột Read(r) khỏi columns của Modal Table.
+  - [x] 3.4: Xóa cell kafkaR và re-index các cells từ 0..17 trong Table.Summary.
+- [x] Task 4: Chạy `npx tsc --noEmit` verify không có lỗi TypeScript.
+- [x] Task 5: Triển khai Backend Go ghi nhận c,u,d thật trong batch_buffer.go & phân định 2 BatchBuffers:
+  - [x] 5.1: Thêm field `Op string` vào struct `UpsertRecord` (`internal/model/shadow/cdc_event.go`).
+  - [x] 5.2: Gán `Op: event.Data.Op` trong `event_handler.go`.
+  - [x] 5.3: Gán `Op: event.Op` trong `bridge_handler.go`.
+  - [x] 5.4: Trong `batch_buffer.go`, đếm `cntC, cntU, cntD`; phân định `bb.isSnapshotBuffer` để gán `triggeredBy = "snapshot"`, `bufferType = "snapshot"` vs `"cdc-stream"`; ghi `c, u, d, buffer_type, is_snapshot` vào `details`.
+  - [x] 5.5: Viết unit test `TestBatchBuffer_OpFieldHandling` trong `snapshot_cdc_isolation_test.go`.
+  - [x] 5.6: Chạy `go test ./internal/handler/shadow/...` và `./internal/handler/source/...` PASS 100%.
+- [x] Task 6: Kiểm tra Definition of Done (DoD G1-G8) và lập tài liệu tổng kết.
+- [x] Task 7: Khắc phục 2 issues phát hiện từ Audit phản biện (Phase 4):
+  - [x] 7.1: Bổ sung logic phân định `isSnapshot` trong `ReconPipelineGrid.tsx:420-460`.
+  - [x] 7.2: Tách biệt hoàn toàn Snapshot Runner (chỉ tính vào Shadow) khỏi Kafka Streaming (tính vào Kafka & Shadow).
+  - [x] 7.3: Verify `npx tsc --noEmit` PASS 100%, 0 lỗi.
+  - [x] 7.4: Verify `go test` PASS 100%.
+- [x] Task 8: Loại bỏ heuristic đoán mò và thực thi SQL Data Sanitation Migration (Phase 5):
+  - [x] 8.1: Loại bỏ hoàn toàn `batchSize >= 500` heuristic khỏi `ReconPipelineGrid.tsx` (Rule #0).
+  - [x] 8.2: Thực thi SQL Migration cập nhật 6 bản ghi snapshot lịch sử (ID 100915, 100916, 100924, 100925, 101020, 101021) trong `cdc_dw`.
+  - [x] 8.3: Đối soát trực tiếp psql: 6 bản ghi snapshot có cờ tường minh; 2 bản ghi stream giữ nguyên.
+  - [x] 8.4: Verify `npx tsc --noEmit` PASS 100% (0 errors).
+  - [x] 8.5: Verify `go test` PASS 100%.
+- [x] Task 9: Khắc phục lỗi JSON String details parsing tại `ReconPipelineGrid.tsx` (Phase 6):
+  - [x] 9.1: Bổ sung helper `parseLogDetails(raw: any)` trong `ReconPipelineGrid.tsx`.
+  - [x] 9.2: Thay thế `typeof k.details === 'object'` (dòng 414) và `typeof t.details === 'object'` (dòng 474) bằng `parseLogDetails`.
+  - [x] 9.3: Chuẩn hóa `row.kafka.total` khi có explicit ops: `total += (c + u + del)`, khi không có: `written`.
+  - [x] 9.4: Chuẩn hóa Master Transmute bóc tách `inserted, updated, skipped` từ `details`.
+  - [x] 9.5: Chạy `npm run build` (tsc -b && vite build) PASS 100% (0 errors).
+  - [x] 9.6: Verify simulation script trên dữ liệu thật ngày 2026-10-07: hiển thị chuẩn 2 Insert, 1 Update ở cả 3 trạm.
+

@@ -87,8 +87,8 @@ def verify_workspace_docs(ws_name):
 
     log_info("✓ Đầy đủ tài liệu bắt buộc (01_requirements, 05_progress, 08_tasks, implementation_plan.md).")
 
-    # 2. Đọc progress file và kiểm tra format + log hôm nay
-    progress_file = progress_files[0]
+    # 2. Đọc progress file mới nhất và kiểm tra format + log hôm nay
+    progress_file = max(progress_files, key=os.path.getmtime)
     today_str = datetime.now().strftime("%Y-%m-%d")
     
     # Định dạng mong đợi: - [YYYY-MM-DD...] [Agent:Model] Action

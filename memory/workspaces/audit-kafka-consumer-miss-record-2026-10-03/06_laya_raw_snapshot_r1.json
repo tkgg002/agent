@@ -1,0 +1,277 @@
+[
+  {
+    "id": "S1",
+    "kind": "claim",
+    "flow": "Snapshot-CDC-Coupling",
+    "claim": "SnapshotRunner and KafkaConsumer share the exact same EventHandler and BatchBuffer instance in server_setup.go, causing bulk snapshot records and realtime CDC records to be intermingled in a single memory slice (bb.records).",
+    "laya_choice": "CORRECT",
+    "laya_confidence": 0.1178,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "SnapshotRunner and KafkaConsumer share the exact same EventHandler and BatchBuffer instance in server_setup.go, causing bulk snapshot records and realtime CDC records to be intermingled in a single memory slice (bb.records).",
+          "evidence": "server_setup.go:152 `batchBuffer := handlershadow.NewBatchBuffer(...)`; :202 `eventHandler := handlershadow.NewEventHandler(..., batchBuffer, logger)`; :375-377 `snapshotRunner := handlerorchestration.NewSnapshotRunner(db, eventHandler, ...)`; :493-496 `kafkaConsumer := handlershadow.NewKafkaConsumer(..., eventHandler, ...)`. Both consumers feed into the same batchBuffer.records slice.",
+          "flow": "Snapshot-CDC-Coupling"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5811,
+                "INCORRECT": 0.2243,
+                "UNSUPPORTED": 0.1946
+              },
+              "confidence": 0.1178,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 254,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 7.03
+    }
+  },
+  {
+    "id": "S2",
+    "kind": "claim",
+    "flow": "Snapshot-Commit-Pollution",
+    "claim": "When SnapshotRunner triggers FlushBatchBuffer, it drains the shared BatchBuffer which may contain Kafka CDC records, and triggers onCommitOffsets committing Kafka offsets as part of a bulk snapshot flush.",
+    "laya_choice": "UNSUPPORTED",
+    "laya_confidence": 0.2349,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "When SnapshotRunner triggers FlushBatchBuffer, it drains the shared BatchBuffer which may contain Kafka CDC records, and triggers onCommitOffsets committing Kafka offsets as part of a bulk snapshot flush.",
+          "evidence": "snapshot_runner_handler.go:827 and :889 call r.eventHandler.FlushBatchBuffer(ctx). event_handler.go:97-101 FlushBatchBuffer delegates to h.batchBuffer.FlushWithContext(ctx). batch_buffer.go:217-291 FlushWithContext swaps bb.records and unconditionally computes max KafkaOffset across the whole batch and invokes onCommitOffsets.",
+          "flow": "Snapshot-Commit-Pollution"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0576,
+                "INCORRECT": 0.3472,
+                "UNSUPPORTED": 0.5952
+              },
+              "confidence": 0.2349,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 229,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 0.31
+    }
+  },
+  {
+    "id": "S3",
+    "kind": "claim",
+    "flow": "Resource-Starvation",
+    "claim": "Snapshot load competing with Kafka CDC on a shared database connection pool (maxOpenConn=100) causes connection exhaustion (SQLSTATE 53300) and lock contention, triggering Kafka CDC drop paths.",
+    "laya_choice": "UNSUPPORTED",
+    "laya_confidence": 0.6945,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "Snapshot load competing with Kafka CDC on a shared database connection pool (maxOpenConn=100) causes connection exhaustion (SQLSTATE 53300) and lock contention, triggering Kafka CDC drop paths.",
+          "evidence": "server_setup.go:152 NewBatchBuffer uses single db pool configured with maxOpenConn=100 (config-production.yml:18). FlushWithContext runs up to 20 concurrent goroutines (g.SetLimit(20), batch_buffer.go:235). High-volume bulk snapshot operations saturate connections, starving realtime CDC transactions.",
+          "flow": "Resource-Starvation"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0114,
+                "INCORRECT": 0.0781,
+                "UNSUPPORTED": 0.9105
+              },
+              "confidence": 0.6945,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 225,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 0.07
+    }
+  },
+  {
+    "id": "S4",
+    "kind": "claim",
+    "flow": "Architecture-Isolation",
+    "claim": "Separating Snapshot into a dedicated BatchBuffer and isolated DB connection pool eliminates offset interference and guarantees realtime CDC SLA without being blocked by bulk operations.",
+    "laya_choice": "CORRECT",
+    "laya_confidence": 0.4138,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "Separating Snapshot into a dedicated BatchBuffer and isolated DB connection pool eliminates offset interference and guarantees realtime CDC SLA without being blocked by bulk operations.",
+          "evidence": "Providing a dedicated SnapshotBatchBuffer without Kafka onCommitOffsets callbacks completely decouples bulk write flushes from Kafka partition commits, preventing cross-pipeline offset corruption and resource starvation.",
+          "flow": "Architecture-Isolation"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7899,
+                "INCORRECT": 0.065,
+                "UNSUPPORTED": 0.1451
+              },
+              "confidence": 0.4138,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 163,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 0.14
+    }
+  },
+  {
+    "id": "SK1",
+    "kind": "control_false",
+    "flow": "Control-Negative",
+    "claim": "SnapshotRunner has its own independent database connection pool and does not share any buffer or eventHandler with KafkaConsumer.",
+    "laya_choice": "UNSUPPORTED",
+    "laya_confidence": 0.4864,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "SnapshotRunner has its own independent database connection pool and does not share any buffer or eventHandler with KafkaConsumer.",
+          "evidence": "server_setup.go:152, 202, 375, 495 explicitly inject the same batchBuffer and eventHandler into both snapshotRunner and kafkaConsumer. They share the same db pool.",
+          "flow": "Control-Negative"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0271,
+                "INCORRECT": 0.163,
+                "UNSUPPORTED": 0.8099
+              },
+              "confidence": 0.4864,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 170,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 0.11
+    }
+  }
+]

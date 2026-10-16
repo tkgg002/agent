@@ -6,6 +6,7 @@
 
 | Workspace | Project | Status | Last Active |
 |-----------|---------|--------|-------------|
+| fix-scan-array-nats-timeout-trans-his | data-hub | 🟡 Active (Planning) | 2026-10-02 |
 | feat-clickhouse-master-destination | data-hub | 🟡 Active (Planning) | 2026-09-11 |
 | feat-cdc-postgres-to-mongo-3tables | data-hub | 🟡 Active (Planning) | 2026-09-10 |
 | bug-delete-connector-cleanup-bindings-2026-06-30 | data-hub | 🟡 Active (Planning) | 2026-06-30 |

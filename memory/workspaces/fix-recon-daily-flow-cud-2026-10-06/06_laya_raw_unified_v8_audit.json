@@ -1,0 +1,782 @@
+[
+  {
+    "id": "K1_NEG_CONTROL",
+    "kind": "control_false",
+    "claim": "In-memory unit tests with mock handlers provide definitive proof that a distributed streaming pipeline works correctly on production without real runtime data tracing.",
+    "evidence": "Lesson [2026-09-29] Mock/Unit Test Illusion: In-memory mock tests only verify local method invocations under simulated conditions. Real streaming environments face concurrency, network latency, database connection limits, transaction isolation, and broker semantics that mocks do not capture.",
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.5456,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.0856,
+                "INCORRECT": 0.8598,
+                "UNSUPPORTED": 0.0547
+              },
+              "confidence": 0.5456,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 200,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.0458,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.3747,
+                "NO": 0.6253
+              },
+              "confidence": 0.0458,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 138,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "K2_POS_CONTROL",
+    "kind": "control_true",
+    "claim": "Using a Set (map[int64]struct{}) instead of a scalar int64 for uncommitted failures allows tracking multiple concurrent offset errors in a single partition without losing track of preceding failures.",
+    "evidence": "In watermark_tracker.go: StatefulWatermarkTracker uses uncommittedFailures map[TopicPartition]map[int64]struct{}. If offset 500 fails and then offset 505 fails, both offsets are recorded in the map, so clearing 505 does not erase 500, and the safe commit offset correctly halts at 499 until 500 is resolved.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0579,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4592,
+                "INCORRECT": 0.1816,
+                "UNSUPPORTED": 0.3592
+              },
+              "confidence": 0.0579,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 241,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.1753,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.7414,
+                "NO": 0.2586
+              },
+              "confidence": 0.1753,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 180,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C1_COMPOSITE_FANOUT_STATE",
+    "kind": "code_audit",
+    "claim": "Grouping execution results by (TopicPartition, Offset) into an offsetState struct before updating uncommittedFailures prevents partial fan-out success from prematurely clearing failure state.",
+    "evidence": "File: internal/handler/shadow/watermark_tracker.go:68-102\ntype offsetState struct {\n    hasFailure bool\n    allSuccess bool\n}\npartitionOffsetStates := make(map[TopicPartition]map[int64]*offsetState)\nFor each result: if StatusFailed -> hasFailure=true, allSuccess=false. Only when allSuccess is true and hasFailure is false does it delete from uncommittedFailures.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5969,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8827,
+                "INCORRECT": 0.0587,
+                "UNSUPPORTED": 0.0587
+              },
+              "confidence": 0.5969,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 255,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7787,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9645,
+                "NO": 0.0355
+              },
+              "confidence": 0.7787,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 188,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C2_FLUSH_TABLE_OFFSET_RESCUE",
+    "kind": "code_audit",
+    "claim": "FlushTableWithContext isolates buffer flushing to a specific table while rescuing and committing Kafka offsets for CDC records of that table that were flushed together.",
+    "evidence": "File: internal/handler/shadow/batch_buffer.go:382-435\nfunc (bb *BatchBuffer) FlushTableWithContext(parentCtx context.Context, targetTable string) (int, error) {\n    ...\n    for _, r := range bb.records {\n        if r.TableName == targetTable || r.PhysicalTableFQN == targetTable {\n            matched = append(matched, r)\n        } else { remaining = append(remaining, r) }\n    }\n    bb.records = remaining\n    ...\n    w, groupResults, gerr := bb.executeFlushGroupsWithResults(dbCtx, byTable)\n    if !bb.isSnapshotBuffer && bb.onCommitOffsets != nil && len(groupResults) > 0 {\n        safeOffsets := bb.watermarkTracker.CalculateSafeCommitOffsets(groupResults)\n        if len(safeOffsets) > 0 {\n            commitCtx, commitCancel := context.WithTimeout(context.Background(), 5*time.Second)\n            bb.onCommitOffsets(commitCtx, safeOffsets)\n            commitCancel()\n        }\n    }\n    return w, gerr\n}",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.6897,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9177,
+                "INCORRECT": 0.0369,
+                "UNSUPPORTED": 0.0454
+              },
+              "confidence": 0.6897,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 493,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5859,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9166,
+                "NO": 0.0834
+              },
+              "confidence": 0.5859,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 432,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C3_DLQ_INDEPENDENT_CONTEXT",
+    "kind": "code_audit",
+    "claim": "Evacuating failed records to DLQ with an independent 10-second timeout context prevents evacuation failures caused by expired parent database transaction timeouts.",
+    "evidence": "File: internal/handler/shadow/batch_buffer.go:549-598\nfunc (bb *BatchBuffer) evacuateFailedChunkToDLQ(records []*shadow.UpsertRecord, dbErr error) []RecordExecutionResult {\n    evacCtx, evacCancel := context.WithTimeout(context.Background(), 10*time.Second)\n    defer evacCancel()\n    ...\n    bulkErr := bb.db.WithContext(evacCtx).CreateInBatches(dlqRows, 100).Error\n    ...\n}\nWhen batchUpsertWithRetry exhausts 3 retries, parent dbCtx (15s) may be cancelled. Using context.Background() ensures DLQ write completes.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.7963,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9517,
+                "INCORRECT": 0.0328,
+                "UNSUPPORTED": 0.0155
+              },
+              "confidence": 0.7963,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 317,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8537,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9791,
+                "NO": 0.0209
+              },
+              "confidence": 0.8537,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 255,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C4_ATOMIC_STAGED_ADDALL",
+    "kind": "code_audit",
+    "claim": "Staging all fan-out UpsertRecords across all resolved routes into a local slice before calling AddAll under a single buffer lock prevents batch tearing during high-throughput ingestion.",
+    "evidence": "File: internal/handler/shadow/event_handler.go:392-493\nstagedRecords := make([]*shadow.UpsertRecord, 0, len(routes))\nfor _, route := range routes {\n    ...\n    stagedRecords = append(stagedRecords, record)\n}\nif len(stagedRecords) > 0 {\n    h.batchBuffer.AddAll(stagedRecords)\n}\nPreviously, calling Add(record) inside the loop could trigger a flush when the buffer filled on route 1 before route 2 was appended.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0554,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4658,
+                "INCORRECT": 0.3456,
+                "UNSUPPORTED": 0.1887
+              },
+              "confidence": 0.0554,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 284,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.1405,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.283,
+                "NO": 0.717
+              },
+              "confidence": 0.1405,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 219,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C5_TRACE_CONTEXT_ISOLATION",
+    "kind": "code_audit",
+    "claim": "Replacing FlushBatchBuffer with FlushTableBatchBuffer in recon_heal_fetch.go eliminates span pollution where unrelated CDC tables were flushed under the heal span context.",
+    "evidence": "File: internal/handler/recon/recon_heal_fetch.go:90-110\npersisted, fErr := h.eventHandler.FlushTableBatchBuffer(ctx, entry.TargetTable)\nPreviously, FlushBatchBuffer flushed all records across all tables (including order_updates CDC stream), attaching the payment_bills heal trace context to unrelated table flushes.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2668,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6867,
+                "INCORRECT": 0.0856,
+                "UNSUPPORTED": 0.2277
+              },
+              "confidence": 0.2668,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 228,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.3833,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8473,
+                "NO": 0.1527
+              },
+              "confidence": 0.3833,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 166,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C6_DETERMINISTIC_NATS_MSG_ID",
+    "kind": "code_audit",
+    "claim": "Generating deterministic Nats-Msg-Id based on Kafka topic, partition, offset, and record count allows JetStream to accurately deduplicate triggers during consumer replay after pod crash.",
+    "evidence": "File: internal/handler/shadow/batch_buffer_fanout.go:75-84\nvar msgID string\nif len(records) > 0 && records[0].KafkaTopic != \"\" && records[0].KafkaOffset >= 0 {\n    msgID = fmt.Sprintf(\"ts-%s-%s-p%d-o%d-c%d\",\n        shadowTable, records[0].KafkaTopic, records[0].KafkaPartition, records[0].KafkaOffset, len(records))\n} else {\n    msgID = fmt.Sprintf(\"ts-%s-heal-%d-%d\", shadowTable, time.Now().UnixNano(), len(records))\n}\nmsg.Header.Set(\"Nats-Msg-Id\", msgID)\nJetStream stream CDC_TRANSMUTE has Duplicates window set to 2 minutes.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5718,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8677,
+                "INCORRECT": 0.094,
+                "UNSUPPORTED": 0.0383
+              },
+              "confidence": 0.5718,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 354,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.0557,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.362,
+                "NO": 0.638
+              },
+              "confidence": 0.0557,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 287,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C7_MULTI_SUBSCRIPTION_CONCURRENCY",
+    "kind": "code_audit",
+    "claim": "Subscribing multiple independent nats.Subscription instances to the same QueueGroup in TransmuteConsumerPool provides true concurrent goroutine dispatch for JetStream push consumers.",
+    "evidence": "File: internal/handler/master/transmute_consumer_pool.go:80-92\nqueueGroup := p.cfg.ConsumerName + \"-group\"\nfor i := 0; i < p.cfg.WorkerCount; i++ {\n    workerID := i\n    sub, err := p.js.QueueSubscribe(p.cfg.FilterSubject, queueGroup, func(msg *nats.Msg) {\n        p.processMessage(msg, workerID)\n    }, nats.Bind(p.cfg.StreamName, p.cfg.ConsumerName), nats.ManualAck())\n    p.subs = append(p.subs, sub)\n}\nA single QueueSubscribe callback in nats.go dispatches sequentially. Multiple subscriptions in the same queue group achieve parallel concurrency.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3332,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7515,
+                "INCORRECT": 0.1312,
+                "UNSUPPORTED": 0.1173
+              },
+              "confidence": 0.3332,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 336,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.714,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9501,
+                "NO": 0.0499
+              },
+              "confidence": 0.714,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 277,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C8_DEBOUNCER_SHUTDOWN_DEADLOCK_FIX",
+    "kind": "code_audit",
+    "claim": "Using select with case <-td.ctx.Done() in triggerFlushLocked and workerLoop prevents goroutine deadlocks during K8s pod graceful shutdown when flushCh is blocked.",
+    "evidence": "File: internal/handler/master/debounce.go:126-155\nselect {\ncase td.flushCh <- tasks:\ncase <-td.ctx.Done():\n    go td.runTransmute(context.Background(), tasks)\ndefault:\n    go td.runTransmute(context.Background(), tasks)\n}\nIn workerLoop: when <-td.ctx.Done() fires, it directly drains remaining tasks without sending to flushCh, preventing Stop() from hanging on wg.Wait().",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4575,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.82,
+                "INCORRECT": 0.0868,
+                "UNSUPPORTED": 0.0932
+              },
+              "confidence": 0.4575,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 267,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.1196,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.7007,
+                "NO": 0.2993
+              },
+              "confidence": 0.1196,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 207,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C9_EXPANDED_TRANSIENT_ERRORS",
+    "kind": "code_audit",
+    "claim": "Adding Postgres SQLSTATE codes 40P01 (deadlock), 57014 (query timeout), and 53300 (too many clients) to isTransientError enables automatic retry rather than incorrectly triggering binary search poison pill splitting.",
+    "evidence": "File: internal/handler/master/transmute_handler.go:592-610\nstrings.Contains(msg, \"sqlstate 53300\") || // too many clients\nstrings.Contains(msg, \"sqlstate 40p01\") || // deadlock detected\nstrings.Contains(msg, \"sqlstate 57014\") || // statement timeout / canceled\nstrings.Contains(msg, \"sqlstate 55p03\") || // lock_not_available\nstrings.Contains(msg, \"deadlock detected\")\nPreviously, temporary lock contention was misdiagnosed as data corruption and initiated unnecessary binary search splitting.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2595,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6843,
+                "INCORRECT": 0.2242,
+                "UNSUPPORTED": 0.0915
+              },
+              "confidence": 0.2595,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 319,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.0871,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.6719,
+                "NO": 0.3281
+              },
+              "confidence": 0.0871,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 262,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C10_SCHEDULER_MULTI_REPLICA_THRESHOLD",
+    "kind": "code_audit",
+    "claim": "Restricting cleanupStuckSchedules to schedules with updated_at older than 10 minutes prevents newly restarted pods from erroneously failing active jobs running on sibling pods in a multi-replica cluster.",
+    "evidence": "File: internal/service/master/transmute_scheduler.go:220-238\nres := s.db.WithContext(ctx).Exec(`\n    UPDATE cdc_system.transmute_schedule\n       SET last_status = 'failed',\n           last_error  = 'Job stuck running for over 10m — marked failed by scheduler',\n           updated_at  = NOW()\n     WHERE last_status = 'running'\n       AND updated_at < NOW() - INTERVAL '10 minutes'\n`)\nPreviously, unconditional UPDATE WHERE last_status = 'running' on restart killed running jobs of healthy sibling pods.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.7039,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9219,
+                "INCORRECT": 0.0497,
+                "UNSUPPORTED": 0.0284
+              },
+              "confidence": 0.7039,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 328,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4615,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8768,
+                "NO": 0.1232
+              },
+              "confidence": 0.4615,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 267,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  }
+]

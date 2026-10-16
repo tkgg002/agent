@@ -1,0 +1,457 @@
+[
+  {
+    "id": "K1_NEG",
+    "kind": "control_false",
+    "claim": "BatchBuffer commits Kafka offsets even when running in snapshot buffer mode (isSnapshotBuffer=true).",
+    "evidence": "batch_buffer.go:301: `if !bb.isSnapshotBuffer && bb.onCommitOffsets != nil { safeOffsets := CalculateSafeCommitOffsets(allResults); if len(safeOffsets) > 0 { bb.onCommitOffsets(ctx, safeOffsets) } }`. When isSnapshotBuffer is true, offset commit is bypassed.",
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.1132,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2519,
+                "INCORRECT": 0.5706,
+                "UNSUPPORTED": 0.1775
+              },
+              "confidence": 0.1132,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 208,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.1313,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.2899,
+                "NO": 0.7101
+              },
+              "confidence": 0.1313,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 148,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "K2_POS",
+    "kind": "control_true",
+    "claim": "shadow.UpsertRecord struct contains an Op string field to preserve CDC event operations.",
+    "evidence": "cdc_event.go:49-54: `type UpsertRecord struct { SourceTsMs int64; Op string; IsDelete bool; ... }`. Op string field is explicitly present.",
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.3606,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0148,
+                "INCORRECT": 0.3258,
+                "UNSUPPORTED": 0.6594
+              },
+              "confidence": 0.3606,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 175,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.9773,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0022,
+                "NO": 0.9978
+              },
+              "confidence": 0.9773,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 115,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C1_OP_PROPAGATE",
+    "kind": "diff_audit",
+    "claim": "event_handler.go and bridge_handler.go propagate event.Data.Op and event.Op into shadow.UpsertRecord so Op is not lost.",
+    "evidence": "event_handler.go:454: `Op: event.Data.Op,` inside record initialization. bridge_handler.go:517: `Op: event.Op,` inside eventToUpsertRecord. Both assign Op into shadow.UpsertRecord.",
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.221,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.1395,
+                "INCORRECT": 0.188,
+                "UNSUPPORTED": 0.6725
+              },
+              "confidence": 0.221,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 207,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.0055,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.4566,
+                "NO": 0.5434
+              },
+              "confidence": 0.0055,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 147,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C2_BATCH_BUFFER_CUD",
+    "kind": "diff_audit",
+    "claim": "batch_buffer.go computes cntC, cntU, cntD based on record.Op and record.IsDelete and passes them into details for cdc_activity_log.",
+    "evidence": "batch_buffer.go:365-388: loop over records with switch r.Op (case 'd': cntD++, case 'u': cntU++, case 'c','r': cntC++, default fallback to r.IsDelete). details map contains 'c': cntC, 'u': cntU, 'd': cntD, and act.Complete passes details to activity log.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.7244,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9283,
+                "INCORRECT": 0.0491,
+                "UNSUPPORTED": 0.0226
+              },
+              "confidence": 0.7244,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 238,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7264,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.953,
+                "NO": 0.047
+              },
+              "confidence": 0.7264,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 177,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C3_SNAPSHOT_TAGGING",
+    "kind": "diff_audit",
+    "claim": "batch_buffer.go sets triggered_by='snapshot', buffer_type='snapshot', and is_snapshot=true in activity log details when isSnapshotBuffer is true.",
+    "evidence": "batch_buffer.go:356-361: `if bb.isSnapshotBuffer { triggeredBy = \"snapshot\"; bufferType = \"snapshot\" }`. batch_buffer.go:389-395: details contains `\"buffer_type\": bufferType, \"is_snapshot\": bb.isSnapshotBuffer`.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4378,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8062,
+                "INCORRECT": 0.125,
+                "UNSUPPORTED": 0.0687
+              },
+              "confidence": 0.4378,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 224,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.669,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9391,
+                "NO": 0.0609
+              },
+              "confidence": 0.669,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 164,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C4_FRONTEND_READ_REMOVAL",
+    "kind": "diff_audit",
+    "claim": "Frontend ReconPipelineGrid.tsx has completely removed Read(r) column from DailyFlow modal columns, outside card and Table.Summary.",
+    "evidence": "ReconPipelineGrid.tsx: DailyFlowRecord has kafka: { total, c, u, d } without r. Outside Card 1 renders `c: {kafkaC} • u: {kafkaU} • d: {kafkaD}`. Table columns array has no Read(r) column. Table.Summary has 18 columns with no kafkaR cell.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4869,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8228,
+                "INCORRECT": 0.1355,
+                "UNSUPPORTED": 0.0417
+              },
+              "confidence": 0.4869,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 218,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6681,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9389,
+                "NO": 0.0611
+              },
+              "confidence": 0.6681,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 158,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "C5_GAP_ANALYSIS",
+    "kind": "critical_finding",
+    "claim": "Frontend ReconPipelineGrid.tsx does not filter out buffer_type === 'snapshot' when processing kafkaLog, so snapshot activity logs are still aggregated into row.kafka.total.",
+    "evidence": "ReconPipelineGrid.tsx:410-440: `(kafkaLog?.data || []).forEach((k) => { const batchSize = Number(details.batch_size) || ...; row.kafka.total += batchSize; ... })`. There is no `if (details.buffer_type === 'snapshot') return;` or check on `k.triggered_by === 'snapshot'`, so all records in kafkaLog are added to row.kafka.total.",
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.2926,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.1613,
+                "INCORRECT": 0.7237,
+                "UNSUPPORTED": 0.115
+              },
+              "confidence": 0.2926,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 255,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.0481,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.3717,
+                "NO": 0.6283
+              },
+              "confidence": 0.0481,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 193,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  }
+]

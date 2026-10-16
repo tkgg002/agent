@@ -1,0 +1,534 @@
+[
+  {
+    "id": "CTRL_NEG_1_BUILD_OK_ILLUSION",
+    "kind": "negative_control",
+    "claim": "Trong quá trình triển khai API mới GET /api/v1/connections trên cdc-cms-service, việc chỉ chạy lệnh 'go build -o server cmd/server/main.go' trả về Exit Code 0 là chưa đủ để báo cáo hoàn thành, bởi nếu không restart tiến trình đang lắng nghe trên cổng 8083 thì client gọi thực tế vẫn nhận lỗi 404 Not Found.",
+    "file": "cdc-cms-service/internal/api/router.go",
+    "objective": "Bác bỏ ảo tưởng Build-OK (Rule #14 G3) và bắt buộc verify HTTP response thật trên cổng runtime.",
+    "flow": "Edit router.go -> go build exit 0 -> Old PID 76332 still serves port 8083 -> GET /api/v1/connections returns 404 until process restart.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2568,
+      "probabilities": {
+        "CORRECT": 0.6813,
+        "INCORRECT": 0.091,
+        "UNSUPPORTED": 0.2277
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6813,
+                "INCORRECT": 0.091,
+                "UNSUPPORTED": 0.2277
+              },
+              "confidence": 0.2568,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 432,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.327,
+      "probabilities": {
+        "YES": 0.8232,
+        "NO": 0.1768
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8232,
+                "NO": 0.1768
+              },
+              "confidence": 0.327,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 404,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "AUDIT_1_CREDENTIAL_MASKING_CONNECTIONS_API",
+    "kind": "security_fix",
+    "claim": "Khi mở endpoint GET /api/v1/connections trả về toàn bộ connection_registry cho Frontend, cột host của các kết nối MongoDB chứa URI đầy đủ dạng 'mongodb://user:password@host:27017/...'. Hàm sanitizeConnectionHost bóc tách đoạn giữa '://' và '@' để thay thế 'user:password@' bằng '***:***@' giúp ngăn chặn triệt để lộ lọt mật khẩu DB nguồn ra trình duyệt mà vẫn giữ nguyên cấu trúc host/port.",
+    "file": "cdc-cms-service/internal/infra/persistence/master/master_repo_gorm.go",
+    "objective": "Chặn lộ thông tin xác thực nhạy cảm (Database Credentials) trên API danh sách kết nối (Rule #15 & #20).",
+    "flow": "ListConnectionsWithFilter -> Query connection_registry -> sanitizeConnectionHost masks user:pass@ -> Return safe JSON to Frontend.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1498,
+      "probabilities": {
+        "CORRECT": 0.545,
+        "INCORRECT": 0.3506,
+        "UNSUPPORTED": 0.1044
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.545,
+                "INCORRECT": 0.3506,
+                "UNSUPPORTED": 0.1044
+              },
+              "confidence": 0.1498,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 482,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4215,
+      "probabilities": {
+        "YES": 0.8622,
+        "NO": 0.1378
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8622,
+                "NO": 0.1378
+              },
+              "confidence": 0.4215,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 454,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "AUDIT_2_POSTGRES_SCHEMA_VS_DB_NAME_SELECTOR",
+    "kind": "frontend_fix",
+    "claim": "Trong CascadingSourceSelector của ActivityManager.tsx, đối với tầng master (PostgreSQL), hàm countSQL của SourceCountRunner thực thi câu lệnh 'SELECT COUNT(*) FROM \"<container_namespace>\".\"<object_name>\" WHERE \"<date_field>\" >= ? AND \"<date_field>\" < ?'. Việc chuẩn hóa effectiveConnCode = m.master_connection_code || 'default_master', chỉ nạp các master_schema thuộc kết nối đã chọn vào namespaceOptions (loại bỏ tên Database như 'goopay_master_2'), tách tên bảng trần (bare table name) và kế thừa timestamp_field từ sourceObjects giúp ngăn chặn lỗi SQLSTATE 42P01 và đảm bảo cả default_master lẫn master_2 đều hiển thị đúng danh sách schema/table.",
+    "file": "cdc-cms-web/src/pages/ActivityManager.tsx",
+    "objective": "Đảm bảo 100% container_namespace khớp với PostgreSQL Schema thực tế cho cả default_master và master_2, tách bare table name và kế thừa đúng timestamp_field.",
+    "flow": "Select Layer (master) -> Select Connection (default_master or master_2) -> Normalize effectiveConnCode = m.master_connection_code || 'default_master' -> Populate namespaceOptions with matching master_schema -> Filter objectOptions by exact master_schema, extract bare table name, and inherit timestamp_field from sourceObjects.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1398,
+      "probabilities": {
+        "CORRECT": 0.6026,
+        "INCORRECT": 0.177,
+        "UNSUPPORTED": 0.2205
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6026,
+                "INCORRECT": 0.177,
+                "UNSUPPORTED": 0.2205
+              },
+              "confidence": 0.1398,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 857,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.2805,
+      "probabilities": {
+        "YES": 0.8012,
+        "NO": 0.1988
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8012,
+                "NO": 0.1988
+              },
+              "confidence": 0.2805,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 829,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "AUDIT_3_DYNAMIC_MULTI_DB_ROUTING",
+    "kind": "backend_fix",
+    "claim": "Lỗi 'ERROR: relation \"master_centrallized_export_service.export_jobs_2\" does not exist (SQLSTATE 42P01)' xảy ra do SourceCountRunner trước đó dùng cứng kết nối mặc định r.dbMaster (trỏ vào goopay_dest cổng 5434), trong khi bảng export_jobs_2 thuộc kết nối master_2 (goopay_master_2 cổng 5437). Việc tích hợp ConnectionManager và gọi r.connMgr.GetMasterDB(ctx, params.ConnectionCode) giúp định tuyến truy vấn COUNT(*) chính xác tới đúng PostgreSQL instance của connection_code đã cấu hình.",
+    "file": "centralized-data-service/internal/server/source_count_runner.go",
+    "objective": "Định tuyến động kết nối CSDL theo connection_code trong kiến trúc Multi-DB Data Hub.",
+    "flow": "Execute(ctx, sched) -> Parse params.ConnectionCode -> Call r.connMgr.GetMasterDB(ctx, params.ConnectionCode) -> Execute SELECT COUNT(*) on target DB pool.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.8412,
+      "probabilities": {
+        "CORRECT": 0.9652,
+        "INCORRECT": 0.0213,
+        "UNSUPPORTED": 0.0136
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9652,
+                "INCORRECT": 0.0213,
+                "UNSUPPORTED": 0.0136
+              },
+              "confidence": 0.8412,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 508,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7869,
+      "probabilities": {
+        "YES": 0.9662,
+        "NO": 0.0338
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9662,
+                "NO": 0.0338
+              },
+              "confidence": 0.7869,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 480,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "AUDIT_4_MANUAL_VS_SCHEDULER_TRIGGER_DETECTION",
+    "kind": "backend_fix",
+    "claim": "Khi người dùng bấm nút 'Chạy ngay' (Run Now) trên CMS, handler update_schedule.go đặt đồng thời 'last_run_at = NULL' và 'next_run_at = NOW()'. Nếu worker chỉ kiểm tra 'sched.NextRunAt != nil && !sched.NextRunAt.After(now)' thì mọi lần chạy tự động định kỳ sau lần chạy đầu tiên đều bị nhận diện nhầm là Run Now thủ công ('triggered_by = manual') và có nguy cơ tự kích hoạt sai khung giờ khi worker khởi động lại. Việc kiểm tra kết hợp 'sched.LastRunAt == nil && sched.NextRunAt != nil && !sched.NextRunAt.After(now)' phân biệt chính xác 100% lệnh Run Now thủ công với các chu kỳ chạy tự động của scheduler.",
+    "file": "centralized-data-service/internal/server/server_scheduler.go",
+    "objective": "Phân biệt chính xác nguồn kích hoạt 'manual' (Run Now) và 'scheduler' (Tự động định kỳ), đồng thời bảo vệ lịch chạy cố định hằng ngày (HH:MM) khi worker restart.",
+    "flow": "CMS Run Now sets last_run_at=NULL & next_run_at=NOW() -> Worker checks LastRunAt==nil && NextRunAt<=now -> Sets triggered_by='manual' and calculates next fixed-time slot -> Subsequent scheduled runs have LastRunAt!=nil -> Sets triggered_by='scheduler'.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.8123,
+      "probabilities": {
+        "CORRECT": 0.9572,
+        "INCORRECT": 0.0224,
+        "UNSUPPORTED": 0.0204
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9572,
+                "INCORRECT": 0.0224,
+                "UNSUPPORTED": 0.0204
+              },
+              "confidence": 0.8123,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 615,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8641,
+      "probabilities": {
+        "YES": 0.981,
+        "NO": 0.019
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.981,
+                "NO": 0.019
+              },
+              "confidence": 0.8641,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 587,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "AUDIT_5_REDIS_LOCK_TTL_VS_TICKER_INTERVAL",
+    "kind": "runtime_discovery_and_fix",
+    "claim": "Khi giảm chu kỳ ticker của startScheduler từ 10 giây xuống 2 giây để đáp ứng lệnh 'Chạy ngay' tức thì, nếu giữ nguyên TTL của khóa phân tán Redis 'SetNX(ctxTimeout, \"cdc:lock:scheduler_poll\", \"locked\", 8*time.Second)' mà không giải phóng cuối vòng lặp, thì chính worker pod đó sẽ tự khóa mình trong 3 nhịp tick liên tiếp (mất 8 giây mới poll lại DB), làm trễ toàn bộ 3 nhịp poll (1s, 2.5s, 4.5s) của Frontend. Việc giảm TTL của SetNX xuống 1500ms (1.5 giây < chu kỳ ticker 2 giây) vừa ngăn chặn các pod khác poll trùng trong cùng nhịp tick, vừa đảm bảo mỗi nhịp 2 giây worker đều poll DB đúng hạn.",
+    "file": "centralized-data-service/internal/server/server_scheduler.go",
+    "objective": "Đồng bộ hóa thời gian sống của khóa phân tán Redis (Lock TTL = 1.5s) với chu kỳ Ticker (2.0s) và chu kỳ Polling của UI (2.5s).",
+    "flow": "Ticker fires every 2.0s -> Redis SetNX lock acquired with 1500ms TTL -> Cycle completes -> Lock expires at 1.5s -> Next tick at 2.0s acquires lock cleanly -> Run Now job executes within < 2.5s.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3389,
+      "probabilities": {
+        "CORRECT": 0.7528,
+        "INCORRECT": 0.1465,
+        "UNSUPPORTED": 0.1007
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7528,
+                "INCORRECT": 0.1465,
+                "UNSUPPORTED": 0.1007
+              },
+              "confidence": 0.3389,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 659,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7184,
+      "probabilities": {
+        "YES": 0.9511,
+        "NO": 0.0489
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9511,
+                "NO": 0.0489
+              },
+              "confidence": 0.7184,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 631,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "AUDIT_6_FULL_CYCLE_ACTIVITY_LOGGING_INCLUDING_UNMARSHAL_ERROR",
+    "kind": "backend_fix",
+    "claim": "Việc tiêm ActivityLogger vào cả SourceCountRunner và ConfluenceReportRunner, đồng thời bổ sung ghi log lỗi ngay cả ở nhánh return sớm khi json.Unmarshal(sched.Params) thất bại, đảm bảo 100% mọi lần thực thi (dù thành công hay thất bại ở bất kỳ bước nào) đều xuất hiện bản ghi tường minh trong bảng cdc_activity_log kèm trạng thái và error_message.",
+    "file": "centralized-data-service/internal/server/source_count_runner.go",
+    "objective": "Triệt tiêu hoàn toàn hiện tượng 'Im lặng nuốt nhật ký' (Silent Activity Drop) khi chạy job từ Activity Manager.",
+    "flow": "Runner starts -> If json.Unmarshal fails: log error to cdc_activity_log & update last_error -> If count/report finishes: log status (success/error) with triggered_by from context.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1089,
+      "probabilities": {
+        "CORRECT": 0.4728,
+        "INCORRECT": 0.4035,
+        "UNSUPPORTED": 0.1237
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4728,
+                "INCORRECT": 0.4035,
+                "UNSUPPORTED": 0.1237
+              },
+              "confidence": 0.1089,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 515,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.2975,
+      "probabilities": {
+        "YES": 0.8095,
+        "NO": 0.1905
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8095,
+                "NO": 0.1905
+              },
+              "confidence": 0.2975,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 487,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  }
+]

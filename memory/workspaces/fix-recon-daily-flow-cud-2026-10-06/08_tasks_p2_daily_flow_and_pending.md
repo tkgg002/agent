@@ -1,0 +1,21 @@
+# 08 — Tasks: Phase P2 & Pending Issues Resolution
+
+- [x] **T1 [CMS Router]**: Sửa `func chain(...)` tại `internal/router/router.go` trả về `out[:len(out):len(out)]` (3-index slice) ngăn chặn aliasing capacity.
+- [x] **T2 [CDS Transmute]**: Cập nhật `transmute_handler.go`: Ghi cờ `"split_retry": true` cho lỗi chia nhỏ trung gian (`len(subBatch) > 1`), ghi `"poison_pill": true` khi cô lập thành công (`len(batch) == 1`).
+- [x] **T3 [CMS Query Model]**: Tạo `DailyFlowParams` và `DailyFlowRecord` trong `internal/app/queries/system/daily_flow.go`.
+- [x] **T4 [CMS Repository]**: Viết method `GetDailyFlow(...)` trong `internal/infra/persistence/system/activity_log_read_repo_gorm.go`:
+  - Pruning partition `created_at >= NOW() - INTERVAL 'X days'`.
+  - Phân tách rõ ràng Snapshot vs CDC Stream (Kafka Ingest, Shadow Applied, Master Transmuted, Recon Drift & Healed, DLQ).
+  - Group theo ngày địa phương `DATE(al.started_at AT TIME ZONE 'UTC' + (INTERVAL '1 minute' * tz_offset))`.
+- [x] **T5 [CMS API & Route]**:
+  - Viết handler `GetDailyFlow` trong `internal/api/system/activity_log_handler.go`.
+  - Đăng ký route `GET /api/reconciliation/daily-flow` và `/api/activity-log/daily-flow` (kèm `/v1` mirror) với quyền `shared`.
+- [x] **T6 [CMS Web Integration]**:
+  - Bổ sung hook `useDailyFlow` trong `src/hooks/useReconStatus.ts`.
+  - Cập nhật `ReconPipelineGrid.tsx` sử dụng hook `useDailyFlow`, loại bỏ hoàn toàn 200 logs limit và client-side reducer.
+- [x] **T7 [Maintenance Tool]**: Viết script SQL `enrich_legacy_activity_logs.sql` để backfill `shadow_schema` cho các log cũ của bảng có 1 binding duy nhất.
+- [x] **T8 [Verification & Testing]**:
+  - Test compile: `go test` + `go build` (CDS), `go build` + `go vet` (CMS), `npm run build` (CMS Web) đều PASS.
+  - Test SQL aggregation trên DB Docker `cdc_dw` thật: chạy thành công, trả về đầy đủ 14 ngày, phân biệt snapshot vs stream.
+  - Test SQL maintenance script: verify trên transaction + rollback (update 2796 rows an toàn).
+- [ ] **T9 [Git Staging & Commit Guidance]**: Phân tách commit theo từng tính năng/repo sạch sẽ cho User.

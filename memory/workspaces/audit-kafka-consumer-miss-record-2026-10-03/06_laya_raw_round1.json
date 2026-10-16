@@ -1,0 +1,772 @@
+[
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "flow": "F-commit",
+    "claim": "FlushWithContext skips onCommitOffsets whenever any group's batchUpsert returned an error.",
+    "laya_choice": "CORRECT",
+    "laya_confidence": 0.5447,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "FlushWithContext skips onCommitOffsets whenever any group's batchUpsert returned an error.",
+          "evidence": "batch_buffer.go:246-257 on gerr!=nil only logs and sets err=gerr (first error); returns nil from goroutine. :276 `_ = g.Wait()`. :279-291 `if bb.onCommitOffsets != nil { groupOffsets := ...max offset per topic-partition over ALL records in batch...; if len(groupOffsets) > 0 { bb.onCommitOffsets(ctx, groupOffsets) } }`. The variable err is not read between g.Wait() and onCommitOffsets.",
+          "flow": "F-commit"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8595,
+                "INCORRECT": 0.085,
+                "UNSUPPORTED": 0.0556
+              },
+              "confidence": 0.5447,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 241,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 3.03
+    }
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "flow": "E-upsert",
+    "claim": "The 10s context timeout created in FlushWithContext is propagated into db.Transaction and cancels in-flight SQL statements.",
+    "laya_choice": "INCORRECT",
+    "laya_confidence": 0.0734,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "The 10s context timeout created in FlushWithContext is propagated into db.Transaction and cancels in-flight SQL statements.",
+          "evidence": "batch_buffer.go:214 ctx,cancel := context.WithTimeout(parentCtx,10s). :392 `txErr := db.Transaction(func(tx *gorm.DB) error {...tx.Exec(query, values...)...})` -- no WithContext(ctx). batch_buffer_utils.go:41-58 resolveDB uses connMgr.GetShadowDB(context.Background(), key). In batchUpsert, ctx is only used for tracing spans and publishTransmuteTrigger.",
+          "flow": "E-upsert"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.1853,
+                "INCORRECT": 0.5098,
+                "UNSUPPORTED": 0.3049
+              },
+              "confidence": 0.0734,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 236,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 0.08
+    }
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "flow": "E-add",
+    "claim": "BatchBuffer.Add appends the record under bb.mu and signals flushCh without blocking when len(records) >= maxSize.",
+    "laya_choice": "UNSUPPORTED",
+    "laya_confidence": 0.3993,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "BatchBuffer.Add appends the record under bb.mu and signals flushCh without blocking when len(records) >= maxSize.",
+          "evidence": "batch_buffer.go:166-178 `bb.mu.Lock(); bb.records = append(bb.records, record); shouldFlush := len(bb.records) >= bb.maxSize; bb.mu.Unlock(); if shouldFlush { select { case bb.flushCh <- struct{}{}: default: } }`. flushCh is make(chan struct{},1) at :86.",
+          "flow": "E-add"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0635,
+                "INCORRECT": 0.157,
+                "UNSUPPORTED": 0.7795
+              },
+              "confidence": 0.3993,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 213,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 0.05
+    }
+  },
+  {
+    "id": "C1",
+    "kind": "claim",
+    "flow": "F-commit",
+    "claim": "Kafka offsets are committed for the whole flushed batch (max offset per topic-partition) even when some table groups failed to persist, so failed records are skipped past by the committed offset.",
+    "laya_choice": "UNSUPPORTED",
+    "laya_confidence": 0.0594,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "Kafka offsets are committed for the whole flushed batch (max offset per topic-partition) even when some table groups failed to persist, so failed records are skipped past by the committed offset.",
+          "evidence": "batch_buffer.go:246-257 gerr only logged, err captured, goroutine returns nil. :276 `_ = g.Wait()`. :279-291 onCommitOffsets is called with max KafkaOffset per TopicPartition computed over `for _, r := range batch` (all records, not only persisted ones); err is never checked. kafka_consumer.go:761-807 commitOffsets calls reader.CommitMessages for those offsets.",
+          "flow": "F-commit"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.1828,
+                "INCORRECT": 0.3491,
+                "UNSUPPORTED": 0.4681
+              },
+              "confidence": 0.0594,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 243,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 0.05
+    }
+  },
+  {
+    "id": "C2",
+    "kind": "claim",
+    "flow": "A/D-handler",
+    "claim": "processEvent reports success (rows=1) to the Kafka consumer loop right after BatchBuffer.Add, before any database write, so the consumer's success counters and metrics do not reflect persistence.",
+    "laya_choice": "UNSUPPORTED",
+    "laya_confidence": 0.0403,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "processEvent reports success (rows=1) to the Kafka consumer loop right after BatchBuffer.Add, before any database write, so the consumer's success counters and metrics do not reflect persistence.",
+          "evidence": "event_handler.go:460-462 `h.batchBuffer.Add(record); written := 1; totalWritten += written`. kafka_consumer.go:473-483 when procErr==nil: metrics.EventsProcessed(...,\"success\").Inc(); batch.success++; batch.rowsAffected += rows. The actual DB write happens later in BatchBuffer.timerLoop/FlushWithContext (batch_buffer.go:180-195,204-295).",
+          "flow": "A/D-handler"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.2865,
+                "INCORRECT": 0.2396,
+                "UNSUPPORTED": 0.4739
+              },
+              "confidence": 0.0403,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 256,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 0.05
+    }
+  },
+  {
+    "id": "C3",
+    "kind": "claim",
+    "flow": "E-upsert",
+    "claim": "In batchUpsert's per-record fallback, when a statement fails with a retryable DB error the function returns immediately, abandoning the remaining records of the chunk and all later chunks without writing failed_sync_logs, and the offsets are still committed by the caller.",
+    "laya_choice": "UNSUPPORTED",
+    "laya_confidence": 0.1668,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "In batchUpsert's per-record fallback, when a statement fails with a retryable DB error the function returns immediately, abandoning the remaining records of the chunk and all later chunks without writing failed_sync_logs, and the offsets are still committed by the caller.",
+          "evidence": "batch_buffer.go:464-514 fallback loop over chunk. :474-479 (soft delete) and :500-505 (upsert): `if isRetryableDBError(err) { ...publishTransmuteTrigger(successfulRecords)...; return written + int(chunkWritten), err }` before writeFailedSyncLog (:480,:506). The for-loop `for i := 0; i < len(records); i += chunkSize` (:384) is exited by the return, so later chunks are not attempted. Caller FlushWithContext :246-257 logs err and :289-291 commits offsets regardless. isRetryableDBError (:596-628) returns true for 40001,40P01,57P01-03,55000, SQLSTATE 08*, and text deadlock/lock conflict/connection refused/reset/conn closed/bad connection.",
+          "flow": "E-upsert"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.3719,
+                "INCORRECT": 0.0885,
+                "UNSUPPORTED": 0.5395
+              },
+              "confidence": 0.1668,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 378,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 0.07
+    }
+  },
+  {
+    "id": "C4",
+    "kind": "claim",
+    "flow": "E-upsert",
+    "claim": "SQLSTATE 53300 (too many clients) is not classified as retryable by isRetryableDBError, so under DB connection exhaustion each record is sent to writeFailedSyncLog; if that write also fails only a metric is incremented and the record is lost while its offset is still committed.",
+    "laya_choice": "UNSUPPORTED",
+    "laya_confidence": 0.1004,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "SQLSTATE 53300 (too many clients) is not classified as retryable by isRetryableDBError, so under DB connection exhaustion each record is sent to writeFailedSyncLog; if that write also fails only a metric is incremented and the record is lost while its offset is still committed.",
+          "evidence": "batch_buffer.go:596-628 isRetryableDBError: non-retryable explicit 23505,23503; retryable prefix 08; switch 40001,40P01,57P01,57P02,57P03,55000; text list deadlock, lock conflict, connection refused, connection reset, conn closed, driver: bad connection. No 53300 and no 'too many clients'. :492-506 non-retryable -> bb.writeFailedSyncLog(tableName,r,err). :578-593 writeFailedSyncLog: on dbErr only metrics.DLQWriteFail.Inc() and logger.Error. :279-291 offsets committed afterwards.",
+          "flow": "E-upsert"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.1356,
+                "INCORRECT": 0.3747,
+                "UNSUPPORTED": 0.4897
+              },
+              "confidence": 0.1004,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 350,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 0.06
+    }
+  },
+  {
+    "id": "C5",
+    "kind": "claim",
+    "flow": "F-commit",
+    "claim": "When processMessage fails and the DLQ write succeeds, the failed message's offset is not committed directly, but a later successful message from the same partition makes the batch commit a higher offset, so the DLQ row becomes the only copy of the failed message.",
+    "laya_choice": "INCORRECT",
+    "laya_confidence": 0.0189,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "When processMessage fails and the DLQ write succeeds, the failed message's offset is not committed directly, but a later successful message from the same partition makes the batch commit a higher offset, so the DLQ row becomes the only copy of the failed message.",
+          "evidence": "kafka_consumer.go:500-526 comment says never commit on error; no commitOffsets call in the loop. Commit only happens via BatchBuffer onCommitOffsets (batch_buffer.go:279-291) with max offset per topic-partition of buffered records. A failed message never enters the BatchBuffer (processEvent returns before Add, event_handler.go:288,418,367), but a later message of the same partition does and commits offset > failed offset. dlq_helper.go:19-55 writeDLQ stores raw JSON, topic, partition, offset into failed_sync_logs.",
+          "flow": "F-commit"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2423,
+                "INCORRECT": 0.3985,
+                "UNSUPPORTED": 0.3592
+              },
+              "confidence": 0.0189,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 296,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 0.05
+    }
+  },
+  {
+    "id": "C6",
+    "kind": "claim",
+    "flow": "B/C/D-decode",
+    "claim": "Several paths drop a Kafka message by returning (0, nil) without DLQ: empty value, foreign topic, non-delete event with nil after, and event with missing primary key; the offset advances and only EventsDropped metric/log records it.",
+    "laya_choice": "CORRECT",
+    "laya_confidence": 0.2479,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "Several paths drop a Kafka message by returning (0, nil) without DLQ: empty value, foreign topic, non-delete event with nil after, and event with missing primary key; the offset advances and only EventsDropped metric/log records it.",
+          "evidence": "kafka_consumer.go:538-546 empty value -> EventsDropped(\"empty_value\"); return 0,nil. :548-555 !IsSystemTopic -> foreign_topic; return 0,nil. :631-640 afterData==nil && opStr!=\"d\" -> nil_after_data; return 0,nil. event_handler.go:343-350 pkValue==\"\" -> logger.Warn; EventsDropped(\"missing_pk\"); return 0,nil. In the consumer loop (kafka_consumer.go:473-483) a nil error is counted as success; no writeDLQ is called for these.",
+          "flow": "B/C/D-decode"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.657,
+                "INCORRECT": 0.0775,
+                "UNSUPPORTED": 0.2655
+              },
+              "confidence": 0.2479,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 313,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 0.05
+    }
+  },
+  {
+    "id": "C7",
+    "kind": "claim",
+    "flow": "E/F-flush",
+    "claim": "BatchBuffer flushes are not serialized: the timerLoop and external callers of FlushBatchBuffer (snapshot runner, recon heal) can run FlushWithContext concurrently, so a later batch with higher offsets can commit before an earlier batch has persisted; if the earlier batch then fails or the process crashes, its records are skipped by the committed offset.",
+    "laya_choice": "UNSUPPORTED",
+    "laya_confidence": 0.1642,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "BatchBuffer flushes are not serialized: the timerLoop and external callers of FlushBatchBuffer (snapshot runner, recon heal) can run FlushWithContext concurrently, so a later batch with higher offsets can commit before an earlier batch has persisted; if the earlier batch then fails or the process crashes, its records are skipped by the committed offset.",
+          "evidence": "batch_buffer.go:217-225 FlushWithContext swaps bb.records under bb.mu and releases the lock before writing; no mutex held during :237-291 and no flush-level lock exists. :180-195 timerLoop calls bb.Flush(). event_handler.go:97-102 FlushBatchBuffer -> batchBuffer.FlushWithContext(ctx). Callers: snapshot_runner_handler.go:827 and :889, recon_heal_fetch.go:91 and :104. Each flush commits max offsets of its own batch at :279-291.",
+          "flow": "E/F-flush"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.2046,
+                "INCORRECT": 0.1691,
+                "UNSUPPORTED": 0.6263
+              },
+              "confidence": 0.1642,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 313,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 0.04
+    }
+  },
+  {
+    "id": "C8",
+    "kind": "claim",
+    "flow": "G-refresh",
+    "claim": "RefreshTopics is invoked from a NATS subscriber goroutine concurrently with the consumer loop; flushAllBatches iterates kc.batches without any lock while the loop goroutine writes kc.batches via getOrCreateBatch, a potential Go concurrent map iteration/write crash when the topic set changes.",
+    "laya_choice": "INCORRECT",
+    "laya_confidence": 0.0527,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "RefreshTopics is invoked from a NATS subscriber goroutine concurrently with the consumer loop; flushAllBatches iterates kc.batches without any lock while the loop goroutine writes kc.batches via getOrCreateBatch, a potential Go concurrent map iteration/write crash when the topic set changes.",
+          "evidence": "server_setup.go:506-508 `natsClient.Conn.Subscribe(\"cdc.cmd.kafka.refresh-topics\", func(msg *nats.Msg){ kafkaConsumer.RefreshTopics(context.Background()) })`. topic_helper.go:43-47 returns early when topic set unchanged; otherwise :59 kc.flushAllBatches(ctx). adaptive_batcher.go:123-126 `for topic := range kc.batches { kc.flushBatch(ctx, topic) }` no lock; :79-85 getOrCreateBatch writes kc.batches[topic]=b no lock; called from loop kafka_consumer.go:421 which does not hold refreshMu.",
+          "flow": "G-refresh"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3474,
+                "INCORRECT": 0.4612,
+                "UNSUPPORTED": 0.1914
+              },
+              "confidence": 0.0527,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 316,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 0.05
+    }
+  },
+  {
+    "id": "C9",
+    "kind": "claim",
+    "flow": "A/G-rebalance",
+    "claim": "A consumer-group rebalance or reader rebuild on its own causes redelivery (duplicates) rather than missing records, because offsets are committed manually only after the flush and CommitInterval is 0.",
+    "laya_choice": "UNSUPPORTED",
+    "laya_confidence": 0.1653,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "A consumer-group rebalance or reader rebuild on its own causes redelivery (duplicates) rather than missing records, because offsets are committed manually only after the flush and CommitInterval is 0.",
+          "evidence": "kafka_consumer.go:168-181 buildReader: GroupID set, CommitInterval:0 `Manual commit only to prevent loss`, StartOffset FirstOffset. The only commit path is commitOffsets (kafka_consumer.go:761-807) triggered from batch_buffer.go:279-291 after g.Wait(). Messages fetched but not yet flushed are therefore uncommitted and are re-fetched from the last committed offset by the new owner of the partition. This statement holds only when the flush itself persisted the records (see offsets committed regardless of errors).",
+          "flow": "A/G-rebalance"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.1348,
+                "INCORRECT": 0.2516,
+                "UNSUPPORTED": 0.6136
+              },
+              "confidence": 0.1653,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 269,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 0.05
+    }
+  },
+  {
+    "id": "C10",
+    "kind": "claim",
+    "flow": "I-scale",
+    "claim": "Database connection usage per worker instance is bounded only by per-process pool settings (MaxOpenConn=100 per gorm pool and 100 per pgx pool), with no cross-instance limit in the code, so total connections grow linearly with the number of instances.",
+    "laya_choice": "INCORRECT",
+    "laya_confidence": 0.0692,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "Database connection usage per worker instance is bounded only by per-process pool settings (MaxOpenConn=100 per gorm pool and 100 per pgx pool), with no cross-instance limit in the code, so total connections grow linearly with the number of instances.",
+          "evidence": "config-production.yml:17-20 dbPool maxOpenConn:100 maxIdleConn:50. pkgs/database/multi.go:237 sqlDB.SetMaxOpenConns(r.cfg.DBPool.MaxOpenConn) in openGorm; :257 poolCfg.MaxConns = int32(MaxOpenConn) in openPgx, :258 MinConns = MaxIdleConn. postgres.go:34,63,108 also SetMaxOpenConns from the same config. These are per-process settings; nothing in the repo coordinates a global connection budget across instances.",
+          "flow": "I-scale"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.381,
+                "INCORRECT": 0.4548,
+                "UNSUPPORTED": 0.1641
+              },
+              "confidence": 0.0692,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 301,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 0.05
+    }
+  },
+  {
+    "id": "C11",
+    "kind": "claim",
+    "flow": "E-route",
+    "claim": "BatchBuffer.resolveDB silently falls back to bb.db (the control-plane DB passed at construction) when a record's ConnectionKey is empty or GetShadowDB errors, so such records are written to a different database than the shadow DB without any error.",
+    "laya_choice": "UNSUPPORTED",
+    "laya_confidence": 0.0792,
+    "raw": {
+      "request": {
+        "state": {
+          "claim": "BatchBuffer.resolveDB silently falls back to bb.db (the control-plane DB passed at construction) when a record's ConnectionKey is empty or GetShadowDB errors, so such records are written to a different database than the shadow DB without any error.",
+          "evidence": "batch_buffer_utils.go:41-58 `if role == \"shadow\" && key != \"\" { if db, err := bb.connMgr.GetShadowDB(context.Background(), key); err == nil { return db } } ... return bb.db`. server_setup.go:152 NewBatchBuffer(..., db, schemaAdapter, logger) where db is the control-plane gorm DB. metadata_registry_service.go:254 `ShadowConnectionKey: connectionCodeByID[binding.ShadowConnectionID]` yields \"\" when the ID is not in the map.",
+          "flow": "E-route"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Given the CLAIM and the EVIDENCE (code excerpts with file:line), decide whether the claim is logically entailed by the evidence.",
+            "criteria": {
+              "CORRECT": "The evidence directly and fully supports the claim.",
+              "INCORRECT": "The evidence contradicts the claim or the claim is overstated.",
+              "UNSUPPORTED": "The evidence is insufficient to confirm or refute the claim."
+            }
+          }
+        }
+      },
+      "response": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.1684,
+                "INCORRECT": 0.3291,
+                "UNSUPPORTED": 0.5025
+              },
+              "confidence": 0.0792,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 284,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "latency_s": 0.05
+    }
+  }
+]
