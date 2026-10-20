@@ -1,0 +1,44 @@
+[
+  {
+    "id": "A-FIX-AF01",
+    "kind": "claim",
+    "claim": "three_way_merge_trees in proposer_axes.py initializes merged = dict(base_tree), removes keys in set(base_tree) - set(branch), and copies keys where k not in base_tree or branch[k] != base_tree[k].",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/orchestrator/proposer_axes.py:36-46\ndef three_way_merge_trees(base_tree: Tree, inv_tree: Tree, dom_tree: Tree) -> Tree:\n    \"\"\"Đóng AF-01: Hợp nhất 3 chiều bảo toàn thay đổi và phép xóa của cả 2 trục trực giao INV & DOM.\"\"\"\n    merged: Tree = dict(base_tree)\n    for branch in (inv_tree, dom_tree):\n        deleted = set(base_tree) - set(branch)\n        for k in deleted:\n            merged.pop(k, None)\n        for k, v in branch.items():\n            if k not in base_tree or branch[k] != base_tree[k]:\n                merged[k] = v\n    return merged",
+    "flow": "three_way_merge_trees -> pop deleted keys -> update added or modified keys relative to base_tree"
+  },
+  {
+    "id": "A-FIX-AF02",
+    "kind": "claim",
+    "claim": "In RecursiveHarnessEngine._run_cached_session, tree_digest is computed via hashlib.sha256 over json.dumps(base_tree, sort_keys=True, ensure_ascii=False) and passed in mission=f'task={task_id}|propose:{dim}:{label}|tree={tree_digest}' to call_fingerprint_sha256.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py:692-700\n        tree_digest = hashlib.sha256(\n            json.dumps(base_tree, sort_keys=True, ensure_ascii=False).encode(\"utf-8\")\n        ).hexdigest()[:16]\n        fp = call_fingerprint_sha256(\n            label=label,\n            mission=f\"task={task_id}|propose:{dim}:{label}|tree={tree_digest}\",\n            system=self.surface.name,\n            context_dir=context_dir,\n        )",
+    "flow": "_run_cached_session -> compute tree_digest -> call_fingerprint_sha256 with task_id, tree_digest, and context_dir"
+  },
+  {
+    "id": "A-FIX-AF03-AF05",
+    "kind": "claim",
+    "claim": "In execute_task_recursion, selector_fn is supported when provided, and s3_docs is populated from ws_target.iterdir() rather than a hardcoded list.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py:866-889\n        if selector_fn is not None:\n            picked_anon = selector_fn(dict(id_map), candidate_trees, rollout_outputs)\n            if picked_anon not in id_map:\n                raise ValueError(f\"selector_fn returned unknown anonymous ID: {picked_anon!r}\")\n            best_anon_id = picked_anon\n        else:\n            best_anon_id = max(\n                sorted(id_map),\n                key=lambda aid: float(\n                    (rollout_outputs.get(id_map[aid]) or {}).get(\"score\", 0.0)\n                ),\n            )\n        chosen_label = id_map[best_anon_id]\n        winning_tree = candidate_trees[chosen_label]\n\n        # Đóng AF-05: Quét danh sách file thật từ workspace_dir thay vì mảng giả tự thỏa mãn\n        ws_target = workspace_dir or (\n            DEFAULT_WS_ROOT / \"feature-harness2-recursive-integration-2026-10-20\"\n        )\n        s3_docs: List[str] = (\n            sorted(p.name for p in ws_target.iterdir() if p.is_file())\n            if ws_target.is_dir()\n            else []\n        )",
+    "flow": "execute_task_recursion -> selector_fn or score fallback -> scan ws_target.iterdir() for s3_docs"
+  },
+  {
+    "id": "A-K1",
+    "kind": "control_false",
+    "claim": "three_way_merge_trees clears base_tree completely and returns an empty dict {}.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/orchestrator/proposer_axes.py:36-46\ndef three_way_merge_trees(base_tree: Tree, inv_tree: Tree, dom_tree: Tree) -> Tree:\n    \"\"\"Đóng AF-01: Hợp nhất 3 chiều bảo toàn thay đổi và phép xóa của cả 2 trục trực giao INV & DOM.\"\"\"\n    merged: Tree = dict(base_tree)\n    for branch in (inv_tree, dom_tree):\n        deleted = set(base_tree) - set(branch)\n        for k in deleted:\n            merged.pop(k, None)\n        for k, v in branch.items():\n            if k not in base_tree or branch[k] != base_tree[k]:\n                merged[k] = v\n    return merged",
+    "flow": "control_false for three_way_merge_trees"
+  },
+  {
+    "id": "A-K2",
+    "kind": "control_false",
+    "claim": "In _run_cached_session, tree_digest is hardcoded to the constant string '0000' and call_fingerprint_sha256 is never called.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py:692-700\n        tree_digest = hashlib.sha256(\n            json.dumps(base_tree, sort_keys=True, ensure_ascii=False).encode(\"utf-8\")\n        ).hexdigest()[:16]\n        fp = call_fingerprint_sha256(\n            label=label,\n            mission=f\"task={task_id}|propose:{dim}:{label}|tree={tree_digest}\",\n            system=self.surface.name,\n            context_dir=context_dir,\n        )",
+    "flow": "control_false for _run_cached_session"
+  },
+  {
+    "id": "A-K3",
+    "kind": "control_true",
+    "claim": "CONTEXT_HIERARCHY_ORDER in proposer_axes.py is ('SKILL', 'SCRIPT', 'SUBAGENT', 'HOOK', 'ALWAYS_ON').",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/orchestrator/proposer_axes.py:27-33\nCONTEXT_HIERARCHY_ORDER: Tuple[str, ...] = (\n    \"SKILL\",\n    \"SCRIPT\",\n    \"SUBAGENT\",\n    \"HOOK\",\n    \"ALWAYS_ON\",\n)",
+    "flow": "control_true for CONTEXT_HIERARCHY_ORDER"
+  }
+]

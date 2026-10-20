@@ -67,4 +67,26 @@
 - **[Definition of Done (DoD)]:**
   - [x] Build binary `go build ./cmd/orchestrator` và chạy `go test ./...` toàn repo PASS 100%.
 
+---
+
+## [ ] Task 5 (`S5 -> S3 Re-Plan` — Khắc phục triệt để 6 Sơ hở `AF-1` $\rightarrow$ `AF-6` phát hiện qua Adversarial Re-Audit Commit `54e36e4`, chờ User `APPROVE`)
+- **[Mô tả & Ánh xạ 1:1 theo từng Sơ hở `AF-1..AF-6`]:**
+  1. **Khắc phục `AF-1` (`P0` — [`internal/runner/claude.go:38-77`](file:///Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/claude.go#L38-L77) & [`internal/orchestrator/wave_parallel_test.go:22-54`](file:///Users/trainguyen/Documents/work/ai-orchestrator/internal/orchestrator/wave_parallel_test.go#L22-L54)):**
+     - Truyền `req.Model` vào `ClaudeRunner.startStreamingProcess` để `--model <req.Model>` (`opus` / `sonnet`) thực sự được truyền xuống CLI `claude`.
+     - Xóa bỏ mockup `recordingCoderAgent` trong `wave_parallel_test.go`, thay bằng test tích hợp đầu-cuối đi xuyên qua `CoderAgent.Run -> ClaudeRunner.Complete` gọi binary script thật ghi nhận `os.Args`.
+  2. **Khắc phục `AF-2` (`P0` — [`internal/gitclient/gitclient.go:124-167`](file:///Users/trainguyen/Documents/work/ai-orchestrator/internal/gitclient/gitclient.go#L124-L167), [`internal/orchestrator/task_runner.go:1053-1190`](file:///Users/trainguyen/Documents/work/ai-orchestrator/internal/orchestrator/task_runner.go#L1053-L1190) & [`internal/agent/coder.go:188-200`](file:///Users/trainguyen/Documents/work/ai-orchestrator/internal/agent/coder.go#L188-L200)):**
+     - Thêm `SeedWorktreeFromRoot` để đồng bộ toàn bộ file uncommitted (TDD tests từ Phase A + file mới của `Wave 0..W-1`) từ `tr.root` sang worktree của `Wave W`.
+     - Phát hiện xung đột tập file sửa giữa các sub-task cùng Wave trong `SyncWorktreeFiles` (3-way merge hoặc báo lỗi tường minh thay vì ghi đè Last-Writer-Wins).
+     - Tách riêng file `coder_output_<subTaskID>.md` và `changes_<subTaskID>.md` trong `.orchestrator/` khi chạy song song.
+  3. **Khắc phục `AF-3` (`P0` — [`cmd/orchestrator/daemon_cmd.go:75-153`](file:///Users/trainguyen/Documents/work/ai-orchestrator/cmd/orchestrator/daemon_cmd.go#L75-L153)):**
+     - Bổ sung luồng `qStore.PopNextPrioritized -> TaskRunner` trong `daemon_cmd.go` và thay thế hoàn toàn mảng `Gates` gán cứng bằng `gatekeeper.EvaluateLiveGateBadges` đọc trạng thái kiểm định thật.
+  4. **Khắc phục `AF-4` (`P1` — [`internal/agentgate/gate.go:53-92, 155-204`](file:///Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/gate.go#L53-L204)):**
+     - Nối dây 4 hàm `LoadCoreConstitutionPrompt`, `RunLayaGate`, `RunMutationGate`, `RunGovernanceLinter` vào `task_runner.go` (`NewTaskRunner`, `runDecomposeGate`, `implementAndReview`).
+  5. **Khắc phục `AF-5` (`P1` — [`internal/queue/store.go:311-332`](file:///Users/trainguyen/Documents/work/ai-orchestrator/internal/queue/store.go#L311-L332) & [`internal/orchestrator/helpers.go:226-231`](file:///Users/trainguyen/Documents/work/ai-orchestrator/internal/orchestrator/helpers.go#L226-L231)):**
+     - Nối `qStore.RecordRound` vào `TaskRunner` và sửa `emitTokenStats` tính đúng đơn giá `opus` (`$15/$75`) vs `sonnet` (`$3/$15`) theo model thực tế của `CoderAgent`.
+  6. **Khắc phục `AF-6` (`P2` — [`internal/tui/wave_dag_view.go:44-144`](file:///Users/trainguyen/Documents/work/ai-orchestrator/internal/tui/wave_dag_view.go#L44-L144) & [`internal/tui/model.go`](file:///Users/trainguyen/Documents/work/ai-orchestrator/internal/tui/model.go)):**
+     - Gắn `RenderWaveDAGDashboard` vào Bubble Tea `internal/tui/model.go` và hiển thị danh sách `Workers` động.
+- **[Definition of Done (DoD)]:**
+  - [ ] Toàn bộ 6 sơ hở `AF-1..AF-6` có bài test Red-to-Green không dùng mockup Agent, `go vet ./...` & `go test -race ./...` PASS 100%, và phối hợp cùng User trace runtime thật trên CLI `claude --model opus/sonnet`.
+
 

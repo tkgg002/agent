@@ -293,6 +293,203 @@ class Harness2EngineTest(unittest.TestCase):
             )
         )
 
+    # === Test Task 7 (AF-01..AF-07): Adversarial Audit Remediation & Subprocess Runtime ===
+    def test_07_af01_to_af07_adversarial_remediation_and_real_subprocess_trace(self) -> None:
+        from tooling.orchestrator import proposer_axes
+
+        # 1. AF-01: three_way_merge_trees preserves INV edits on existing files and deletions
+        base_with_obsolete = {
+            **self.base_tree,
+            "tooling/obsolete.py": "OLD = True\n",
+        }
+        inv_branch = dict(base_with_obsolete)
+        inv_branch["tooling/verify_governance.py"] = (
+            "def ok() -> bool:\n    return True  # INV_MODIFIED\n"
+        )
+        del inv_branch["tooling/obsolete.py"]
+
+        dom_branch = dict(base_with_obsolete)
+        dom_branch["skills/dom-cdc/SKILL.md"] = (
+            "---\nname: dom-cdc\ndescription: CDC skill\n---\n# CDC\n"
+        )
+
+        merged_3way = proposer_axes.three_way_merge_trees(
+            base_with_obsolete, inv_branch, dom_branch
+        )
+        self.assertIn("# INV_MODIFIED", merged_3way["tooling/verify_governance.py"])
+        self.assertNotIn("tooling/obsolete.py", merged_3way)
+        self.assertIn("skills/dom-cdc/SKILL.md", merged_3way)
+
+        # 2. AF-04 & AF-06: UTF-8 multi-byte cap, strict YAML frontmatter, word-boundary skill token, and INV skill fence
+        viet_tree = dict(self.base_tree)
+        # 8000 'ă' chars = 8000 chars (< 10000), but 16000 UTF-8 bytes (> 10000)
+        viet_tree["GEMINI.md"] = self.base_tree["GEMINI.md"] + ("ă" * 8000)
+        utf8_spec = h2.AgentSurfaceSpec(always_on_max=10_000)
+        errs_utf8 = h2.validate_agent_surface(utf8_spec, viet_tree)
+        self.assertTrue(any("always-on vượt trần" in e for e in errs_utf8))
+
+        # Body text mimicking frontmatter without --- delimiters must fail
+        no_delim_tree = dict(self.base_tree)
+        no_delim_tree["skills/fake-fm/SKILL.md"] = (
+            "name: fake-fm\ndescription: Not inside YAML delimiters\n# Body\n"
+        )
+        no_delim_tree["OPERATOR_MAP.md"] += "\n| `fake-fm` |\n"
+        errs_fm = h2.validate_agent_surface(h2.AgentSurfaceSpec(), no_delim_tree)
+        self.assertTrue(any("thiếu description:" in e for e in errs_fm))
+
+        # Substring collision: skill 'brain' must NOT match 'brain-delegate' in GEMINI.md
+        sub_skill_tree = dict(self.base_tree)
+        sub_skill_tree["skills/brain/SKILL.md"] = (
+            "---\nname: brain\ndescription: Standalone brain skill\n---\n# Brain\n"
+        )
+        errs_sub = h2.validate_agent_surface(h2.AgentSurfaceSpec(), sub_skill_tree)
+        self.assertTrue(any("skill 'brain' chưa được nhắc tên" in e for e in errs_sub))
+
+        # AF-06: INV proposer prohibited from editing ANY skill in skills/* (even without 'domain-' prefix)
+        inv_touch_skill = dict(self.base_tree)
+        inv_touch_skill["skills/brain-delegate/SKILL.md"] += "\n# Extra\n"
+        ok_axis, msg_axis = h2.validate_orthogonal_axis_edit(
+            "INV", self.base_tree, inv_touch_skill
+        )
+        self.assertFalse(ok_axis)
+        self.assertIn("INV Proposer không được sửa", msg_axis)
+
+        # 3. AF-02, AF-03, AF-05: Cross-task cache isolation, base rollout winning, grader-free selector_fn & real s3_docs
+        cache_dir = self.tmp / "shared_cache"
+        lib_dir = self.tmp / "lib_af"
+        empty_ws = self.tmp / "empty_ws"
+        empty_ws.mkdir(parents=True, exist_ok=True)
+        engine = h2.RecursiveHarnessEngine(
+            library=h2.DomainHarnessLibrary(lib_dir),
+            cache_dir=cache_dir,
+        )
+
+        call_counter = {"count": 0}
+
+        def mutating_proposer(label: str, dim: str, tree: Dict[str, str]) -> Dict[str, str]:
+            call_counter["count"] += 1
+            out = dict(tree)
+            if dim == "INV":
+                out["tooling/verify_governance.py"] = (
+                    f"def ok() -> bool:\n    return True  # {label}_{call_counter['count']}\n"
+                )
+            elif dim == "DOM":
+                sname = f"dom-{label}"
+                out[f"skills/{sname}/SKILL.md"] = (
+                    f"---\nname: {sname}\ndescription: Skill {label}\n---\n"
+                )
+            return out
+
+        # Base rollout scores 0.99 while candidate rollouts score 0.10 -> 'base' MUST win (AF-03)
+        def base_wins_rollout(label: str, tree: Dict[str, str]) -> Dict[str, float]:
+            return {"score": 0.99 if label.startswith(("base", "b")) else 0.10}
+
+        res_task_a = engine.execute_task_recursion(
+            task_id="task_alpha",
+            domain="gov",
+            mode="agg",
+            k=1,
+            base_tree=self.base_tree,
+            proposer_fn=mutating_proposer,
+            rollout_fn=base_wins_rollout,
+            workspace_dir=empty_ws,
+        )
+        self.assertEqual(res_task_a["chosen_label"], "base")
+        self.assertEqual(res_task_a["cache_hits"], 0)
+        # Empty workspace lacks S3 docs -> library_slot must be None (AF-05)
+        self.assertIsNone(res_task_a["library_slot"])
+
+        # Different task_id ('task_beta') sharing cache_dir MUST NOT collide with 'task_alpha' (AF-02)
+        res_task_b = engine.execute_task_recursion(
+            task_id="task_beta",
+            domain="gov",
+            mode="agg",
+            k=1,
+            base_tree=self.base_tree,
+            proposer_fn=mutating_proposer,
+            rollout_fn=base_wins_rollout,
+            workspace_dir=empty_ws,
+        )
+        self.assertEqual(res_task_b["cache_hits"], 0)
+
+        # Grader-free selector_fn operating on anonymized IDs without 'score' field (AF-03)
+        valid_ws = self.tmp / "valid_ws"
+        valid_ws.mkdir(parents=True, exist_ok=True)
+        for fname in (
+            "01_requirements_t.md",
+            "05_progress_t.md",
+            "08_tasks_t.md",
+            "09_tasks_solution_t.md",
+        ):
+            (valid_ws / fname).write_text("# Doc\n", encoding="utf-8")
+
+        lessons_src = self.tmp / "lessons.md"
+        lessons_src.write_text(
+            "# Global Lessons\n\n## 1. Governance\n\n"
+            "### [2026-10-20] Test Lesson\n"
+            "- **Global Pattern:** [A] -> [B]. **Đúng:** flow\n"
+            "- **Bối cảnh (Trigger):** ctx\n"
+            "- **Root Cause:** rc\n"
+            "- **Fix/Correct Flow:** fix\n"
+            "- **Tags:** #governance\n",
+            encoding="utf-8",
+        )
+        lessons_out = self.tmp / "lessons_out"
+
+        def scoreless_rollout(label: str, tree: Dict[str, str]) -> Dict[str, object]:
+            return {"trace": f"completed:{label}", "files": len(tree)}
+
+        def custom_selector(
+            id_map: Dict[str, str],
+            trees: Dict[str, Dict[str, str]],
+            rollouts: Dict[str, Dict[str, object]],
+        ) -> str:
+            # Pick the anonymous candidate whose tree contains both INV edit and DOM skill
+            for anon_id, lbl in sorted(id_map.items()):
+                if any(k.startswith("skills/dom-") for k in trees[lbl]):
+                    return anon_id
+            return sorted(id_map.keys())[0]
+
+        res_sel = engine.execute_task_recursion(
+            task_id="task_gamma",
+            domain="gov",
+            mode="agg",
+            k=1,
+            base_tree=self.base_tree,
+            proposer_fn=mutating_proposer,
+            rollout_fn=scoreless_rollout,
+            selector_fn=custom_selector,
+            workspace_dir=valid_ws,
+            sync_lessons_index=True,
+            lessons_source=lessons_src,
+            lessons_out_dir=lessons_out,
+        )
+        self.assertEqual(res_sel["chosen_label"], "agg1")
+        self.assertIn("# inv1_", res_sel["winning_tree"]["tooling/verify_governance.py"])
+        self.assertIn("skills/dom-dom1/SKILL.md", res_sel["winning_tree"])
+        self.assertIsNotNone(res_sel["library_slot"])
+        self.assertEqual(res_sel["lessons_index_stats"]["index_entries"], 1)
+        self.assertTrue((lessons_out / "INDEX.md").is_file())
+
+        # 4. AF-07: Real CLI Subprocess execution via main(["run-recursion", ...])
+        rc = h2.main(
+            [
+                "run-recursion",
+                "--task-id",
+                "cli_subproc_test",
+                "--domain",
+                "agent_gov",
+                "--mode",
+                "agg",
+                "--k",
+                "1",
+                "--workspace-dir",
+                str(valid_ws),
+            ]
+        )
+        self.assertEqual(rc, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
+

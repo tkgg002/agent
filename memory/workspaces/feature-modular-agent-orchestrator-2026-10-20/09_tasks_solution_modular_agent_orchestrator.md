@@ -440,4 +440,108 @@ class OrchestratorQueueDB:
 | **DG2** | `D-EDGE` | Các ngưỡng trong `laya_gate.py` là `DECISIVE_CONF=0.5`, `BLOCK_CONF=0.8`, `DEBATE_APPROVE_CONF=0.95`. | `tooling/laya_gate.py:44-46` | **`ACCEPT`** (`r1: 0.78`, `r2: 0.89`, `r3: 0.98`) | **PASS** 🟢 |
 | **DG2** | `D-API` | `PROD_MOCK_POLLUTION` trong `agy_guard.py` chặn gắn hàm mock `*Fn`, `sqlmock`, `fakemodel` vào production code. | `hooks/agy/agy_guard.py:51-53` | **`ACCEPT`** (`r1: 0.26`, `r2: 0.45`, `r3: 0.93`) | **PASS** 🟢 |
 
+---
+
+## 6. Đặc tả Khắc phục Khép kín `S5 -> S3 Re-Plan` (Ánh xạ 1:1 Giải pháp cho từng Sơ hở `AF-1` $\rightarrow$ `AF-6` phát hiện khi Adversarial Re-Audit Commit `54e36e4`)
+
+> **Tuân thủ Rule #9.7(d) (`S5 -> S3 Closed-Loop Re-Plan`) & Bài học `L005` (`Finding-Centric 1:1 Solution Mapping`):**
+> Sau khi phát hiện 6 sơ hở `AF-1..AF-6` trong quá trình Audit phản biện từng dòng diff của commit `54e36e4`, chúng ta giữ nguyên trạng mã nguồn (`Propose-Only`), thiết kế **ĐÚNG 1 PHƯƠNG ÁN TỐI ƯU NHẤT** ánh xạ 1:1 cho từng sơ hở `AF-1` $\rightarrow$ `AF-6` dưới đây, qua kiểm định `DG1` & `DG2` và chờ lệnh `APPROVE` của User trước khi thực thi.
+
+### 6.1. Giải pháp xử lý Sơ hở `AF-1` (`P0 Critical` — Truyền xuyên suốt `req.Model` xuống `ClaudeRunner` & Xóa bỏ Mockup `recordingCoderAgent` trong `wave_parallel_test.go`)
+- **Nguyên nhân gốc rễ (`REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/claude.go:38-76`):**
+  - `ClaudeRunner.Complete` gọi `r.startStreamingProcess(ctx, prompt, req.SystemPrompt)` mà không truyền `req.Model`, và dòng `71-73` chỉ đọc `r.Model`. Lỗi này bị che khuất vì `wave_parallel_test.go:22-54` dùng struct giả `recordingCoderAgent` chặn ở ranh giới `TaskRunner`.
+- **Thiết kế sửa đổi & Code Demo (`internal/runner/claude.go:38-77` & `internal/orchestrator/wave_parallel_test.go`):**
+  1. Tại `internal/runner/claude.go`, truyền `req.Model` vào `startStreamingProcess` và ưu tiên `req.Model` trước `r.Model`:
+```go
+func (r ClaudeRunner) Complete(ctx context.Context, req CompletionRequest) (<-chan Token, error) {
+	prompt := buildClaudePrompt(req.Messages)
+
+	cmd, stdout, stderr, err := r.startStreamingProcess(ctx, prompt, req.SystemPrompt, req.Model)
+	if err != nil {
+		return nil, err
+	}
+	ch := make(chan Token, 16)
+	go streamClaudeOutput(cmd, stdout, stderr, req, prompt, ch)
+	return withHeartbeat(ch, defaultHeartbeatInterval), nil
+}
+
+func (r ClaudeRunner) startStreamingProcess(ctx context.Context, prompt, systemPrompt, reqModel string) (*exec.Cmd, io.ReadCloser, *bytes.Buffer, error) {
+	bin := r.Binary
+	if bin == "" {
+		bin = "claude"
+	}
+	model := strings.TrimSpace(reqModel)
+	if model == "" {
+		model = strings.TrimSpace(r.Model)
+	}
+	args := []string{"--output-format", "stream-json", "--verbose", "--no-session-persistence", "--allowedTools", ""}
+	if model != "" {
+		args = append(args, "--model", model)
+	}
+	if systemPrompt != "" {
+		args = append(args, "--system-prompt", systemPrompt)
+	}
+	cmd := executil.Command(bin, args...)
+```
+  2. Tại `internal/orchestrator/wave_parallel_test.go` và `internal/runner/claude_test.go`: Xóa bỏ mockup `recordingCoderAgent`, thay bằng `CoderAgent` thật kết nối với `ClaudeRunner{Binary: realFakeClaudeScriptPath}` (một executable shell script thật trên đĩa ghi lại đối số `--model <val>` vào file log và phát chuỗi `stream-json` hợp lệ) để kiểm chứng đầu-cuối từ `TaskRunner -> CoderAgent.Run -> ClaudeRunner.Complete -> OS Process Args`.
+
+### 6.2. Giải pháp xử lý Sơ hở `AF-2` (`P0 Critical` — Đồng bộ Working Tree sang Worktree con giữa các Wave, Chống ghi đè Last-Writer-Wins & Tách file Artifact theo SubTask ID)
+- **Nguyên nhân gốc rễ (`REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/gitclient/gitclient.go:124-167`, `internal/agent/coder.go:188-200`):**
+  - `WorktreeAdd` checkout từ `HEAD` nên thiếu các file chưa commit của Phase A (`generateAllTests`) và của `Wave` trước; `SyncWorktreeFiles` ghi đè `os.WriteFile` không kiểm tra xung đột giữa 2 worker cùng Wave; `coder.go:188-200` ghi đè chung `coder_output.md` và `changes.md`.
+- **Thiết kế sửa đổi & Code Demo (`internal/gitclient/gitclient.go` & `internal/agent/coder.go`):**
+  1. Thêm `SeedWorktreeFromRoot(worktreePath string)` trong `internal/gitclient/gitclient.go` (chạy `git status --porcelain` tại `g.Root` để copy toàn bộ các file modified/untracked từ `g.Root` sang `worktreePath` ngay khi khởi tạo worktree của Wave mới):
+```go
+func (g *GitClient) SeedWorktreeFromRoot(worktreePath string) error {
+	out, err := g.run("status", "--porcelain", "-uall")
+	if err != nil {
+		return err
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if len(line) < 4 {
+			continue
+		}
+		rel := strings.TrimSpace(line[3:])
+		if idx := strings.Index(rel, " -> "); idx >= 0 {
+			rel = strings.TrimSpace(rel[idx+4:])
+		}
+		if strings.HasPrefix(rel, ".orchestrator/") {
+			continue
+		}
+		_ = copyRelativeFile(g.Root, worktreePath, rel)
+	}
+	return nil
+}
+```
+  2. Trong `SyncWorktreeFiles` (`gitclient.go:147-167`), kiểm tra xung đột tập file sửa trong cùng một Wave (`waveTouched map[string]string`): nếu 2 sub-task trong cùng 1 Wave sửa cùng 1 file `rel`, gọi `git merge-file` 3 chiều trên bản gốc đầu Wave; nếu vẫn conflict thì trả lỗi tường minh để `TaskRunner` đẩy vào vòng `fixRounds`.
+  3. Trong `internal/agent/coder.go:188-200`, khi `cp.SubTask != nil && cp.SubTask.ID != ""`, lưu riêng `coder_output_<subTaskID>.md` và `changes_<subTaskID>.md` để không xảy ra race condition trên đĩa giữa các goroutine cùng Wave.
+
+### 6.3. Giải pháp xử lý Sơ hở `AF-3` (`P0 Critical` — Nối `PopNextPrioritized -> TaskRunner` vào `daemon_cmd.go` & Thay thế mảng `Gates` gán cứng bằng `EvaluateLiveGateBadges`)
+- **Nguyên nhân gốc rễ (`REF: /Users/trainguyen/Documents/work/ai-orchestrator/cmd/orchestrator/daemon_cmd.go:126-154`):**
+  - `daemon_cmd.go` dừng ở `PRIORITIZED` mà không gọi `PopNextPrioritized` hay `TaskRunner`, đồng thời gán cứng mảng `GateStatusBadge` với `Status: "PASS"`.
+- **Thiết kế sửa đổi & Code Demo (`internal/agentgate/gate.go` & `cmd/orchestrator/daemon_cmd.go`):**
+  1. Bổ sung phương thức `EvaluateLiveGateBadges(ctx context.Context, projectRoot, wsName string, indexedLessons int) []GateStatusResult` trong `internal/agentgate/gate.go` để kiểm tra thật:
+     - `S0-Constitution`: gọi `g.LoadCoreConstitutionPrompt()` và kiểm tra độ dài `> 0`.
+     - `DG1+DG2` / `DG3`: đọc file `06_laya_summary_*.json` thực tế trong workspace (nếu chưa có thì trả `"PENDING"`, nếu `"gate": "PASS"` mới trả `"PASS"`).
+     - `H4b-ZeroMock`: quét thật toàn bộ file `.go` trong `projectRoot` qua `g.ScanProductionFiles`.
+     - `H5-NoGitPush`: kiểm chứng bộ lọc `g.ValidateCommandSafety`.
+  2. Trong `cmd/orchestrator/daemon_cmd.go`, khi truyền cờ `--execute-next`, gọi `qStore.PopNextPrioritized(ctx)` và kích hoạt `TaskRunner` thực thi task ưu tiên cao nhất.
+
+### 6.4. Giải pháp xử lý Sơ hở `AF-4` (`P1 High` — Nối dây toàn bộ 4 hàm còn lại của `agentgate.Gatekeeper` vào `TaskRunner`)
+- **Nguyên nhân gốc rễ (`REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/gate.go:53-92, 155-204`):**
+  - `LoadCoreConstitutionPrompt`, `RunLayaGate`, `RunMutationGate`, `RunGovernanceLinter` chưa có caller trong `internal/orchestrator/task_runner.go`.
+- **Thiết kế sửa đổi:**
+  - Nối `tr.gatekeeper.LoadCoreConstitutionPrompt()` vào `SystemPrompt` при khởi tạo Agent; nối `RunLayaGate` vào `runDecomposeGate` (`task_runner.go:702`) và nối `RunMutationGate` + `RunGovernanceLinter` vào `implementAndReview` (`task_runner.go:478`) khi cấu hình `AgentWorkspace` được chỉ định.
+
+### 6.5. Giải pháp xử lý Sơ hở `AF-5` (`P1 High` — Nối `qStore.RecordRound` vào `TaskRunner` & Phân tách chi phí `opus` vs `sonnet` của `bus.RoleCoder` trong `helpers.go:226-231`)
+- **Nguyên nhân gốc rễ (`REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/orchestrator/helpers.go:226-232`):**
+  - `emitTokenStats` luôn gán `modelTier := "sonnet"` cho `bus.RoleCoder`, và `qStore.RecordRound` chưa được gọi trong `TaskRunner`.
+- **Thiết kế sửa đổi:**
+  - Lưu model thực tế đã chạy trên từng role (`tr.roleModels[role]`, hoặc tách `coderOpusUsage` / `coderSonnetUsage`) để `emitTokenStats` gọi `runner.CalculateCostUSD` đúng đơn giá `opus` (`$15/$75`) hay `sonnet` (`$3/$15`), đồng thời gọi `tr.queueStore.RecordRound` sau mỗi vòng `Plan review`, `Code review`, `Local QA`.
+
+### 6.6. Giải pháp xử lý Sơ hở `AF-6` (`P2 Medium` — Gắn `RenderWaveDAGDashboard` vào Bubble Tea `internal/tui/model.go` & Cập nhật `Workers []WorkerSlotStatus` động)
+- **Nguyên nhân gốc rễ (`REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/tui/wave_dag_view.go:44-144`):**
+  - `RenderWaveDAGDashboard` chỉ được gọi tĩnh trong `daemon_cmd.go:141` với `Workers: nil`.
+- **Thiết kế sửa đổi:**
+  - Tích hợp `RenderWaveDAGDashboard` vào `internal/tui/model.go` (chuyển đổi qua phím tắt `w` / tab Wave DAG) và truyền danh sách `Workers` đang chạy thực tế từ `TaskRunner` / `daemon_cmd.go`.
+
 

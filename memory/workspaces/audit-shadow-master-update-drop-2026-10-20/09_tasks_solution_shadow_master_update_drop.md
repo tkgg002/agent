@@ -332,7 +332,7 @@ Tại [`transmuter.go`](file:///Users/trainguyen/Documents/work/data-hub/central
 
 ---
 
-## 6. Kế Hoạch Bổ Sung Từ Phản Biện Cuối Workflow (`S5 → S3 Closed-Loop Re-Plan` Cho `AF-01..AF-05` — Chờ User `APPROVE`)
+## 6. Kế Hoạch Bổ Sung Từ Phản Biện Cuối Workflow (`S5 → S3 Closed-Loop Re-Plan` Cho `AF-01..AF-05` — Đã Được User `APPROVE`)
 
 ### 6.1. Giải pháp cho `AF-01`: Quét động toàn bộ `is_active = true` trong `cdc_system.master_binding` (bao gồm `Binding 51, 52`) & Phối hợp Restart 3 Daemon Runtime (`:8081/:8082/:8083`)
 - **Tại `internal/service/master/transmuter_gpayid_test.go:402`:** Thay vì hardcode `for _, bID := range []int64{46, 47, 48}`, truy vấn động `SELECT id FROM cdc_system.master_binding WHERE is_active = true ORDER BY id` để chạy đồng bộ và kiểm chứng `droppedDelete = 0, droppedUpdate = 0, gpayMismatch = 0` trên toàn bộ **5 active bindings (`46, 47, 48, 51, 52`)** (lấy đúng `masterDB` theo `row.MasterConnectionKey` cho cả `default_master` `:5434` lẫn `master_2` `:5437`).

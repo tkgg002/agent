@@ -23,7 +23,9 @@ import os
 from pathlib import Path
 import random
 import re
+import subprocess
 import sys
+import tempfile
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 AGENT_ROOT = Path(__file__).resolve().parents[2]
@@ -40,9 +42,18 @@ from hooks.agy.agy_guard import (  # noqa: E402
     SRC_EXT,
     contaminated_clean_room_reads,
 )
-from tooling.build_lessons_index import DEFAULT_SOURCE, MAX_INDEX_BYTES  # noqa: E402
+from tooling.build_lessons_index import (  # noqa: E402
+    DEFAULT_OUT_DIR,
+    DEFAULT_SOURCE,
+    MAX_INDEX_BYTES,
+    build_index,
+)
 from tooling.laya_gate import BLOCK_CONF, DEBATE_APPROVE_CONF, DECISIVE_CONF  # noqa: E402
 from tooling.mutation_gate import DEFAULT_WS_ROOT, MIN_MUTANTS  # noqa: E402
+from tooling.orchestrator.proposer_axes import (  # noqa: E402
+    CONTEXT_HIERARCHY_ORDER,
+    three_way_merge_trees,
+)
 from tooling.verify_governance import STAGE_S3_PREFIXES, SUFFIX_SCOPED_PREFIXES  # noqa: E402
 
 Tree = Dict[str, str]
@@ -62,17 +73,22 @@ EVIDENCE_BOUNDARY_HEADER = (
     "=====================================================\n"
 )
 
-CONTEXT_HIERARCHY_ORDER: Tuple[str, ...] = (
-    "SKILL",
-    "SCRIPT",
-    "SUBAGENT",
-    "HOOK",
-    "ALWAYS_ON",
-)
+_FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", re.S)
+
+
+def _extract_yaml_frontmatter(src: str) -> str:
+    """Đóng AF-04: Tách chính xác khối YAML frontmatter nằm giữa cặp dấu --- ở đầu file."""
+    m = _FRONTMATTER_RE.match(src)
+    return m.group(1) if m else ""
+
+
+def _has_skill_trigger_token(body: str, sname: str) -> bool:
+    """Đóng AF-04: Kiểm tra tên skill theo ranh giới từ/token, tránh dương tính giả do chuỗi con."""
+    return bool(re.search(rf"(?<![\w\-]){re.escape(sname)}(?![\w\-])", body))
 
 
 # ============================================================================
-# Giải pháp xử lý Khoảng trống F3 (Task 3):
+# Giải pháp xử lý Khoảng trống F3 (Task 3 & AF-04):
 # Bộ Kiểm định Bề mặt Cấu hình /agent (AgentSurfaceValidator & Auto-Trigger)
 # ============================================================================
 @dataclass(frozen=True)
@@ -110,12 +126,13 @@ def load_agent_surface_tree(agent_root: Path = AGENT_ROOT) -> Tree:
 
 
 def validate_agent_surface(surface: AgentSurfaceSpec, tree: Tree) -> List[str]:
-    """Đóng F3: Kiểm tra trần always_on_max, frontmatter SKILL.md, dòng trigger và compile .py."""
+    """Đóng F3 & AF-04: Kiểm tra trần UTF-8 bytes always_on_max, YAML frontmatter SKILL.md, token trigger và compile .py."""
     errs: List[str] = []
     body = "\n\n".join(tree.get(a, "") for a in surface.always_on)
-    if len(body) > surface.always_on_max:
+    body_bytes = len(body.encode("utf-8"))
+    if body_bytes > surface.always_on_max:
         errs.append(
-            f"always-on vượt trần: {len(body)} > {surface.always_on_max} (INDEX cap={MAX_INDEX_BYTES})"
+            f"always-on vượt trần: {body_bytes} bytes (chars={len(body)}) > {surface.always_on_max} (INDEX cap={MAX_INDEX_BYTES})"
         )
 
     skill_rx = re.compile(rf"^{re.escape(surface.skill_dir)}/([a-z0-9][a-z0-9_\-]*)/SKILL\.md$")
@@ -127,13 +144,13 @@ def validate_agent_surface(surface: AgentSurfaceSpec, tree: Tree) -> List[str]:
         m = skill_rx.fullmatch(rel)
         if m:
             sname = m.group(1)
-            fm = src[:600]
+            fm = _extract_yaml_frontmatter(src)
             if not re.search(r"^description:\s*\S", fm, re.M):
                 errs.append(f"{rel} thiếu description: trong YAML frontmatter")
             m_name = re.search(r"^name:\s*(\S+)\s*$", fm, re.M)
             if not (m_name and m_name.group(1) == sname):
                 errs.append(f"{rel} cần frontmatter name: {sname} khớp tên thư mục")
-            if sname not in body:
+            if not _has_skill_trigger_token(body, sname):
                 errs.append(
                     f"skill '{sname}' chưa được nhắc tên trong {surface.always_on} (dead weight)"
                 )
@@ -154,7 +171,7 @@ def validate_agent_surface(surface: AgentSurfaceSpec, tree: Tree) -> List[str]:
 
 
 def autotrigger_agent_skills(surface: AgentSurfaceSpec, tree: Tree) -> Tree:
-    """Đóng F3: Tự động nối dòng Trigger vào OPERATOR_MAP.md cho mọi skill mới chưa được tham chiếu."""
+    """Đóng F3 & AF-04: Tự động nối dòng Trigger vào OPERATOR_MAP.md cho mọi skill mới chưa được tham chiếu."""
     out = dict(tree)
     body = "\n\n".join(out.get(a, "") for a in surface.always_on)
     skill_rx = re.compile(rf"^{re.escape(surface.skill_dir)}/([a-z0-9][a-z0-9_\-]*)/SKILL\.md$")
@@ -165,8 +182,9 @@ def autotrigger_agent_skills(surface: AgentSurfaceSpec, tree: Tree) -> Tree:
         if not m:
             continue
         sname = m.group(1)
-        if sname not in body:
-            desc_match = re.search(r"^description:\s*(.+)$", src[:600], re.M)
+        if not _has_skill_trigger_token(body, sname):
+            fm = _extract_yaml_frontmatter(src)
+            desc_match = re.search(r"^description:\s*(.+)$", fm, re.M)
             desc = desc_match.group(1).strip() if desc_match else f"Domain skill {sname}"
             missing_triggers.append((sname, desc))
 
@@ -182,7 +200,7 @@ def autotrigger_agent_skills(surface: AgentSurfaceSpec, tree: Tree) -> Tree:
 
 
 # ============================================================================
-# Giải pháp xử lý Khoảng trống F2 (Task 2):
+# Giải pháp xử lý Khoảng trống F2 (Task 2, AF-04 & AF-06):
 # Phân tách 2 Trục Improver Trực giao (INV vs DOM) & Cưỡng chế Thứ bậc Context
 # ============================================================================
 def validate_orthogonal_axis_edit(
@@ -191,7 +209,7 @@ def validate_orthogonal_axis_edit(
     after: Tree,
     surface: Optional[AgentSurfaceSpec] = None,
 ) -> Tuple[bool, str]:
-    """Đóng F2: INV chỉ sửa tooling/hooks/workflow; DOM chỉ sửa domain skills/project memory."""
+    """Đóng F2, AF-04 & AF-06: INV chỉ sửa tooling/hooks/workflow; DOM chỉ sửa skills/project memory."""
     spec = surface or AgentSurfaceSpec()
     changed = sorted(
         (set(after) - set(before))
@@ -201,18 +219,20 @@ def validate_orthogonal_axis_edit(
     if not changed:
         return True, "KEEP_BASE"
 
-    always_on_len = sum(len(after.get(a, "")) for a in spec.always_on)
-    if always_on_len > spec.always_on_max:
-        return False, f"ALWAYS_ON_OVER_BUDGET: {always_on_len} > {spec.always_on_max}"
+    always_on_body = "\n\n".join(after.get(a, "") for a in spec.always_on)
+    always_on_bytes = len(always_on_body.encode("utf-8"))
+    if always_on_bytes > spec.always_on_max:
+        return False, f"ALWAYS_ON_OVER_BUDGET: {always_on_bytes} bytes > {spec.always_on_max}"
 
     for rel in changed:
         if dim == "INV" and (
-            rel.startswith("memory/global/project/") or rel.startswith("skills/domain-")
+            rel.startswith("memory/global/project/") or rel.startswith("skills/")
         ):
             return False, f"INV Proposer không được sửa tri thức nghiệp vụ dự án: {rel}"
         if dim == "DOM" and (
             rel.startswith("hooks/agy/")
             or rel.startswith("tooling/")
+            or rel.startswith("scripts/")
             or rel in spec.always_on
         ):
             return False, f"DOM Proposer không được sửa script/hook/always-on lõi: {rel}"
@@ -536,8 +556,117 @@ class DomainHarnessLibrary:
         return task_slot
 
 
+class SubprocessHarnessRunner:
+    """Đóng AF-07: Bộ thực thi tiến trình con CLI thật trên thư mục ContextTree vật lý với timeout."""
+
+    def __init__(
+        self,
+        proposer_cmd_template: Optional[Sequence[str]] = None,
+        rollout_cmd_template: Optional[Sequence[str]] = None,
+        timeout_sec: float = 60.0,
+        forbidden_globs: Sequence[str] = (),
+    ) -> None:
+        self.proposer_cmd_template = list(proposer_cmd_template or [])
+        self.rollout_cmd_template = list(rollout_cmd_template or [])
+        self.timeout_sec = timeout_sec
+        self.forbidden_globs = tuple(forbidden_globs)
+
+    def run_proposer(self, label: str, dim: str, base_tree: Tree) -> Tree:
+        """Ghi ContextTree ra đĩa tạm, gọi subprocess CLI thật để sửa context/harness/ và đọc lại kết quả."""
+        with tempfile.TemporaryDirectory(prefix=f"harness2-prop-{label}-") as tmpdir:
+            croot = Path(tmpdir) / "context"
+            build_evidence_context_tree(
+                croot,
+                task_id=label,
+                task_prompt=f"Propose orthogonal {dim} improvement for candidate {label}",
+                harness_tree=base_tree,
+                rollout_logs={label: f"Trace for {label} ({dim})"},
+                forbidden_globs=self.forbidden_globs,
+            )
+            harness_dir = croot / "harness"
+            if self.proposer_cmd_template:
+                mapping = {
+                    "{context_root}": str(croot),
+                    "{harness_dir}": str(harness_dir),
+                    "{label}": label,
+                    "{dim}": dim,
+                }
+                cmd = [
+                    self._expand_token(tok, mapping)
+                    for tok in self.proposer_cmd_template
+                ]
+                proc = subprocess.run(
+                    cmd,
+                    cwd=str(croot),
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout_sec,
+                    check=False,
+                )
+                if proc.returncode != 0:
+                    raise RuntimeError(
+                        f"Proposer subprocess failed ({label}, rc={proc.returncode}): {proc.stderr.strip()}"
+                    )
+            assert_pre_flight_clean_room(croot, self.forbidden_globs)
+            out_tree: Tree = {}
+            for p in sorted(harness_dir.rglob("*")):
+                if p.is_file():
+                    rel = p.relative_to(harness_dir).as_posix()
+                    out_tree[rel] = p.read_text(encoding="utf-8")
+            return out_tree
+
+    @staticmethod
+    def _expand_token(tok: str, mapping: Mapping[str, str]) -> str:
+        out = tok
+        for k, v in mapping.items():
+            out = out.replace(k, v)
+        return out
+
+    def run_rollout(self, label: str, tree: Tree) -> Dict[str, Any]:
+        """Chạy subprocess đánh giá/kiểm định thật trên cây cấu hình ứng viên."""
+        with tempfile.TemporaryDirectory(prefix=f"harness2-roll-{label}-") as tmpdir:
+            wroot = Path(tmpdir) / "worktree"
+            for rel, content in sorted(tree.items()):
+                dest = wroot / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(content, encoding="utf-8")
+            if self.rollout_cmd_template:
+                mapping = {"{worktree}": str(wroot), "{label}": label}
+                cmd = [
+                    self._expand_token(tok, mapping)
+                    for tok in self.rollout_cmd_template
+                ]
+                proc = subprocess.run(
+                    cmd,
+                    cwd=str(wroot),
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout_sec,
+                    check=False,
+                )
+                stdout_str = proc.stdout.strip()
+                try:
+                    parsed = json.loads(stdout_str) if stdout_str.startswith("{") else {}
+                except Exception:
+                    parsed = {}
+                return {
+                    "label": label,
+                    "returncode": proc.returncode,
+                    "stdout": stdout_str,
+                    "stderr": proc.stderr.strip(),
+                    "score": float(parsed.get("score", 1.0 if proc.returncode == 0 else 0.0)),
+                    "files_count": len(tree),
+                }
+            return {
+                "label": label,
+                "returncode": 0,
+                "score": float(len(tree)),
+                "files_count": len(tree),
+            }
+
+
 class RecursiveHarnessEngine:
-    """Đóng F1–F6: Động cơ thực thi Đệ quy 2 Tầng (agg song song & seq tuần tự)."""
+    """Đóng F1–F6 & AF-01..AF-07: Động cơ thực thi Đệ quy 2 Tầng (agg song song & seq tuần tự)."""
 
     def __init__(
         self,
@@ -555,15 +684,23 @@ class RecursiveHarnessEngine:
         dim: str,
         base_tree: Tree,
         proposer_fn: Callable[[str, str, Tree], Tree],
+        *,
+        task_id: str = "default",
+        context_dir: Optional[Path] = None,
     ) -> Tuple[Tree, bool]:
+        """Đóng AF-02: Băm đầy đủ task_id, base_tree SHA-256 digest và context_dir vào khóa cache."""
+        tree_digest = hashlib.sha256(
+            json.dumps(base_tree, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        ).hexdigest()[:16]
         fp = call_fingerprint_sha256(
             label=label,
-            mission=f"propose:{dim}:{label}",
+            mission=f"task={task_id}|propose:{dim}:{label}|tree={tree_digest}",
             system=self.surface.name,
+            context_dir=context_dir,
         )
         if self.cache_dir is not None:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
-            cfile = self.cache_dir / f"{label}_{fp}.json"
+            cfile = self.cache_dir / f"{task_id}_{label}_{fp}.json"
             if cfile.is_file():
                 cached_tree = json.loads(cfile.read_text(encoding="utf-8"))
                 return cached_tree, True
@@ -580,7 +717,7 @@ class RecursiveHarnessEngine:
             raise ValueError(f"Surface validation failed for {label}: {surface_errs}")
 
         if self.cache_dir is not None:
-            cfile = self.cache_dir / f"{label}_{fp}.json"
+            cfile = self.cache_dir / f"{task_id}_{label}_{fp}.json"
             atomic_flock_write_json(cfile, proposed)
         return proposed, False
 
@@ -594,6 +731,13 @@ class RecursiveHarnessEngine:
         base_tree: Tree,
         proposer_fn: Callable[[str, str, Tree], Tree],
         rollout_fn: Callable[[str, Tree], Dict[str, Any]],
+        selector_fn: Optional[
+            Callable[[Dict[str, str], Mapping[str, Tree], Mapping[str, Dict[str, Any]]], str]
+        ] = None,
+        workspace_dir: Optional[Path] = None,
+        sync_lessons_index: bool = False,
+        lessons_source: Path = DEFAULT_SOURCE,
+        lessons_out_dir: Path = DEFAULT_OUT_DIR,
         dg3_conf: float = 0.90,
         mutants_killed: int = 3,
     ) -> Dict[str, Any]:
@@ -609,16 +753,26 @@ class RecursiveHarnessEngine:
         cache_hits = 0
 
         if mode == "agg":
-            # 1. k base rollouts
+            # 1. k base rollouts + tổng hợp rollout_outputs["base"] (Đóng AF-03)
+            base_scores: List[float] = []
             for i in range(1, k + 1):
                 lbl = f"base{i}"
                 ledger.record_rollout(lbl)
-                rollout_outputs[lbl] = rollout_fn(lbl, base_tree)
+                r_base = rollout_fn(lbl, base_tree)
+                rollout_outputs[lbl] = r_base
+                base_scores.append(float(r_base.get("score", 0.0)))
+            rollout_outputs["base"] = {
+                "label": "base",
+                "rollouts": [f"base{i}" for i in range(1, k + 1)],
+                "score": round(sum(base_scores) / len(base_scores), 6) if base_scores else 0.0,
+            }
 
             # 2. 2k orthogonal proposer sessions (inv1..invk, dom1..domk) + 2k probe rollouts
             def _probe_branch(i: int, axis: str) -> Tuple[str, Tree, Dict[str, Any], bool]:
                 lbl = f"{axis.lower()}{i}"
-                t_out, hit = self._run_cached_session(lbl, axis, base_tree, proposer_fn)
+                t_out, hit = self._run_cached_session(
+                    lbl, axis, base_tree, proposer_fn, task_id=task_id
+                )
                 r_out = rollout_fn(lbl, t_out)
                 return lbl, t_out, r_out, hit
 
@@ -636,13 +790,17 @@ class RecursiveHarnessEngine:
                     if hit:
                         cache_hits += 1
 
-            # 3. k composition sessions (agg1..aggk) + k final rollouts
+            # 3. k composition sessions (agg1..aggk) dùng three_way_merge_trees (Đóng AF-01) + k final rollouts
             for i in range(1, k + 1):
                 lbl = f"agg{i}"
-                merged_seed = dict(base_tree)
-                merged_seed.update(candidate_trees[f"inv{i}"])
-                merged_seed.update(candidate_trees[f"dom{i}"])
-                t_agg, hit = self._run_cached_session(lbl, "COMPOSE", merged_seed, proposer_fn)
+                merged_seed = three_way_merge_trees(
+                    base_tree,
+                    candidate_trees[f"inv{i}"],
+                    candidate_trees[f"dom{i}"],
+                )
+                t_agg, hit = self._run_cached_session(
+                    lbl, "COMPOSE", merged_seed, proposer_fn, task_id=task_id
+                )
                 ledger.record_session(lbl)
                 ledger.record_rollout(lbl)
                 candidate_trees[lbl] = t_agg
@@ -657,25 +815,32 @@ class RecursiveHarnessEngine:
             for i in range(1, k + 1):
                 b_lbl = f"b{i}"
                 ledger.record_rollout(b_lbl)
-                rollout_outputs[b_lbl] = rollout_fn(b_lbl, cur_tree)
+                r_b = rollout_fn(b_lbl, cur_tree)
+                rollout_outputs[b_lbl] = r_b
+                if i == 1:
+                    rollout_outputs["base"] = dict(r_b)
 
                 inv_lbl = f"inv{i}"
-                t_inv, hit_i = self._run_cached_session(inv_lbl, "INV", cur_tree, proposer_fn)
+                t_inv, hit_i = self._run_cached_session(
+                    inv_lbl, "INV", cur_tree, proposer_fn, task_id=task_id
+                )
                 ledger.record_session(inv_lbl)
                 ledger.record_rollout(inv_lbl)
                 rollout_outputs[inv_lbl] = rollout_fn(inv_lbl, t_inv)
 
                 dom_lbl = f"dom{i}"
-                t_dom, hit_d = self._run_cached_session(dom_lbl, "DOM", cur_tree, proposer_fn)
+                t_dom, hit_d = self._run_cached_session(
+                    dom_lbl, "DOM", cur_tree, proposer_fn, task_id=task_id
+                )
                 ledger.record_session(dom_lbl)
                 ledger.record_rollout(dom_lbl)
                 rollout_outputs[dom_lbl] = rollout_fn(dom_lbl, t_dom)
 
                 c_lbl = f"c{i}"
-                merged_seed = dict(cur_tree)
-                merged_seed.update(t_inv)
-                merged_seed.update(t_dom)
-                t_comp, hit_c = self._run_cached_session(c_lbl, "COMPOSE", merged_seed, proposer_fn)
+                merged_seed = three_way_merge_trees(cur_tree, t_inv, t_dom)
+                t_comp, hit_c = self._run_cached_session(
+                    c_lbl, "COMPOSE", merged_seed, proposer_fn, task_id=task_id
+                )
                 ledger.record_session(c_lbl)
                 ledger.record_rollout(c_lbl)
                 rollout_outputs[c_lbl] = rollout_fn(c_lbl, t_comp)
@@ -697,18 +862,34 @@ class RecursiveHarnessEngine:
             {lbl: candidate_trees[lbl] for lbl in final_Pool_labels}
         )
 
-        best_anon_id = max(
-            sorted(id_map),
-            key=lambda aid: float(
-                (rollout_outputs.get(id_map[aid]) or {}).get("score", 0.0)
-            ),
-        )
+        # Đóng AF-03: Cho phép selector_fn chấm mù trên ID ẩn danh A, B, C... không cần score có sẵn
+        if selector_fn is not None:
+            picked_anon = selector_fn(dict(id_map), candidate_trees, rollout_outputs)
+            if picked_anon not in id_map:
+                raise ValueError(f"selector_fn returned unknown anonymous ID: {picked_anon!r}")
+            best_anon_id = picked_anon
+        else:
+            best_anon_id = max(
+                sorted(id_map),
+                key=lambda aid: float(
+                    (rollout_outputs.get(id_map[aid]) or {}).get("score", 0.0)
+                ),
+            )
         chosen_label = id_map[best_anon_id]
         winning_tree = candidate_trees[chosen_label]
 
-        # Lưu vào Domain Harness Library (F1) nếu đạt cổng DG3 + 3-Mutant Gate
+        # Đóng AF-05: Quét danh sách file thật từ workspace_dir thay vì mảng giả tự thỏa mãn
+        ws_target = workspace_dir or (
+            DEFAULT_WS_ROOT / "feature-harness2-recursive-integration-2026-10-20"
+        )
+        s3_docs: List[str] = (
+            sorted(p.name for p in ws_target.iterdir() if p.is_file())
+            if ws_target.is_dir()
+            else []
+        )
+
         library_slot: Optional[str] = None
-        s3_docs = [f"{pfx}_ok.md" for pfx in STAGE_S3_PREFIXES]
+        lessons_index_stats: Optional[Dict[str, int]] = None
         if self.library is not None and can_commit_adopted_harness_to_domain_library(
             dg3_conf=dg3_conf,
             mutants_killed=mutants_killed,
@@ -734,6 +915,10 @@ class RecursiveHarnessEngine:
                 winning_tree=winning_tree,
             )
             library_slot = str(slot)
+            if sync_lessons_index and lessons_source.is_file():
+                lessons_index_stats = build_index(
+                    source_path=lessons_source, out_dir=lessons_out_dir
+                )
 
         return {
             "task_id": task_id,
@@ -746,24 +931,42 @@ class RecursiveHarnessEngine:
             "anonymous_id_map": id_map,
             "chosen_anonymous_id": best_anon_id,
             "chosen_label": chosen_label,
+            "winning_tree": winning_tree,
             "diversity": diversity_stats,
             "library_slot": library_slot,
+            "s3_docs_checked": len(s3_docs),
+            "lessons_index_stats": lessons_index_stats,
         }
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(
-        description="Harness² Recursive Integration Engine for /agent (F1–F6)"
+        description="Harness² Recursive Integration Engine for /agent (F1–F6 & AF-01..AF-07)"
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    p_val = sub.add_parser("validate-surface", help="Validate /agent surface (F3)")
+    p_val = sub.add_parser("validate-surface", help="Validate /agent surface (F3 & AF-04)")
     p_val.add_argument("--agent-root", default=str(AGENT_ROOT), help="Path to /agent root")
-    p_val.add_argument("--always-on-max", type=int, default=24000, help="Max chars for always-on files")
+    p_val.add_argument("--always-on-max", type=int, default=24000, help="Max UTF-8 bytes for always-on files")
 
     p_cr = sub.add_parser("check-clean-room", help="Run pre-flight clean-room leak & verdict check (F4)")
     p_cr.add_argument("--context-root", required=True, help="Directory to scan")
     p_cr.add_argument("--forbidden", default="", help="Comma-separated forbidden globs")
+
+    p_rec = sub.add_parser(
+        "run-recursion",
+        help="Execute live subprocess recursion trace on disk (AF-07)",
+    )
+    p_rec.add_argument("--task-id", default="live-trace-task", help="Task identifier")
+    p_rec.add_argument("--domain", default="agent_governance", help="Target domain name")
+    p_rec.add_argument("--mode", choices=["agg", "seq"], default="agg", help="Recursion mode")
+    p_rec.add_argument("--k", type=int, default=2, help="Branch/round budget k")
+    p_rec.add_argument(
+        "--workspace-dir",
+        default=str(DEFAULT_WS_ROOT / "feature-harness2-recursive-integration-2026-10-20"),
+        help="Workspace directory to verify real S3 docs",
+    )
+    p_rec.add_argument("--sync-lessons", action="store_true", help="Sync global lessons INDEX.md")
 
     return ap.parse_args(argv)
 
@@ -775,11 +978,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         spec = AgentSurfaceSpec(always_on_max=args.always_on_max)
         tree = load_agent_surface_tree(root)
         errs = validate_agent_surface(spec, tree)
+        always_on_body = "\n\n".join(tree.get(a, "") for a in spec.always_on)
         report = {
             "status": "VALIDATED" if not errs else "FAILED",
             "agent_root": str(root),
             "files_scanned": len(tree),
             "always_on_chars": sum(len(tree.get(a, "")) for a in spec.always_on),
+            "always_on_utf8_bytes": len(always_on_body.encode("utf-8")),
             "always_on_max": spec.always_on_max,
             "errors": errs,
         }
@@ -796,6 +1001,66 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return 2
         print(json.dumps({"status": "CLEAN", "context_root": str(croot)}, ensure_ascii=False, indent=2))
         return 0
+
+    if args.cmd == "run-recursion":
+        with tempfile.TemporaryDirectory(prefix="harness2-live-trace-") as tmpdir:
+            tmp_root = Path(tmpdir)
+            lib = DomainHarnessLibrary(tmp_root / "harness_library")
+            engine = RecursiveHarnessEngine(
+                surface=AgentSurfaceSpec(always_on_max=24000),
+                library=lib,
+                cache_dir=tmp_root / "cache",
+            )
+            base_tree: Tree = {
+                "GEMINI.md": "# Core Rules\nRun `python3 tooling/existing_check.py`\n- `core-skill`\n",
+                "OPERATOR_MAP.md": "# Operator Map\n| `core-skill` | Trigger | `S1` | Core |\n",
+                "skills/core-skill/SKILL.md": "---\nname: core-skill\ndescription: Core workflow skill\n---\n# Body\n",
+                "tooling/existing_check.py": "VALUE = 1\n",
+            }
+            py_cmd = (
+                "import pathlib, sys; "
+                "h = pathlib.Path(sys.argv[1]); lbl = sys.argv[2]; dim = sys.argv[3]; "
+                "p = h / 'tooling/existing_check.py'; "
+                "(p.write_text('VALUE = 2\\n#' + lbl + '\\n', encoding='utf-8') if dim == 'INV' else None); "
+                "s = h / f'skills/dom-{lbl}/SKILL.md'; "
+                "(s.parent.mkdir(parents=True, exist_ok=True), s.write_text(f'---\\nname: dom-{lbl}\\ndescription: Skill {lbl}\\n---\\n# Body\\n', encoding='utf-8')) if dim == 'DOM' else None"
+            )
+            runner = SubprocessHarnessRunner(
+                proposer_cmd_template=[
+                    sys.executable,
+                    "-c",
+                    py_cmd,
+                    "{harness_dir}",
+                    "{label}",
+                    "{dim}",
+                ],
+                rollout_cmd_template=[
+                    sys.executable,
+                    "-c",
+                    "import json, pathlib, sys; w = pathlib.Path(sys.argv[1]); "
+                    "txt = (w / 'tooling/existing_check.py').read_text(encoding='utf-8'); "
+                    "has_inv = 'VALUE = 2' in txt; "
+                    "has_dom = any(p.name == 'SKILL.md' and 'dom-' in str(p) for p in (w / 'skills').rglob('SKILL.md')); "
+                    "print(json.dumps({'score': 1.0 if (has_inv and has_dom) else (0.6 if (has_inv or has_dom) else 0.2)}))",
+                    "{worktree}",
+                ],
+            )
+            res = engine.execute_task_recursion(
+                task_id=args.task_id,
+                domain=args.domain,
+                mode=args.mode,
+                k=args.k,
+                base_tree=base_tree,
+                proposer_fn=runner.run_proposer,
+                rollout_fn=runner.run_rollout,
+                workspace_dir=Path(args.workspace_dir).resolve(),
+                sync_lessons_index=bool(args.sync_lessons),
+            )
+            winning = res.pop("winning_tree", {})
+            res["winning_existing_check_py"] = winning.get("tooling/existing_check.py", "").strip()
+            res["winning_files"] = sorted(winning.keys())
+            print(json.dumps(res, ensure_ascii=False, indent=2))
+            return 0
 
     return 1
 

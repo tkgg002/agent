@@ -70,7 +70,7 @@
 
 ---
 
-## [ ] Task 7 (`S5 → S3 Re-Plan` — Khắc phục 7 Lỗi Phản biện `AF-01 → AF-07` sau khi có User `APPROVE` mới)
+## [x] Task 7 (`S5 → S3 Re-Plan` — Khắc phục 7 Lỗi Phản biện `AF-01 → AF-07` sau khi có User `APPROVE` mới)
 - **[Mô tả]:**
   - **`AF-01` (3-Way Tree Merge):** Thay thế `merged_seed.update(inv{i})` + `merged_seed.update(dom{i})` tuần tự tại `tooling/orchestrator/harness2_engine.py:642-644, 675-677` bằng hàm `three_way_merge_trees(base_tree, inv_tree, dom_tree)` bảo toàn cả các file có sẵn được sửa bởi `INV` lẫn các file bị xóa chủ đích.
   - **`AF-02` (Full SHA-256 Cache Fingerprint):** Sửa `_run_cached_session` (`harness2_engine.py:559-569`) đưa `task_id`, mã băm `SHA-256` của toàn bộ `base_tree` (`json.dumps(base_tree, sort_keys=True)`) và `context_dir` vào `call_fingerprint_sha256`, chống ngộ độc cache liên task và liên vòng.

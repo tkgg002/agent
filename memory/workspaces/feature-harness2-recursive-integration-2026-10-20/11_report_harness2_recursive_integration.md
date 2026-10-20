@@ -24,14 +24,15 @@ Sau khi nhận lệnh `APPROVE` từ User, đã hoàn tất việc hiện thực
 
 ---
 
-## 2. Danh sách File Thay đổi & Thống kê Dòng Code (`Source & Test Changes`)
+## 2. Danh sách File Thay đổi & Thống kê Dòng Code (`Source & Test Changes` — Sau khi hoàn tất `Task 1..7`)
 
 | File | Loại | Số dòng | Mô tả |
 | :--- | :---: | :---: | :--- |
-| [`tooling/orchestrator/__init__.py`](file:///Users/trainguyen/Documents/work/agent/tooling/orchestrator/__init__.py) | Mới | `1` | Khởi tạo package `tooling.orchestrator`. |
-| [`tooling/orchestrator/harness2_engine.py`](file:///Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py) | Mới | `804` | Module lõi hiện thực hóa đầy đủ 6 giải pháp `F1 → F6` và CLI `validate-surface` / `check-clean-room`. |
-| [`tooling/tests/test_harness2_engine.py`](file:///Users/trainguyen/Documents/work/agent/tooling/tests/test_harness2_engine.py) | Mới | `298` | Bộ 6 unit & integration tests kiểm thử toàn diện `F1 → F6`, đa luồng 8 workers `flock` và cache SHA-256. |
-| **Tổng cộng** | | **`1,103` dòng** | **100% PASS tests, 3/3 Mutants KILLED, 0 Regression** |
+| [`tooling/orchestrator/__init__.py`](file:///Users/trainguyen/Documents/work/agent/tooling/orchestrator/__init__.py) | Mới / Cập nhật | `13` | Khởi tạo package `tooling.orchestrator` và export `three_way_merge_trees`, `validate_orthogonal_axis_edit`, `CONTEXT_HIERARCHY_ORDER`. |
+| [`tooling/orchestrator/proposer_axes.py`](file:///Users/trainguyen/Documents/work/agent/tooling/orchestrator/proposer_axes.py) | Mới | `98` | Module phân tách trực giao `INV` vs `DOM`, kiểm tra trần UTF-8 bytes và hợp nhất 3 chiều `three_way_merge_trees()` (`F2`, `AF-01`, `AF-04`, `AF-06`). |
+| [`tooling/orchestrator/harness2_engine.py`](file:///Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py) | Mới / Cập nhật | `1,070` | Module lõi hiện thực hóa đầy đủ `F1 → F6` & `AF-01 → AF-07` (`SubprocessHarnessRunner`, full SHA-256 cache key, `selector_fn`, real `s3_docs`, `build_index` sync, CLI `validate-surface` / `check-clean-room` / `run-recursion`). |
+| [`tooling/tests/test_harness2_engine.py`](file:///Users/trainguyen/Documents/work/agent/tooling/tests/test_harness2_engine.py) | Mới / Cập nhật | `497` | Bộ 7 unit & integration tests kiểm thử toàn diện `F1 → F6` và `AF-01 → AF-07` (bao gồm `three_way_merge_trees`, cross-task cache isolation, UTF-8 byte cap, real subprocess CLI `run-recursion`). |
+| **Tổng cộng** | | **`1,678` dòng** | **62/62 PASS tests, 4/4 Mutants KILLED, 0 Regression** |
 
 ---
 
@@ -41,8 +42,9 @@ Sau khi nhận lệnh `APPROVE` từ User, đã hoàn tất việc hiện thực
 - Sổ cái Quyết định (`ADR`): [`04_decisions_feature-harness2-recursive-integration-2026-10-20.md`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-harness2-recursive-integration-2026-10-20/04_decisions_feature-harness2-recursive-integration-2026-10-20.md)
 - Nhật ký Tiến độ (`Append-Only`): [`05_progress_harness2_recursive_integration.md`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-harness2-recursive-integration-2026-10-20/05_progress_harness2_recursive_integration.md)
 - Báo cáo Kiểm thử & Nghiệm thu (`S5/S6`): [`06_validation_harness2_recursive_integration.md`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-harness2-recursive-integration-2026-10-20/06_validation_harness2_recursive_integration.md)
-- Biên bản Đột biến 3 Bản hỏng (`G3`): [`06_mutation_summary_harness2_recursive_integration_20261020T153533.json`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-harness2-recursive-integration-2026-10-20/06_mutation_summary_harness2_recursive_integration_20261020T153533.json)
+- Biên bản Đột biến 4 Bản hỏng (`G3`): [`06_mutation_summary_harness2_recursive_integration_20261020T163227.json`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-harness2-recursive-integration-2026-10-20/06_mutation_summary_harness2_recursive_integration_20261020T163227.json)
 - Danh mục Task (`S1/S4`): [`08_tasks_harness2_recursive_integration.md`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-harness2-recursive-integration-2026-10-20/08_tasks_harness2_recursive_integration.md)
 - Giải pháp Kỹ thuật (`S3`): [`09_tasks_solution_harness2_recursive_integration.md`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-harness2-recursive-integration-2026-10-20/09_tasks_solution_harness2_recursive_integration.md)
 - Phân tích Đối sánh (`S2`): [`13_analysis_harness2_recursive_integration.md`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-harness2-recursive-integration-2026-10-20/13_analysis_harness2_recursive_integration.md)
 - Biên bản Phản biện Cuối phiên (`S5`): [`audit_report_harness2_recursive_integration.md`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-harness2-recursive-integration-2026-10-20/audit_report_harness2_recursive_integration.md)
+
