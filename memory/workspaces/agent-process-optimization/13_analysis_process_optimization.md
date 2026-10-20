@@ -135,8 +135,9 @@ description: >-
 2. Append 05_progress: `- [<ISO-ts>] [Agent:<Model>] START <task>` TRƯỚC khi sửa code.
 3. Restore-point: `git -C <service> commit` local (KHÔNG push).
 4. Implement theo pattern hiện có của service.
-5. Verify thật: `go build ./... && go test ./...` (Go) | `npx tsc -b && npm run build` (web);
-   restart process, `lsof -nP -iTCP:<port> -sTCP:LISTEN`, bắn request thật.
+5. Verify thật theo `.agent-project.json` của dự án: chạy `checks` + `test` của component bị sửa,
+   rồi `runtime_check` (khởi động lại process + chứng minh process mới đang chạy) và gọi request thật.
+   Dự án chưa có manifest → ghi rõ lệnh đã chạy vào 06_validation. (Sửa theo ADR-07, 2026-10-16)
 6. Gọi skill security-agent → qa-agent (DoD G1–G8).
 7. Ghi 06_validation + 11_report; append 05_progress `DONE`.
 ```

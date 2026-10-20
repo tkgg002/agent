@@ -1,49 +1,31 @@
-# Operator Workflow Map (Muscle Catalog)
+# Operator Map — Antigravity Core Skills (`agent/skills/`)
 
-Bản đồ tra cứu nhanh 79+ workflows kỹ thuật từ hạ tầng mới (`agent/workflows/`). Brain sử dụng file này để Dispatch công việc cho Muscle.
+Bản đồ điều phối 10 Core Skills chuẩn hóa của hệ thống `/agent` trên **Google Antigravity** (đăng ký qua `.agents/skills.json`). Brain và Muscle sử dụng bảng này theo **Master Workflow `S0 → S6`**.
 
-## 1. Nhóm Chiến lược & Thực thi (Strategic Execution)
-| Workflow | Mục tiêu | Khi nào dùng |
-|---|---|---|
-| `/prp-prd` | Tạo PRD hoàn chỉnh | Yêu cầu feature mới chưa có spec. |
-| `/prp-plan` | Lập kế hoạch chi tiết + trích xuất patterns | Task phức tạp, cần độ chính xác cao. |
-| `/prp-implement` | Thực thi plan với validation loop | Sau khi có `.plan.md` từ `/prp-plan`. |
-| `/prp-commit` | Commit code kèm context theo chuẩn PRP | Kết thúc task, chuẩn bị PR. |
-| `/prp-pr` | Tạo Pull Request chuyên nghiệp | Khi đã sẵn sàng để review. |
+## 1. Bảng Điều phối 10 Core Skills (`agent/skills/<name>/SKILL.md`)
 
-## 2. Nhóm Kiểm thử & Chất lượng (TDD & Quality)
-| Workflow | Mục tiêu | Khi nào dùng |
-|---|---|---|
-| `/tdd` | Quy trình Test-Driven Development | Viết tính năng mới, ưu tiên Test trước. |
-| `/santa-loop` | Xác minh đối kháng (Adversarial) | Logic nhạy cảm (Tiền tệ, Bảo mật). |
-| `/verify` | Kiểm tra tổng thể trạng thái code | Sau khi fix bug hoặc refactor. |
-| `/test-coverage` | Đo lường độ bao phủ test | Đánh giá chất lượng bộ test. |
-| `/e2e` | Kiểm thử Playwright đầu-cuối | Kiểm tra UI/UX flows. |
+| Skill | Role | Giai đoạn (`S0–S6`) | Chức năng cốt lõi |
+| :--- | :--- | :---: | :--- |
+| `brain-delegate` | Brain | `S0–S3` | Phân loại Tier (`T0–T3`), tạo workspace, viết `09_tasks_solution_*.md`, chạy `DG1`/`DG2`, xin `APPROVE` của User và lập lệnh Delegate chuẩn. |
+| `muscle-execute` | Muscle | `S4–S5` | Thực thi code theo DNA dự án, chạy `checks` và `runtime_check` từ `.agent-project.json`, vượt qua 8 cổng `DoD G1–G8`. |
+| `laya-router` | Brain / Muscle / QA | `S2, S3, S5` | Vận hành `tooling/laya_gate.py` (Mode A: Calibrated Claim Gate & Mode B: Agentic Debate Review) tại `DG1`, `DG2`, `DG3`. |
+| `audit-propose-only` | Brain / QA | `S2, S5` | Rà soát kiến trúc & code theo nguyên tắc `Propose-Only` (Rule #1, #13): chỉ đọc và xuất báo cáo kèm `REF: path:line`, cấm sửa code khi chưa có `APPROVE`. |
+| `debug-agent` | Debugger | `S2, S4` | Truy tìm Root Cause bằng thực chứng (`Reproduce Red -> Green`), kiểm chứng qua `laya_gate.py`. |
+| `qa-agent` | QA | `S5` | Kiểm định đối kháng (Adversarial Review), đối chiếu `DoD G1–G8`, kiểm tra `06_validation_*.md` và `DG3`. |
+| `security-agent` | Security | `S3, S5` | Quét lộ lọt Secret/PII, kiểm tra bảo mật API/DB/Auth trước khi báo hoàn thành. |
+| `workspace-docs` | Brain / Muscle | `S1–S6` | Chuẩn hóa Mandatory Doc Registry (`00`–`14`) theo Tier `T0–T3`, bảo vệ các file append-only (`05_progress`, `04_decisions`, `lessons.md`). |
+| `context-manager` | Context Manager | `S0, S6` | Ghi bài học chuẩn 5 phần vào `memory/global/lessons.md` và tái tạo chỉ mục 2 tầng (`tooling/build_lessons_index.py`). |
+| `session-wrapup` | Brain / Muscle | `S6` | Đóng phiên: hoàn tất `11_report_*.md`, chạy `tooling/verify_governance.py --workspace <ws>`, đối soát bài học. |
 
-## 3. Nhóm Ngôn ngữ & Framework (Custom Tech Muscle)
-| Ngôn ngữ | Workflows sẵn có | Chức năng |
-|---|---|---|
-| **Golang** | `/go-build`, `/go-test`, `/go-review` | Build, test, review code Go. |
-| **Python** | `/python-review`, `/python-test` (via `/tdd`) | Xử lý logic Python. |
-| **Rust** | `/rust-build`, `/rust-test`, `/rust-review` | Hệ sinh thái Rust. |
-| **Frontend** | `/flutter-build`, `/flutter-test`, `/kotlin-build` | App & Mobile development. |
-| **C++** | `/cpp-build`, `/cpp-test`, `/cpp-review` | Native development. |
+## 2. Hạ tầng Kiểm soát Tự động (Hooks & Tooling)
 
-## 4. Nhóm Tối ưu hóa AI (Internal Ops)
-| Workflow | Mục tiêu | Khi nào dùng |
-|---|---|---|
-| `/evolve` | Phân tích và đề xuất tiến hóa cấu trúc | Muốn tối ưu hóa chính Agentic Core. |
-| `/skill-create` | Tự đúc kết Skills từ Git history | Muốn lưu lại kinh nghiệm dự án. |
-| `/prompt-optimize`| Tối ưu hóa câu lệnh hệ thống | Khi Agent phản hồi kém hiệu quả. |
-| `/skill-health` | Kiểm tra "sức khỏe" bộ kỹ năng | Audit lại mớ Skills cũ. |
+| Thành phần | Đường dẫn | Vai trò |
+| :--- | :--- | :--- |
+| **Lifecycle Hooks** | `hooks/agy/agy_guard.py` (`.agents/hooks.json`) | Thực thi 7 chốt chặn tự động `H1–H7` (`PreInvocation`, `PreToolUse`, `PostInvocation`, `Stop`). |
+| **Decision Gate CLI** | `tooling/laya_gate.py` | Chạy kiểm định `/laya_router` có đối chứng (`control_true` / `control_false` / `corrupted-diff`). |
+| **Lessons Indexer** | `tooling/build_lessons_index.py` | Sinh `memory/global/lessons/INDEX.md` (`<15KB`) và `topics/*.md` từ `lessons.md` (Read-Only). |
+| **Process Linter** | `tooling/verify_governance.py` | Kiểm định cấu trúc tài liệu Workspace theo Tier (`T0–T3`) và định dạng Audit Log `05_progress_*.md`. |
+| **Project Manifest** | `<project-root>/.agent-project.json` | Khai báo `checks` và `runtime_check` đặc thù của từng dự án để giữ `/agent` 100% project-agnostic. |
 
-## 5. Nhóm Tích hợp & Quản trị (Integration & Ops)
-| Workflow | Mục tiêu | Khi nào dùng |
-|---|---|---|
-| `/jira` | Tương tác với vé Jira | Lấy yêu cầu hoặc cập nhật status. |
-| `/gh-issue` | Quản lý GitHub Issues | Triage hoặc link active work. |
-| `/sessions` | Quản lý lịch sử phiên làm việc | Tra cứu lại quyết định cũ. |
-| `/save-session` | Lưu trạng thái phiên hiện tại | Sắp hết context hoặc kết thúc ngày. |
-
-> [!IMPORTANT]
-> **Priority**: Nếu Brain có workflow riêng trong `agent/workflows/` (như `/brain-delegate`), hãy dùng nó trước rồi mới Dispatch các lệnh này.
+> [!NOTE]
+> Toàn bộ 96 file workflow phẳng thế hệ cũ đã được lưu trữ an toàn tại `agent/workflows/_archive/` (xem `agent/workflows/README.md`).

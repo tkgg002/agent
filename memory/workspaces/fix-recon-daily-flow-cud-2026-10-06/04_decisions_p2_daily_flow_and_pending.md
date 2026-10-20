@@ -31,3 +31,8 @@ Ngày: 2026-10-12
 - **Hệ quả & Đánh giá**:
   - *Tích cực*: Số lượng lỗi phản ánh chính xác số lượng bản ghi hoặc sự kiện hỏng thực tế (1 poison pill = 1 DLQ).
   - *Tiêu cực*: Không có.
+- [2026-10-16T16:17:42+07:00] [Agent:laya_gate] DG1 S-RC FLAG resolved: Đã kiểm chứng trực tiếp toàn bộ struct SourceObjectRegistry chỉ có PrimaryKeyField và TimestampField, hoàn toàn không có trường cấu hình cột ngày tạo bản ghi tại REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/model/source/source_object_registry.go:8-49
+- [2026-10-16T16:18:21+07:00] [Agent:laya_gate] DG1 S-PATTERN FLAG resolved: Đã kiểm chứng trực tiếp dòng 444-445 của ActivityManager.tsx gán date_field = '_created_at' khi rules.length > 0 và không có approvedCreate tại REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/ActivityManager.tsx:442-446
+- [2026-10-16T17:05:33+07:00] [Agent:laya_gate] DG2 D-BEHAV FLAG resolved: REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/sourcecount/source_count_runner.go:278-286 confirms validIdent.MatchString checks ContainerNamespace, ObjectName, and DateField before building SQL query.
+- [2026-10-16T17:06:33+07:00] [Agent:laya_gate] DG2 D-API FLAG resolved: REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/sourcecount/source_count_runner.go:297 confirms db.WithContext(ctx).Raw(query, start, end).Scan(&count).Error executes the SQL query.
+- [2026-10-16T17:25:30+07:00] [Agent:laya_gate] DG3 A-F FLAG resolved: REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/model/source/source_object_registry.go:25-39 confirms SourceObjectRegistry only defines TimestampField and has no created_at_field.

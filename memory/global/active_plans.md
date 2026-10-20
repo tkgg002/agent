@@ -1,11 +1,12 @@
 # Active Plans Registry
 
 > **Maintained by**: Brain (Antigravity)
-> **Last Updated**: 2026-06-23
+> **Last Updated**: 2026-10-16
 > **Purpose**: Registry để Brain biết workspace nào đang active → load đúng context khi bắt đầu phiên mới. KHÔNG phải cơ chế agent communication.
 
 | Workspace | Project | Status | Last Active |
 |-----------|---------|--------|-------------|
+| agent-process-optimization | /agent | ✅ Done (Master Workflow S0–S6 + Laya Gate + Hooks H1–H7 + 2-Tier Lessons Index) | 2026-10-16 |
 | fix-scan-array-nats-timeout-trans-his | data-hub | 🟡 Active (Planning) | 2026-10-02 |
 | feat-clickhouse-master-destination | data-hub | 🟡 Active (Planning) | 2026-09-11 |
 | feat-cdc-postgres-to-mongo-3tables | data-hub | 🟡 Active (Planning) | 2026-09-10 |

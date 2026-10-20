@@ -11,35 +11,23 @@
 - Workflow phải định nghĩa rõ: Trigger từ đâu? Output đi đâu?
 - Không dùng từ chung chung ("Task xong"). Phải cụ thể ("Sau khi `/muscle-execute` trả về `exit code 0`").
 
-## 3. Role-Based Actions
+## 3. Role-Based Actions & Audit Log Format
 - Luôn chỉ định rõ **Ai** làm gì (**Brain** vs **Muscle**).
-- **Brain**: Phải xác định model/provider phù hợp trước khi delegate.
-- **Muscle**: Phải nạp `models.env` để sử dụng model tối ưu chi phí (Flash/Haiku) và hỗ trợ retry/rotate key khi đạt quota.
-- **Identity Verification**: Trước mỗi Task/Phase, phải chạy lệnh `env | grep MODEL` để xác thực model đang chạy khớp với cấu hình.
-- **Progress Tracking**: Mọi thay đổi trong `05_progress.md` PHẢI bắt đầu bằng tag model: `[Model-X] Task Description`.
-- Tránh passive voice ("File được cập nhật"). Dùng active voice ("Brain cập nhật file").
+- **Brain**: Phân loại Tier (`T0–T3`), thiết kế `09_tasks_solution_*.md`, chạy cổng quyết định `laya_gate.py` (`DG1`, `DG2`), trình User chờ `APPROVE`.
+- **Muscle**: Chỉ sửa source code sau khi có `APPROVE` (cưỡng chế bởi Hook `H4`); chạy `checks` và `runtime_check` theo `.agent-project.json`.
+- **Progress Tracking**: Mọi dòng trong `05_progress_*.md` PHẢI tuân thủ định dạng: `- [YYYY-MM-DDTHH:MM:SS+07:00] [Agent:<Model>] <Action>`.
 
-## 4. V3 Workspace Standard (Cấu trúc Thư mục Chuẩn)
-Mọi Workspace (Task/Feature) mới PHẢI tuân thủ cấu trúc 8 file:
-1. `00_context.md`: Context & Scope.
-2. `01_requirements.md`: Yêu cầu & Feedback của User.
-3. `02_plan.md`: Chiến lược thực thi (Active Plan + Checklist).
-4. `03_implementation.md`: Chi tiết kỹ thuật (Tech Specs).
-5. `04_decisions.md`: Quyết định quan trọng (ADRs local của workspace).
-6. `05_progress.md`: Nhật ký công việc (Chronological Log).
-7. `06_validation.md`: Kết quả nghiệm thu (QA/Tests).
-8. `07_lessons.md`: Lessons learned riêng của workspace này (filter từ lessons.md global).
+## 4. Phân tầng Tài liệu Workspace (Tiers `T0–T3` — ADR-03)
+Mọi Workspace tuân thủ Mandatory Doc Registry (`00–14`, chi tiết tại `skills/workspace-docs/SKILL.md`):
+- **Tier `T0` (Hỏi đáp/Tư vấn, không sửa file):** Không tạo workspace, không chạy linter.
+- **Tier `T1` (Hotfix/Micro-task):** Tối thiểu 3 file: `01_requirements_*.md` (`tier: T1`), `05_progress_*.md`, `08_tasks_*.md`.
+- **Tier `T2` (Feature/Bugfix):** `T1` + `09_tasks_solution_*.md`, `06_validation_*.md`, `11_report_*.md` (`tier: T2`).
+- **Tier `T3` (Epic/Phase lớn):** Bộ đầy đủ `00, 01, 02, 04, 05, 06, 08, 09, 11, 12, 13` (`tier: T3`).
 
-## 5. Protocol Signature (Chữ ký Giao thức)
-Mọi phản hồi cuối cùng của Agent PHẢI có chữ ký:
-```markdown
-**Role**: [Brain/Muscle]
-**Model**: [e.g. gemini-3-flash | gemini-3-pro-high]
-**Provider**: [Antigravity | OpenAI | Anthropic]
-**Task**: [Tên Task hiện tại]
-**Exec**: [Hành động tóm tắt]
-**Skills**: `skill_1`, `skill_2`...
-```
+## 5. Cuối Phiên & Chữ ký Phản hồi (Rule #0 & S6)
+Cuối mỗi câu trả lời, Agent bắt buộc:
+1. Liệt kê các bài học (`lessons.md`) đã tuân thủ hoặc mắc phải trong phiên.
+2. Liệt kê danh sách `Skills` và `Tools` đã sử dụng.
 
 ## 6. Workspace Isolation (Cô lập Workspace)
 > **Rule**: Mỗi workspace là 1 project/feature LỚN **hoàn toàn độc lập**. Chúng KHÔNG liên lạc nhau.
