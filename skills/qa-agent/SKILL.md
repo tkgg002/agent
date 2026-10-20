@@ -68,7 +68,7 @@ Kiểm tra và có bằng chứng test cho các trường hợp biên:
        --workspace <workspace_name> --repo <repo_path>
      ```
 3. Lập báo cáo **`audit_report_<suffix>.md`** theo đúng cấu trúc 6 phần bắt buộc bên dưới (Hook `H7` và `verify_governance.py` sẽ chặn đóng task nếu thiếu file này hoặc thiếu bất kỳ phần nào trong 6 phần).
-4. **Kỷ luật S5 Propose-Only:** Nếu phát hiện bug/lỗ hổng ngay trong phần code thuộc phạm vi đã `APPROVE`, sửa dứt điểm và chạy lại kiểm định; nếu phát hiện vấn đề nằm ngoài phạm vi đã được User `APPROVE` ở S3, **KHÔNG tự ý sửa code** mà ghi rõ vào báo cáo và xin `APPROVE` của User.
+4. **Kỷ luật Khép Vòng Lặp `S5 → S3 Re-Plan` (Enforced bởi Hook `H4b`):** Khi đã bước vào chặng `S5` (đã ghi `audit_report_<suffix>.md`), nếu phát hiện bất kỳ bug, lỗ hổng bảo mật hay thiếu sót thiết kế nào, **TUYỆT ĐỐI CẤM tự ý sửa thẳng source code**. Bắt buộc quay ngược về chặng `S3`: cập nhật giải pháp vào `09_tasks_solution_<suffix>.md`, bổ sung task vào `08_tasks_<suffix>.md`, chạy lại `DG1`/`DG2` (`laya_gate.py`) và **dừng chờ User `APPROVE`** trước khi quay lại `S4` sửa code.
 
 ### (G8) Bằng chứng Vật lý trong Workspace (`audit_report_<suffix>.md` & `06_validation_<suffix>.md`)
 

@@ -70,6 +70,6 @@ description: >-
 ### Bước 6 — Chuyển giao Kiểm định S5 (`/security-agent` → `/qa-agent` → `DG3` → `audit_report_<suffix>.md`)
 1. Chạy `/security-agent` để rà soát lỗ hổng bảo mật và đảm bảo không lộ secret/PII.
 2. Chạy `/qa-agent` và Decision Gate `DG3` (`laya_gate.py run --stage dg3` và/hoặc `laya_gate.py review`) với đầy đủ context.
-   - Lưu ý ranh giới **S4 / S5**: Trong S4 được phép sửa để test pass *trong phạm vi thiết kế đã APPROVE*. Khi sang S5, mọi phát hiện nằm ngoài phạm vi đã duyệt chỉ được ghi vào báo cáo đề xuất, không tự ý sửa thêm.
+   - Lưu ý ranh giới **S4 / S5 (`Closed-Loop S5 → S3 Re-Plan`)**: Trong S4 (trước khi lập `audit_report_<suffix>.md`) được phép sửa để test pass *trong phạm vi thiết kế đã APPROVE*. Ngay khi đã bước sang S5 (`audit_report_<suffix>.md`), Hook `H4b` khoá quyền sửa source code trực tiếp — nếu phát hiện bug/gap mới ở S5, bắt buộc quay ngược về S3 cập nhật `09_tasks_solution_<suffix>.md` + `08_tasks_<suffix>.md`, chạy lại `DG1/DG2` và chờ User `APPROVE` mới.
 3. Tạo local commit restore-point sau khi hoàn tất kiểm định (`KHÔNG git push`).
 4. Lập báo cáo **`audit_report_<suffix>.md`** (đủ 6 phần phản biện từng dòng diff, chống suy diễn smoke test, concurrency/timeout/continuity, chống báo cáo láo, Self-Improvement Loop, và `/laya_router` `DG3`), ghi kết quả vào `06_validation_<suffix>.md`, `11_report_<suffix>.md` và append `DONE` vào `05_progress_<suffix>.md`.

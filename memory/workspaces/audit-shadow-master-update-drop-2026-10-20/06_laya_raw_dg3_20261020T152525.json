@@ -1,0 +1,1070 @@
+[
+  {
+    "id": "IMPL-F1-DYNAMIC-PK-DELETE-AND-SPLIT",
+    "category": "A-FINDING",
+    "kind": "target",
+    "claim": "In TransmuterModule.RunEvents, delete events now call deleteFromMasterBySourceAndGpayIDs which resolves conflictTarget dynamically via resolveConflictTarget(binding, colTypes) and deletes by conflictTarget and _gpay_id; additionally, binarySearchSplit calls splitSingleTaskPayload when a single NATS task contains multiple Events or SourceIDs.",
+    "flow": "RunEvents -> deleteFromMasterBySourceAndGpayIDs -> resolveConflictTarget & binarySearchSplit -> splitSingleTaskPayload",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:702-708\n\t\tif ev.IsDelete || ev.Op == \"d\" {\n\t\t\tvar extraGIDs []int64\n\t\t\tif shadowGID, ok := shadowGpayMap[ev.SourceID]; ok && shadowGID > 0 {\n\t\t\t\textraGIDs = append(extraGIDs, shadowGID)\n\t\t\t}\n\t\t\t_, delErr := t.deleteFromMasterBySourceAndGpayIDs(ctx, masterRow, colTypes, []string{ev.SourceID}, extraGIDs)\n\t\t\tif delErr != nil {\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1621-1623\n\tqt := quoteTransmuteQualified(binding.MasterSchema, binding.MasterTable)\n\tconflictTarget := resolveConflictTarget(binding, colTypes)\n\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:696-699\n\t\tif len(task.Req.Events) > 1 || (len(task.Req.Events) == 0 && len(task.Req.SourceIDs) > 1) {\n\t\t\th.splitSingleTaskPayload(ctx, masterTable, task)\n\t\t\treturn\n\t\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3879,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7585,
+                "INCORRECT": 0.1941,
+                "UNSUPPORTED": 0.0474
+              },
+              "confidence": 0.3879,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 620,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In TransmuterModule.RunEvents, delete events now call deleteFromMasterBySourceAndGpayIDs which resolves conflictTarget dynamically via resolveConflictTarget(binding, colTypes) and deletes by conflictTarget and _gpay_id; additionally, binarySearchSplit calls splitSingleTaskPayload when a single NATS task contains multiple Events or SourceIDs.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:702-708\n\t\tif ev.IsDelete || ev.Op == \"d\" {\n\t\t\tvar extraGIDs []int64\n\t\t\tif shadowGID, ok := shadowGpayMap[ev.SourceID]; ok && shadowGID > 0 {\n\t\t\t\textraGIDs = append(extraGIDs, shadowGID)\n\t\t\t}\n\t\t\t_, delErr := t.deleteFromMasterBySourceAndGpayIDs(ctx, masterRow, colTypes, []string{ev.SourceID}, extraGIDs)\n\t\t\tif delErr != nil {\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1621-1623\n\tqt := quoteTransmuteQualified(binding.MasterSchema, binding.MasterTable)\n\tconflictTarget := resolveConflictTarget(binding, colTypes)\n\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:696-699\n\t\tif len(task.Req.Events) > 1 || (len(task.Req.Events) == 0 && len(task.Req.SourceIDs) > 1) {\n\t\t\th.splitSingleTaskPayload(ctx, masterTable, task)\n\t\t\treturn\n\t\t}",
+          "flow": "RunEvents -> deleteFromMasterBySourceAndGpayIDs -> resolveConflictTarget & binarySearchSplit -> splitSingleTaskPayload"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.0766,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.1899,
+                "INCORRECT": 0.2899,
+                "UNSUPPORTED": 0.5202
+              },
+              "confidence": 0.0766,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 626,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "RunEvents -> deleteFromMasterBySourceAndGpayIDs -> resolveConflictTarget & binarySearchSplit -> splitSingleTaskPayload",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:702-708\n\t\tif ev.IsDelete || ev.Op == \"d\" {\n\t\t\tvar extraGIDs []int64\n\t\t\tif shadowGID, ok := shadowGpayMap[ev.SourceID]; ok && shadowGID > 0 {\n\t\t\t\textraGIDs = append(extraGIDs, shadowGID)\n\t\t\t}\n\t\t\t_, delErr := t.deleteFromMasterBySourceAndGpayIDs(ctx, masterRow, colTypes, []string{ev.SourceID}, extraGIDs)\n\t\t\tif delErr != nil {\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1621-1623\n\tqt := quoteTransmuteQualified(binding.MasterSchema, binding.MasterTable)\n\tconflictTarget := resolveConflictTarget(binding, colTypes)\n\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:696-699\n\t\tif len(task.Req.Events) > 1 || (len(task.Req.Events) == 0 && len(task.Req.SourceIDs) > 1) {\n\t\t\th.splitSingleTaskPayload(ctx, masterTable, task)\n\t\t\treturn\n\t\t}",
+          "claim": "In TransmuterModule.RunEvents, delete events now call deleteFromMasterBySourceAndGpayIDs which resolves conflictTarget dynamically via resolveConflictTarget(binding, colTypes) and deletes by conflictTarget and _gpay_id; additionally, binarySearchSplit calls splitSingleTaskPayload when a single NATS task contains multiple Events or SourceIDs."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.773,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9633,
+                "NO": 0.0367
+              },
+              "confidence": 0.773,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 533,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:702-708\n\t\tif ev.IsDelete || ev.Op == \"d\" {\n\t\t\tvar extraGIDs []int64\n\t\t\tif shadowGID, ok := shadowGpayMap[ev.SourceID]; ok && shadowGID > 0 {\n\t\t\t\textraGIDs = append(extraGIDs, shadowGID)\n\t\t\t}\n\t\t\t_, delErr := t.deleteFromMasterBySourceAndGpayIDs(ctx, masterRow, colTypes, []string{ev.SourceID}, extraGIDs)\n\t\t\tif delErr != nil {\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1621-1623\n\tqt := quoteTransmuteQualified(binding.MasterSchema, binding.MasterTable)\n\tconflictTarget := resolveConflictTarget(binding, colTypes)\n\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:696-699\n\t\tif len(task.Req.Events) > 1 || (len(task.Req.Events) == 0 && len(task.Req.SourceIDs) > 1) {\n\t\t\th.splitSingleTaskPayload(ctx, masterTable, task)\n\t\t\treturn\n\t\t}",
+          "claim": "In TransmuterModule.RunEvents, delete events now call deleteFromMasterBySourceAndGpayIDs which resolves conflictTarget dynamically via resolveConflictTarget(binding, colTypes) and deletes by conflictTarget and _gpay_id; additionally, binarySearchSplit calls splitSingleTaskPayload when a single NATS task contains multiple Events or SourceIDs."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "IMPL-F2-SHADOW-GPAY-SYNC-AND-CONFLICT-UPDATE",
+    "category": "A-FINDING",
+    "kind": "target",
+    "claim": "RunEvents pre-fetches Shadow _gpay_id values via lookupShadowGpayIDs and uses deterministicGpayID(shadowGID, e.KeySuffix) when shadowGID > 0, and bulkUpsertMaster includes _gpay_id in ON CONFLICT DO UPDATE SET whenever conflictTarget != \"_gpay_id\".",
+    "flow": "RunEvents -> lookupShadowGpayIDs -> deterministicGpayID -> bulkUpsertMaster ON CONFLICT (conflictTarget) DO UPDATE",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:752-761\n\t\tshadowGID := shadowGpayMap[ev.SourceID]\n\t\trecords := make([]map[string]any, 0, len(emits))\n\t\tfor _, e := range emits {\n\t\t\trec := e.Cols\n\t\t\tif shadowGID > 0 {\n\t\t\t\trec[\"_gpay_id\"] = deterministicGpayID(shadowGID, e.KeySuffix)\n\t\t\t} else {\n\t\t\t\trec[\"_gpay_id\"] = deterministicSourceGpayID(ev.SourceID, e.KeySuffix)\n\t\t\t}\n\t\t\trec[\"_source_ts\"] = ev.SourceTs\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1736-1745\n\tsets := make([]string, 0, len(keys))\n\tfor _, k := range keys {\n\t\t// Fix F2: Khi conflictTarget != \"_gpay_id\" (ví dụ \"_id\" hoặc \"id\" từ transform_spec.pk),\n\t\t// cho phép cập nhật cả \"_gpay_id\" = EXCLUDED.\"_gpay_id\" để tự chữa lành các dòng lệch _gpay_id.\n\t\tif k == conflictTarget {\n\t\t\tcontinue\n\t\t}\n\t\tsets = append(sets, fmt.Sprintf(\"%s = EXCLUDED.%s\", quoteTransmuteIdent(k), quoteTransmuteIdent(k)))\n\t}\n\tsets = append(sets, `\"_updated_at\" = NOW()`)",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5406,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8545,
+                "INCORRECT": 0.1006,
+                "UNSUPPORTED": 0.0449
+              },
+              "confidence": 0.5406,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 692,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "RunEvents pre-fetches Shadow _gpay_id values via lookupShadowGpayIDs and uses deterministicGpayID(shadowGID, e.KeySuffix) when shadowGID > 0, and bulkUpsertMaster includes _gpay_id in ON CONFLICT DO UPDATE SET whenever conflictTarget != \"_gpay_id\".",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:752-761\n\t\tshadowGID := shadowGpayMap[ev.SourceID]\n\t\trecords := make([]map[string]any, 0, len(emits))\n\t\tfor _, e := range emits {\n\t\t\trec := e.Cols\n\t\t\tif shadowGID > 0 {\n\t\t\t\trec[\"_gpay_id\"] = deterministicGpayID(shadowGID, e.KeySuffix)\n\t\t\t} else {\n\t\t\t\trec[\"_gpay_id\"] = deterministicSourceGpayID(ev.SourceID, e.KeySuffix)\n\t\t\t}\n\t\t\trec[\"_source_ts\"] = ev.SourceTs\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1736-1745\n\tsets := make([]string, 0, len(keys))\n\tfor _, k := range keys {\n\t\t// Fix F2: Khi conflictTarget != \"_gpay_id\" (ví dụ \"_id\" hoặc \"id\" từ transform_spec.pk),\n\t\t// cho phép cập nhật cả \"_gpay_id\" = EXCLUDED.\"_gpay_id\" để tự chữa lành các dòng lệch _gpay_id.\n\t\tif k == conflictTarget {\n\t\t\tcontinue\n\t\t}\n\t\tsets = append(sets, fmt.Sprintf(\"%s = EXCLUDED.%s\", quoteTransmuteIdent(k), quoteTransmuteIdent(k)))\n\t}\n\tsets = append(sets, `\"_updated_at\" = NOW()`)",
+          "flow": "RunEvents -> lookupShadowGpayIDs -> deterministicGpayID -> bulkUpsertMaster ON CONFLICT (conflictTarget) DO UPDATE"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3055,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7259,
+                "INCORRECT": 0.1808,
+                "UNSUPPORTED": 0.0933
+              },
+              "confidence": 0.3055,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 697,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "RunEvents -> lookupShadowGpayIDs -> deterministicGpayID -> bulkUpsertMaster ON CONFLICT (conflictTarget) DO UPDATE",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:752-761\n\t\tshadowGID := shadowGpayMap[ev.SourceID]\n\t\trecords := make([]map[string]any, 0, len(emits))\n\t\tfor _, e := range emits {\n\t\t\trec := e.Cols\n\t\t\tif shadowGID > 0 {\n\t\t\t\trec[\"_gpay_id\"] = deterministicGpayID(shadowGID, e.KeySuffix)\n\t\t\t} else {\n\t\t\t\trec[\"_gpay_id\"] = deterministicSourceGpayID(ev.SourceID, e.KeySuffix)\n\t\t\t}\n\t\t\trec[\"_source_ts\"] = ev.SourceTs\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1736-1745\n\tsets := make([]string, 0, len(keys))\n\tfor _, k := range keys {\n\t\t// Fix F2: Khi conflictTarget != \"_gpay_id\" (ví dụ \"_id\" hoặc \"id\" từ transform_spec.pk),\n\t\t// cho phép cập nhật cả \"_gpay_id\" = EXCLUDED.\"_gpay_id\" để tự chữa lành các dòng lệch _gpay_id.\n\t\tif k == conflictTarget {\n\t\t\tcontinue\n\t\t}\n\t\tsets = append(sets, fmt.Sprintf(\"%s = EXCLUDED.%s\", quoteTransmuteIdent(k), quoteTransmuteIdent(k)))\n\t}\n\tsets = append(sets, `\"_updated_at\" = NOW()`)",
+          "claim": "RunEvents pre-fetches Shadow _gpay_id values via lookupShadowGpayIDs and uses deterministicGpayID(shadowGID, e.KeySuffix) when shadowGID > 0, and bulkUpsertMaster includes _gpay_id in ON CONFLICT DO UPDATE SET whenever conflictTarget != \"_gpay_id\"."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8079,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9705,
+                "NO": 0.0295
+              },
+              "confidence": 0.8079,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 602,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:752-761\n\t\tshadowGID := shadowGpayMap[ev.SourceID]\n\t\trecords := make([]map[string]any, 0, len(emits))\n\t\tfor _, e := range emits {\n\t\t\trec := e.Cols\n\t\t\tif shadowGID > 0 {\n\t\t\t\trec[\"_gpay_id\"] = deterministicGpayID(shadowGID, e.KeySuffix)\n\t\t\t} else {\n\t\t\t\trec[\"_gpay_id\"] = deterministicSourceGpayID(ev.SourceID, e.KeySuffix)\n\t\t\t}\n\t\t\trec[\"_source_ts\"] = ev.SourceTs\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1736-1745\n\tsets := make([]string, 0, len(keys))\n\tfor _, k := range keys {\n\t\t// Fix F2: Khi conflictTarget != \"_gpay_id\" (ví dụ \"_id\" hoặc \"id\" từ transform_spec.pk),\n\t\t// cho phép cập nhật cả \"_gpay_id\" = EXCLUDED.\"_gpay_id\" để tự chữa lành các dòng lệch _gpay_id.\n\t\tif k == conflictTarget {\n\t\t\tcontinue\n\t\t}\n\t\tsets = append(sets, fmt.Sprintf(\"%s = EXCLUDED.%s\", quoteTransmuteIdent(k), quoteTransmuteIdent(k)))\n\t}\n\tsets = append(sets, `\"_updated_at\" = NOW()`)",
+          "claim": "RunEvents pre-fetches Shadow _gpay_id values via lookupShadowGpayIDs and uses deterministicGpayID(shadowGID, e.KeySuffix) when shadowGID > 0, and bulkUpsertMaster includes _gpay_id in ON CONFLICT DO UPDATE SET whenever conflictTarget != \"_gpay_id\"."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "IMPL-F3-INCREMENTAL-RETROACTIVE-SCAN",
+    "category": "A-FINDING",
+    "kind": "target",
+    "claim": "syncUpdatedShadowRowsBeforeCursor scans Shadow rows with _gpay_id <= maxCursor that have COALESCE(_deleted, false) = true or _updated_at >= cutoff and passes them to processBatch during incremental sync.",
+    "flow": "TransmuterModule.Run -> syncUpdatedShadowRowsBeforeCursor -> processBatch",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1508-1513\n\t\tvar rows []shadowBatchRow\n\t\tquery := fmt.Sprintf(\n\t\t\t`SELECT %s, _source_id, _raw_data, _source_ts, _deleted FROM %s WHERE %s > ? AND %s <= ? AND (COALESCE(_deleted, false) = true OR _updated_at >= ?) ORDER BY 1 LIMIT ?`,\n\t\t\tpkSelect, shadowQT, pkBigint, pkBigint,\n\t\t)\n\t\terrQ := shadowDB.WithContext(ctx).Raw(query, scanCursor, maxCursor, cutoff, t.batchSize).Scan(&rows).Error",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2043,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5423,
+                "INCORRECT": 0.3941,
+                "UNSUPPORTED": 0.0637
+              },
+              "confidence": 0.2043,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 387,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "syncUpdatedShadowRowsBeforeCursor scans Shadow rows with _gpay_id <= maxCursor that have COALESCE(_deleted, false) = true or _updated_at >= cutoff and passes them to processBatch during incremental sync.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1508-1513\n\t\tvar rows []shadowBatchRow\n\t\tquery := fmt.Sprintf(\n\t\t\t`SELECT %s, _source_id, _raw_data, _source_ts, _deleted FROM %s WHERE %s > ? AND %s <= ? AND (COALESCE(_deleted, false) = true OR _updated_at >= ?) ORDER BY 1 LIMIT ?`,\n\t\t\tpkSelect, shadowQT, pkBigint, pkBigint,\n\t\t)\n\t\terrQ := shadowDB.WithContext(ctx).Raw(query, scanCursor, maxCursor, cutoff, t.batchSize).Scan(&rows).Error",
+          "flow": "TransmuterModule.Run -> syncUpdatedShadowRowsBeforeCursor -> processBatch"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3569,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6979,
+                "INCORRECT": 0.2738,
+                "UNSUPPORTED": 0.0283
+              },
+              "confidence": 0.3569,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 393,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "TransmuterModule.Run -> syncUpdatedShadowRowsBeforeCursor -> processBatch",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1508-1513\n\t\tvar rows []shadowBatchRow\n\t\tquery := fmt.Sprintf(\n\t\t\t`SELECT %s, _source_id, _raw_data, _source_ts, _deleted FROM %s WHERE %s > ? AND %s <= ? AND (COALESCE(_deleted, false) = true OR _updated_at >= ?) ORDER BY 1 LIMIT ?`,\n\t\t\tpkSelect, shadowQT, pkBigint, pkBigint,\n\t\t)\n\t\terrQ := shadowDB.WithContext(ctx).Raw(query, scanCursor, maxCursor, cutoff, t.batchSize).Scan(&rows).Error",
+          "claim": "syncUpdatedShadowRowsBeforeCursor scans Shadow rows with _gpay_id <= maxCursor that have COALESCE(_deleted, false) = true or _updated_at >= cutoff and passes them to processBatch during incremental sync."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5489,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9056,
+                "NO": 0.0944
+              },
+              "confidence": 0.5489,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 309,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1508-1513\n\t\tvar rows []shadowBatchRow\n\t\tquery := fmt.Sprintf(\n\t\t\t`SELECT %s, _source_id, _raw_data, _source_ts, _deleted FROM %s WHERE %s > ? AND %s <= ? AND (COALESCE(_deleted, false) = true OR _updated_at >= ?) ORDER BY 1 LIMIT ?`,\n\t\t\tpkSelect, shadowQT, pkBigint, pkBigint,\n\t\t)\n\t\terrQ := shadowDB.WithContext(ctx).Raw(query, scanCursor, maxCursor, cutoff, t.batchSize).Scan(&rows).Error",
+          "claim": "syncUpdatedShadowRowsBeforeCursor scans Shadow rows with _gpay_id <= maxCursor that have COALESCE(_deleted, false) = true or _updated_at >= cutoff and passes them to processBatch during incremental sync."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "IMPL-F4-F5-DEDUP-MERGE-AND-UNION-KEYS",
+    "category": "A-FINDING",
+    "kind": "target",
+    "claim": "BatchBuffer.batchUpsert calls dedupByConflictKey(sc.Records) before signature grouping and iterates deterministically over sigOrder, while bulkUpsertMaster calls unionSortedKeys(records) to include columns from all records in the batch.",
+    "flow": "batchUpsert -> dedupByConflictKey -> sigOrder & bulkUpsertMaster -> unionSortedKeys(records)",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:728-745\n\t\t\t\t\tdeduped := dedupByConflictKey(sc.Records)\n\n\t\t\t\t\t// CDC Priority: \"Accuracy and Safety first, Speed second\"\n\t\t\t\t\t// Signature Grouping: Group records by exact schema signature to guarantee\n\t\t\t\t\t// that multi-row upserts do not force `NULL` into missing fields when\n\t\t\t\t\t// records in the same chunk have heterogeneous schemas (spec drift).\n\t\t\t\t\tgroups := make(map[string][]*shadow.UpsertRecord)\n\t\t\t\t\tsigOrder := make([]string, 0, len(deduped))\n\t\t\t\t\tfor _, r := range deduped {\n\t\t\t\t\t\tsig := getSignature(r)\n\t\t\t\t\t\tif _, exists := groups[sig]; !exists {\n\t\t\t\t\t\t\tsigOrder = append(sigOrder, sig)\n\t\t\t\t\t\t}\n\t\t\t\t\t\tgroups[sig] = append(groups[sig], r)\n\t\t\t\t\t}\n\n\t\t\t\t\tfor _, sig := range sigOrder {\n\t\t\t\t\t\tsubChunk := groups[sig]\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1710-1715\n\t// Fix F5: Lấy hợp (union) toàn bộ keys của mọi bản ghi trong batch thay vì chỉ records[0]\n\tkeys := unionSortedKeys(records)\n\tcols := make([]string, len(keys))\n\tfor i, k := range keys {\n\t\tcols[i] = quoteTransmuteIdent(k)\n\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6397,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8915,
+                "INCORRECT": 0.0881,
+                "UNSUPPORTED": 0.0204
+              },
+              "confidence": 0.6397,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 734,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "BatchBuffer.batchUpsert calls dedupByConflictKey(sc.Records) before signature grouping and iterates deterministically over sigOrder, while bulkUpsertMaster calls unionSortedKeys(records) to include columns from all records in the batch.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:728-745\n\t\t\t\t\tdeduped := dedupByConflictKey(sc.Records)\n\n\t\t\t\t\t// CDC Priority: \"Accuracy and Safety first, Speed second\"\n\t\t\t\t\t// Signature Grouping: Group records by exact schema signature to guarantee\n\t\t\t\t\t// that multi-row upserts do not force `NULL` into missing fields when\n\t\t\t\t\t// records in the same chunk have heterogeneous schemas (spec drift).\n\t\t\t\t\tgroups := make(map[string][]*shadow.UpsertRecord)\n\t\t\t\t\tsigOrder := make([]string, 0, len(deduped))\n\t\t\t\t\tfor _, r := range deduped {\n\t\t\t\t\t\tsig := getSignature(r)\n\t\t\t\t\t\tif _, exists := groups[sig]; !exists {\n\t\t\t\t\t\t\tsigOrder = append(sigOrder, sig)\n\t\t\t\t\t\t}\n\t\t\t\t\t\tgroups[sig] = append(groups[sig], r)\n\t\t\t\t\t}\n\n\t\t\t\t\tfor _, sig := range sigOrder {\n\t\t\t\t\t\tsubChunk := groups[sig]\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1710-1715\n\t// Fix F5: Lấy hợp (union) toàn bộ keys của mọi bản ghi trong batch thay vì chỉ records[0]\n\tkeys := unionSortedKeys(records)\n\tcols := make([]string, len(keys))\n\tfor i, k := range keys {\n\t\tcols[i] = quoteTransmuteIdent(k)\n\t}",
+          "flow": "batchUpsert -> dedupByConflictKey -> sigOrder & bulkUpsertMaster -> unionSortedKeys(records)"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2596,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6414,
+                "INCORRECT": 0.2994,
+                "UNSUPPORTED": 0.0592
+              },
+              "confidence": 0.2596,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 739,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "batchUpsert -> dedupByConflictKey -> sigOrder & bulkUpsertMaster -> unionSortedKeys(records)",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:728-745\n\t\t\t\t\tdeduped := dedupByConflictKey(sc.Records)\n\n\t\t\t\t\t// CDC Priority: \"Accuracy and Safety first, Speed second\"\n\t\t\t\t\t// Signature Grouping: Group records by exact schema signature to guarantee\n\t\t\t\t\t// that multi-row upserts do not force `NULL` into missing fields when\n\t\t\t\t\t// records in the same chunk have heterogeneous schemas (spec drift).\n\t\t\t\t\tgroups := make(map[string][]*shadow.UpsertRecord)\n\t\t\t\t\tsigOrder := make([]string, 0, len(deduped))\n\t\t\t\t\tfor _, r := range deduped {\n\t\t\t\t\t\tsig := getSignature(r)\n\t\t\t\t\t\tif _, exists := groups[sig]; !exists {\n\t\t\t\t\t\t\tsigOrder = append(sigOrder, sig)\n\t\t\t\t\t\t}\n\t\t\t\t\t\tgroups[sig] = append(groups[sig], r)\n\t\t\t\t\t}\n\n\t\t\t\t\tfor _, sig := range sigOrder {\n\t\t\t\t\t\tsubChunk := groups[sig]\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1710-1715\n\t// Fix F5: Lấy hợp (union) toàn bộ keys của mọi bản ghi trong batch thay vì chỉ records[0]\n\tkeys := unionSortedKeys(records)\n\tcols := make([]string, len(keys))\n\tfor i, k := range keys {\n\t\tcols[i] = quoteTransmuteIdent(k)\n\t}",
+          "claim": "BatchBuffer.batchUpsert calls dedupByConflictKey(sc.Records) before signature grouping and iterates deterministically over sigOrder, while bulkUpsertMaster calls unionSortedKeys(records) to include columns from all records in the batch."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.521,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8968,
+                "NO": 0.1032
+              },
+              "confidence": 0.521,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 648,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:728-745\n\t\t\t\t\tdeduped := dedupByConflictKey(sc.Records)\n\n\t\t\t\t\t// CDC Priority: \"Accuracy and Safety first, Speed second\"\n\t\t\t\t\t// Signature Grouping: Group records by exact schema signature to guarantee\n\t\t\t\t\t// that multi-row upserts do not force `NULL` into missing fields when\n\t\t\t\t\t// records in the same chunk have heterogeneous schemas (spec drift).\n\t\t\t\t\tgroups := make(map[string][]*shadow.UpsertRecord)\n\t\t\t\t\tsigOrder := make([]string, 0, len(deduped))\n\t\t\t\t\tfor _, r := range deduped {\n\t\t\t\t\t\tsig := getSignature(r)\n\t\t\t\t\t\tif _, exists := groups[sig]; !exists {\n\t\t\t\t\t\t\tsigOrder = append(sigOrder, sig)\n\t\t\t\t\t\t}\n\t\t\t\t\t\tgroups[sig] = append(groups[sig], r)\n\t\t\t\t\t}\n\n\t\t\t\t\tfor _, sig := range sigOrder {\n\t\t\t\t\t\tsubChunk := groups[sig]\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1710-1715\n\t// Fix F5: Lấy hợp (union) toàn bộ keys của mọi bản ghi trong batch thay vì chỉ records[0]\n\tkeys := unionSortedKeys(records)\n\tcols := make([]string, len(keys))\n\tfor i, k := range keys {\n\t\tcols[i] = quoteTransmuteIdent(k)\n\t}",
+          "claim": "BatchBuffer.batchUpsert calls dedupByConflictKey(sc.Records) before signature grouping and iterates deterministically over sigOrder, while bulkUpsertMaster calls unionSortedKeys(records) to include columns from all records in the batch."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "category": "CTRL",
+    "kind": "control_true",
+    "claim": "In dedupByConflictKey, if len(records) <= 1, the function immediately returns the input records slice unchanged.",
+    "flow": "dedupByConflictKey -> len(records) <= 1",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go:90-93\nfunc dedupByConflictKey(records []*shadow.UpsertRecord) []*shadow.UpsertRecord {\n\tif len(records) <= 1 {\n\t\treturn records\n\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.8167,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9577,
+                "INCORRECT": 0.0293,
+                "UNSUPPORTED": 0.013
+              },
+              "confidence": 0.8167,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 252,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In dedupByConflictKey, if len(records) <= 1, the function immediately returns the input records slice unchanged.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go:90-93\nfunc dedupByConflictKey(records []*shadow.UpsertRecord) []*shadow.UpsertRecord {\n\tif len(records) <= 1 {\n\t\treturn records\n\t}",
+          "flow": "dedupByConflictKey -> len(records) <= 1"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2281,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6405,
+                "INCORRECT": 0.0835,
+                "UNSUPPORTED": 0.276
+              },
+              "confidence": 0.2281,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 258,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "dedupByConflictKey -> len(records) <= 1",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go:90-93\nfunc dedupByConflictKey(records []*shadow.UpsertRecord) []*shadow.UpsertRecord {\n\tif len(records) <= 1 {\n\t\treturn records\n\t}",
+          "claim": "In dedupByConflictKey, if len(records) <= 1, the function immediately returns the input records slice unchanged."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.474,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.1188,
+                "NO": 0.8812
+              },
+              "confidence": 0.474,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 177,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go:90-93\nfunc dedupByConflictKey(records []*shadow.UpsertRecord) []*shadow.UpsertRecord {\n\tif len(records) <= 1 {\n\t\treturn records\n\t}",
+          "claim": "In dedupByConflictKey, if len(records) <= 1, the function immediately returns the input records slice unchanged."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "category": "CTRL",
+    "kind": "control_false",
+    "claim": "In bulkUpsertMaster, the column list keys is still extracted exclusively from the first element records[0] via sortedKeysAny(records[0]), ignoring columns in subsequent records.",
+    "flow": "bulkUpsertMaster -> unionSortedKeys(records)",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1710-1715\n\t// Fix F5: Lấy hợp (union) toàn bộ keys của mọi bản ghi trong batch thay vì chỉ records[0]\n\tkeys := unionSortedKeys(records)\n\tcols := make([]string, len(keys))\n\tfor i, k := range keys {\n\t\tcols[i] = quoteTransmuteIdent(k)\n\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1726,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5807,
+                "INCORRECT": 0.3205,
+                "UNSUPPORTED": 0.0988
+              },
+              "confidence": 0.1726,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 303,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In bulkUpsertMaster, the column list keys is still extracted exclusively from the first element records[0] via sortedKeysAny(records[0]), ignoring columns in subsequent records.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1710-1715\n\t// Fix F5: Lấy hợp (union) toàn bộ keys của mọi bản ghi trong batch thay vì chỉ records[0]\n\tkeys := unionSortedKeys(records)\n\tcols := make([]string, len(keys))\n\tfor i, k := range keys {\n\t\tcols[i] = quoteTransmuteIdent(k)\n\t}",
+          "flow": "bulkUpsertMaster -> unionSortedKeys(records)"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.2779,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.0821,
+                "INCORRECT": 0.6945,
+                "UNSUPPORTED": 0.2234
+              },
+              "confidence": 0.2779,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 308,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "bulkUpsertMaster -> unionSortedKeys(records)",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1710-1715\n\t// Fix F5: Lấy hợp (union) toàn bộ keys của mọi bản ghi trong batch thay vì chỉ records[0]\n\tkeys := unionSortedKeys(records)\n\tcols := make([]string, len(keys))\n\tfor i, k := range keys {\n\t\tcols[i] = quoteTransmuteIdent(k)\n\t}",
+          "claim": "In bulkUpsertMaster, the column list keys is still extracted exclusively from the first element records[0] via sortedKeysAny(records[0]), ignoring columns in subsequent records."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.0666,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.6507,
+                "NO": 0.3493
+              },
+              "confidence": 0.0666,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 230,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1710-1715\n\t// Fix F5: Lấy hợp (union) toàn bộ keys của mọi bản ghi trong batch thay vì chỉ records[0]\n\tkeys := unionSortedKeys(records)\n\tcols := make([]string, len(keys))\n\tfor i, k := range keys {\n\t\tcols[i] = quoteTransmuteIdent(k)\n\t}",
+          "claim": "In bulkUpsertMaster, the column list keys is still extracted exclusively from the first element records[0] via sortedKeysAny(records[0]), ignoring columns in subsequent records."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "category": "CTRL",
+    "kind": "control_false",
+    "claim": "In binarySearchSplit, when len(batch) == 1 and len(task.Req.Events) > 1, the function immediately marks the entire task as a poison pill without calling splitSingleTaskPayload.",
+    "flow": "binarySearchSplit -> len(batch) == 1 -> splitSingleTaskPayload",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:691-699\n\tif len(batch) == 1 {\n\t\ttask := batch[0]\n\t\t// Nếu 1 NATS message chứa nhiều Events hoặc nhiều SourceIDs, tiếp tục chia đôi\n\t\t// mảng Events / SourceIDs để cô lập chính xác 1 bản ghi Poison Pill duy nhất,\n\t\t// cứu toàn bộ các bản ghi hợp lệ đi cùng trong message đó.\n\t\tif len(task.Req.Events) > 1 || (len(task.Req.Events) == 0 && len(task.Req.SourceIDs) > 1) {\n\t\t\th.splitSingleTaskPayload(ctx, masterTable, task)\n\t\t\treturn\n\t\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.2654,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3306,
+                "INCORRECT": 0.6215,
+                "UNSUPPORTED": 0.0479
+              },
+              "confidence": 0.2654,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 400,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In binarySearchSplit, when len(batch) == 1 and len(task.Req.Events) > 1, the function immediately marks the entire task as a poison pill without calling splitSingleTaskPayload.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:691-699\n\tif len(batch) == 1 {\n\t\ttask := batch[0]\n\t\t// Nếu 1 NATS message chứa nhiều Events hoặc nhiều SourceIDs, tiếp tục chia đôi\n\t\t// mảng Events / SourceIDs để cô lập chính xác 1 bản ghi Poison Pill duy nhất,\n\t\t// cứu toàn bộ các bản ghi hợp lệ đi cùng trong message đó.\n\t\tif len(task.Req.Events) > 1 || (len(task.Req.Events) == 0 && len(task.Req.SourceIDs) > 1) {\n\t\t\th.splitSingleTaskPayload(ctx, masterTable, task)\n\t\t\treturn\n\t\t}",
+          "flow": "binarySearchSplit -> len(batch) == 1 -> splitSingleTaskPayload"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3105,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6384,
+                "INCORRECT": 0.3316,
+                "UNSUPPORTED": 0.0299
+              },
+              "confidence": 0.3105,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 406,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "binarySearchSplit -> len(batch) == 1 -> splitSingleTaskPayload",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:691-699\n\tif len(batch) == 1 {\n\t\ttask := batch[0]\n\t\t// Nếu 1 NATS message chứa nhiều Events hoặc nhiều SourceIDs, tiếp tục chia đôi\n\t\t// mảng Events / SourceIDs để cô lập chính xác 1 bản ghi Poison Pill duy nhất,\n\t\t// cứu toàn bộ các bản ghi hợp lệ đi cùng trong message đó.\n\t\tif len(task.Req.Events) > 1 || (len(task.Req.Events) == 0 && len(task.Req.SourceIDs) > 1) {\n\t\t\th.splitSingleTaskPayload(ctx, masterTable, task)\n\t\t\treturn\n\t\t}",
+          "claim": "In binarySearchSplit, when len(batch) == 1 and len(task.Req.Events) > 1, the function immediately marks the entire task as a poison pill without calling splitSingleTaskPayload."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.1963,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.2452,
+                "NO": 0.7548
+              },
+              "confidence": 0.1963,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 322,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:691-699\n\tif len(batch) == 1 {\n\t\ttask := batch[0]\n\t\t// Nếu 1 NATS message chứa nhiều Events hoặc nhiều SourceIDs, tiếp tục chia đôi\n\t\t// mảng Events / SourceIDs để cô lập chính xác 1 bản ghi Poison Pill duy nhất,\n\t\t// cứu toàn bộ các bản ghi hợp lệ đi cùng trong message đó.\n\t\tif len(task.Req.Events) > 1 || (len(task.Req.Events) == 0 && len(task.Req.SourceIDs) > 1) {\n\t\t\th.splitSingleTaskPayload(ctx, masterTable, task)\n\t\t\treturn\n\t\t}",
+          "claim": "In binarySearchSplit, when len(batch) == 1 and len(task.Req.Events) > 1, the function immediately marks the entire task as a poison pill without calling splitSingleTaskPayload."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

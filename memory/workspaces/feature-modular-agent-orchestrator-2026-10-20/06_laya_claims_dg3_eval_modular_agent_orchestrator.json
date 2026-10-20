@@ -1,0 +1,50 @@
+[
+  {
+    "id": "A-F1",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Finding F1: Hàm last_user_idx trong agy_guard.py xác định điểm neo điều phối dựa trên lượt USER_INPUT cuối cùng trong transcript.jsonl của phiên hội thoại đơn lẻ.",
+    "claim": "Hàm last_user_idx trong agy_guard.py duyệt ngược danh sách st và trả về chỉ số i đầu tiên có type bằng \"USER_INPUT\", hoặc trả về -1 nếu không tìm thấy.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:130-134\ndef last_user_idx(st: List[Dict[str, Any]]) -> int:\n    for i in range(len(st) - 1, -1, -1):\n        if st[i].get(\"type\") == \"USER_INPUT\":\n            return i\n    return -1"
+  },
+  {
+    "id": "A-F2",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Điểm mạnh độc quyền của bộ /agent: mutation_gate.py cưỡng chế cổng 3-Mutant Verification Gate, chỉ trả về exit code 0 khi Baseline PASS và tất cả >=3 Mutants đều bị KILLED.",
+    "claim": "Công cụ mutation_gate.py quy định mã thoát 0 là PASS khi Baseline PASS, tất cả >=3 Mutants bị KILLED và 100% SHA-256 được khôi phục.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/mutation_gate.py:8-11\nExit codes:\n  0 : PASS (Baseline PASS + All >=3 Mutants KILLED + 100% SHA-256 Restored)\n  2 : FAIL (Baseline FAIL or >=1 Mutant SURVIVED/TIMEOUT or Restore Mismatch)\n  3 : INVALID_INPUT (<3 mutants, invalid target_content, or SyntaxError mutant)"
+  },
+  {
+    "id": "A-F3",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Finding F6: OPERATOR_MAP.md ghi nhận Lessons Indexer (build_lessons_index.py) chỉ sinh INDEX.md và topics/*.md từ lessons.md chứ chưa đánh chỉ mục tìm kiếm cho các thư mục memory/workspaces/.",
+    "claim": "Trong OPERATOR_MAP.md, thành phần Lessons Indexer (tooling/build_lessons_index.py) có vai trò sinh memory/global/lessons/INDEX.md (<15KB) và topics/*.md từ lessons.md (Read-Only).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/OPERATOR_MAP.md:26-27\n| **Lessons Indexer** | `tooling/build_lessons_index.py` | Sinh `memory/global/lessons/INDEX.md` (`<15KB`) và `topics/*.md` từ `lessons.md` (Read-Only). |\n| **Process Linter** | `tooling/verify_governance.py` | Kiểm định cấu trúc tài liệu Workspace theo Tier (`T0–T3`) và định dạng Audit Log `05_progress_*.md`. |"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Control false sai lệch giá trị trả về mặc định của last_user_idx.",
+    "claim": "Hàm last_user_idx trong agy_guard.py trả về 9999 khi không tìm thấy phần tử nào có type bằng \"USER_INPUT\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:130-134\ndef last_user_idx(st: List[Dict[str, Any]]) -> int:\n    for i in range(len(st) - 1, -1, -1):\n        if st[i].get(\"type\") == \"USER_INPUT\":\n            return i\n    return -1"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Control false đảo ngược điều kiện PASS của mutation_gate.py.",
+    "claim": "Công cụ mutation_gate.py quy định mã thoát 0 là PASS khi tất cả Mutants đều SURVIVED.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/mutation_gate.py:8-11\nExit codes:\n  0 : PASS (Baseline PASS + All >=3 Mutants KILLED + 100% SHA-256 Restored)\n  2 : FAIL (Baseline FAIL or >=1 Mutant SURVIVED/TIMEOUT or Restore Mismatch)\n  3 : INVALID_INPUT (<3 mutants, invalid target_content, or SyntaxError mutant)"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "Control true kiểm chứng hằng số MIN_MUTANTS trong mutation_gate.py.",
+    "claim": "Hằng số MIN_MUTANTS trong mutation_gate.py có giá trị bằng 3.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/mutation_gate.py:28-29\nDEFAULT_WS_ROOT = AGENT_ROOT / \"memory\" / \"workspaces\"\nMIN_MUTANTS = 3"
+  }
+]

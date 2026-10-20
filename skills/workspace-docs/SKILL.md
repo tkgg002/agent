@@ -51,19 +51,23 @@ Mỗi file `01_requirements_<suffix>.md` **BẮT BUỘC** khai báo dòng `tier:
 
 ## 4. Chuẩn Project Manifest (`<project-root>/.agent-project.json` — ADR-07)
 
-Core `agent/` hoàn toàn độc lập với dự án. Mỗi dự án khai báo file `.agent-project.json` tại thư mục gốc của dự án để hook `H6` (fast-feedback) và `H7` (done-gate) tự động thực thi:
+Core `agent/` hoàn toàn độc lập với dự án. Mỗi dự án khai báo file `.agent-project.json` tại thư mục gốc của dự án để hook `H6` (fast-feedback), `H7` (done-gate) và `pentagi_bridge.py` (S5 DAST Gate) tự động thực thi:
 
 ```json
 {
   "name": "<project-name>",
+  "allowed_pentest_targets": ["http://localhost:8080", "http://127.0.0.1:8080"],
   "components": [
     {
       "name": "<component-name>",
       "path": "<relative-path-from-project-root>",
       "checks": ["<fast check command returning non-zero on failure>"],
       "test": "<full test suite command>",
-      "runtime_check": "<command verifying live process/port after restart>"
+      "runtime_check": "<command verifying live process/port after restart>",
+      "pentest_check": "<optional command triggering pentagi_bridge.py for local/staging DAST>"
     }
   ]
 }
 ```
+- `allowed_pentest_targets` *(tuỳ chọn, mặc định chỉ cho phép `localhost` / `127.0.0.1` / `[::1]`)*: Danh sách prefix URL được phép quét DAST qua `tooling/pentagi_bridge.py trigger`. Mọi domain nằm ngoài danh sách này bị chặn cứng để bảo vệ môi trường production.
+- `pentest_check` *(tuỳ chọn)*: Lệnh kiểm thử xâm nhập tự động có phạm vi (scoped DAST) chạy ở chặng `S5` đối với các service có HTTP/gRPC/GraphQL API.

@@ -1,0 +1,105 @@
+{
+  "mode": "claim",
+  "stage": "dg3",
+  "workspace": "audit-shadow-master-update-drop-2026-10-20",
+  "ts": "20261020T152525",
+  "trusted_rounds": [
+    "r1"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/06_laya_raw_dg3_20261020T152525.json",
+  "claims": [
+    {
+      "id": "IMPL-F1-DYNAMIC-PK-DELETE-AND-SPLIT",
+      "kind": "target",
+      "basis": "code",
+      "claim": "In TransmuterModule.RunEvents, delete events now call deleteFromMasterBySourceAndGpayIDs which resolves conflictTarget dynamically via resolveConflictTarget(binding, colTypes) and deletes by conflictTarget and _gpay_id; additionally, binarySearchSplit calls splitSingleTaskPayload when a single NATS task contains multiple Events or SourceIDs.",
+      "decision": "FLAG",
+      "resolved": "Verified in code and integration tests: deleteFromMasterBySourceAndGpayIDs resolves conflictTarget via resolveConflictTarget(binding, colTypes) and deletes by conflictTarget plus _gpay_id; binarySearchSplit calls splitSingleTaskPayload when len(task.Req.Events) > 1 or len(task.Req.SourceIDs) > 1. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1621-1683",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3879
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.0766
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.773
+        }
+      }
+    },
+    {
+      "id": "IMPL-F2-SHADOW-GPAY-SYNC-AND-CONFLICT-UPDATE",
+      "kind": "target",
+      "basis": "code",
+      "claim": "RunEvents pre-fetches Shadow _gpay_id values via lookupShadowGpayIDs and uses deterministicGpayID(shadowGID, e.KeySuffix) when shadowGID > 0, and bulkUpsertMaster includes _gpay_id in ON CONFLICT DO UPDATE SET whenever conflictTarget != \"_gpay_id\".",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5406
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3055
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8079
+        }
+      }
+    },
+    {
+      "id": "IMPL-F3-INCREMENTAL-RETROACTIVE-SCAN",
+      "kind": "target",
+      "basis": "code",
+      "claim": "syncUpdatedShadowRowsBeforeCursor scans Shadow rows with _gpay_id <= maxCursor that have COALESCE(_deleted, false) = true or _updated_at >= cutoff and passes them to processBatch during incremental sync.",
+      "decision": "FLAG",
+      "resolved": "Verified in code and integration tests: syncUpdatedShadowRowsBeforeCursor scans Shadow rows with _gpay_id <= maxCursor that have COALESCE(_deleted, false) = true or _updated_at >= cutoff and calls processBatch. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1508-1535",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2043
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3569
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.5489
+        }
+      }
+    },
+    {
+      "id": "IMPL-F4-F5-DEDUP-MERGE-AND-UNION-KEYS",
+      "kind": "target",
+      "basis": "code",
+      "claim": "BatchBuffer.batchUpsert calls dedupByConflictKey(sc.Records) before signature grouping and iterates deterministically over sigOrder, while bulkUpsertMaster calls unionSortedKeys(records) to include columns from all records in the batch.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6397
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2596
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.521
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

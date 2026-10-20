@@ -1,0 +1,1070 @@
+[
+  {
+    "id": "DG1-S-RC",
+    "category": "S-RC",
+    "kind": "target",
+    "claim": "Root causes of Shadow-to-Master UPDATE/DELETE drops are: (1) DELETE WHERE _source_id = ? failing with SQLSTATE 42703 on Master tables where _source_id was dropped, coupled with binarySearchSplit discarding the entire single-task NATS batch; (2) Split-Brain _gpay_id between RunEvents (SHA-256) and Run (Sonyflake) breaking Segment B Recon/Heal; (3) Incremental Run() filtering only _gpay_id > lastGpayID which misses updated rows whose _gpay_id did not change; and (4) BatchBuffer grouping by signature before cross-signature deduplication.",
+    "flow": "Shadow -> NATS -> TransmuteHandler -> TransmuterModule -> Master DB",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:672-676\nif ev.IsDelete || ev.Op == \"d\" {\n\tsqlDel := fmt.Sprintf(`DELETE FROM %s WHERE _source_id = ?`,\n\t\tquoteTransmuteQualified(masterRow.MasterSchema, masterRow.MasterTable))\n\tdelErr := masterDB.WithContext(ctx).Exec(sqlDel, ev.SourceID).Error\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:690-712\nfunc (h *TransmuteHandler) binarySearchSplit(ctx context.Context, masterTable string, batch []NatsMsgTask) {\n\tif len(batch) == 1 {\n\t\ttask := batch[0]\n\t\tpoisonErr := fmt.Errorf(\"poison pill isolated\")\n\t\ttask.complete(poisonErr)\n\t\treturn\n\t}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:718-724\nrec[\"_gpay_id\"] = deterministicSourceGpayID(ev.SourceID, e.KeySuffix)",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5691,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8541,
+                "INCORRECT": 0.1262,
+                "UNSUPPORTED": 0.0198
+              },
+              "confidence": 0.5691,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 621,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Root causes of Shadow-to-Master UPDATE/DELETE drops are: (1) DELETE WHERE _source_id = ? failing with SQLSTATE 42703 on Master tables where _source_id was dropped, coupled with binarySearchSplit discarding the entire single-task NATS batch; (2) Split-Brain _gpay_id between RunEvents (SHA-256) and Run (Sonyflake) breaking Segment B Recon/Heal; (3) Incremental Run() filtering only _gpay_id > lastGpayID which misses updated rows whose _gpay_id did not change; and (4) BatchBuffer grouping by signature before cross-signature deduplication.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:672-676\nif ev.IsDelete || ev.Op == \"d\" {\n\tsqlDel := fmt.Sprintf(`DELETE FROM %s WHERE _source_id = ?`,\n\t\tquoteTransmuteQualified(masterRow.MasterSchema, masterRow.MasterTable))\n\tdelErr := masterDB.WithContext(ctx).Exec(sqlDel, ev.SourceID).Error\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:690-712\nfunc (h *TransmuteHandler) binarySearchSplit(ctx context.Context, masterTable string, batch []NatsMsgTask) {\n\tif len(batch) == 1 {\n\t\ttask := batch[0]\n\t\tpoisonErr := fmt.Errorf(\"poison pill isolated\")\n\t\ttask.complete(poisonErr)\n\t\treturn\n\t}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:718-724\nrec[\"_gpay_id\"] = deterministicSourceGpayID(ev.SourceID, e.KeySuffix)",
+          "flow": "Shadow -> NATS -> TransmuteHandler -> TransmuterModule -> Master DB"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.1144,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3748,
+                "INCORRECT": 0.5012,
+                "UNSUPPORTED": 0.124
+              },
+              "confidence": 0.1144,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 627,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "Shadow -> NATS -> TransmuteHandler -> TransmuterModule -> Master DB",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:672-676\nif ev.IsDelete || ev.Op == \"d\" {\n\tsqlDel := fmt.Sprintf(`DELETE FROM %s WHERE _source_id = ?`,\n\t\tquoteTransmuteQualified(masterRow.MasterSchema, masterRow.MasterTable))\n\tdelErr := masterDB.WithContext(ctx).Exec(sqlDel, ev.SourceID).Error\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:690-712\nfunc (h *TransmuteHandler) binarySearchSplit(ctx context.Context, masterTable string, batch []NatsMsgTask) {\n\tif len(batch) == 1 {\n\t\ttask := batch[0]\n\t\tpoisonErr := fmt.Errorf(\"poison pill isolated\")\n\t\ttask.complete(poisonErr)\n\t\treturn\n\t}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:718-724\nrec[\"_gpay_id\"] = deterministicSourceGpayID(ev.SourceID, e.KeySuffix)",
+          "claim": "Root causes of Shadow-to-Master UPDATE/DELETE drops are: (1) DELETE WHERE _source_id = ? failing with SQLSTATE 42703 on Master tables where _source_id was dropped, coupled with binarySearchSplit discarding the entire single-task NATS batch; (2) Split-Brain _gpay_id between RunEvents (SHA-256) and Run (Sonyflake) breaking Segment B Recon/Heal; (3) Incremental Run() filtering only _gpay_id > lastGpayID which misses updated rows whose _gpay_id did not change; and (4) BatchBuffer grouping by signature before cross-signature deduplication."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8133,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9715,
+                "NO": 0.0285
+              },
+              "confidence": 0.8133,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 543,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:672-676\nif ev.IsDelete || ev.Op == \"d\" {\n\tsqlDel := fmt.Sprintf(`DELETE FROM %s WHERE _source_id = ?`,\n\t\tquoteTransmuteQualified(masterRow.MasterSchema, masterRow.MasterTable))\n\tdelErr := masterDB.WithContext(ctx).Exec(sqlDel, ev.SourceID).Error\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:690-712\nfunc (h *TransmuteHandler) binarySearchSplit(ctx context.Context, masterTable string, batch []NatsMsgTask) {\n\tif len(batch) == 1 {\n\t\ttask := batch[0]\n\t\tpoisonErr := fmt.Errorf(\"poison pill isolated\")\n\t\ttask.complete(poisonErr)\n\t\treturn\n\t}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:718-724\nrec[\"_gpay_id\"] = deterministicSourceGpayID(ev.SourceID, e.KeySuffix)",
+          "claim": "Root causes of Shadow-to-Master UPDATE/DELETE drops are: (1) DELETE WHERE _source_id = ? failing with SQLSTATE 42703 on Master tables where _source_id was dropped, coupled with binarySearchSplit discarding the entire single-task NATS batch; (2) Split-Brain _gpay_id between RunEvents (SHA-256) and Run (Sonyflake) breaking Segment B Recon/Heal; (3) Incremental Run() filtering only _gpay_id > lastGpayID which misses updated rows whose _gpay_id did not change; and (4) BatchBuffer grouping by signature before cross-signature deduplication."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "DG1-S-FIX",
+    "category": "S-FIX",
+    "kind": "target",
+    "claim": "The proposed solution in 09_tasks_solution_shadow_master_update_drop.md resolves all root causes by: looking up Shadow _gpay_id in RunEvents and allowing _gpay_id updates when conflictTarget != \"_gpay_id\", deleting on Master via conflictTarget/_gpay_id instead of _source_id, splitting single-task Events/SourceIDs payloads in binarySearchSplit, deduplicating by PrimaryKeyValue before signature grouping in BatchBuffer, and scanning recently updated Shadow rows / triggering NATS transmute after ReconHealer.",
+    "flow": "09_tasks_solution_shadow_master_update_drop.md -> Single-Best Solution",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/09_tasks_solution_shadow_master_update_drop.md:20-34\n- **Đồng nhất `_gpay_id` giữa Shadow và Master:** Trong `RunEvents()`, trước khi xử lý các sự kiện của một binding, thực hiện 1 câu truy vấn batch nhẹ (`SELECT \"_source_id\", \"_gpay_id\" FROM <shadow_table> WHERE \"_source_id\" IN (?)`) để lấy đúng `_gpay_id` (Sonyflake) thực tế đang lưu trên bảng Shadow. Chỉ khi không tìm thấy mới fallback về `deterministicSourceGpayID(ev.SourceID, e.KeySuffix)`.\n- **Chia đôi đến tận cấp độ `Events` / `SourceIDs` trong `binarySearchSplit`:** Khi `len(batch) == 1`, nếu `len(batch[0].Req.Events) > 1` (hoặc `len(batch[0].Req.SourceIDs) > 1`), tiếp tục chia đôi mảng `Events` / `SourceIDs` bên trong task đó để thực thi riêng rẽ từng nửa, đảm bảo **chỉ cô lập đúng 1 bản ghi Poison Pill duy nhất** và **cứu sống 100% các bản ghi `UPDATE` hợp lệ còn lại trong cùng message NATS**!",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.8976,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9796,
+                "INCORRECT": 0.0134,
+                "UNSUPPORTED": 0.007
+              },
+              "confidence": 0.8976,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 591,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "The proposed solution in 09_tasks_solution_shadow_master_update_drop.md resolves all root causes by: looking up Shadow _gpay_id in RunEvents and allowing _gpay_id updates when conflictTarget != \"_gpay_id\", deleting on Master via conflictTarget/_gpay_id instead of _source_id, splitting single-task Events/SourceIDs payloads in binarySearchSplit, deduplicating by PrimaryKeyValue before signature grouping in BatchBuffer, and scanning recently updated Shadow rows / triggering NATS transmute after ReconHealer.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/09_tasks_solution_shadow_master_update_drop.md:20-34\n- **Đồng nhất `_gpay_id` giữa Shadow và Master:** Trong `RunEvents()`, trước khi xử lý các sự kiện của một binding, thực hiện 1 câu truy vấn batch nhẹ (`SELECT \"_source_id\", \"_gpay_id\" FROM <shadow_table> WHERE \"_source_id\" IN (?)`) để lấy đúng `_gpay_id` (Sonyflake) thực tế đang lưu trên bảng Shadow. Chỉ khi không tìm thấy mới fallback về `deterministicSourceGpayID(ev.SourceID, e.KeySuffix)`.\n- **Chia đôi đến tận cấp độ `Events` / `SourceIDs` trong `binarySearchSplit`:** Khi `len(batch) == 1`, nếu `len(batch[0].Req.Events) > 1` (hoặc `len(batch[0].Req.SourceIDs) > 1`), tiếp tục chia đôi mảng `Events` / `SourceIDs` bên trong task đó để thực thi riêng rẽ từng nửa, đảm bảo **chỉ cô lập đúng 1 bản ghi Poison Pill duy nhất** và **cứu sống 100% các bản ghi `UPDATE` hợp lệ còn lại trong cùng message NATS**!",
+          "flow": "09_tasks_solution_shadow_master_update_drop.md -> Single-Best Solution"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3395,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6487,
+                "INCORRECT": 0.3311,
+                "UNSUPPORTED": 0.0202
+              },
+              "confidence": 0.3395,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 597,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "09_tasks_solution_shadow_master_update_drop.md -> Single-Best Solution",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/09_tasks_solution_shadow_master_update_drop.md:20-34\n- **Đồng nhất `_gpay_id` giữa Shadow và Master:** Trong `RunEvents()`, trước khi xử lý các sự kiện của một binding, thực hiện 1 câu truy vấn batch nhẹ (`SELECT \"_source_id\", \"_gpay_id\" FROM <shadow_table> WHERE \"_source_id\" IN (?)`) để lấy đúng `_gpay_id` (Sonyflake) thực tế đang lưu trên bảng Shadow. Chỉ khi không tìm thấy mới fallback về `deterministicSourceGpayID(ev.SourceID, e.KeySuffix)`.\n- **Chia đôi đến tận cấp độ `Events` / `SourceIDs` trong `binarySearchSplit`:** Khi `len(batch) == 1`, nếu `len(batch[0].Req.Events) > 1` (hoặc `len(batch[0].Req.SourceIDs) > 1`), tiếp tục chia đôi mảng `Events` / `SourceIDs` bên trong task đó để thực thi riêng rẽ từng nửa, đảm bảo **chỉ cô lập đúng 1 bản ghi Poison Pill duy nhất** và **cứu sống 100% các bản ghi `UPDATE` hợp lệ còn lại trong cùng message NATS**!",
+          "claim": "The proposed solution in 09_tasks_solution_shadow_master_update_drop.md resolves all root causes by: looking up Shadow _gpay_id in RunEvents and allowing _gpay_id updates when conflictTarget != \"_gpay_id\", deleting on Master via conflictTarget/_gpay_id instead of _source_id, splitting single-task Events/SourceIDs payloads in binarySearchSplit, deduplicating by PrimaryKeyValue before signature grouping in BatchBuffer, and scanning recently updated Shadow rows / triggering NATS transmute after ReconHealer."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5594,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9088,
+                "NO": 0.0912
+              },
+              "confidence": 0.5594,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 508,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/09_tasks_solution_shadow_master_update_drop.md:20-34\n- **Đồng nhất `_gpay_id` giữa Shadow và Master:** Trong `RunEvents()`, trước khi xử lý các sự kiện của một binding, thực hiện 1 câu truy vấn batch nhẹ (`SELECT \"_source_id\", \"_gpay_id\" FROM <shadow_table> WHERE \"_source_id\" IN (?)`) để lấy đúng `_gpay_id` (Sonyflake) thực tế đang lưu trên bảng Shadow. Chỉ khi không tìm thấy mới fallback về `deterministicSourceGpayID(ev.SourceID, e.KeySuffix)`.\n- **Chia đôi đến tận cấp độ `Events` / `SourceIDs` trong `binarySearchSplit`:** Khi `len(batch) == 1`, nếu `len(batch[0].Req.Events) > 1` (hoặc `len(batch[0].Req.SourceIDs) > 1`), tiếp tục chia đôi mảng `Events` / `SourceIDs` bên trong task đó để thực thi riêng rẽ từng nửa, đảm bảo **chỉ cô lập đúng 1 bản ghi Poison Pill duy nhất** và **cứu sống 100% các bản ghi `UPDATE` hợp lệ còn lại trong cùng message NATS**!",
+          "claim": "The proposed solution in 09_tasks_solution_shadow_master_update_drop.md resolves all root causes by: looking up Shadow _gpay_id in RunEvents and allowing _gpay_id updates when conflictTarget != \"_gpay_id\", deleting on Master via conflictTarget/_gpay_id instead of _source_id, splitting single-task Events/SourceIDs payloads in binarySearchSplit, deduplicating by PrimaryKeyValue before signature grouping in BatchBuffer, and scanning recently updated Shadow rows / triggering NATS transmute after ReconHealer."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "DG1-S-IMPACT",
+    "category": "S-IMPACT",
+    "kind": "target",
+    "claim": "The proposed changes are localized to TransmuterModule (transmuter.go), TransmuteHandler (transmute_handler.go), BatchBuffer (batch_buffer.go / batch_buffer_utils.go), and ReconHealer / ReconExecuteHealHandler without altering external NATS subject contracts or requiring destructive DDL migrations on Master tables.",
+    "flow": "Component scope impact verification",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/09_tasks_solution_shadow_master_update_drop.md:49-53\n### 2.1. Component 1: `internal/service/master/transmuter.go` (Fix `F1`, `F2`, `F3`, `F5`)\n#### A. Đồng nhất `_gpay_id` từ bảng Shadow & Sửa lỗi `DELETE` + Retry trong `RunEvents()`\nREF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/09_tasks_solution_shadow_master_update_drop.md:257-260\n### 2.2. Component 2: `internal/handler/master/transmute_handler.go` (Fix `F1` — Chia đôi cấp độ `Events`/`SourceIDs` & Mở rộng `isTransientError`)",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.0146,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2517,
+                "INCORRECT": 0.3839,
+                "UNSUPPORTED": 0.3644
+              },
+              "confidence": 0.0146,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 456,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "The proposed changes are localized to TransmuterModule (transmuter.go), TransmuteHandler (transmute_handler.go), BatchBuffer (batch_buffer.go / batch_buffer_utils.go), and ReconHealer / ReconExecuteHealHandler without altering external NATS subject contracts or requiring destructive DDL migrations on Master tables.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/09_tasks_solution_shadow_master_update_drop.md:49-53\n### 2.1. Component 1: `internal/service/master/transmuter.go` (Fix `F1`, `F2`, `F3`, `F5`)\n#### A. Đồng nhất `_gpay_id` từ bảng Shadow & Sửa lỗi `DELETE` + Retry trong `RunEvents()`\nREF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/09_tasks_solution_shadow_master_update_drop.md:257-260\n### 2.2. Component 2: `internal/handler/master/transmute_handler.go` (Fix `F1` — Chia đôi cấp độ `Events`/`SourceIDs` & Mở rộng `isTransientError`)",
+          "flow": "Component scope impact verification"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.357,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.0447,
+                "INCORRECT": 0.7282,
+                "UNSUPPORTED": 0.2271
+              },
+              "confidence": 0.357,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 462,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "Component scope impact verification",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/09_tasks_solution_shadow_master_update_drop.md:49-53\n### 2.1. Component 1: `internal/service/master/transmuter.go` (Fix `F1`, `F2`, `F3`, `F5`)\n#### A. Đồng nhất `_gpay_id` từ bảng Shadow & Sửa lỗi `DELETE` + Retry trong `RunEvents()`\nREF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/09_tasks_solution_shadow_master_update_drop.md:257-260\n### 2.2. Component 2: `internal/handler/master/transmute_handler.go` (Fix `F1` — Chia đôi cấp độ `Events`/`SourceIDs` & Mở rộng `isTransientError`)",
+          "claim": "The proposed changes are localized to TransmuterModule (transmuter.go), TransmuteHandler (transmute_handler.go), BatchBuffer (batch_buffer.go / batch_buffer_utils.go), and ReconHealer / ReconExecuteHealHandler without altering external NATS subject contracts or requiring destructive DDL migrations on Master tables."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.1278,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.7072,
+                "NO": 0.2928
+              },
+              "confidence": 0.1278,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 390,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/09_tasks_solution_shadow_master_update_drop.md:49-53\n### 2.1. Component 1: `internal/service/master/transmuter.go` (Fix `F1`, `F2`, `F3`, `F5`)\n#### A. Đồng nhất `_gpay_id` từ bảng Shadow & Sửa lỗi `DELETE` + Retry trong `RunEvents()`\nREF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/09_tasks_solution_shadow_master_update_drop.md:257-260\n### 2.2. Component 2: `internal/handler/master/transmute_handler.go` (Fix `F1` — Chia đôi cấp độ `Events`/`SourceIDs` & Mở rộng `isTransientError`)",
+          "claim": "The proposed changes are localized to TransmuterModule (transmuter.go), TransmuteHandler (transmute_handler.go), BatchBuffer (batch_buffer.go / batch_buffer_utils.go), and ReconHealer / ReconExecuteHealHandler without altering external NATS subject contracts or requiring destructive DDL migrations on Master tables."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "DG1-S-PATTERN",
+    "category": "S-PATTERN",
+    "kind": "target",
+    "claim": "The proposed solution adheres strictly to the existing codebase architecture and patterns, reusing deterministicGpayID, isRetryableDBError, quoteTransmuteIdent, and GORM batch queries on Shadow DB.",
+    "flow": "TransmuterModule existing patterns",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1172-1178\nfor _, e := range emits {\n\trecord := e.Cols\n\trecord[\"_gpay_id\"] = deterministicGpayID(row.GpayID, e.KeySuffix)\n\trecord[\"_source_ts\"] = row.SourceTs\n\trecord[\"_deleted\"] = false\n\tlocalRecords = append(localRecords, record)\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1412-1416\nkeys := sortedKeysAny(records[0])\ncols := make([]string, len(keys))\nfor i, k := range keys {\n\tcols[i] = quoteTransmuteIdent(k)\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4358,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7937,
+                "INCORRECT": 0.1591,
+                "UNSUPPORTED": 0.0471
+              },
+              "confidence": 0.4358,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 399,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "The proposed solution adheres strictly to the existing codebase architecture and patterns, reusing deterministicGpayID, isRetryableDBError, quoteTransmuteIdent, and GORM batch queries on Shadow DB.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1172-1178\nfor _, e := range emits {\n\trecord := e.Cols\n\trecord[\"_gpay_id\"] = deterministicGpayID(row.GpayID, e.KeySuffix)\n\trecord[\"_source_ts\"] = row.SourceTs\n\trecord[\"_deleted\"] = false\n\tlocalRecords = append(localRecords, record)\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1412-1416\nkeys := sortedKeysAny(records[0])\ncols := make([]string, len(keys))\nfor i, k := range keys {\n\tcols[i] = quoteTransmuteIdent(k)\n}",
+          "flow": "TransmuterModule existing patterns"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2146,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6641,
+                "INCORRECT": 0.2049,
+                "UNSUPPORTED": 0.131
+              },
+              "confidence": 0.2146,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 405,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "TransmuterModule existing patterns",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1172-1178\nfor _, e := range emits {\n\trecord := e.Cols\n\trecord[\"_gpay_id\"] = deterministicGpayID(row.GpayID, e.KeySuffix)\n\trecord[\"_source_ts\"] = row.SourceTs\n\trecord[\"_deleted\"] = false\n\tlocalRecords = append(localRecords, record)\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1412-1416\nkeys := sortedKeysAny(records[0])\ncols := make([]string, len(keys))\nfor i, k := range keys {\n\tcols[i] = quoteTransmuteIdent(k)\n}",
+          "claim": "The proposed solution adheres strictly to the existing codebase architecture and patterns, reusing deterministicGpayID, isRetryableDBError, quoteTransmuteIdent, and GORM batch queries on Shadow DB."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.0471,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.627,
+                "NO": 0.373
+              },
+              "confidence": 0.0471,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 331,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1172-1178\nfor _, e := range emits {\n\trecord := e.Cols\n\trecord[\"_gpay_id\"] = deterministicGpayID(row.GpayID, e.KeySuffix)\n\trecord[\"_source_ts\"] = row.SourceTs\n\trecord[\"_deleted\"] = false\n\tlocalRecords = append(localRecords, record)\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1412-1416\nkeys := sortedKeysAny(records[0])\ncols := make([]string, len(keys))\nfor i, k := range keys {\n\tcols[i] = quoteTransmuteIdent(k)\n}",
+          "claim": "The proposed solution adheres strictly to the existing codebase architecture and patterns, reusing deterministicGpayID, isRetryableDBError, quoteTransmuteIdent, and GORM batch queries on Shadow DB."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "category": "CTRL",
+    "kind": "control_true",
+    "claim": "In bulkUpsertMaster, the column list keys is extracted solely from the first element records[0] via sortedKeysAny(records[0]).",
+    "flow": "bulkUpsertMaster -> sortedKeysAny(records[0])",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1412-1416\nkeys := sortedKeysAny(records[0])\ncols := make([]string, len(keys))\nfor i, k := range keys {\n\tcols[i] = quoteTransmuteIdent(k)\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7906,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9498,
+                "INCORRECT": 0.0349,
+                "UNSUPPORTED": 0.0153
+              },
+              "confidence": 0.7906,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 262,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In bulkUpsertMaster, the column list keys is extracted solely from the first element records[0] via sortedKeysAny(records[0]).",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1412-1416\nkeys := sortedKeysAny(records[0])\ncols := make([]string, len(keys))\nfor i, k := range keys {\n\tcols[i] = quoteTransmuteIdent(k)\n}",
+          "flow": "bulkUpsertMaster -> sortedKeysAny(records[0])"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.1121,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3701,
+                "INCORRECT": 0.5031,
+                "UNSUPPORTED": 0.1269
+              },
+              "confidence": 0.1121,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 267,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "bulkUpsertMaster -> sortedKeysAny(records[0])",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1412-1416\nkeys := sortedKeysAny(records[0])\ncols := make([]string, len(keys))\nfor i, k := range keys {\n\tcols[i] = quoteTransmuteIdent(k)\n}",
+          "claim": "In bulkUpsertMaster, the column list keys is extracted solely from the first element records[0] via sortedKeysAny(records[0])."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5113,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8937,
+                "NO": 0.1063
+              },
+              "confidence": 0.5113,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 186,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1412-1416\nkeys := sortedKeysAny(records[0])\ncols := make([]string, len(keys))\nfor i, k := range keys {\n\tcols[i] = quoteTransmuteIdent(k)\n}",
+          "claim": "In bulkUpsertMaster, the column list keys is extracted solely from the first element records[0] via sortedKeysAny(records[0])."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "category": "CTRL",
+    "kind": "control_false",
+    "claim": "In TransmuterModule.RunEvents, when ev.IsDelete is true, the code performs a soft delete by executing UPDATE SET _deleted = true WHERE _gpay_id = ? instead of a hard DELETE statement.",
+    "flow": "TransmuterModule.RunEvents -> delete branch",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:672-676\nif ev.IsDelete || ev.Op == \"d\" {\n\tsqlDel := fmt.Sprintf(`DELETE FROM %s WHERE _source_id = ?`,\n\t\tquoteTransmuteQualified(masterRow.MasterSchema, masterRow.MasterTable))\n\tdelErr := masterDB.WithContext(ctx).Exec(sqlDel, ev.SourceID).Error",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2336,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6839,
+                "INCORRECT": 0.1456,
+                "UNSUPPORTED": 0.1704
+              },
+              "confidence": 0.2336,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 307,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In TransmuterModule.RunEvents, when ev.IsDelete is true, the code performs a soft delete by executing UPDATE SET _deleted = true WHERE _gpay_id = ? instead of a hard DELETE statement.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:672-676\nif ev.IsDelete || ev.Op == \"d\" {\n\tsqlDel := fmt.Sprintf(`DELETE FROM %s WHERE _source_id = ?`,\n\t\tquoteTransmuteQualified(masterRow.MasterSchema, masterRow.MasterTable))\n\tdelErr := masterDB.WithContext(ctx).Exec(sqlDel, ev.SourceID).Error",
+          "flow": "TransmuterModule.RunEvents -> delete branch"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2939,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6728,
+                "INCORRECT": 0.2751,
+                "UNSUPPORTED": 0.0521
+              },
+              "confidence": 0.2939,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 313,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "TransmuterModule.RunEvents -> delete branch",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:672-676\nif ev.IsDelete || ev.Op == \"d\" {\n\tsqlDel := fmt.Sprintf(`DELETE FROM %s WHERE _source_id = ?`,\n\t\tquoteTransmuteQualified(masterRow.MasterSchema, masterRow.MasterTable))\n\tdelErr := masterDB.WithContext(ctx).Exec(sqlDel, ev.SourceID).Error",
+          "claim": "In TransmuterModule.RunEvents, when ev.IsDelete is true, the code performs a soft delete by executing UPDATE SET _deleted = true WHERE _gpay_id = ? instead of a hard DELETE statement."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.3833,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8472,
+                "NO": 0.1528
+              },
+              "confidence": 0.3833,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 235,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:672-676\nif ev.IsDelete || ev.Op == \"d\" {\n\tsqlDel := fmt.Sprintf(`DELETE FROM %s WHERE _source_id = ?`,\n\t\tquoteTransmuteQualified(masterRow.MasterSchema, masterRow.MasterTable))\n\tdelErr := masterDB.WithContext(ctx).Exec(sqlDel, ev.SourceID).Error",
+          "claim": "In TransmuterModule.RunEvents, when ev.IsDelete is true, the code performs a soft delete by executing UPDATE SET _deleted = true WHERE _gpay_id = ? instead of a hard DELETE statement."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "category": "CTRL",
+    "kind": "control_false",
+    "claim": "In TransmuteHandler.binarySearchSplit, when len(batch) == 1, the function recursively splits task.Req.Events into two halves and calls processSubBatch on each half.",
+    "flow": "TransmuteHandler.binarySearchSplit -> len(batch) == 1",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:690-712\nfunc (h *TransmuteHandler) binarySearchSplit(ctx context.Context, masterTable string, batch []NatsMsgTask) {\n\tif len(batch) == 1 {\n\t\ttask := batch[0]\n\t\tpoisonErr := fmt.Errorf(\"poison pill isolated\")\n\t\th.replyErr(ctx, task.Msg, task.Req.CorrelationID, \"poison_pill_isolated\")\n\t\th.publishCompleted(ctx, task.Req, master.TransmuteResult{}, poisonErr, \"\")\n\t\ttask.complete(poisonErr)\n\t\treturn\n\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7675,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9406,
+                "INCORRECT": 0.0473,
+                "UNSUPPORTED": 0.0121
+              },
+              "confidence": 0.7675,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 374,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In TransmuteHandler.binarySearchSplit, when len(batch) == 1, the function recursively splits task.Req.Events into two halves and calls processSubBatch on each half.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:690-712\nfunc (h *TransmuteHandler) binarySearchSplit(ctx context.Context, masterTable string, batch []NatsMsgTask) {\n\tif len(batch) == 1 {\n\t\ttask := batch[0]\n\t\tpoisonErr := fmt.Errorf(\"poison pill isolated\")\n\t\th.replyErr(ctx, task.Msg, task.Req.CorrelationID, \"poison_pill_isolated\")\n\t\th.publishCompleted(ctx, task.Req, master.TransmuteResult{}, poisonErr, \"\")\n\t\ttask.complete(poisonErr)\n\t\treturn\n\t}",
+          "flow": "TransmuteHandler.binarySearchSplit -> len(batch) == 1"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.4418,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.0981,
+                "INCORRECT": 0.8121,
+                "UNSUPPORTED": 0.0898
+              },
+              "confidence": 0.4418,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 380,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "TransmuteHandler.binarySearchSplit -> len(batch) == 1",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:690-712\nfunc (h *TransmuteHandler) binarySearchSplit(ctx context.Context, masterTable string, batch []NatsMsgTask) {\n\tif len(batch) == 1 {\n\t\ttask := batch[0]\n\t\tpoisonErr := fmt.Errorf(\"poison pill isolated\")\n\t\th.replyErr(ctx, task.Msg, task.Req.CorrelationID, \"poison_pill_isolated\")\n\t\th.publishCompleted(ctx, task.Req, master.TransmuteResult{}, poisonErr, \"\")\n\t\ttask.complete(poisonErr)\n\t\treturn\n\t}",
+          "claim": "In TransmuteHandler.binarySearchSplit, when len(batch) == 1, the function recursively splits task.Req.Events into two halves and calls processSubBatch on each half."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.0083,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.4464,
+                "NO": 0.5536
+              },
+              "confidence": 0.0083,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 297,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:690-712\nfunc (h *TransmuteHandler) binarySearchSplit(ctx context.Context, masterTable string, batch []NatsMsgTask) {\n\tif len(batch) == 1 {\n\t\ttask := batch[0]\n\t\tpoisonErr := fmt.Errorf(\"poison pill isolated\")\n\t\th.replyErr(ctx, task.Msg, task.Req.CorrelationID, \"poison_pill_isolated\")\n\t\th.publishCompleted(ctx, task.Req, master.TransmuteResult{}, poisonErr, \"\")\n\t\ttask.complete(poisonErr)\n\t\treturn\n\t}",
+          "claim": "In TransmuteHandler.binarySearchSplit, when len(batch) == 1, the function recursively splits task.Req.Events into two halves and calls processSubBatch on each half."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

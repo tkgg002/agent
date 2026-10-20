@@ -1,0 +1,11 @@
+# 05. Progress Log — Audit Shadow -> Master Update Drop
+
+- [2026-10-20T13:39:30+07:00] [Agent:Gemini-4-Argon] START S0/S1 Intake: Khởi tạo workspace `audit-shadow-master-update-drop-2026-10-20` (Tier T2, Propose-Only Audit) để điều tra lỗ hổng rớt ~3-4 bản ghi UPDATE/ngày trên ~15k records từ Shadow sang Master (Mongo -> Postgres).
+- [2026-10-20T14:05:00+07:00] [Agent:Gemini-4-Argon] S2 Read-Only Investigation Completed: Xác định 5 lỗ hổng gốc rễ (`F1..F5`) từ mã nguồn và DB runtime (`payment_bills` có 14 dòng rớt UPDATE, 2 dòng rớt DELETE, 1482 dòng lệch `_gpay_id`; `payment_bills_1` có 344 dòng rớt UPDATE; `export_jobs` có 520 dòng lệch `_gpay_id`).
+- [2026-10-20T14:13:00+07:00] [Agent:Gemini-4-Argon] S3 Solution Design Completed: Xuất bản `13_analysis_shadow_master_update_drop.md` và `09_tasks_solution_shadow_master_update_drop.md` (1 phương án tối ưu duy nhất kèm Code Demo).
+- [2026-10-20T14:18:30+07:00] [Agent:Gemini-4-Argon] DG3 Audit Gate PASS: `06_laya_summary_dg3_20261020T141652.json` (`trusted_rounds=["r3"]`, `gate="PASS"`).
+- [2026-10-20T14:19:41+07:00] [Agent:Gemini-4-Argon] DG1 Solution Gate PASS: `06_laya_summary_dg1_20261020T141834.json` (`trusted_rounds=["r3"]`, `gate="PASS"`).
+- [2026-10-20T14:19:44+07:00] [Agent:Gemini-4-Argon] DG2 Code Demo Gate PASS: `06_laya_summary_dg2_20261020T141837.json` (`trusted_rounds=["r3"]`, `gate="PASS"`). Dừng ở chế độ Propose-Only chờ lệnh APPROVE từ User.
+- [2026-10-20T14:38:00+07:00] [Agent:Gemini-4-Argon] Mid-Session Fix (Rule #5): Ghi bài học mới vào `lessons.md` (`1951 -> 1958` dòng), đồng bộ `lessons/INDEX.md` (`251/251/251`). Chuẩn hóa lại `09_tasks_solution_shadow_master_update_drop.md` và `08_tasks_shadow_master_update_drop.md` theo đúng ánh xạ 1:1 với từng sơ hở `F1..F5` và đọc động khóa `pk` từ `master_binding.transform_spec` (`parsePKFromSpec` / `resolveConflictTarget`).
+- [2026-10-20T14:43:05+07:00] [Agent:Gemini-4-Argon] DG1 & DG2 Re-Verified PASS: `06_laya_summary_dg1_20261020T144218.json` (`gate="PASS"`) & `06_laya_summary_dg2_20261020T144221.json` (`gate="PASS"`). Chờ lệnh APPROVE từ User.
+- [2026-10-20T14:48:35+07:00] [Agent:Gemini-4-Argon] START S4 Execute: Nhận lệnh APPROVE từ User, bắt đầu tạo restore-point và triển khai giải pháp khắc phục 5 sơ hở F1..F5 theo `09_tasks_solution_shadow_master_update_drop.md`.

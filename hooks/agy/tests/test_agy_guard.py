@@ -893,6 +893,130 @@ class TestAgyGuard(unittest.TestCase):
         )
         self.assertEqual(res, {})
 
+    # 29. H4b: Closed-Loop S5 -> S3 Re-Plan blocks source edit after audit_report_ until 09_tasks_solution is updated and re-approved
+    def test_29_h4b_blocks_source_edit_after_s5_audit_until_s3_replan_and_new_approve(self) -> None:
+        ws_dir = self.ws_root / "feat-replan"
+        ws_dir.mkdir(parents=True, exist_ok=True)
+        (ws_dir / "06_laya_summary_dg1_test.json").write_text(
+            json.dumps({"gate": "PASS"}), encoding="utf-8"
+        )
+        sol_file = ws_dir / "09_tasks_solution_rp.md"
+        aud_file = ws_dir / "audit_report_rp.md"
+        src_file = self.tmp / "app" / "service.py"
+
+        # Case A: audit_report_ written AFTER 09_tasks_solution -> direct source edit denied
+        tr_locked = self._write_transcript(
+            [
+                {
+                    "tool_calls": [
+                        {"name": "replace_file_content", "args": {"TargetFile": str(ws_dir / "05_progress_rp.md")}},
+                        {"name": "write_to_file", "args": {"TargetFile": str(sol_file)}},
+                    ]
+                },
+                {"type": "USER_INPUT", "content": "APPROVE"},
+                {"tool_calls": [{"name": "replace_file_content", "args": {"TargetFile": str(src_file)}}]},
+                {"tool_calls": [{"name": "write_to_file", "args": {"TargetFile": str(aud_file)}}]},
+            ]
+        )
+        res_locked = agy_guard.handle_pre_write(
+            {
+                "transcriptPath": tr_locked,
+                "toolCall": {
+                    "name": "replace_file_content",
+                    "args": {"TargetFile": str(src_file), "ReplacementContent": "x = 2\n"},
+                },
+            },
+            mem_root=self.mem_root,
+            ws_root=self.ws_root,
+        )
+        self.assertEqual(res_locked.get("decision"), "deny")
+        self.assertIn("S5 -> S3 Re-Plan Loop", res_locked.get("reason", ""))
+
+        # Case B: Agent updates 09_tasks_solution AFTER audit_report_, and User sends new APPROVE -> ask
+        tr_replanned = self._write_transcript(
+            [
+                {
+                    "tool_calls": [
+                        {"name": "replace_file_content", "args": {"TargetFile": str(ws_dir / "05_progress_rp.md")}},
+                        {"name": "write_to_file", "args": {"TargetFile": str(sol_file)}},
+                    ]
+                },
+                {"type": "USER_INPUT", "content": "APPROVE"},
+                {"tool_calls": [{"name": "replace_file_content", "args": {"TargetFile": str(src_file)}}]},
+                {"tool_calls": [{"name": "write_to_file", "args": {"TargetFile": str(aud_file)}}]},
+                {"tool_calls": [{"name": "replace_file_content", "args": {"TargetFile": str(sol_file)}}]},
+                {"type": "USER_INPUT", "content": "APPROVE"},
+            ]
+        )
+        res_unlocked = agy_guard.handle_pre_write(
+            {
+                "transcriptPath": tr_replanned,
+                "toolCall": {
+                    "name": "replace_file_content",
+                    "args": {"TargetFile": str(src_file), "ReplacementContent": "x = 3\n"},
+                },
+            },
+            mem_root=self.mem_root,
+            ws_root=self.ws_root,
+        )
+        self.assertEqual(res_unlocked.get("decision"), "ask")
+
+    # 30. H6: Loop prevention counter escalates on >=3 consecutive check failures and resets to 0 on pass
+    def test_30_h6_loop_prevention_escalates_on_three_consecutive_failures_and_resets_on_pass(self) -> None:
+        proj = self.tmp / "loop_proj"
+        proj.mkdir(parents=True, exist_ok=True)
+        flag_file = proj / "pass.flag"
+        (proj / ".agent-project.json").write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "components": [
+                        {
+                            "name": "worker",
+                            "path": ".",
+                            "checks": [f"test -f {flag_file}"],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        src_file = proj / "worker.py"
+        src_file.write_text("x = 1\n", encoding="utf-8")
+
+        steps_list = [{"type": "USER_INPUT", "content": "APPROVE"}]
+        for attempt in range(1, 4):
+            steps_list.append(
+                {"tool_calls": [{"name": "replace_file_content", "args": {"TargetFile": str(src_file)}}]}
+            )
+            tr = self._write_transcript(steps_list)
+            res = agy_guard.handle_post_invocation(
+                {"conversationId": "c30", "transcriptPath": tr},
+                mem_root=self.mem_root,
+                state_dir=self.state_dir,
+            )
+            msg = res["injectSteps"][0]["ephemeralMessage"]
+            if attempt < 3:
+                self.assertNotIn("H6 EXECUTION MONITOR", msg)
+            else:
+                self.assertIn("H6 EXECUTION MONITOR", msg)
+                self.assertIn("Rule #15 Escalation", msg)
+
+        # Now make the check pass -> loop counter resets to 0
+        flag_file.write_text("ok", encoding="utf-8")
+        steps_list.append(
+            {"tool_calls": [{"name": "replace_file_content", "args": {"TargetFile": str(src_file)}}]}
+        )
+        tr_pass = self._write_transcript(steps_list)
+        res_pass = agy_guard.handle_post_invocation(
+            {"conversationId": "c30", "transcriptPath": tr_pass},
+            mem_root=self.mem_root,
+            state_dir=self.state_dir,
+        )
+        msg_pass = res_pass["injectSteps"][0]["ephemeralMessage"]
+        self.assertNotIn("H6 EXECUTION MONITOR", msg_pass)
+        self.assertEqual((self.state_dir / "c30.0.loop").read_text(encoding="utf-8"), "0")
+
 
 if __name__ == "__main__":
     unittest.main()

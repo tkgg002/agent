@@ -1,0 +1,105 @@
+{
+  "mode": "claim",
+  "stage": "dg3",
+  "workspace": "audit-shadow-master-update-drop-2026-10-20",
+  "ts": "20261020T141652",
+  "trusted_rounds": [
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/06_laya_raw_dg3_20261020T141652.json",
+  "claims": [
+    {
+      "id": "F1-DELETE-SOURCE-ID",
+      "kind": "target",
+      "basis": "code",
+      "claim": "In TransmuterModule.RunEvents, when ev.IsDelete is true or ev.Op == \"d\", the SQL statement executes DELETE FROM master table WHERE _source_id = ?, even though master_ddl_generator drops _source_id from master tables.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5941
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3966
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.5961
+        }
+      }
+    },
+    {
+      "id": "F1-BINARY-SEARCH-SPLIT",
+      "kind": "target",
+      "basis": "code",
+      "claim": "In TransmuteHandler.binarySearchSplit, when len(batch) == 1, the function immediately logs poison pill isolated and completes the task with poisonErr without splitting task.Req.Events or task.Req.SourceIDs.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4847
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.8255
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.933
+        }
+      }
+    },
+    {
+      "id": "F2-SPLIT-BRAIN-GPAY-ID",
+      "kind": "target",
+      "basis": "code",
+      "claim": "RunEvents computes _gpay_id using deterministicSourceGpayID(ev.SourceID, e.KeySuffix), whereas processBatch in Run computes _gpay_id using deterministicGpayID(row.GpayID, e.KeySuffix), and bulkUpsertMaster skips updating _gpay_id when conflictTarget != \"_gpay_id\".",
+      "decision": "FLAG",
+      "resolved": "Verified directly in code REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:720-721 (rec[\"_gpay_id\"] = deterministicSourceGpayID) vs REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1174-1175 (record[\"_gpay_id\"] = deterministicGpayID) and REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1439-1441, plus 1482 mismatched _gpay_id rows in live DB.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.1356
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1298
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.3884
+        }
+      }
+    },
+    {
+      "id": "F4-BATCH-UPSERT-MAP-ORDER",
+      "kind": "target",
+      "basis": "code",
+      "claim": "In BatchBuffer.batchUpsert, records are grouped into a Go map groups[sig] before dedupByConflictKey(subChunk) is called per signature group, and iterating over the map groups executes SQL statements in non-deterministic map iteration order.",
+      "decision": "FLAG",
+      "resolved": "Verified directly in code REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:728-741 where groups is a Go map[string][]*shadow.UpsertRecord iterated via for _, subChunk := range groups before calling dedupByConflictKey(subChunk).",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.8758
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.2368
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.5048
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

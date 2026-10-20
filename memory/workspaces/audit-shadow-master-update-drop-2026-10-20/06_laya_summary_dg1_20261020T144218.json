@@ -1,0 +1,105 @@
+{
+  "mode": "claim",
+  "stage": "dg1",
+  "workspace": "audit-shadow-master-update-drop-2026-10-20",
+  "ts": "20261020T144218",
+  "trusted_rounds": [
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/06_laya_raw_dg1_20261020T144218.json",
+  "claims": [
+    {
+      "id": "DG1-S-RC",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Root causes of Shadow-to-Master UPDATE/DELETE drops are: (1) DELETE WHERE _source_id = ? failing with SQLSTATE 42703 on Master tables where _source_id was dropped, coupled with binarySearchSplit discarding the entire single-task NATS batch; (2) Split-Brain _gpay_id between RunEvents (SHA-256) and Run (Sonyflake) breaking Segment B Recon/Heal; (3) Incremental Run() filtering only _gpay_id > lastGpayID which misses updated rows whose _gpay_id did not change; and (4) BatchBuffer grouping by signature before cross-signature deduplication.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5691
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1144
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8133
+        }
+      }
+    },
+    {
+      "id": "DG1-S-FIX",
+      "kind": "target",
+      "basis": "code",
+      "claim": "The proposed solution in 09_tasks_solution_shadow_master_update_drop.md maps 1:1 to flaws F1 through F5: (F1) deleting on Master using conflictTarget dynamically parsed from binding.TransformSpec[\"pk\"] via resolveConflictTarget and splitting single-task Events/SourceIDs payloads in binarySearchSplit; (F2) looking up Shadow _gpay_id in RunEvents and updating _gpay_id when conflictTarget != \"_gpay_id\"; (F3) scanning recently updated Shadow rows and triggering NATS transmute after ReconHealer; (F4) deduplicating by PrimaryKeyValue before signature grouping; and (F5) unioning all keys across records in bulkUpsertMaster.",
+      "decision": "FLAG",
+      "resolved": "Verified 1:1 mapping in REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/09_tasks_solution_shadow_master_update_drop.md:20-44 covering F1, F2, F3, F4, F5.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5985
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.2529
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0262
+        }
+      }
+    },
+    {
+      "id": "DG1-S-IMPACT",
+      "kind": "target",
+      "basis": "code",
+      "claim": "The proposed changes for F1..F5 use dynamic primary key resolution from master_binding.transform_spec via resolveConflictTarget(binding, colTypes) without hardcoding column names or altering external NATS subject contracts.",
+      "decision": "FLAG",
+      "resolved": "Verified dynamic transform_spec.pk resolution in REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:465-478.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.8153
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.1672
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0881
+        }
+      }
+    },
+    {
+      "id": "DG1-S-PATTERN",
+      "kind": "target",
+      "basis": "code",
+      "claim": "The proposed solution adheres strictly to the existing codebase architecture and patterns, reusing resolveConflictTarget, deterministicGpayID, isRetryableDBError, quoteTransmuteIdent, and GORM batch queries on Shadow DB.",
+      "decision": "FLAG",
+      "resolved": "Verified pattern adherence in REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1172-1178 and 1412-1416.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4331
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3678
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.1955
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

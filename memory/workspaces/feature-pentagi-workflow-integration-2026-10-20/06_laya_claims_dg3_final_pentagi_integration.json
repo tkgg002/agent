@@ -1,0 +1,44 @@
+[
+  {
+    "id": "A-F1",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "PentAGI Bridge Secret Masking & Target Whitelist Guard",
+    "claim": "Hàm mask_secrets() và validate_target_url() trong tooling/pentagi_bridge.py ẩn thông tin nhạy cảm bằng DB_URI_CRED_RE/SECRET_RE và kiểm tra ranh giới prefix (_matches_prefix_boundary) để chỉ cho phép http/https thuộc DEFAULT_ALLOWED_TARGETS hoặc allowed_prefixes, chặn cả domain ngoài lẫn subdomain spoofing.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/pentagi_bridge.py:63-88\ndef mask_secrets(text: str) -> str:\n    \"\"\"Masks credentials, tokens, API keys, and DB URIs according to Rule #20.\"\"\"\n    masked = DB_URI_CRED_RE.sub(r\"\\1***:***@\", text)\n    return SECRET_RE.sub(\"<MASKED_SECRET>\", masked)\n\n\ndef _matches_prefix_boundary(url_lower: str, prefix_lower: str) -> bool:\n    clean_p = prefix_lower.rstrip(\"/\")\n    if not url_lower.startswith(clean_p):\n        return False\n    rem = url_lower[len(clean_p) :]\n    return rem == \"\" or rem[0] in (\"/\", \":\", \"?\", \"#\")\n\n\ndef validate_target_url(target_url: str, allowed_prefixes: Optional[Sequence[str]] = None) -> bool:\n    \"\"\"Validates that target_url uses http/https and matches allowed_pentest_targets.\"\"\"\n    raw = (target_url or \"\").strip()\n    if not raw:\n        return False\n    parsed = urllib.parse.urlparse(raw)\n    if parsed.scheme not in (\"http\", \"https\") or not parsed.netloc:\n        return False\n    prefixes = list(allowed_prefixes) if allowed_prefixes else list(DEFAULT_ALLOWED_TARGETS)\n    u_low = raw.lower()\n    return any(_matches_prefix_boundary(u_low, p.strip().lower()) for p in prefixes if p and p.strip())"
+  },
+  {
+    "id": "A-R1",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Closed-Loop S5 -> S3 Re-Plan Enforcement in Hook H4b",
+    "claim": "Hook H4b trong hooks/agy/agy_guard.py chặn cứng ('decision': 'deny') việc sửa source code trực tiếp khi đã bước vào S5 Audit (last_aud_idx > last_sol_idx), bắt buộc quay về S3 cập nhật 09_tasks_solution + 08_tasks, chạy lại DG1/DG2 và chờ User APPROVE mới.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:577-598\n        sol = [i for i, _, x in calls(st) if \"09_tasks_solution\" in tgt(x)]\n        aud = [\n            i\n            for i, nm, x in calls(st)\n            if nm in (\"write_to_file\", \"replace_file_content\") and \"audit_report_\" in tgt(x)\n        ]\n        last_sol_idx = sol[-1] if sol else -1\n        last_aud_idx = aud[-1] if aud else -1\n        if last_aud_idx > last_sol_idx:\n            return {\n                \"decision\": \"deny\",\n                \"reason\": (\n                    \"Rule 9/13 (S5 -> S3 Re-Plan Loop): Đã bước vào chặng S5 Audit (audit_report_). \"\n                    \"Nếu phát hiện bug/gap mới, CẤM sửa thẳng source code! Bắt buộc quay về S3 cập nhật \"\n                    \"09_tasks_solution_<suffix>.md + 08_tasks_<suffix>.md, chạy lại DG1/DG2 và chờ User APPROVE.\"\n                ),\n            }"
+  },
+  {
+    "id": "A-SCOPE",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Hook H6 Execution Monitor & Loop Prevention Counter",
+    "claim": "Hook H6 trong hooks/agy/agy_guard.py theo dõi số lần checks thất bại liên tiếp qua file <conv_id>.<u_idx>.loop (reset về 0 khi pass) và tự động bơm ESCALATION_MENTOR_MSG khi cur_loops >= 3 để cưỡng chế Rule #15 Escalation.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:649-668\n    u_idx = last_user_idx(st)\n    loop_key = f\"{conv_id}.{u_idx}.loop\" if u_idx >= 0 else f\"{conv_id}.loop\"\n    loop_file = sdir / loop_key\n\n    edited_names = \", \".join(sorted({Path(f).name for _, f in new_edits}))\n    audit_prompt = FINAL_AUDIT_MSG.format(files=edited_names)\n    if errs:\n        prev_loops = int(loop_file.read_text(encoding=\"utf-8\")) if loop_file.exists() else 0\n        cur_loops = prev_loops + 1\n        loop_file.write_text(str(cur_loops), encoding=\"utf-8\")\n        escalation = ESCALATION_MENTOR_MSG.format(loops=cur_loops) + \"\\n\\n\" if cur_loops >= 3 else \"\"\n        msg = escalation + \"⚠️ H6 fast-feedback:\\n\" + \"\\n\".join(errs) + \"\\n\\n\" + audit_prompt\n    else:\n        loop_file.write_text(\"0\", encoding=\"utf-8\")\n        msg = audit_prompt"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Khi last_aud_idx > last_sol_idx trong hooks/agy/agy_guard.py, Hook H4b trả về decision allow để cho phép sửa source code tự do mà không cần cập nhật 09_tasks_solution.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:585-593\n        if last_aud_idx > last_sol_idx:\n            return {\n                \"decision\": \"deny\",\n                \"reason\": (\n                    \"Rule 9/13 (S5 -> S3 Re-Plan Loop): Đã bước vào chặng S5 Audit (audit_report_). \"\n                    \"Nếu phát hiện bug/gap mới, CẤM sửa thẳng source code! Bắt buộc quay về S3 cập nhật \"\n                    \"09_tasks_solution_<suffix>.md + 08_tasks_<suffix>.md, chạy lại DG1/DG2 và chờ User APPROVE.\"\n                ),\n            }"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Hàm generate_s1_intake_from_report trong tooling/pentagi_bridge.py tự động ghi đè (overwrite) lên file 01_requirements và 08_tasks đã tồn tại mà không báo lỗi.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/pentagi_bridge.py:158-163\n    # Rule #17: Never overwrite existing workspace requirement/task files\n    if req_path.exists() or tasks_path.exists():\n        raise FileExistsError(\n            f\"Rule 17: Không ghi đè file workspace đã tồn tại ({req_path.name} / {tasks_path.name}).\"\n        )"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Hàm generate_s1_intake_from_report trong tooling/pentagi_bridge.py kiểm tra req_path.exists() hoặc tasks_path.exists() và ném ngoại lệ FileExistsError để bảo vệ file workspace theo Rule #17.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/pentagi_bridge.py:158-163\n    # Rule #17: Never overwrite existing workspace requirement/task files\n    if req_path.exists() or tasks_path.exists():\n        raise FileExistsError(\n            f\"Rule 17: Không ghi đè file workspace đã tồn tại ({req_path.name} / {tasks_path.name}).\"\n        )"
+  }
+]

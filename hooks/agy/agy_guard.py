@@ -89,6 +89,13 @@ FINAL_AUDIT_MSG = (
     "5. [QC, 3-Mutant Gate & /laya_router DG3]: Chạy `mutation_gate.py` (nếu task có `mode: clean-room` — kiểm chứng >=3 bản cố tình làm hỏng đều bị test đánh trượt KILLED) + gọi `laya_gate.py run --stage dg3` (và/hoặc `review`) để nhận xét lại quyết định thực thi.\n"
     "6. [Lưu báo cáo vật lý]: Lưu toàn bộ kết quả 6 mục trên vào `audit_report_<suffix>.md` trong workspace của task (H7 sẽ chặn nếu thiếu!)."
 )
+ESCALATION_MENTOR_MSG = (
+    "🚨 H6 EXECUTION MONITOR — PHÁT HIỆN VÒNG LẶP THẤT BẠI (Rule #15 Escalation >3 lần):\n"
+    "Đã thất bại liên tiếp {loops} lần khi chạy checks sau khi sửa code!\n"
+    "BẮT BUỘC DỪNG NGAY việc sửa mò (blind-fixing):\n"
+    "1. Quay lại đọc kỹ `09_tasks_solution_<suffix>.md` và log lỗi thực tế.\n"
+    "2. Nếu giải pháp hiện tại không khả thi, dừng sửa code và báo cáo rõ cho User để Re-plan (S3)."
+)
 AUDIT_REQUIRED_PATTERNS = [
     (r"(line-by-line|từng dòng|git diff)", "Mục 1: Phản biện từng dòng update / git diff & từng task"),
     (r"(mockup|hallucination|runtime|trace|smoke)", "Mục 2: Chống suy diễn Smoke Test / Mockup / Hallucination & Trace Runtime thật"),
@@ -568,9 +575,25 @@ def handle_pre_write(
                     ),
                 }
         sol = [i for i, _, x in calls(st) if "09_tasks_solution" in tgt(x)]
+        aud = [
+            i
+            for i, nm, x in calls(st)
+            if nm in ("write_to_file", "replace_file_content") and "audit_report_" in tgt(x)
+        ]
+        last_sol_idx = sol[-1] if sol else -1
+        last_aud_idx = aud[-1] if aud else -1
+        if last_aud_idx > last_sol_idx:
+            return {
+                "decision": "deny",
+                "reason": (
+                    "Rule 9/13 (S5 -> S3 Re-Plan Loop): Đã bước vào chặng S5 Audit (audit_report_). "
+                    "Nếu phát hiện bug/gap mới, CẤM sửa thẳng source code! Bắt buộc quay về S3 cập nhật "
+                    "09_tasks_solution_<suffix>.md + 08_tasks_<suffix>.md, chạy lại DG1/DG2 và chờ User APPROVE."
+                ),
+            }
         ok = any(
             s.get("type") == "USER_INPUT" and APPROVE.search(s.get("content", ""))
-            for s in st[(sol[-1] + 1 if sol else 0) :]
+            for s in st[(last_sol_idx + 1 if last_sol_idx >= 0 else 0) :]
         )
         if not ok:
             return {
@@ -627,11 +650,20 @@ def handle_post_invocation(
             except Exception as e:
                 errs.append(f"[{name}] $ {cmd}\nError: {e}")
 
+    u_idx = last_user_idx(st)
+    loop_key = f"{conv_id}.{u_idx}.loop" if u_idx >= 0 else f"{conv_id}.loop"
+    loop_file = sdir / loop_key
+
     edited_names = ", ".join(sorted({Path(f).name for _, f in new_edits}))
     audit_prompt = FINAL_AUDIT_MSG.format(files=edited_names)
     if errs:
-        msg = "⚠️ H6 fast-feedback:\n" + "\n".join(errs) + "\n\n" + audit_prompt
+        prev_loops = int(loop_file.read_text(encoding="utf-8")) if loop_file.exists() else 0
+        cur_loops = prev_loops + 1
+        loop_file.write_text(str(cur_loops), encoding="utf-8")
+        escalation = ESCALATION_MENTOR_MSG.format(loops=cur_loops) + "\n\n" if cur_loops >= 3 else ""
+        msg = escalation + "⚠️ H6 fast-feedback:\n" + "\n".join(errs) + "\n\n" + audit_prompt
     else:
+        loop_file.write_text("0", encoding="utf-8")
         msg = audit_prompt
     return {"injectSteps": [{"ephemeralMessage": msg}]}
 

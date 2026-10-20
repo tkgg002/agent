@@ -1,7 +1,7 @@
 # T5: Frontend, React, AntD & UI/UX
 > Tổng số bài học trong chủ đề này: **10** (trích xuất nguyên bản từ `memory/global/lessons.md`).
 
-<!-- ID: L016 | lessons.md:L108 -->
+<!-- ID: L019 | lessons.md:L129 -->
 ### [2026-10-15] Gọi trực tiếp `Form.useWatch(...)` bên trong nhánh JSX có điều kiện gây crash React "Rendered more hooks than during the previous render" (Conditional React Hook Call Inside JSX Ternary Branch)
 - **Global Pattern:** Khi xây dựng Form đa chế độ trong React/Ant Design [A] có nhiều nhánh giao diện con hiển thị theo loại tác vụ (`{selectedOperation === 'type_a' ? (...) : (...)}`) [B], lập trình viên lại viết trực tiếp lời gọi Hook `{Form.useWatch('field_x', form) === 'val' ? ...}` ngay bên trong một nhánh rẽ JSX có điều kiện [X] thay vì khai báo ở đầu hàm Component -> Hậu quả nghiêm trọng [Y]: Ở lần render đầu tiên khi `selectedOperation !== 'type_a'`, nhánh đó không chạy nên Hook `Form.useWatch` không được đăng ký vào danh sách Hooks trên Fiber node của Component; ngay khi người dùng chọn `selectedOperation = 'type_a'`, Component re-render đi vào nhánh đó và gọi thêm 1 Hook mới làm tổng số Hooks tăng từ $N$ lên $N+1$, khiến React lập tức ném lỗi `Error: Rendered more hooks than during the previous render.` và làm sập toàn bộ trang vào `ErrorBoundary` ("Không tải được dữ liệu") — lỗi này hoàn toàn không bị phát hiện bởi `tsc -b` hay `vite build` (vì TypeScript chỉ kiểm tra kiểu tĩnh, không kiểm tra thứ tự thực thi Hook lúc runtime). **Đúng:** (1) Tuân thủ tuyệt đối **React Rules of Hooks**: MỌI lời gọi Hook (`useState`, `useMemo`, `useEffect`, `Form.useWatch`, `useQuery`...) BẮT BUỘC phải được khai báo vô điều kiện ở tầng cao nhất (Top-level) của Function Component trước bất kỳ câu lệnh `return` hoặc nhánh điều kiện nào; (2) Tuyệt đối CẤM viết `{Form.useWatch(...) === ...}` trực tiếp bên trong biểu thức JSX; (3) Khi audit code React, bắt buộc grep toàn bộ `use[A-Z]` / `Form.useWatch` để đảm bảo 100% nằm ở đầu hàm Component.
 - **Bối cảnh (Trigger):** User chọn tác vụ Confluence trên `http://localhost:5173/activity-manager` và báo lỗi: "http://localhost:5173/activity-manager , chọn tác vụ cònluencer hông tải được dữ liệu / Rendered more hooks than during the previous render."
@@ -9,7 +9,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức, phân tích gốc rễ chính xác dòng code gây lỗi (Rule #5). (2) Tuân thủ nghiêm ngặt Rule #1 & Rule #13: Lập hồ sơ giải pháp `09_tasks_solution_confluence_hooks_fix.md` trình bày rõ nguyên nhân + code sửa (đưa `createScheduleType = Form.useWatch('schedule_type', form)` và `editScheduleType = Form.useWatch('schedule_type', editForm)` lên đầu hàm `ActivityManager`), không tự ý sửa source code khi chưa có lệnh APPROVE của User.
 - **Tags:** #react-rules-of-hooks #conditional-usewatch-in-jsx #rendered-more-hooks #build-ok-not-runtime-ok #error-boundary-crash #mid-session-fix
 
-<!-- ID: L028 | lessons.md:L199 -->
+<!-- ID: L031 | lessons.md:L220 -->
 ### [2026-10-12] Tự bịa đặt giải thích trong UI Tooltip từ công thức số học suy diễn (Fabricated UI Tooltip Explanation from Speculative Arithmetic)
 - **Global Pattern:** Khi số liệu ở trạm đích [A] (Master updated) nhỏ hơn trạm trước [B] (Shadow update events), thay vì chỉ hiển thị trung thực dữ liệu đo lường thô [X], lập trình viên lại tự tính hiệu số arithmetic delta `absorbed = B - A` rồi bịa ra câu giải thích khẳng định như thật trong Tooltip [Y] ("absorbed event còn lại rơi vào dòng mới tạo trong cùng mẻ nên đã nằm trong cột Inserted") mà không hề có bằng chứng hay telemetry xác thực -> Hậu quả: (1) Lừa dối người dùng (User) bằng thông tin giả mạo; (2) Che giấu nguy cơ deduplication nhiều update trên cùng PK, hoặc conflict, hoặc drop event thật; (3) Vi phạm nghiêm trọng Rule #0 ("không đoán mò, không suy diễn"). **Đúng:** (1) Frontend KHÔNG BAO GIỜ được tự ý suy diễn nguyên nhân của độ lệch (drift/absorbed); (2) Nếu hệ thống chỉ đo được số dòng Master ghi nhận Update là A, thì chỉ hiển thị đúng số A và số event Shadow là B, tuyệt đối không bịa ra đích đến của `B - A`; (3) Muốn giải thích nguyên nhân thì Backend/Worker phải emit telemetry phân loại chính xác (vd: `dedup_same_pk_count`, `upsert_absorbed_count`, `occ_skipped_count`).
 - **Bối cảnh (Trigger):** User chất vấn gay gắt: "40 event update ở Shadow. 13 dòng đã có sẵn ở Master nên được update; 27 event còn lại rơi vào dòng mới tạo trong cùng mẻ nên đã nằm trong cột Inserted (giá trị mới nhất). sao mày biết 27 event là rơi vào dòng mới tạo => mày cheat à. giỡn mặt" sau khi phát hiện Tooltip `MasterUpdatedCell` tự bịa ra lý do cho 27 event.
@@ -17,7 +17,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức (Mid-Session Fix theo Rule #5). (2) Thừa nhận sai lầm 100%, xin lỗi chân thành, không cãi, không bao biện. (3) Ghi lesson vào `lessons.md`. (4) Xóa bỏ toàn bộ câu giải thích suy diễn trong `MasterUpdatedCell` và `MasterTotalCell`, chỉ hiển thị số liệu đo lường thực tế; nếu có tooltip thì chỉ giải thích định nghĩa chỉ số (metric definition), không giải thích phỏng đoán hành vi dữ liệu.
 - **Tags:** #fabricated-ui-explanation #speculative-arithmetic #no-guessing #truth-in-telemetry #mid-session-fix
 
-<!-- ID: L029 | lessons.md:L207 -->
+<!-- ID: L032 | lessons.md:L228 -->
 ### [2026-10-12] Báo xong thay đổi UI chỉ dựa vào type-check, không kiểm tra layout thực tế (UI Done Without Visual Verification)
 - **Global Pattern:** Khi sửa render của ô bảng [A] trong component UI [B], Agent chỉ chạy compile/type-check [X] rồi báo hoàn thành, không kiểm tra chiều cao hàng, width cột, tổng scroll.x, summary row ghim [Y] -> Vỡ layout, User phát hiện trước. **Đúng:** (1) Giữ chiều cao ô đồng nhất với ô lân cận (tối đa 2 dòng như hiện trạng); (2) Đổi width cột thì phải cập nhật scroll.x / summary tương ứng; (3) Không có trình duyệt thì nói rõ "chưa verify visual" và KHÔNG khẳng định đã xong.
 - **Bối cảnh (Trigger):** User: "chắc chưa, mày test chưa. sao tao thấy nó như hư form rồi" sau khi đổi ô Master trong ReconPipelineGrid thành 3-4 dòng và tăng width cột mà không chỉnh scroll.x.
@@ -25,7 +25,7 @@
 - **Fix/Correct Flow:** Thu gọn ô về đúng 2 dòng như cũ, đưa giải thích vào Tooltip, giữ nguyên width cột.
 - **Tags:** #ui-visual-verification #build-ok-is-not-done #antd-table-layout #mid-session-fix
 
-<!-- ID: L046 | lessons.md:L327 -->
+<!-- ID: L049 | lessons.md:L348 -->
 ### [2026-10-06] Parse URI lỗi trên connection string replica set và hardcode chuỗi rác vào Database (Connection String URI Parse Failure & Database Poisoning with Mock String)
 - **Global Pattern:** Khi viết helper bóc tách host an toàn từ connection string [A], lập trình viên dùng `url.Parse` chuẩn của ngôn ngữ [B] nhưng không lường trước định dạng URI phức tạp (như MongoDB replica set chứa nhiều host ngăn cách bằng dấu phẩy `,`) khiến parser báo lỗi cú pháp [X], sau đó hàm fallback trả về một chuỗi thông báo rác định dạng URL (`<hidden_or_invalid_url>`) và ghi thẳng vào database [Y] -> Hậu quả nghiêm trọng: (1) Làm nhiễm độc dữ liệu trong DB (database poisoning) với 76+ bản ghi chứa chuỗi rác; (2) Frontend đọc data thật từ DB nhưng lại nhận được chuỗi rác và hiển thị lên UI, khiến người dùng nhìn thấy `<hidden_or_invalid_url>` dù frontend đã xóa mock; (3) Gây nhiễu và hoang mang vì tưởng bug ở frontend trong khi gốc rễ nằm ở hàm bóc tách URI backend. **Đúng:** (1) Xử lý URI/connection string bằng string manipulation hoặc regex an toàn (tách phần sau `://`, sau `@` và trước `/?#`), hỗ trợ cả multi-host replica set; (2) Nếu không bóc tách được host, TUYỆT ĐỐI KHÔNG trả về chuỗi text rác kiểu URL — chỉ trả về chuỗi rỗng `""`; (3) Phải truy quét tận database để dọn dẹp (UPDATE/CLEAN) các bản ghi rác cũ; (4) Frontend phải có tầng phòng thủ lọc sạch (sanitize) không hiển thị bất kỳ giá trị nào chứa ký tự bất thường (`<`, `hidden`, `invalid`).
 - **Bối cảnh (Trigger):** User phản ánh: "<hidden_or_invalid_url> sao vẫn hiện cái này." sau khi frontend tưởng chừng đã xóa mock.
@@ -33,7 +33,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức (Mid-Session Fix theo Rule #5). (2) Sửa hàm `extractHost` trong `recon_smoke.go` để bóc tách multi-host replica set an toàn, không dùng `url.Parse` cứng nhắc, nếu rỗng thì trả về `""` (không trả về `<hidden_or_invalid_url>`). (3) Chạy SQL UPDATE dọn sạch 76 bản ghi rác trong DB `cdc_dw`. (4) Sửa Frontend `ReconPipelineGrid.tsx`: Trạm SOURCE chỉ hiện `sourceConnectorName`, trạm SHADOW hiện `PostgreSQL Shadow` (không lấy `rowA.source_host`), trạm MASTER lọc bỏ các chuỗi chứa `hidden/invalid/<`.
 - **Tags:** #uri-parse-failure #replica-set-hosts #database-poisoning #sanitize-db-and-ui #mid-session-fix
 
-<!-- ID: L053 | lessons.md:L376 -->
+<!-- ID: L056 | lessons.md:L397 -->
 ### [2026-09-30] Gợi ý trường từ đích gộp chung với nguồn gây duplicate options và lệch casing trên Select tags (Destination Column Leakage & Case-Insensitive Dropdown Duplicate)
 - **Global Pattern:** Khi hệ thống cung cấp giao diện chọn thuộc tính nguồn [A] (Fields Shadow để trích xuất raw payload vào Master), Agent gom cả tên cột nguồn (`source_field`), cột đích (`target_column`), và các cột vật lý của bảng đích (`shadowColumns`) vào danh sách gợi ý [B], đồng thời dùng tập lọc phân biệt hoa thường (`Set.has(field)`) [X] -> Hậu quả nghiêm trọng: (1) Trên giao diện người dùng, các trường bị nhân đôi/nhân ba do vừa xuất hiện dạng camelCase của nguồn (`createdAt`), vừa xuất hiện dạng snake_case của đích (`created_at`, `status1`) [Y]; (2) Người dùng click nhầm cột đích khiến backend GJSON truy vấn trượt trên payload thô (`_raw_data`), làm mất dữ liệu ngầm; (3) Vi phạm nguyên tắc bảo toàn ngữ cảnh và trải nghiệm người dùng. **Đúng:** (1) Nguồn dữ liệu nào thì chỉ lấy đúng schema của nguồn đó (`source_field`, `source_path`), TUYỆT ĐỐI KHÔNG trộn lẫn cột đích; (2) Bộ lọc deduplicate cho UI gợi ý BẮT BUỘC phải chuẩn hóa không phân biệt hoa thường (`toLowerCase()`), chuẩn hóa tiền tố (`after.`), và lọc bỏ thuộc tính hệ thống/nội bộ (`__v`, `_deleted`); (3) Tầng tiếp nhận tag (`onChange`) phải ép kiểu `Set` loại bỏ tag trùng lặp ngay khi người dùng chọn hoặc gõ.
 - **Bối cảnh (Trigger):** User phản hồi: "đang bị duplicate rồi (Fields (Shadow): ".
@@ -41,7 +41,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức (Mid-Session Fix theo Rule #5). (2) Loại bỏ hoàn toàn `target_column` khỏi dropdown `Fields (Shadow)`. (3) Chuẩn hóa deduplicate bằng `seenLower = new Set<string>()`, loại bỏ `after.` và `__v`. (4) Deduplicate tags trong `onChange` của Ant Design Select. (5) Verify thực tế bằng build production.
 - **Tags:** #destination-column-leakage #case-insensitive-duplicate #shadow-fields-modal #antd-tags-dedup #mid-session-fix
 
-<!-- ID: L091 | lessons.md:L692 -->
+<!-- ID: L094 | lessons.md:L713 -->
 ### [2026-08-27] Đặt UI action sai màn hình ngữ cảnh nghiệp vụ (UX domain misalignment)
 
 - **Global Pattern:** Khi bổ sung tính năng điều khiển vận hành [A] (`Force Transform`), Agent tự tiện đặt nút bấm vào màn hình cấu hình metadata [B] (`MappingFieldsPage` - nơi chỉ khai báo rule) thay vì đặt vào modal xác nhận của hành động vận hành [C] (`handleTransform` Modal trên `TableRegistry.tsx`) -> Vi phạm phân tách nghiệp vụ UX: trang cấu hình bị lẫn lộn chức năng trigger job vận hành, người dùng không thể chọn danh sách field linh hoạt khi bấm chạy transform thông thường. **Đúng:** Mọi tùy chọn nâng cao của một hành động (như Force mode, target fields) PHẢI nằm trực tiếp trong Modal/Dialog xác nhận của chính hành động đó (`handleTransform`), không được tạo thêm nút bấm rải rác sai ngữ cảnh nghiệp vụ.
@@ -50,7 +50,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức theo Mid-Session Fix (Rule #5). (2) Xóa bỏ hoàn toàn nút Force Transform khỏi `MappingFieldsPage.tsx`. (3) Tích hợp form điều khiển vào Modal của `handleTransform` trong `TableRegistry.tsx` với Switch "Force Transform" và Select chọn `force_fields`.
 - **Tags:** #ux-domain-misalignment #modal-form-controls #mapping-vs-operations #mid-session-fix #ui-context-boundary
 
-<!-- ID: L097 | lessons.md:L740 -->
+<!-- ID: L100 | lessons.md:L761 -->
 ### [2026-08-27] Copy-paste ternary bug: cả 2 nhánh cùng giá trị → silent data mutation
 
 - **Global Pattern:** Khi viết ternary [A] để chọn giá trị dựa trên state [B] (`rule.is_active ? 'approved' : 'approved'`), cả 2 nhánh mang cùng giá trị → mọi action đều thực hiện cùng một operation bất kể state → user không thể toggle off. **Đúng:** Review từng ternary: `condition ? valueIfTrue : valueIfFalse` — 2 giá trị PHẢI khác nhau.
@@ -59,7 +59,7 @@
 - **Fix/Correct Flow:** `status: rule.is_active ? 'rejected' : 'approved'`
 - **Tags:** #copy-paste-bug #ternary-same-value #silent-data-mutation #frontend-toggle
 
-<!-- ID: L154 | lessons.md:L1167 -->
+<!-- ID: L157 | lessons.md:L1188 -->
 ### [2026-08-05] Pattern: Bắt buộc sinh Trace ID ngay từ Frontend cho 100% HTTP requests & Async Mutations
 
 - **Global Pattern:** Frontend UI [A] thực hiện HTTP requests / Async Mutations (như Bridge Oplog) → quên đính kèm W3C traceparent & `X-Correlation-Id` từ client → CMS API không nhận được Trace ID từ client → chuỗi vết (Traceability) bị đứt đoạn ngay từ gốc. **Đúng:** (1) Thêm Axios Request Interceptor tại `api.ts` tự động tạo 32-char hex Trace ID và gắn header `X-Correlation-Id` + W3C `traceparent` cho 100% HTTP requests. (2) Tại các async mutation đặc thù (Bridge Oplog), tạo `traceId` 32-char hex đính trực tiếp vào JSON body `trace_id` + HTTP headers để đảm bảo tính nhất quán toàn trình.
@@ -68,7 +68,7 @@
 - **Fix/Correct Flow:** Thêm interceptor ở `api.ts` và đính `trace_id` trong `bridgeOplogMut` tại `SourceConnectors.tsx`.
 - **Tags:** #frontend-trace-id #axios-interceptor #w3c-traceparent #full-stack-tracing #bridge-oplog
 
-<!-- ID: L196 | lessons.md:L1535 -->
+<!-- ID: L199 | lessons.md:L1556 -->
 ### [2026-07-20] Tin tưởng mù quáng vào kết quả verify của subagent dẫn đến crash build frontend
 - **Global Pattern:** Agent [A] delegate việc thực thi code và verify [B] cho subagent [X] → subagent báo cáo đã verify build thành công [Y] nhưng thực tế vẫn bị lỗi cú pháp làm crash build → Agent [A] tin tưởng báo cáo và đóng turn mà không tự build kiểm thử thực tế → gây crash dự án và bị User khiển trách. **Đúng:** (1) Tuyệt đối không tin tưởng mù quáng vào báo cáo của subagent. (2) Trước khi báo hoàn thành, main agent BẮT BUỘC tự chạy lệnh build thực tế (`npm run build` hoặc `npx tsc --noEmit`) từ workspace chính.
 - **Bối cảnh (Trigger):** Thực hiện task chỉnh sửa `SourceConnectors.tsx`, Muscle subagent báo cáo đã verify build pass bằng `npx tsc --noEmit` nhưng thực tế file bị thiếu dấu ngoặc nhọn `}` đóng hàm `buildConnectorConfig` dẫn đến crash build Vite.
@@ -76,7 +76,7 @@
 - **Fix/Correct Flow:** Main agent tự chạy lệnh verify build thực tế sau khi subagent trả kết quả, rà soát lại file diff để phát hiện lỗi thiếu ngoặc trước khi bàn giao.
 - **Tags:** #blind-trust #syntax-error #build-verification-fail #carelessness #repeated-offense
 
-<!-- ID: L241 | lessons.md:L1878 -->
+<!-- ID: L244 | lessons.md:L1899 -->
 ### [2026-08-25] Sửa handler A nhưng bỏ sót handler B vì không trace route registration → Fix chỉ áp dụng cho endpoint KHÔNG được gọi
 - **Global Pattern:** Khi sửa logic trong handler [A] (VD: `TriggerCheck`), Agent SỬA ĐÚNG nhưng frontend thực tế gọi handler [B] (VD: `TriggerCheckAll`) qua route khác. **Đúng:** PHẢI trace ngược Frontend URL → `router.go` → Actual Handler TRƯỚC khi sửa.
 - **Bối cảnh (Trigger):** Sửa `TriggerCheck` để normalize `shadow_schema.table`, nhưng frontend POST `/api/reconciliation/check` (không có `:table`) → route match vào `TriggerCheckAll` → fix không có tác dụng.
