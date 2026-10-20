@@ -5,7 +5,7 @@
 
 ---
 
-## Task 1 (Xử lý Khoảng trống `F1`): Xây dựng Động cơ Đệ quy 2 Tầng (`Task-Level Propose–Probe–Compose` & `Harnessing-Level Domain Library`)
+## [x] Task 1 (Xử lý Khoảng trống `F1`): Xây dựng Động cơ Đệ quy 2 Tầng (`Task-Level Propose–Probe–Compose` & `Harnessing-Level Domain Library`)
 - **[Mô tả]:**
   - Hiện thực hóa module `tooling/orchestrator/harness2_engine.py` tích hợp vòng lặp **Đệ quy Cấp Task (`Propose → Probe → Compose` với 2 chế độ `agg` song song và `seq` tuần tự)** khi Worker gặp task phức tạp hoặc bị trả về từ trạm QA, cùng **Đệ quy Cấp Hệ thống (`Experience Reflector` + `Per-Domain Harness Library`)** lưu trữ cây `/agent` đã thắng (`harnesses/<task_id>/harness/`) và `EXPERIENCE.md` (`cue`, `lesson`, `evidence`, `confidence`, `edits`) vào `memory/global/harness_library/<domain>/INDEX.md`.
 - **[Context & Logs]:**
@@ -14,7 +14,7 @@
 - **[Definition of Done]:**
   - Pass unit & integration test cho cả 2 luồng `run_parallel` (`agg`) và `run_sequential` (`seq`), tự động sinh `EXPERIENCE.md` + cập nhật `<domain>/INDEX.md` và đồng bộ bài học sang `memory/global/lessons/INDEX.md` qua `build_lessons_index.py`.
 
-## Task 2 (Xử lý Khoảng trống `F2`): Phân tách 2 Trục Improver Trực giao (`INV` vs `DOM`) & Cưỡng chế Thứ bậc Tiết kiệm Context (`Skill → Script → Subagent → Hook → Always-On`)
+## [x] Task 2 (Xử lý Khoảng trống `F2`): Phân tách 2 Trục Improver Trực giao (`INV` vs `DOM`) & Cưỡng chế Thứ bậc Tiết kiệm Context (`Skill → Script → Subagent → Hook → Always-On`)
 - **[Mô tả]:**
   - Thiết lập 2 kênh Proposer độc lập trong `tooling/orchestrator/proposer_axes.py`:
     1. **`INV Proposer` (Task-Invariant Workflow/Tool Lever):** Chỉ được phép sửa `tooling/*.py`, `scripts/*.py` hoặc đề xuất rule hook trong `hooks/agy/agy_guard.py`; cấm chạm vào tài liệu nghiệp vụ dự án.
@@ -26,7 +26,7 @@
 - **[Definition of Done]:**
   - Kiểm chứng tự động từ chối mọi bản đề xuất `INV` sửa nhầm file `DOM` (và ngược lại), giữ dung lượng `GEMINI.md` luôn dưới trần `always_on_max`.
 
-## Task 3 (Xử lý Khoảng trống `F3`): Xây dựng Bộ Kiểm định Bề mặt Cấu hình `/agent` (`AgentSurfaceValidator & Auto-Trigger Compiler`)
+## [x] Task 3 (Xử lý Khoảng trống `F3`): Xây dựng Bộ Kiểm định Bề mặt Cấu hình `/agent` (`AgentSurfaceValidator & Auto-Trigger Compiler`)
 - **[Mô tả]:**
   - Xây dựng module kiểm định bề mặt cấu hình `/agent` (`SurfaceSpec` cho `/agent`: `GEMINI.md`, `OPERATOR_MAP.md`, `skills/*/SKILL.md`, `tooling/*.py`, `hooks/agy/agy_guard.py`):
     1. Kiểm tra tổng số ký tự `always_on` (`GEMINI.md`) không vượt ngưỡng `always_on_max`.
@@ -39,7 +39,7 @@
 - **[Definition of Done]:**
   - Chạy kiểm định trên chính cây `/Users/trainguyen/Documents/work/agent` đạt `100% VALIDATED`, phát hiện chính xác skill thiếu trigger hoặc script lỗi cú pháp trong bộ test đột biến (`mutation_gate.py`).
 
-## Task 4 (Xử lý Khoảng trống `F4`): Chuẩn hóa Cây Bằng chứng Vật lý (`ContextTree`) & Chốt chặn Tiền kiểm Phòng sạch (`Pre-Flight Leak & Grader Verdict Tripwire`)
+## [x] Task 4 (Xử lý Khoảng trống `F4`): Chuẩn hóa Cây Bằng chứng Vật lý (`ContextTree`) & Chốt chặn Tiền kiểm Phòng sạch (`Pre-Flight Leak & Grader Verdict Tripwire`)
 - **[Mô tả]:**
   - Xây dựng bộ đóng gói bằng chứng trên đĩa (`context/task.md`, `context/rollouts/<label>.md`, `context/deliverables/<label>/`, `context/harness/`, `context/pool/<label>/harness.diff`, `context/library/INDEX.md`) kèm hàm sinh prompt con trỏ ngắn `mission()`.
   - Nâng cấp cơ chế `Clean-Room Isolation` (`hooks/agy/agy_guard.py:259-301`): bổ sung hàm tiền kiểm `assert_no_leak_paths(root, clean_room_forbidden_sources)` và `assert_no_grader_verdicts(root)` quét sạch thư mục làm việc **trước** khi khởi chạy Sub-agent/Worker, kết hợp với hậu kiểm `contaminated_clean_room_reads` hiện có.
@@ -49,7 +49,7 @@
 - **[Definition of Done]:**
   - Chặn đứng 100% file thuộc `clean_room_forbidden_sources` và các chuỗi `GRADER_VERDICT_MARKERS` ngay tại bước staging `context/` trước khi tiến trình CLI Worker kịp đọc.
 
-## Task 5 (Xử lý Khoảng trống `F5`): Tuyển chọn Ẩn danh Chống Thiên kiến (`Blind Anonymized Selection`) & Đo Độ Đa dạng (`Pairwise Line-Jaccard Diversity`)
+## [x] Task 5 (Xử lý Khoảng trống `F5`): Tuyển chọn Ẩn danh Chống Thiên kiến (`Blind Anonymized Selection`) & Đo Độ Đa dạng (`Pairwise Line-Jaccard Diversity`)
 - **[Mô tả]:**
   - Khi đánh giá nhiều nhánh giải pháp/code (`agg1..aggk` hoặc `base` vs `candidate`), áp dụng hàm ẩn danh hóa có seed `assign_ids()` (`A, B, C...`) kết hợp tính toán độ đa dạng `diversity()` (`mean_line_jaccard`) và cổng thẩm định toán học `/laya_router` (`DG3` tại `tooling/laya_gate.py:44-46`).
 - **[Context & Logs]:**
@@ -58,7 +58,7 @@
 - **[Definition of Done]:**
   - Đảm bảo tính tất định của bảng ánh xạ ẩn danh `id_map` theo `SHA-1(task_id|k|mode)` và tính chính xác chỉ số `mean_line_jaccard`.
 
-## Task 6 (Xử lý Khoảng trống `F6`): Hằng đẳng thức Ngân sách Tất định (`Ledger.assert_identity: R=4k, P=3k`) & Content-Addressed SHA-256 Cache + `flock` Resume
+## [x] Task 6 (Xử lý Khoảng trống `F6`): Hằng đẳng thức Ngân sách Tất định (`Ledger.assert_identity: R=4k, P=3k`) & Content-Addressed SHA-256 Cache + `flock` Resume
 - **[Mô tả]:**
   - Tích hợp bộ kiểm toán ngân sách `Ledger.assert_identity()` (`R = 4k` rollouts, `P = 3k` sessions, cấm trùng lặp nhãn `label`) vào sổ cái `autopilot_rounds` của Orchestrator.
   - Bổ sung cơ chế định danh nội dung `_call_fingerprint` bằng `SHA-256` trên toàn bộ `(label, mission, system, context_dir)` và ghi file tổng kết nguyên tử bằng `fcntl.flock(LOCK_EX)` + `os.replace` để hỗ trợ resume đa tiến trình an toàn tuyệt đối.
