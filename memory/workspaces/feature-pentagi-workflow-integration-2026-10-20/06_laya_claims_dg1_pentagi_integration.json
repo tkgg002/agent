@@ -1,0 +1,52 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Security Gate & Escalation Hook Gap",
+    "claim": "Quy trình /security-agent hiện tại kiểm định 4 tầng tĩnh và handle_post_invocation trong agy_guard.py mới trả về lỗi checks kèm FINAL_AUDIT_MSG chứ chưa đếm số lần lặp lỗi liên tiếp để kích hoạt Rule #15 Escalation.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/skills/security-agent/SKILL.md:17-20\n## Quy trình Kiểm định 4 Tầng\n\n### 1. Quét Secret & PII trong Code và Memory (Rule #20 — Bắt buộc 100%)\nQuét toàn bộ `git diff` và các file mới/sửa trong `agent/memory/workspaces/<ws>/`:\n\nREF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:505-511\n    edited_names = \", \".join(sorted({Path(f).name for _, f in new_edits}))\n    audit_prompt = FINAL_AUDIT_MSG.format(files=edited_names)\n    if errs:\n        msg = \"⚠️ H6 fast-feedback:\\n\" + \"\\n\".join(errs) + \"\\n\\n\" + audit_prompt\n    else:\n        msg = audit_prompt\n    return {\"injectSteps\": [{\"ephemeralMessage\": msg}]}"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Bi-directional PentAGI Integration & H6 Loop Monitor",
+    "claim": "Giải pháp bổ sung pentagi_bridge.py (kết nối PentAGI REST/GraphQL cho Inline S5 DAST và Overnight Batch S1 Intake có mask SECRET theo Rule #20), mở rộng .agent-project.json với trường tùy chọn pentest_check, và bổ sung bộ đếm lặp lỗi >= 3 lần trong handle_post_invocation (H6) để cưỡng chế Rule #15 Escalation.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/GEMINI.md:105-107\n### 15. Quy tắc Cổng Bảo mật, CẤM Git Push & Escalation\n- **CẤM `git push`:** Không chạy `git push` lên bất kỳ nhánh nào (hook H5 chặn cứng). User tự quyết định push.\n- **Escalation (>3 lần lặp):** Thử sửa cùng 1 lỗi >3 lần thất bại → DỪNG NGAY, báo cáo để re-plan.\n\nREF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:41-46\nSECRET = re.compile(\n    r\"(AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|ATATT[\\w\\-]{20,}|ghp_\\w{30,}\"\n    r\"|Bearer\\s+[\\w.\\-]{20,}|(mongodb|postgres(ql)?|mysql|redis)://[^*\\s:/]+:[^*\\s@]+@\"\n    r\"|password\\s*[:=]\\s*[^\\s*'\\\"]{6,})\",\n    re.I,\n)"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Backward Compatibility & Agnostic Core Preservation",
+    "claim": "Khi không có new_edits thì handle_post_invocation trả về dict rỗng {}, và khi có new_edits thì chỉ kích hoạt thêm cảnh báo Escalation nếu errs khác rỗng từ 3 lần liên tiếp trở lên nên giữ tương thích ngược với các dự án hiện tại.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:482-485\n    new_edits = [(i, f) for i, f in src_edits(st, mem_root) if i > last]\n    if not new_edits:\n        return {}\n\nREF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:505-511\n    edited_names = \", \".join(sorted({Path(f).name for _, f in new_edits}))\n    audit_prompt = FINAL_AUDIT_MSG.format(files=edited_names)\n    if errs:\n        msg = \"⚠️ H6 fast-feedback:\\n\" + \"\\n\".join(errs) + \"\\n\\n\" + audit_prompt\n    else:\n        msg = audit_prompt\n    return {\"injectSteps\": [{\"ephemeralMessage\": msg}]}"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Agnostic Core (ADR-07) & Immutable Audit Log Pattern",
+    "claim": "Thiết kế tuân thủ chuẩn Agnostic Core (Rule #3 / ADR-07) khi đẩy toàn bộ URL/cấu hình pentest dự án vào .agent-project.json và ghi log tiến độ S1 Intake theo đúng định dạng LOG_LINE_RE của verify_governance.py.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/GEMINI.md:29\n- **Agnostic Core (ADR-07):** Core `agent/` phục vụ mọi dự án — **CẤM** hardcode tên service, port, hay lệnh ngôn ngữ dự án vào core. Dữ kiện dự án khai báo tại `<project-root>/.agent-project.json`.\n\nREF: /Users/trainguyen/Documents/work/agent/tooling/verify_governance.py:21-22\nTIER_RE = re.compile(r\"^\\s*tier\\s*:\\s*(T[0-3])\\b\", re.I | re.M)\nLOG_LINE_RE = re.compile(r\"^-\\s*\\[\\d{4}-\\d{2}-\\d{2}[^\\]]*\\]\\s*\\[Agent:[a-zA-Z0-9.\\-_]+\\]\\s+.+\")"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Rule #15 trong GEMINI.md cho phép chạy git push tự do và chỉ yêu cầu Escalation sau khi thử sửa thất bại trên 50 lần.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/GEMINI.md:105-107\n### 15. Quy tắc Cổng Bảo mật, CẤM Git Push & Escalation\n- **CẤM `git push`:** Không chạy `git push` lên bất kỳ nhánh nào (hook H5 chặn cứng). User tự quyết định push.\n- **Escalation (>3 lần lặp):** Thử sửa cùng 1 lỗi >3 lần thất bại → DỪNG NGAY, báo cáo để re-plan."
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Hàm handle_post_invocation trong agy_guard.py luôn trả về dict rỗng {} ngay cả khi có new_edits và errs khác rỗng.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:505-511\n    edited_names = \", \".join(sorted({Path(f).name for _, f in new_edits}))\n    audit_prompt = FINAL_AUDIT_MSG.format(files=edited_names)\n    if errs:\n        msg = \"⚠️ H6 fast-feedback:\\n\" + \"\\n\".join(errs) + \"\\n\\n\" + audit_prompt\n    else:\n        msg = audit_prompt\n    return {\"injectSteps\": [{\"ephemeralMessage\": msg}]}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Rule #15 trong GEMINI.md cấm chạy git push lên bất kỳ nhánh nào và yêu cầu dừng ngay để báo cáo re-plan khi thử sửa cùng 1 lỗi quá 3 lần thất bại.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/GEMINI.md:105-107\n### 15. Quy tắc Cổng Bảo mật, CẤM Git Push & Escalation\n- **CẤM `git push`:** Không chạy `git push` lên bất kỳ nhánh nào (hook H5 chặn cứng). User tự quyết định push.\n- **Escalation (>3 lần lặp):** Thử sửa cùng 1 lỗi >3 lần thất bại → DỪNG NGAY, báo cáo để re-plan."
+  }
+]

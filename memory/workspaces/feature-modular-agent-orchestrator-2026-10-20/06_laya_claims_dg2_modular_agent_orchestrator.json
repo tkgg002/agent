@@ -1,0 +1,50 @@
+[
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Code Demo của Orchestrator kết hợp trạng thái Stage S3 (01_requirements, 05_progress, 08_tasks, 09_tasks_solution) của verify_governance.py để kiểm chứng hồ sơ thiết kế của Planner Agent trước khi đẩy sang Coding Queue.",
+    "claim": "Hằng số STAGE_S3_PREFIXES trong verify_governance.py gồm 4 tiền tố: 01_requirements, 05_progress, 08_tasks và 09_tasks_solution.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/verify_governance.py:56-57\nSTAGE_S3_PREFIXES = (\"01_requirements\", \"05_progress\", \"08_tasks\", \"09_tasks_solution\")\nSUFFIX_SCOPED_PREFIXES = (\"01_requirements\", \"08_tasks\", \"09_tasks_solution\", \"audit_report\")"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Code Demo của Reviewer/QA Worker gọi laya_gate.py với các ngưỡng tin cậy DECISIVE_CONF = 0.5, BLOCK_CONF = 0.8 và DEBATE_APPROVE_CONF = 0.95 để chặn các lỗi must-fix.",
+    "claim": "Trong laya_gate.py, các ngưỡng được cấu hình là DECISIVE_CONF = 0.5, BLOCK_CONF = 0.8 và DEBATE_APPROVE_CONF = 0.95.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:44-46\nDECISIVE_CONF = 0.5\nBLOCK_CONF = 0.8\nDEBATE_APPROVE_CONF = 0.95"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Code Demo của Coder/Reviewer Worker đọc cấu hình checks, test và runtime_check từ component_for() trong agy_guard.py dựa trên file .agent-project.json của dự án.",
+    "claim": "Hàm component_for trong agy_guard.py gọi manifest_for(clean_path) và chọn component có đường dẫn khớp dài nhất (max theo len của path).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:286-302\ndef component_for(file_path: str) -> Tuple[Optional[Path], Optional[Dict[str, Any]]]:\n    \"\"\"Return (project_root, component_dict) with the longest matching path prefix.\"\"\"\n    clean_path = str(_unquote(file_path))\n    root, mf = manifest_for(clean_path)\n    if not root or not mf:\n        return None, None\n    try:\n        rel = Path(clean_path).resolve().relative_to(root).as_posix()\n    except ValueError:\n        return None, None\n    hits: List[Dict[str, Any]] = []\n    for c in mf.get(\"components\", []):\n        cpath = c.get(\"path\", \"\").rstrip(\"/\")\n        if cpath in (\"\", \".\") or rel == cpath or rel.startswith(cpath + \"/\"):\n            hits.append(c)\n    best = max(hits, key=lambda c: len(c.get(\"path\", \"\").rstrip(\"/\")), default=None)\n    return root, best"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Control false sai lệch giá trị ngưỡng DEBATE_APPROVE_CONF.",
+    "claim": "Trong laya_gate.py, ngưỡng DEBATE_APPROVE_CONF được đặt bằng 0.15.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:44-46\nDECISIVE_CONF = 0.5\nBLOCK_CONF = 0.8\nDEBATE_APPROVE_CONF = 0.95"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Control false sai lệch danh sách STAGE_S3_PREFIXES.",
+    "claim": "Hằng số STAGE_S3_PREFIXES trong verify_governance.py chỉ chứa duy nhất tiền tố 14_walkthrough.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/verify_governance.py:56-57\nSTAGE_S3_PREFIXES = (\"01_requirements\", \"05_progress\", \"08_tasks\", \"09_tasks_solution\")\nSUFFIX_SCOPED_PREFIXES = (\"01_requirements\", \"08_tasks\", \"09_tasks_solution\", \"audit_report\")"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "Control true kiểm chứng URL mặc định của Laya server.",
+    "claim": "Hằng số DEFAULT_URL trong laya_gate.py có giá trị là \"http://127.0.0.1:8200/v1/predict\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:41-42\nFALLBACK_STATE_ROOT = AGENT_ROOT / \".agents\" / \"state\" / \"workspaces\"\nDEFAULT_URL = \"http://127.0.0.1:8200/v1/predict\""
+  }
+]

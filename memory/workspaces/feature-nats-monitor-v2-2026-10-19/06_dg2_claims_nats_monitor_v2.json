@@ -1,0 +1,44 @@
+[
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "NATSMonitorHandler.GetOverview concurrent HTTP fetching",
+    "claim": "Hàm GetOverview trong nats_monitor_handler.go sử dụng sync.WaitGroup để gọi đồng thời các endpoint /varz, /jsz và /connz với timeout 3 giây.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:36-63\nfunc (h *NATSMonitorHandler) GetOverview(c *fiber.Ctx) error {\n\tctx, cancel := context.WithTimeout(c.Context(), 3*time.Second)\n\tdefer cancel()\n\n\tvar (\n\t\tvarz, jsz, connz map[string]any\n\t\terrVarz, errJsz, errConnz error\n\t\twg sync.WaitGroup\n\t)\n\n\twg.Add(3)\n\tgo func() {\n\t\tdefer wg.Done()\n\t\terrVarz = h.fetchJSON(ctx, \"/varz\", &varz)\n\t}()\n\n\tgo func() {\n\t\tdefer wg.Done()\n\t\terrJsz = h.fetchJSON(ctx, \"/jsz?streams=true&config=true&consumers=true\", &jsz)\n\t}()\n\n\tgo func() {\n\t\tdefer wg.Done()\n\t\terrConnz = h.fetchJSON(ctx, \"/connz\", &connz)\n\t}()\n\n\twg.Wait()"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "NATSMonitorHandler.GetOverview error handling when NATS monitor is unreachable",
+    "claim": "Khi cả 3 lời gọi errVarz, errJsz và errConnz đều khác nil, GetOverview trả về HTTP 503 StatusServiceUnavailable kèm status down.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:64-76\n\tif errVarz != nil && errJsz != nil && errConnz != nil {\n\t\th.logger.Warn(\"Failed to reach NATS monitoring endpoints\",\n\t\t\tzap.String(\"nats_url\", h.natsMonitorURL),\n\t\t\tzap.NamedError(\"err_varz\", errVarz),\n\t\t\tzap.NamedError(\"err_jsz\", errJsz),\n\t\t\tzap.NamedError(\"err_connz\", errConnz),\n\t\t)\n\t\treturn c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{\n\t\t\t\"status\":  \"down\",\n\t\t\t\"error\":   fmt.Sprintf(\"cannot reach NATS monitor at %s\", h.natsMonitorURL),\n\t\t\t\"details\": fmt.Sprintf(\"varz: %v; jsz: %v; connz: %v\", errVarz, errJsz, errConnz),\n\t\t})\n\t}"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Frontend NatsMonitor component queries /api/system/nats/overview via cmsApi",
+    "claim": "Component NatsMonitor trên frontend khai báo toàn bộ React hooks ở đầu hàm và gọi cmsApi.get('/api/system/nats/overview').",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/NatsMonitor.tsx:237-260\nexport default function NatsMonitor() {\n  const [pollInterval, setPollInterval] = useState<number>(5000);\n  const [connSearch, setConnSearch] = useState<string>('');\n  const [selectedStream, setSelectedStream] = useState<NatsStreamDetail | null>(null);\n  const [consumerDrawerOpen, setConsumerDrawerOpen] = useState<boolean>(false);\n  const [rawModalOpen, setRawModalOpen] = useState<boolean>(false);\n\n  // Fetch overview from CMS backend (which proxies /varz, /jsz, /connz)\n  const {\n    data,\n    isLoading,\n    isFetching,\n    error,\n    refetch,\n    dataUpdatedAt,\n  } = useQuery<NatsOverviewResponse>({\n    queryKey: ['nats-overview'],\n    queryFn: async () => {\n      const resp = await cmsApi.get<NatsOverviewResponse>('/api/system/nats/overview');\n      return resp.data;\n    },\n    refetchInterval: pollInterval > 0 ? pollInterval : false,\n    staleTime: 3000,\n  });"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Khi cả 3 lời gọi errVarz, errJsz và errConnz đều lỗi, GetOverview trả về HTTP 200 OK kèm status healthy.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:64-76\n\tif errVarz != nil && errJsz != nil && errConnz != nil {\n\t\th.logger.Warn(\"Failed to reach NATS monitoring endpoints\",\n\t\t\tzap.String(\"nats_url\", h.natsMonitorURL),\n\t\t\tzap.NamedError(\"err_varz\", errVarz),\n\t\t\tzap.NamedError(\"err_jsz\", errJsz),\n\t\t\tzap.NamedError(\"err_connz\", errConnz),\n\t\t)\n\t\treturn c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{\n\t\t\t\"status\":  \"down\",\n\t\t\t\"error\":   fmt.Sprintf(\"cannot reach NATS monitor at %s\", h.natsMonitorURL),\n\t\t\t\"details\": fmt.Sprintf(\"varz: %v; jsz: %v; connz: %v\", errVarz, errJsz, errConnz),\n\t\t})\n\t}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Component NatsMonitor sử dụng authApi.post để lấy dữ liệu overview từ endpoint /api/auth/login.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/NatsMonitor.tsx:252-257\n  } = useQuery<NatsOverviewResponse>({\n    queryKey: ['nats-overview'],\n    queryFn: async () => {\n      const resp = await cmsApi.get<NatsOverviewResponse>('/api/system/nats/overview');\n      return resp.data;\n    },"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Hàm fetchJSON kiểm tra nếu resp.StatusCode >= 400 thì trả về lỗi định dạng nats monitor returned status.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:87-103\nfunc (h *NATSMonitorHandler) fetchJSON(ctx context.Context, endpoint string, target *map[string]any) error {\n\treq, err := http.NewRequestWithContext(ctx, http.MethodGet, h.natsMonitorURL+endpoint, nil)\n\tif err != nil {\n\t\treturn err\n\t}\n\tresp, err := h.httpClient.Do(req)\n\tif err != nil {\n\t\treturn err\n\t}\n\tdefer resp.Body.Close()\n\n\tif resp.StatusCode >= 400 {\n\t\treturn fmt.Errorf(\"nats monitor returned status %d\", resp.StatusCode)\n\t}\n\n\treturn json.NewDecoder(resp.Body).Decode(target)\n}"
+  }
+]

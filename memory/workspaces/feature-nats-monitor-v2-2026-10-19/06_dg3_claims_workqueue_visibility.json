@@ -1,0 +1,44 @@
+[
+  {
+    "id": "A-WQ1",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Canonical stream role description for CDC_EVENTS and CDC_TRANSMUTE",
+    "claim": "Trong canonicalCoreStreams tại nats_monitor_handler.go:53-67, CDC_EVENTS có Role ghi rõ Hiện KafkaConsumer ghi thẳng qua cdcBatchBuffer RAM, bypass NATS và CDC_TRANSMUTE có Role ghi rõ Xóa ngay bản tin khỏi đĩa sau khi Worker ACK với ExpectedRetention là workqueue.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:53-67\nvar canonicalCoreStreams = map[string]CoreStreamSpec{\n\t\"CDC_EVENTS\": {\n\t\tName:              \"CDC_EVENTS\",\n\t\tRole:              \"Hàng đợi dự phòng sự kiện CDC (Hiện KafkaConsumer ghi thẳng qua cdcBatchBuffer RAM, bypass NATS)\",\n\t\tExpectedRetention: \"limits\",\n\t\tExpectedMaxBytes:  512 * 1024 * 1024, // 512 MiB\n\t\tExpectedMaxAgeNs:  int64(24 * time.Hour),\n\t},\n\t\"CDC_TRANSMUTE\": {\n\t\tName:              \"CDC_TRANSMUTE\",\n\t\tRole:              \"Hàng đợi WorkQueue điều phối job Shadow -> Master (Xóa ngay bản tin khỏi đĩa sau khi Worker ACK)\",\n\t\tExpectedRetention: \"workqueue\",\n\t\tExpectedMaxBytes:  256 * 1024 * 1024, // 256 MiB\n\t\tExpectedMaxAgeNs:  int64(1 * time.Hour),\n\t},"
+  },
+  {
+    "id": "A-WQ2",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Messages and Sequence column rendering for workqueue and CDC_EVENTS in NatsMonitor.tsx",
+    "claim": "Tại NatsMonitor.tsx:955-988, khi isWorkQueue va last > 0 thi hien thi Tag mau green Da xu ly: #last, luon hien thi Cuoi: lastTs khi lastTs khac '-', va voi CDC_EVENTS khi msgs === 0 thi hien thi Tag Direct Kafka->RAM (Bypass NATS).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/NatsMonitor.tsx:955-988\n              {isWorkQueue && last > 0 && (\n                <Tag color=\"green\" style={{ margin: 0, fontSize: 11 }}>\n                  Đã xử lý: #{formatNumber(last)}\n                </Tag>\n              )}\n              {!isWorkQueue && msgs === 0 && last > 0 && (\n                <Tag color=\"default\" style={{ margin: 0, fontSize: 11 }}>\n                  Đã qua: #{formatNumber(last)}\n                </Tag>\n              )}\n            </Space>\n            {msgs === 0 ? (\n              <Text type=\"secondary\" style={{ fontSize: 12 }}>\n                {isWorkQueue\n                  ? `Hàng đợi sạch (Next: #${first > 0 ? first : last + 1})`\n                  : `Trống (Next: #${first > 0 ? first : last + 1})`}\n              </Text>\n            ) : (\n              <Text type=\"secondary\" style={{ fontSize: 12 }}>\n                Seq: #{first} → #{last}\n              </Text>\n            )}\n            {lastTs !== '-' && (\n              <Text type=\"secondary\" style={{ fontSize: 11 }}>\n                Cuối: <Text strong style={{ fontSize: 11 }}>{lastTs}</Text>\n              </Text>\n            )}\n            {record.name === 'CDC_EVENTS' && msgs === 0 && (\n              <Tooltip title=\"KafkaConsumer (kafka_consumer.go:748) hiện đang ghi thẳng vào cdcBatchBuffer trong RAM (buffer_type: cdc-stream) để tối ưu độ trễ, không publish qua NATS CDC_EVENTS.\">\n                <Tag color=\"processing\" style={{ margin: 0, fontSize: 10, cursor: 'help' }}>\n                  Direct Kafka→RAM (Bypass NATS)\n                </Tag>\n              </Tooltip>\n            )}"
+  },
+  {
+    "id": "A-WQ3",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Message Inspector Drawer empty alerts for workqueue and CDC_EVENTS in NatsMonitor.tsx",
+    "claim": "Tại NatsMonitor.tsx:2148-2171, khi peekData.total_messages === 0, giao dien hien thi Alert type success cho stream co retention workqueue (khi peekData.last_seq > 0) va Alert type warning cho stream CDC_EVENTS giai thich co che In-Memory Bypass.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/NatsMonitor.tsx:2148-2171\n          {!peekError &&\n            peekData &&\n            peekData.total_messages === 0 &&\n            (selectedStream?.config?.retention || '').toLowerCase() === 'workqueue' &&\n            peekData.last_seq > 0 && (\n              <Alert\n                type=\"success\"\n                showIcon\n                message={`Hàng đợi WORKQUEUE \"${selectedStreamName}\" đã xử lý hết bản tin tồn đọng (Đã xử lý: #${formatNumber(peekData.last_seq)} msgs)`}\n                description={`Stream sử dụng cơ chế WorkQueuePolicy: bản tin được tự động xóa khỏi ổ đĩa ngay khi Worker xử lý xong và gọi ACK (~25–39ms). Bản tin gần nhất (#${formatNumber(peekData.last_seq)}) đã được xử lý lúc ${formatDate(selectedStream?.state?.last_ts)}.`}\n              />\n            )}\n\n          {!peekError &&\n            peekData &&\n            peekData.total_messages === 0 &&\n            selectedStreamName === 'CDC_EVENTS' && (\n              <Alert\n                type=\"warning\"\n                showIcon\n                message=\"Stream CDC_EVENTS hiện đang được đi tắt (In-Memory Bypass)\"\n                description={`Trong kiến trúc hiện tại (kafka_consumer.go:748), KafkaConsumer đọc sự kiện Debezium và đẩy thẳng vào cdcBatchBuffer trong RAM (\"buffer_type\": \"cdc-stream\") để ghi trực tiếp vào Shadow DB mà không publish qua NATS stream CDC_EVENTS (bản tin cuối cùng trên NATS: #${peekData.last_seq} lúc ${formatDate(selectedStream?.state?.last_ts)}).`}\n              />\n            )}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Trong canonicalCoreStreams tại nats_monitor_handler.go:54-60, stream CDC_EVENTS được cấu hình ExpectedRetention là interest và ExpectedMaxBytes bằng 0.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:54-60\n\t\"CDC_EVENTS\": {\n\t\tName:              \"CDC_EVENTS\",\n\t\tRole:              \"Hàng đợi dự phòng sự kiện CDC (Hiện KafkaConsumer ghi thẳng qua cdcBatchBuffer RAM, bypass NATS)\",\n\t\tExpectedRetention: \"limits\",\n\t\tExpectedMaxBytes:  512 * 1024 * 1024, // 512 MiB\n\t\tExpectedMaxAgeNs:  int64(24 * time.Hour),\n\t},"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Tại NatsMonitor.tsx:1026-1030, khi retention === 'workqueue' và usedBytes === 0, giao diện xóa tự động stream khỏi NATS thông qua lệnh DELETE.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/NatsMonitor.tsx:1026-1030\n            {retention === 'workqueue' && usedBytes === 0 && lastSeq > 0 && (\n              <Text type=\"secondary\" style={{ fontSize: 10, color: '#389e0d' }}>\n                ✓ WorkQueue: tự xóa sau ACK (#{formatNumber(lastSeq)})\n              </Text>\n            )}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Trong canonicalCoreStreams tại nats_monitor_handler.go:61-67, stream CDC_TRANSMUTE có ExpectedRetention là workqueue và ExpectedMaxAgeNs là int64(1 * time.Hour).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:61-67\n\t\"CDC_TRANSMUTE\": {\n\t\tName:              \"CDC_TRANSMUTE\",\n\t\tRole:              \"Hàng đợi WorkQueue điều phối job Shadow -> Master (Xóa ngay bản tin khỏi đĩa sau khi Worker ACK)\",\n\t\tExpectedRetention: \"workqueue\",\n\t\tExpectedMaxBytes:  256 * 1024 * 1024, // 256 MiB\n\t\tExpectedMaxAgeNs:  int64(1 * time.Hour),\n\t},"
+  }
+]

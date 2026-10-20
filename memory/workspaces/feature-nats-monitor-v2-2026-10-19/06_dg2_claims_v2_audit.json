@@ -1,0 +1,44 @@
+[
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "GetOverview concurrent HTTP fetches in nats_monitor_handler.go",
+    "claim": "Hàm GetOverview trong nats_monitor_handler.go khởi tạo context với timeout 3 giây và dùng sync.WaitGroup chờ 3 goroutine lấy /varz, /jsz và /connz.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:36-63\nfunc (h *NATSMonitorHandler) GetOverview(c *fiber.Ctx) error {\n\tctx, cancel := context.WithTimeout(c.Context(), 3*time.Second)\n\tdefer cancel()\n\n\tvar (\n\t\tvarz, jsz, connz map[string]any\n\t\terrVarz, errJsz, errConnz error\n\t\twg sync.WaitGroup\n\t)\n\n\twg.Add(3)\n\tgo func() {\n\t\tdefer wg.Done()\n\t\terrVarz = h.fetchJSON(ctx, \"/varz\", &varz)\n\t}()\n\n\tgo func() {\n\t\tdefer wg.Done()\n\t\terrJsz = h.fetchJSON(ctx, \"/jsz?streams=true&config=true&consumers=true\", &jsz)\n\t}()\n\n\tgo func() {\n\t\tdefer wg.Done()\n\t\terrConnz = h.fetchJSON(ctx, \"/connz\", &connz)\n\t}()\n\n\twg.Wait()"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Audit middleware deriveTarget in audit.go",
+    "claim": "Hàm deriveTarget trong audit.go hiện tại chỉ kiểm tra các tham số URL là table, id, name và trường collection trong body JSON.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/middleware/audit.go:325-346\nfunc deriveTarget(c *fiber.Ctx) string {\n\tif t := c.Params(\"table\"); t != \"\" {\n\t\treturn t\n\t}\n\tif id := c.Params(\"id\"); id != \"\" {\n\t\treturn id\n\t}\n\tif n := c.Params(\"name\"); n != \"\" {\n\t\treturn n\n\t}\n\t// Best-effort body peek for reset-offset.\n\tvar body struct {\n\t\tCollection string `json:\"collection\"`\n\t\tDatabase   string `json:\"database\"`\n\t}\n\tif err := json.Unmarshal(c.Body(), &body); err == nil {\n\t\tif body.Collection != \"\" {\n\t\t\treturn body.Database + \".\" + body.Collection\n\t\t}\n\t}\n\treturn \"\"\n}"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "NatsMonitor component hooks and API endpoint in NatsMonitor.tsx",
+    "claim": "Component NatsMonitor trên frontend khai báo các state bằng useState ở đầu hàm và gọi cmsApi.get('/api/system/nats/overview').",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/NatsMonitor.tsx:237-260\nexport default function NatsMonitor() {\n  const [pollInterval, setPollInterval] = useState<number>(5000);\n  const [connSearch, setConnSearch] = useState<string>('');\n  const [selectedStream, setSelectedStream] = useState<NatsStreamDetail | null>(null);\n  const [consumerDrawerOpen, setConsumerDrawerOpen] = useState<boolean>(false);\n  const [rawModalOpen, setRawModalOpen] = useState<boolean>(false);\n\n  // Fetch overview from CMS backend (which proxies /varz, /jsz, /connz)\n  const {\n    data,\n    isLoading,\n    isFetching,\n    error,\n    refetch,\n    dataUpdatedAt,\n  } = useQuery<NatsOverviewResponse>({\n    queryKey: ['nats-overview'],\n    queryFn: async () => {\n      const resp = await cmsApi.get<NatsOverviewResponse>('/api/system/nats/overview');\n      return resp.data;\n    },\n    refetchInterval: pollInterval > 0 ? pollInterval : false,\n    staleTime: 3000,\n  });"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Hàm deriveTarget trong audit.go hiện tại đã đọc tham số c.Params(\"stream\") ở dòng 326.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/middleware/audit.go:325-335\nfunc deriveTarget(c *fiber.Ctx) string {\n\tif t := c.Params(\"table\"); t != \"\" {\n\t\treturn t\n\t}\n\tif id := c.Params(\"id\"); id != \"\" {\n\t\treturn id\n\t}\n\tif n := c.Params(\"name\"); n != \"\" {\n\t\treturn n\n\t}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Component NatsMonitor khởi tạo pollInterval mặc định bằng 60000ms.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/NatsMonitor.tsx:237-240\nexport default function NatsMonitor() {\n  const [pollInterval, setPollInterval] = useState<number>(5000);\n  const [connSearch, setConnSearch] = useState<string>('');"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Component NatsMonitor khởi tạo state pollInterval mặc định bằng 5000ms.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/NatsMonitor.tsx:237-240\nexport default function NatsMonitor() {\n  const [pollInterval, setPollInterval] = useState<number>(5000);\n  const [connSearch, setConnSearch] = useState<string>('');"
+  }
+]

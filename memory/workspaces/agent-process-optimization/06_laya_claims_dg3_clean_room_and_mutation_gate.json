@@ -1,0 +1,58 @@
+[
+  {
+    "id": "A-F1",
+    "kind": "claim",
+    "flow": "hooks/agy/agy_guard.py handle_pre_write() body construction",
+    "claim": "handle_pre_write constructs body by concatenating args.get('CodeContent') and args.get('ReplacementContent') without reading the existing file content from disk.",
+    "evidence": "REF: hooks/agy/agy_guard.py:344-348\n    raw_args = (payload.get(\"toolCall\") or {}).get(\"args\") or {}\n    args = {k: _unquote(v) for k, v in raw_args.items()}\n    f = tgt(args)\n    body = str(args.get(\"CodeContent\") or \"\") + str(args.get(\"ReplacementContent\") or \"\")"
+  },
+  {
+    "id": "A-F2",
+    "kind": "claim",
+    "flow": "hooks/agy/agy_guard.py calls() transcript tool call iterator",
+    "claim": "calls iterates over st and yields (i, tc.get('name'), clean_args) for each tool call in s.get('tool_calls').",
+    "evidence": "REF: hooks/agy/agy_guard.py:119-125\ndef calls(st: List[Dict[str, Any]]) -> Iterator[Tuple[int, Optional[str], Dict[str, Any]]]:\n    for i, s in enumerate(st):\n        for tc in s.get(\"tool_calls\") or []:\n            raw_args = tc.get(\"args\") or {}\n            clean_args = {k: _unquote(v) for k, v in raw_args.items()}\n            yield i, tc.get(\"name\"), clean_args"
+  },
+  {
+    "id": "A-F4",
+    "kind": "claim",
+    "flow": "hooks/agy/agy_guard.py manifest_for() and component_for()",
+    "claim": "manifest_for walks up parent directories from resolved file_path looking for MANIFEST (.agent-project.json) and returns (d, parsed_json).",
+    "evidence": "REF: hooks/agy/agy_guard.py:270-283\ndef manifest_for(file_path: str) -> Tuple[Optional[Path], Optional[Dict[str, Any]]]:\n    \"\"\"Find nearest .agent-project.json walking up from file_path.\"\"\"\n    try:\n        resolved = Path(_unquote(file_path)).resolve()\n    except OSError:\n        return None, None\n    for d in [resolved.parent, *resolved.parents]:\n        mf = d / MANIFEST\n        try:\n            if mf.is_file():\n                return d, json.loads(mf.read_text(encoding=\"utf-8\"))\n        except OSError:\n            continue\n    return None, None"
+  },
+  {
+    "id": "A-F6",
+    "kind": "claim",
+    "flow": "hooks/agy/agy_guard.py AUDIT_REQUIRED_PATTERNS",
+    "claim": "AUDIT_REQUIRED_PATTERNS is a list of 6 tuples checking mandatory sections in audit_report_<suffix>.md from Mục 1 to Mục 6.",
+    "evidence": "REF: hooks/agy/agy_guard.py:89-96\nAUDIT_REQUIRED_PATTERNS = [\n    (r\"(line-by-line|từng dòng|git diff)\", \"Mục 1: Phản biện từng dòng update / git diff & từng task\"),\n    (r\"(mockup|hallucination|runtime|trace|smoke)\", \"Mục 2: Chống suy diễn Smoke Test / Mockup / Hallucination & Trace Runtime thật\"),\n    (r\"(concurrency|multi-worker|worker|timeout|heartbeat|ackwait|watermark|continuity|debouncer)\", \"Mục 3: Kiểm tra Concurrency / Timeout-Heartbeat / Data Continuity\"),\n    (r\"(suy diễn|báo cáo láo|speculation|trung thực|honesty)\", \"Mục 4: Kiểm tra suy diễn & báo cáo láo\"),\n    (r\"(self-improvement|phản tỉnh|lessons)\", \"Mục 5: Vòng lặp Phản tỉnh & Khắc phục (Self-Improvement Loop)\"),\n    (r\"(laya_router|laya_gate|dg3)\", \"Mục 6: Kết quả QC & nhận xét từ /laya_router (DG3)\"),\n]"
+  },
+  {
+    "id": "A-SCOPE",
+    "kind": "claim",
+    "flow": "tooling/laya_gate.py resolve_ref_path()",
+    "claim": "resolve_ref_path checks if p is absolute and a file, otherwise searches each directory in base_dirs and returns cand.resolve() if cand.is_file().",
+    "evidence": "REF: tooling/laya_gate.py:97-105\ndef resolve_ref_path(raw_path: str, base_dirs: List[Path]) -> Optional[Path]:\n    p = Path(raw_path)\n    if p.is_absolute():\n        return p if p.is_file() else None\n    for base in base_dirs:\n        cand = (base / p).resolve()\n        if cand.is_file():\n            return cand\n    return None"
+  },
+  {
+    "id": "CF1",
+    "kind": "control_false",
+    "flow": "tooling/verify_governance.py TIER_RULES",
+    "claim": "TIER_RULES for T1 requires 11_report_*.md and 12_implementation_plan_*.md.",
+    "evidence": "REF: tooling/verify_governance.py:26-30\n    \"T1\": [\n        (\"01_requirements_*.md\", (\"01_requirements*.md\",)),\n        (\"05_progress_*.md\", (\"05_progress*.md\",)),\n        (\"08_tasks_*.md\", (\"08_tasks*.md\",)),\n    ],"
+  },
+  {
+    "id": "CF2",
+    "kind": "control_false",
+    "flow": "hooks/agy/agy_guard.py handle_post_invocation()",
+    "claim": "handle_post_invocation deletes the transcript file before running checks.",
+    "evidence": "REF: hooks/agy/agy_guard.py:471-481\ndef handle_post_invocation(\n    payload: Dict[str, Any],\n    mem_root: Optional[Path] = None,\n    state_dir: Optional[Path] = None,\n) -> Dict[str, Any]:\n    sdir = state_dir or STATE\n    st = steps(payload)\n    conv_id = payload.get(\"conversationId\", \"default\")\n    mark = sdir / f\"{conv_id}.fb\"\n    last = int(mark.read_text(encoding=\"utf-8\")) if mark.exists() else -1"
+  },
+  {
+    "id": "CT1",
+    "kind": "control_true",
+    "flow": "hooks/agy/agy_guard.py last_user_idx()",
+    "claim": "last_user_idx iterates backward through st and returns the index of the last step where type is USER_INPUT, or -1 if none exists.",
+    "evidence": "REF: hooks/agy/agy_guard.py:127-131\ndef last_user_idx(st: List[Dict[str, Any]]) -> int:\n    for i in range(len(st) - 1, -1, -1):\n        if st[i].get(\"type\") == \"USER_INPUT\":\n            return i\n    return -1"
+  }
+]

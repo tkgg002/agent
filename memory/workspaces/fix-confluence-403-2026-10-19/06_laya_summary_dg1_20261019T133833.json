@@ -1,0 +1,105 @@
+{
+  "mode": "claim",
+  "stage": "dg1",
+  "workspace": "fix-confluence-403-2026-10-19",
+  "ts": "20261019T133833",
+  "trusted_rounds": [
+    "r2"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-confluence-403-2026-10-19/06_laya_raw_dg1_20261019T133833.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "Hàm isPermanentForbiddenBody trả về true khi statusCode là http.StatusForbidden và body chứa chuỗi caller cannot access confluence, khiến doWithRetry dừng ngay ở attempt đầu tiên.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6575
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6641
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7139
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "Hàm findPageByTitle hiện chỉ truy vấn GET /wiki/rest/api/content theo spaceKey và title, trả về lỗi search content returned status %d khi resp.StatusCode khác http.StatusOK.",
+      "decision": "FLAG",
+      "resolved": "Đã xác minh tại REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/confluence/client.go:234-253 hàm findPageByTitle chỉ gọi GET /wiki/rest/api/content?spaceKey=...&title=... và trả lỗi khi StatusCode != http.StatusOK.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3309
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.0763
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8328
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "Khi CreateOrUpdateChildPage trả về lỗi khác nil, hàm Run chỉ cập nhật cột last_error trên bảng WorkerSchedule mà không lên lịch chạy thử lại trong ngày.",
+      "decision": "FLAG",
+      "resolved": "Đã xác minh trực tiếp tại REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/confluence/confluence_runner.go:706-713 khi err != nil hàm Run chỉ gọi Update(\"last_error\", err.Error()) và return, không cập nhật next_run_at để retry trong ngày.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3629
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.6084
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.7591
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "Trong hàm calculateNextRun khi runAtTime khác rỗng và nowInTz.After(targetToday), nếu đã qua cửa sổ 5 phút đầu giờ và không phải manual trigger thì hàm luôn đặt nextRun sang ngày hôm sau và trả về shouldRun bằng false.",
+      "decision": "FLAG",
+      "resolved": "Đã xác minh tại REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_scheduler.go:264-275 khi nowInTz.After(targetToday) ở cuối nhánh runAtTime thì nextRun = targetToday.AddDate(0, 0, 1) và shouldRun = false.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "INCORRECT",
+          "confidence": 0.3292
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4149
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8179
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

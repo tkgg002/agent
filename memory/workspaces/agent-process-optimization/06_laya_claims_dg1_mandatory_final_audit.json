@@ -1,0 +1,51 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "claim",
+    "flow": "hooks/agy/agy_guard.py handle_post_invocation() and handle_stop()",
+    "claim": "handle_post_invocation returns an empty dictionary when errs is empty, and handle_stop inside the if src block checks 05_progress, 06_validation, and laya_gate_status(ws, 'dg3') without checking for audit_report.",
+    "evidence": "REF: hooks/agy/agy_guard.py:423-425\n    if errs:\n        return {\"injectSteps\": [{\"ephemeralMessage\": \"⚠️ H6 fast-feedback:\\n\" + \"\\n\".join(errs)}]}\n    return {}\nREF: hooks/agy/agy_guard.py:474-481\n    if src:\n        last = src[-1][0]\n        if not touched(st, r\"05_progress\", last):\n            miss.append(\"05_progress: chưa append kết quả sau lần sửa code cuối\")\n        if not touched(st, r\"06_validation\", last):\n            miss.append(\"06_validation: chưa ghi bằng chứng test/runtime sau lần sửa code cuối\")\n        if laya_gate_status(ws, \"dg3\", ws_root) != \"PASS\":\n            miss.append(\"DG3: chưa self-audit thay đổi bằng laya_gate\")"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "claim",
+    "flow": "tooling/verify_governance.py TIER_RULES",
+    "claim": "TIER_RULES for T2 currently requires 01_requirements, 05_progress, 08_tasks, 09_tasks_solution, 06_validation/06_test_cases, and 11_report, without requiring audit_report.",
+    "evidence": "REF: tooling/verify_governance.py:31-38\n    \"T2\": [\n        (\"01_requirements_*.md\", (\"01_requirements*.md\",)),\n        (\"05_progress_*.md\", (\"05_progress*.md\",)),\n        (\"08_tasks_*.md\", (\"08_tasks*.md\",)),\n        (\"09_tasks_solution_*.md\", (\"09_tasks_solution*.md\",)),\n        (\"06_validation_*.md / 06_test_cases_*.md\", (\"06_validation*.md\", \"06_test_cases*.md\")),\n        (\"11_report_*.md\", (\"11_report*.md\",)),\n    ],"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "claim",
+    "flow": "tooling/verify_governance.py STAGE_S3_PREFIXES",
+    "claim": "STAGE_S3_PREFIXES filters rules in stage S3 to only 01_requirements, 05_progress, 08_tasks, and 09_tasks_solution.",
+    "evidence": "REF: tooling/verify_governance.py:54-55\nSTAGE_S3_PREFIXES = (\"01_requirements\", \"05_progress\", \"08_tasks\", \"09_tasks_solution\")\nSUFFIX_SCOPED_PREFIXES = (\"01_requirements\", \"08_tasks\", \"09_tasks_solution\")"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "claim",
+    "flow": "hooks/agy/agy_guard.py dispatch()",
+    "claim": "dispatch maps pre-invocation, pre-write, pre-command, post-invocation, and stop events to their respective handler functions.",
+    "evidence": "REF: hooks/agy/agy_guard.py:519-529\ndef dispatch(event_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:\n    handlers = {\n        \"pre-invocation\": handle_pre_invocation,\n        \"pre-write\": handle_pre_write,\n        \"pre-command\": handle_pre_command,\n        \"post-invocation\": handle_post_invocation,\n        \"stop\": handle_stop,\n    }\n    if event_name not in handlers:\n        return {}\n    return handlers[event_name](payload)"
+  },
+  {
+    "id": "CF1",
+    "kind": "control_false",
+    "flow": "tooling/verify_governance.py TIER_RULES",
+    "claim": "TIER_RULES for T1 requires 11_report_*.md and 12_implementation_plan_*.md.",
+    "evidence": "REF: tooling/verify_governance.py:26-30\n    \"T1\": [\n        (\"01_requirements_*.md\", (\"01_requirements*.md\",)),\n        (\"05_progress_*.md\", (\"05_progress*.md\",)),\n        (\"08_tasks_*.md\", (\"08_tasks*.md\",)),\n    ],"
+  },
+  {
+    "id": "CF2",
+    "kind": "control_false",
+    "flow": "hooks/agy/agy_guard.py handle_post_invocation()",
+    "claim": "handle_post_invocation deletes the transcript file before running checks.",
+    "evidence": "REF: hooks/agy/agy_guard.py:393-403\ndef handle_post_invocation(\n    payload: Dict[str, Any],\n    mem_root: Optional[Path] = None,\n    state_dir: Optional[Path] = None,\n) -> Dict[str, Any]:\n    sdir = state_dir or STATE\n    st = steps(payload)\n    conv_id = payload.get(\"conversationId\", \"default\")\n    mark = sdir / f\"{conv_id}.fb\"\n    last = int(mark.read_text(encoding=\"utf-8\")) if mark.exists() else -1"
+  },
+  {
+    "id": "CT1",
+    "kind": "control_true",
+    "flow": "hooks/agy/agy_guard.py last_user_idx()",
+    "claim": "last_user_idx iterates backward through st and returns the index of the last step where type is USER_INPUT, or -1 if none exists.",
+    "evidence": "REF: hooks/agy/agy_guard.py:100-104\ndef last_user_idx(st: List[Dict[str, Any]]) -> int:\n    for i in range(len(st) - 1, -1, -1):\n        if st[i].get(\"type\") == \"USER_INPUT\":\n            return i\n    return -1"
+  }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "H6 Execution Loop Monitor & PentAGI Bridge Intake Masking",
+    "claim": "Code demo nâng cấp handle_post_invocation trong agy_guard.py đếm số lần liên tiếp checks trả về lỗi (errs khác rỗng) vào file <conv_id>.<u_idx>.loop trong state_dir và tự động nối thông điệp cảnh báo Escalation (Rule #15) khi số lần lỗi liên tiếp >= 3, đồng thời reset bộ đếm về 0 khi checks đạt PASS.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:476-485\n    sdir = state_dir or STATE\n    st = steps(payload)\n    conv_id = payload.get(\"conversationId\", \"default\")\n    mark = sdir / f\"{conv_id}.fb\"\n    last = int(mark.read_text(encoding=\"utf-8\")) if mark.exists() else -1\n\n    new_edits = [(i, f) for i, f in src_edits(st, mem_root) if i > last]\n    if not new_edits:\n        return {}\n\nREF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:505-511\n    edited_names = \", \".join(sorted({Path(f).name for _, f in new_edits}))\n    audit_prompt = FINAL_AUDIT_MSG.format(files=edited_names)\n    if errs:\n        msg = \"⚠️ H6 fast-feedback:\\n\" + \"\\n\".join(errs) + \"\\n\\n\" + audit_prompt\n    else:\n        msg = audit_prompt\n    return {\"injectSteps\": [{\"ephemeralMessage\": msg}]}"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Secret Masking & Target Whitelist Validation in pentagi_bridge.py",
+    "claim": "Code demo pentagi_bridge.py tái sử dụng biểu thức chính quy SECRET của agy_guard.py để che mọi token/mật khẩu trong báo cáo PentAGI trước khi ghi vào workspace memory, và từ chối chạy trigger nếu target URL không thuộc danh sách allowed_pentest_targets (mặc định chỉ cho phép localhost/127.0.0.1).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:41-46\nSECRET = re.compile(\n    r\"(AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|ATATT[\\w\\-]{20,}|ghp_\\w{30,}\"\n    r\"|Bearer\\s+[\\w.\\-]{20,}|(mongodb|postgres(ql)?|mysql|redis)://[^*\\s:/]+:[^*\\s@]+@\"\n    r\"|password\\s*[:=]\\s*[^\\s*'\\\"]{6,})\",\n    re.I,\n)\n\nREF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:370-376\n    # H3: Secret & PII Guard (Rule #20)\n    m = SECRET.search(body)\n    if m:\n        return {\n            \"decision\": \"deny\" if is_mem_path(f, mem_root) else \"force_ask\",\n            \"reason\": f\"Rule 20: phát hiện chuỗi giống secret ({m.group(0)[:10]}***). Mask trước khi ghi.\",\n        }"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Valid Call Signatures in agy_guard.py & verify_governance.py",
+    "claim": "Code demo chỉ gọi các hàm và hằng số có thật trong agy_guard.py (steps, last_user_idx, src_edits, component_for, STATE, SECRET, FINAL_AUDIT_MSG) và sinh dòng log tiến độ khớp đúng biểu thức LOG_LINE_RE của verify_governance.py.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:127-131\ndef last_user_idx(st: List[Dict[str, Any]]) -> int:\n    for i in range(len(st) - 1, -1, -1):\n        if st[i].get(\"type\") == \"USER_INPUT\":\n            return i\n    return -1\n\nREF: /Users/trainguyen/Documents/work/agent/tooling/verify_governance.py:21-22\nTIER_RE = re.compile(r\"^\\s*tier\\s*:\\s*(T[0-3])\\b\", re.I | re.M)\nLOG_LINE_RE = re.compile(r\"^-\\s*\\[\\d{4}-\\d{2}-\\d{2}[^\\]]*\\]\\s*\\[Agent:[a-zA-Z0-9.\\-_]+\\]\\s+.+\")"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Hàm last_user_idx trong agy_guard.py luôn trả về hằng số 999 mà không duyệt qua danh sách st.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:127-131\ndef last_user_idx(st: List[Dict[str, Any]]) -> int:\n    for i in range(len(st) - 1, -1, -1):\n        if st[i].get(\"type\") == \"USER_INPUT\":\n            return i\n    return -1"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Hook H3 trong agy_guard.py luôn trả về decision allow khi phát hiện chuỗi khớp biểu thức SECRET trong memory file.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:370-376\n    # H3: Secret & PII Guard (Rule #20)\n    m = SECRET.search(body)\n    if m:\n        return {\n            \"decision\": \"deny\" if is_mem_path(f, mem_root) else \"force_ask\",\n            \"reason\": f\"Rule 20: phát hiện chuỗi giống secret ({m.group(0)[:10]}***). Mask trước khi ghi.\",\n        }"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Hàm last_user_idx trong agy_guard.py duyệt ngược danh sách st và trả về chỉ số i của phần tử có type bằng USER_INPUT, hoặc trả về -1 nếu không tìm thấy.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:127-131\ndef last_user_idx(st: List[Dict[str, Any]]) -> int:\n    for i in range(len(st) - 1, -1, -1):\n        if st[i].get(\"type\") == \"USER_INPUT\":\n            return i\n    return -1"
+  }
+]

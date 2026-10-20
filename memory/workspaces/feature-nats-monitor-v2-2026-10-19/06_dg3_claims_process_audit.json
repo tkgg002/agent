@@ -1,0 +1,62 @@
+[
+  {
+    "id": "A-R1",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Frontend X-Action-Reason Header UTF-8 Encoding Fix (AF-02)",
+    "claim": "Trong NatsMonitor.tsx, hàm handleExecuteDestructiveAction gán 'X-Action-Reason': encodeURIComponent(reason) để mã hóa an toàn chuỗi tiếng Việt có dấu trên HTTP header.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/NatsMonitor.tsx:770-777\n  const handleExecuteDestructiveAction = async (reason: string) => {\n    if (!pendingAction) return;\n    setActionSubmitting(true);\n    const headers = {\n      'Idempotency-Key': generateIdempotencyKey(),\n      'X-Action-Reason': encodeURIComponent(reason),\n    };"
+  },
+  {
+    "id": "A-R2",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "buildNATSGovernance STREAM_DRIFT ExpectedMaxBytes & ExpectedMaxAgeNs Check (AF-05)",
+    "claim": "Trong buildNATSGovernance, khối kiểm tra isCore so sánh maxBytes != coreSpec.ExpectedMaxBytes và maxAgeNs != coreSpec.ExpectedMaxAgeNs để phát hiện STREAM_DRIFT khi cấu hình lệch chuẩn.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:718-731\n\t\t\tif retention != coreSpec.ExpectedRetention {\n\t\t\t\tdriftReasons = append(driftReasons, fmt.Sprintf(\"retention đang là '%s' (chuẩn yêu cầu '%s')\", retention, coreSpec.ExpectedRetention))\n\t\t\t}\n\t\t\tif maxBytes <= 0 {\n\t\t\t\tdriftReasons = append(driftReasons, fmt.Sprintf(\"max_bytes chưa giới hạn (UNLIMITED), chuẩn yêu cầu %d MiB\", coreSpec.ExpectedMaxBytes/(1024*1024)))\n\t\t\t} else if coreSpec.ExpectedMaxBytes > 0 && maxBytes != coreSpec.ExpectedMaxBytes {\n\t\t\t\tdriftReasons = append(driftReasons, fmt.Sprintf(\"max_bytes đang là %d MiB (chuẩn yêu cầu %d MiB)\", maxBytes/(1024*1024), coreSpec.ExpectedMaxBytes/(1024*1024)))\n\t\t\t}\n\t\t\tif maxAgeNs <= 0 {\n\t\t\t\tdriftReasons = append(driftReasons, \"max_age chưa giới hạn (UNLIMITED)\")\n\t\t\t} else if coreSpec.ExpectedMaxAgeNs > 0 && maxAgeNs != coreSpec.ExpectedMaxAgeNs {\n\t\t\t\tdriftReasons = append(driftReasons, fmt.Sprintf(\"max_age đang là %s (chuẩn yêu cầu %s)\", time.Duration(maxAgeNs), time.Duration(coreSpec.ExpectedMaxAgeNs)))\n\t\t\t}"
+  },
+  {
+    "id": "A-R3",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "buildNATSGovernance MISSING_CORE_STREAM & Partial Monitor Error Alerts (AF-04)",
+    "claim": "Trong buildNATSGovernance, vòng lặp kiểm tra !seenCoreStreams[coreName] chạy khi jsz != nil (kể cả khi danh sách stream rỗng) và GetOverview bổ sung cảnh báo MONITOR_PARTIAL_ERROR khi 1 trong 3 endpoint lỗi cục bộ.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:180-202\n\tgovernance := buildNATSGovernance(varz, jsz, connz, h.natsClient != nil && h.natsClient.JS != nil)\n\tif errVarz != nil || errJsz != nil || errConnz != nil {\n\t\tpartialErrs := make([]string, 0, 3)\n\t\tif errVarz != nil {\n\t\t\tpartialErrs = append(partialErrs, fmt.Sprintf(\"/varz: %v\", errVarz))\n\t\t}\n\t\tif errJsz != nil {\n\t\t\tpartialErrs = append(partialErrs, fmt.Sprintf(\"/jsz: %v\", errJsz))\n\t\t}\n\t\tif errConnz != nil {\n\t\t\tpartialErrs = append(partialErrs, fmt.Sprintf(\"/connz: %v\", errConnz))\n\t\t}\n\t\talerts, _ := governance[\"alerts\"].([]map[string]any)\n\t\talerts = append(alerts, map[string]any{\n\t\t\t\"code\":    \"MONITOR_PARTIAL_ERROR\",\n\t\t\t\"level\":   \"warning\",\n\t\t\t\"message\": fmt.Sprintf(\"Một số endpoint NATS Monitor phản hồi lỗi cục bộ: %s\", strings.Join(partialErrs, \"; \")),\n\t\t})\n\t\tgovernance[\"alerts\"] = alerts\n\t\tif summary, ok := governance[\"summary\"].(map[string]any); ok {\n\t\t\tsummary[\"alerts_count\"] = len(alerts)\n\t\t}\n\t}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:834-847\n\tmissingCoreStreams := make([]string, 0)\n\tif jsz != nil {\n\t\tfor _, coreName := range canonicalCoreStreamOrder {\n\t\t\tif !seenCoreStreams[coreName] {\n\t\t\t\tmissingCoreStreams = append(missingCoreStreams, coreName)\n\t\t\t\talerts = append(alerts, map[string]any{\n\t\t\t\t\t\"code\":    \"MISSING_CORE_STREAM\",\n\t\t\t\t\t\"level\":   \"error\",\n\t\t\t\t\t\"stream\":  coreName,\n\t\t\t\t\t\"message\": fmt.Sprintf(\"Thiếu Core Stream bắt buộc '%s' trên NATS JetStream\", coreName),\n\t\t\t\t})\n\t\t\t}\n\t\t}\n\t}"
+  },
+  {
+    "id": "A-R4",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "GetStreamMessages Wildcard Subject Matching via matchNATSSubjectFilter (AF-06)",
+    "claim": "Hàm GetStreamMessages sử dụng matchNATSSubjectFilter(msg.Subject, subjectFilter) hỗ trợ cả ký tự đại diện '*' và '>' của NATS.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:372-399\n\t\t\tif subjectFilter != \"\" && !matchNATSSubjectFilter(msg.Subject, subjectFilter) {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\titems = append(items, formatRawMsg(msg))\n\t\t}\n\n\tdefault: // \"latest\"\n\t\tprobes := 0\n\t\tfor seq := state.LastSeq; seq >= state.FirstSeq && len(items) < limit && probes < maxProbes; seq-- {\n\t\t\tif ctx.Err() != nil {\n\t\t\t\tbreak\n\t\t\t}\n\t\t\tprobes++\n\t\t\tmsg, getErr := h.natsClient.JS.GetMsg(streamName, seq, nats.Context(ctx))\n\t\t\tif getErr != nil {\n\t\t\t\tif seq == 0 {\n\t\t\t\t\tbreak\n\t\t\t\t}\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tif subjectFilter != \"\" && !matchNATSSubjectFilter(msg.Subject, subjectFilter) {\n\t\t\t\tif seq == 0 {\n\t\t\t\t\tbreak\n\t\t\t\t}\n\t\t\t\tcontinue\n\t\t\t}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:1001-1023\nfunc matchNATSSubjectFilter(subject, filter string) bool {\n\tfilter = strings.TrimSpace(filter)\n\tif filter == \"\" || filter == \">\" {\n\t\treturn true\n\t}\n\tif !strings.ContainsAny(filter, \"*>\") {\n\t\treturn strings.Contains(subject, filter)\n\t}\n\tsubTokens := strings.Split(subject, \".\")\n\tpatTokens := strings.Split(filter, \".\")\n\tfor i, pat := range patTokens {\n\t\tif pat == \">\" {\n\t\t\treturn i < len(subTokens)\n\t\t}\n\t\tif i >= len(subTokens) {\n\t\t\treturn false\n\t\t}\n\t\tif pat != \"*\" && pat != subTokens[i] {\n\t\t\treturn false\n\t\t}\n\t}\n\treturn len(subTokens) == len(patTokens)\n}"
+  },
+  {
+    "id": "A-R5",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "GetOverview & GetStreamMessages c.UserContext() and Sidebar Vietnamese Label (AF-07)",
+    "claim": "GetOverview sử dụng c.UserContext() cho context.WithTimeout và App.tsx hiển thị nhãn 'Giám sát NATS' cho route /nats-monitor.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:134-141\nfunc (h *NATSMonitorHandler) GetOverview(c *fiber.Ctx) error {\n\tbaseCtx := c.UserContext()\n\tif baseCtx == nil {\n\t\tbaseCtx = context.Background()\n\t}\n\tctx, cancel := context.WithTimeout(baseCtx, 3*time.Second)\n\tdefer cancel()\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/App.tsx:140-144\n        {\n          key: '/nats-monitor',\n          icon: <CloudServerOutlined />,\n          label: <Link to=\"/nats-monitor\">Giám sát NATS</Link>,\n        },"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Trong NewNATSMonitorHandler, httpClient.Timeout được cấu hình là 60 * time.Minute.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:124-129\n\t\thttpClient: &http.Client{\n\t\t\tTimeout: 3 * time.Second,\n\t\t},\n\t\tlogger:     logger,\n\t\tnatsClient: nc,\n\t}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Hàm matchNATSSubjectFilter luôn trả về false khi filter là chuỗi rỗng hoặc ký tự '>'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:1001-1006\nfunc matchNATSSubjectFilter(subject, filter string) bool {\n\tfilter = strings.TrimSpace(filter)\n\tif filter == \"\" || filter == \">\" {\n\t\treturn true\n\t}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Hàm matchNATSSubjectFilter trả về true ngay lập tức khi filter là chuỗi rỗng hoặc ký tự '>'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:1001-1006\nfunc matchNATSSubjectFilter(subject, filter string) bool {\n\tfilter = strings.TrimSpace(filter)\n\tif filter == \"\" || filter == \">\" {\n\t\treturn true\n\t}"
+  }
+]
+
+

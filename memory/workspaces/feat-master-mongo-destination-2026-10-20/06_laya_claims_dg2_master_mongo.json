@@ -1,0 +1,47 @@
+[
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Hàm bulkUpsertMasterMongo trong Code Demo thực thi BulkWrite có thứ tự",
+    "claim": "Trong Code Demo, hàm bulkUpsertMasterMongo gọi coll.BulkWrite với tùy chọn options.BulkWrite().SetOrdered(true).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feat-master-mongo-destination-2026-10-20/09_tasks_solution_master_mongo.md:243-250\n\tres, err := coll.BulkWrite(ctx, models, options.BulkWrite().SetOrdered(true))\n\tif err != nil {\n\t\treturn 0, 0, int64(len(records)), fmt.Errorf(\"mongo master bulk write %s.%s: %w\", dbName, binding.MasterTable, err)\n\t}\n\tins = res.UpsertedCount\n\tupd = res.ModifiedCount\n\toccSkip = int64(len(records)) - ins - upd\n\treturn ins, upd, occSkip, nil"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Xử lý biên khi danh sách records rỗng trong bulkUpsertMasterMongo",
+    "claim": "Khi len(records) == 0, hàm bulkUpsertMasterMongo trả về ngay 0, 0, 0, nil mà không gọi tới MongoDB.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feat-master-mongo-destination-2026-10-20/09_tasks_solution_master_mongo.md:182-185\n) (ins int64, upd int64, occSkip int64, err error) {\n\tif len(records) == 0 {\n\t\treturn 0, 0, 0, nil\n\t}"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Đối chiếu tên bảng cdc_system.connection_registry trong ConnectionManager",
+    "claim": "Trong ConnectionManager, câu truy vấn GORM tra cứu bảng cdc_system.connection_registry với điều kiện status = 'active'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:93-96\n\t\t\tvar conn modelsource.ConnectionRegistry\n\t\t\tqErr := sysDB.WithContext(ctx).Table(\"cdc_system.connection_registry\").\n\t\t\t\tWhere(\"(connection_code = ? OR connection_code = ?) AND status = 'active'\", key, strings.ToLower(key)).\n\t\t\t\tFirst(&conn).Error"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "flow": "Control false: đảo ngược giá trị trả về khi len(records) == 0",
+    "claim": "Khi len(records) == 0, hàm bulkUpsertMasterMongo trả về lỗi err != nil.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feat-master-mongo-destination-2026-10-20/09_tasks_solution_master_mongo.md:182-185\n) (ins int64, upd int64, occSkip int64, err error) {\n\tif len(records) == 0 {\n\t\treturn 0, 0, 0, nil\n\t}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "flow": "Control false: đảo tham số SetOrdered trong BulkWrite",
+    "claim": "Trong Code Demo, hàm bulkUpsertMasterMongo gọi options.BulkWrite().SetOrdered(false).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feat-master-mongo-destination-2026-10-20/09_tasks_solution_master_mongo.md:243-250\n\tres, err := coll.BulkWrite(ctx, models, options.BulkWrite().SetOrdered(true))\n\tif err != nil {\n\t\treturn 0, 0, int64(len(records)), fmt.Errorf(\"mongo master bulk write %s.%s: %w\", dbName, binding.MasterTable, err)\n\t}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "flow": "Control true: khớp nguyên văn tên bảng cdc_system.connection_registry",
+    "claim": "Câu truy vấn trong ConnectionManager gọi Table(\"cdc_system.connection_registry\").",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:93-96\n\t\t\tvar conn modelsource.ConnectionRegistry\n\t\t\tqErr := sysDB.WithContext(ctx).Table(\"cdc_system.connection_registry\").\n\t\t\t\tWhere(\"(connection_code = ? OR connection_code = ?) AND status = 'active'\", key, strings.ToLower(key)).\n\t\t\t\tFirst(&conn).Error"
+  }
+]

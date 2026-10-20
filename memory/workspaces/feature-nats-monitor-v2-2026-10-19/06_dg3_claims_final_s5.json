@@ -1,0 +1,68 @@
+[
+  {
+    "id": "A-R1",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "GetStreamMessages Empty Stream Guard (R2 & R4)",
+    "claim": "Hàm GetStreamMessages kiểm tra state.Msgs == 0 || state.FirstSeq > state.LastSeq và trả về danh sách items rỗng khi stream trống.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:223-234\n\tstate := info.State\n\t// Empty stream guard: NATS sets FirstSeq = LastSeq + 1 when Messages == 0\n\tif state.Msgs == 0 || state.FirstSeq > state.LastSeq {\n\t\treturn c.JSON(fiber.Map{\n\t\t\t\"stream\":         streamName,\n\t\t\t\"mode\":           mode,\n\t\t\t\"first_seq\":      state.FirstSeq,\n\t\t\t\"last_seq\":       state.LastSeq,\n\t\t\t\"total_messages\": state.Msgs,\n\t\t\t\"items\":          []any{},\n\t\t})\n\t}"
+  },
+  {
+    "id": "A-R2",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "PurgeStream Mutual Exclusion Guard (R5)",
+    "claim": "Hàm PurgeStream trả về HTTP 400 BadRequest nếu req.Keep > 0 và req.Seq > 0 cùng được truyền trong một request.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:410-414\n\tif req.Keep > 0 && req.Seq > 0 {\n\t\treturn c.Status(fiber.StatusBadRequest).JSON(fiber.Map{\n\t\t\t\"error\": \"keep and seq cannot both be set in a single purge request\",\n\t\t})\n\t}"
+  },
+  {
+    "id": "A-R3",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "DeleteStream Core Stream Protection (R5)",
+    "claim": "Hàm DeleteStream chặn xóa và trả về HTTP 400 BadRequest nếu streamName nằm trong canonicalCoreStreams.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:550-554\n\tif _, isCore := canonicalCoreStreams[streamName]; isCore {\n\t\treturn c.Status(fiber.StatusBadRequest).JSON(fiber.Map{\n\t\t\t\"error\": fmt.Sprintf(\"stream %s là Core Stream của Data-Hub và được bảo vệ cứng (không được xóa); vui lòng dùng Purge hoặc Chỉnh Quota\", streamName),\n\t\t})\n\t}"
+  },
+  {
+    "id": "A-R4",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "DeleteConsumer PushBound & NumWaiting Guard (R5)",
+    "claim": "Hàm DeleteConsumer trả về HTTP 400 BadRequest nếu info.PushBound hoặc info.NumWaiting > 0.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:593-597\n\tif info.PushBound || info.NumWaiting > 0 {\n\t\treturn c.Status(fiber.StatusBadRequest).JSON(fiber.Map{\n\t\t\t\"error\": fmt.Sprintf(\"consumer %s đang có worker lắng nghe (push_bound=%v, num_waiting=%d) — không được xóa khi worker đang chạy để bảo vệ kết nối subscription\", consumerName, info.PushBound, info.NumWaiting),\n\t\t})\n\t}"
+  },
+  {
+    "id": "A-R5",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Destructive Routes & Audit Target Derivation (R5 & R6)",
+    "claim": "Hàm deriveTarget trong audit.go trích xuất tham số stream kèm consumer hoặc seq để ghi nhận mục tiêu thao tác NATS vào bảng admin_actions.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/middleware/audit.go:341-349\n\tif stream := c.Params(\"stream\"); stream != \"\" {\n\t\tif consumer := c.Params(\"consumer\"); consumer != \"\" {\n\t\t\treturn stream + \"/\" + consumer\n\t\t}\n\t\tif seq := c.Params(\"seq\"); seq != \"\" {\n\t\t\treturn stream + \"#\" + seq\n\t\t}\n\t\treturn stream\n\t}"
+  },
+  {
+    "id": "A-R6",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Frontend NatsMonitor PATCH Config Contract (R6)",
+    "claim": "Hàm handleExecuteDestructiveAction trong NatsMonitor.tsx gọi cmsApi.patch tới /api/system/nats/streams/${sName}/config khi thực thi update_quota.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/NatsMonitor.tsx:787-793\n      } else if (pendingAction.type === 'update_quota') {\n        const resp = await cmsApi.patch(\n          `/api/system/nats/streams/${sName}/config`,\n          { ...pendingAction.quotaPayload, reason },\n          { headers },\n        );\n        message.success(resp.data?.message || `Đã cập nhật Quota cho stream ${pendingAction.streamName}`);"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Hàm DeleteStream cho phép xóa trực tiếp mọi stream nằm trong canonicalCoreStreams và trả về HTTP 200 OK.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:550-554\n\tif _, isCore := canonicalCoreStreams[streamName]; isCore {\n\t\treturn c.Status(fiber.StatusBadRequest).JSON(fiber.Map{\n\t\t\t\"error\": fmt.Sprintf(\"stream %s là Core Stream của Data-Hub và được bảo vệ cứng (không được xóa); vui lòng dùng Purge hoặc Chỉnh Quota\", streamName),\n\t\t})\n\t}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Hàm PurgeStream cho phép truyền đồng thời req.Keep > 0 và req.Seq > 0 mà không trả về lỗi.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:410-414\n\tif req.Keep > 0 && req.Seq > 0 {\n\t\treturn c.Status(fiber.StatusBadRequest).JSON(fiber.Map{\n\t\t\t\"error\": \"keep and seq cannot both be set in a single purge request\",\n\t\t})\n\t}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Khi req.Keep > 0 và req.Seq > 0, hàm PurgeStream trả về mã trạng thái fiber.StatusBadRequest.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:410-414\n\tif req.Keep > 0 && req.Seq > 0 {\n\t\treturn c.Status(fiber.StatusBadRequest).JSON(fiber.Map{\n\t\t\t\"error\": \"keep and seq cannot both be set in a single purge request\",\n\t\t})\n\t}"
+  }
+]

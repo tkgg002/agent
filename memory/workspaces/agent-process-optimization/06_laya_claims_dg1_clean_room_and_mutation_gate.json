@@ -1,0 +1,51 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "claim",
+    "flow": "hooks/agy/agy_guard.py handle_stop() src check block",
+    "claim": "Inside the if src block, handle_stop checks 05_progress, 06_validation, audit_report_, audit_report_issues, and dg3, without checking for any mutation gate summary.",
+    "evidence": "REF: hooks/agy/agy_guard.py:561-574\n    if src:\n        last = src[-1][0]\n        if not touched(st, r\"05_progress\", last):\n            miss.append(\"05_progress: chưa append kết quả sau lần sửa code cuối\")\n        if not touched(st, r\"06_validation\", last):\n            miss.append(\"06_validation: chưa ghi bằng chứng test/runtime sau lần sửa code cuối\")\n        if not touched(st, r\"audit_report_\", last):\n            miss.append(\"audit_report: chưa tạo/cập nhật audit_report_<suffix>.md sau lần sửa code cuối\")\n        miss.extend(audit_report_issues(ws, ws_root, sol_sfx))\n        if laya_gate_status(ws, \"dg3\", ws_root) != \"PASS\" or not touched(\n            st, r\"(laya_gate\\.py.*(dg3|review)|06_laya_.*dg3)\", last\n        ):\n            miss.append(\"DG3: chưa chạy lại /laya_router (dg3/review PASS) sau lần sửa code cuối\")"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "claim",
+    "flow": "tooling/verify_governance.py TIER_RE and LOG_LINE_RE",
+    "claim": "verify_governance.py defines TIER_RE to match tier: T0-T3 and LOG_LINE_RE to match progress log lines, without defining a regex for mode: clean-room.",
+    "evidence": "REF: tooling/verify_governance.py:21-23\nTIER_RE = re.compile(r\"^\\s*tier\\s*:\\s*(T[0-3])\\b\", re.I | re.M)\nLOG_LINE_RE = re.compile(r\"^-\\s*\\[\\d{4}-\\d{2}-\\d{2}[^\\]]*\\]\\s*\\[Agent:[a-zA-Z0-9.\\-_]+\\]\\s+.+\")"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "claim",
+    "flow": "tooling/verify_governance.py STAGE_S3_PREFIXES and SUFFIX_SCOPED_PREFIXES",
+    "claim": "STAGE_S3_PREFIXES contains 01_requirements, 05_progress, 08_tasks, and 09_tasks_solution.",
+    "evidence": "REF: tooling/verify_governance.py:56-57\nSTAGE_S3_PREFIXES = (\"01_requirements\", \"05_progress\", \"08_tasks\", \"09_tasks_solution\")\nSUFFIX_SCOPED_PREFIXES = (\"01_requirements\", \"08_tasks\", \"09_tasks_solution\", \"audit_report\")"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "claim",
+    "flow": "hooks/agy/agy_guard.py dispatch()",
+    "claim": "dispatch maps pre-invocation, pre-write, pre-command, post-invocation, and stop events to their respective handler functions.",
+    "evidence": "REF: hooks/agy/agy_guard.py:610-620\ndef dispatch(event_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:\n    handlers = {\n        \"pre-invocation\": handle_pre_invocation,\n        \"pre-write\": handle_pre_write,\n        \"pre-command\": handle_pre_command,\n        \"post-invocation\": handle_post_invocation,\n        \"stop\": handle_stop,\n    }\n    if event_name not in handlers:\n        return {}\n    return handlers[event_name](payload)"
+  },
+  {
+    "id": "CF1",
+    "kind": "control_false",
+    "flow": "tooling/verify_governance.py TIER_RULES",
+    "claim": "TIER_RULES for T1 requires 11_report_*.md and 12_implementation_plan_*.md.",
+    "evidence": "REF: tooling/verify_governance.py:26-30\n    \"T1\": [\n        (\"01_requirements_*.md\", (\"01_requirements*.md\",)),\n        (\"05_progress_*.md\", (\"05_progress*.md\",)),\n        (\"08_tasks_*.md\", (\"08_tasks*.md\",)),\n    ],"
+  },
+  {
+    "id": "CF2",
+    "kind": "control_false",
+    "flow": "hooks/agy/agy_guard.py handle_post_invocation()",
+    "claim": "handle_post_invocation deletes the transcript file before running checks.",
+    "evidence": "REF: hooks/agy/agy_guard.py:471-481\ndef handle_post_invocation(\n    payload: Dict[str, Any],\n    mem_root: Optional[Path] = None,\n    state_dir: Optional[Path] = None,\n) -> Dict[str, Any]:\n    sdir = state_dir or STATE\n    st = steps(payload)\n    conv_id = payload.get(\"conversationId\", \"default\")\n    mark = sdir / f\"{conv_id}.fb\"\n    last = int(mark.read_text(encoding=\"utf-8\")) if mark.exists() else -1"
+  },
+  {
+    "id": "CT1",
+    "kind": "control_true",
+    "flow": "hooks/agy/agy_guard.py last_user_idx()",
+    "claim": "last_user_idx iterates backward through st and returns the index of the last step where type is USER_INPUT, or -1 if none exists.",
+    "evidence": "REF: hooks/agy/agy_guard.py:127-131\ndef last_user_idx(st: List[Dict[str, Any]]) -> int:\n    for i in range(len(st) - 1, -1, -1):\n        if st[i].get(\"type\") == \"USER_INPUT\":\n            return i\n    return -1"
+  }
+]

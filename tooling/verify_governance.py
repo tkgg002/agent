@@ -9,6 +9,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from datetime import datetime
@@ -19,6 +20,8 @@ AGENT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_WORKSPACES_DIR = AGENT_ROOT / "memory" / "workspaces"
 
 TIER_RE = re.compile(r"^\s*tier\s*:\s*(T[0-3])\b", re.I | re.M)
+CLEAN_ROOM_MODE_RE = re.compile(r"^\s*mode\s*:\s*clean-room\b", re.I | re.M)
+CLEAN_ROOM_SPEC_RE = re.compile(r"clean-room\s+approved\s+spec", re.I)
 LOG_LINE_RE = re.compile(r"^-\s*\[\d{4}-\d{2}-\d{2}[^\]]*\]\s*\[Agent:[a-zA-Z0-9.\-_]+\]\s+.+")
 
 # Mỗi phần tử là (nhãn mô tả, tuple các glob pattern chấp nhận 1 trong số đó)
@@ -190,6 +193,66 @@ def verify_workspace_docs(
         return False
 
     log_info(f"✓ Đầy đủ bộ tài liệu bắt buộc cho Tier {tier} ({stage_norm}).")
+
+    # Kiểm tra Clean-Room Approved Spec & 3-Mutant Verification Gate khi task khai báo mode: clean-room
+    req_candidates = match_any(ws_path, ("01_requirements*.md",))
+    req_file: Optional[Path] = None
+    if suffix and (ws_path / f"01_requirements_{suffix}.md").is_file():
+        req_file = ws_path / f"01_requirements_{suffix}.md"
+    elif req_candidates:
+        req_file = max(req_candidates, key=lambda p: p.stat().st_mtime)
+
+    is_clean_room = False
+    if req_file and req_file.is_file():
+        req_text = req_file.read_text(encoding="utf-8", errors="ignore")
+        is_clean_room = bool(CLEAN_ROOM_MODE_RE.search(req_text))
+
+    if is_clean_room and tier in ("T2", "T3"):
+        sol_candidates = match_any(ws_path, ("09_tasks_solution*.md",))
+        sol_file: Optional[Path] = None
+        if suffix and (ws_path / f"09_tasks_solution_{suffix}.md").is_file():
+            sol_file = ws_path / f"09_tasks_solution_{suffix}.md"
+        elif sol_candidates:
+            sol_file = max(sol_candidates, key=lambda p: p.stat().st_mtime)
+        if not sol_file or not CLEAN_ROOM_SPEC_RE.search(
+            sol_file.read_text(encoding="utf-8", errors="ignore")
+        ):
+            log_error(
+                f"[Clean-Room Mode] Thiếu mục 'Clean-Room Approved Spec' trong {sol_file.name if sol_file else '09_tasks_solution_*.md'}."
+            )
+            return False
+        log_info(f"✓ [Clean-Room Mode] Đã có Clean-Room Approved Spec trong {sol_file.name}.")
+
+        if stage_norm == "S6":
+            mut_patterns = (
+                (f"06_mutation_summary_{suffix}_*.json", "06_mutation_summary_*.json")
+                if suffix
+                else ("06_mutation_summary_*.json",)
+            )
+            mut_candidates = match_any(ws_path, mut_patterns)
+            if not mut_candidates:
+                log_error(
+                    "[Clean-Room Mode] Thiếu biên bản kiểm thử đột biến 3 bản hỏng (06_mutation_summary_*.json) ở chặng S6."
+                )
+                return False
+            latest_mut = sorted(mut_candidates, key=lambda p: p.name)[-1]
+            try:
+                mut_data = json.loads(latest_mut.read_text(encoding="utf-8"))
+            except Exception as e:
+                log_error(f"[Clean-Room Mode] Không đọc được {latest_mut.name}: {e}")
+                return False
+            if (
+                mut_data.get("gate") != "PASS"
+                or int(mut_data.get("killed_count", 0)) < 3
+                or not bool(mut_data.get("all_restored_sha256", False))
+            ):
+                log_error(
+                    f"[Clean-Room Mode] {latest_mut.name} chưa đạt PASS (gate={mut_data.get('gate')}, killed={mut_data.get('killed_count')})."
+                )
+                return False
+            log_info(
+                f"✓ [Clean-Room Mode] {latest_mut.name} đạt PASS ({mut_data.get('killed_count')}/{mut_data.get('total_mutants')} mutants KILLED)."
+            )
 
     # Kiểm tra nội dung 6 phần bắt buộc trong audit_report_*.md ở chặng S6 (Tier T2/T3)
     if stage_norm == "S6" and tier in ("T2", "T3"):

@@ -1,0 +1,51 @@
+[
+  {
+    "id": "DG3-A1",
+    "kind": "claim",
+    "flow": "hooks/agy/agy_guard.py handle_pre_write() PROD_MOCK_POLLUTION check",
+    "claim": "In handle_pre_write, when f is a source file and not a test file and PROD_MOCK_POLLUTION matches body, it returns a dictionary with decision set to deny.",
+    "evidence": "REF: hooks/agy/agy_guard.py:419-427\n    if is_src(f, mem_root):\n        if not is_test_file(f) and PROD_MOCK_POLLUTION.search(body):\n            return {\n                \"decision\": \"deny\",\n                \"reason\": (\n                    \"Rule 12/14 (Anti-Smoke-Speculation): CẤM gắn hàm mock/closure giả (*Fn, sqlmock, fakemodel) \"\n                    \"vào code production để lách tích hợp thật (L001/L056)!\"\n                ),\n            }"
+  },
+  {
+    "id": "DG3-A2",
+    "kind": "claim",
+    "flow": "hooks/agy/agy_guard.py handle_post_invocation() auto-injection of FINAL_AUDIT_MSG",
+    "claim": "In handle_post_invocation, when new_edits is non-empty, it formats FINAL_AUDIT_MSG with edited_names and always returns injectSteps containing ephemeralMessage even when errs is empty.",
+    "evidence": "REF: hooks/agy/agy_guard.py:505-511\n    edited_names = \", \".join(sorted({Path(f).name for _, f in new_edits}))\n    audit_prompt = FINAL_AUDIT_MSG.format(files=edited_names)\n    if errs:\n        msg = \"⚠️ H6 fast-feedback:\\n\" + \"\\n\".join(errs) + \"\\n\\n\" + audit_prompt\n    else:\n        msg = audit_prompt\n    return {\"injectSteps\": [{\"ephemeralMessage\": msg}]}"
+  },
+  {
+    "id": "DG3-A3",
+    "kind": "claim",
+    "flow": "hooks/agy/agy_guard.py handle_stop() audit_report and DG3 checks",
+    "claim": "In handle_stop, when src is non-empty, it checks whether audit_report_ was touched after last, appends audit_report_issues, and checks that laya_gate_status for dg3 is PASS and touched after last.",
+    "evidence": "REF: hooks/agy/agy_guard.py:561-573\n    if src:\n        last = src[-1][0]\n        if not touched(st, r\"05_progress\", last):\n            miss.append(\"05_progress: chưa append kết quả sau lần sửa code cuối\")\n        if not touched(st, r\"06_validation\", last):\n            miss.append(\"06_validation: chưa ghi bằng chứng test/runtime sau lần sửa code cuối\")\n        if not touched(st, r\"audit_report_\", last):\n            miss.append(\"audit_report: chưa tạo/cập nhật audit_report_<suffix>.md sau lần sửa code cuối\")\n        miss.extend(audit_report_issues(ws, ws_root, sol_sfx))\n        if laya_gate_status(ws, \"dg3\", ws_root) != \"PASS\" or not touched(\n            st, r\"(laya_gate\\.py.*(dg3|review)|06_laya_.*dg3)\", last\n        ):\n            miss.append(\"DG3: chưa chạy lại /laya_router (dg3/review PASS) sau lần sửa code cuối\")"
+  },
+  {
+    "id": "DG3-A4",
+    "kind": "claim",
+    "flow": "tooling/verify_governance.py TIER_RULES and verify_workspace_docs() audit_report validation",
+    "claim": "In verify_governance.py, TIER_RULES for T2 and T3 include audit_report_*.md, and in stage S6 for T2 or T3 it checks that the audit report text matches all patterns in AUDIT_REQUIRED_PATTERNS.",
+    "evidence": "REF: tooling/verify_governance.py:31-39\n    \"T2\": [\n        (\"01_requirements_*.md\", (\"01_requirements*.md\",)),\n        (\"05_progress_*.md\", (\"05_progress*.md\",)),\n        (\"08_tasks_*.md\", (\"08_tasks*.md\",)),\n        (\"09_tasks_solution_*.md\", (\"09_tasks_solution*.md\",)),\n        (\"06_validation_*.md / 06_test_cases_*.md\", (\"06_validation*.md\", \"06_test_cases*.md\")),\n        (\"11_report_*.md\", (\"11_report*.md\",)),\n        (\"audit_report_*.md\", (\"audit_report*.md\",)),\n    ],\nREF: tooling/verify_governance.py:195-208\n    if stage_norm == \"S6\" and tier in (\"T2\", \"T3\"):\n        audit_candidates = match_any(ws_path, (\"audit_report*.md\",))\n        if suffix and (ws_path / f\"audit_report_{suffix}.md\").is_file():\n            audit_file = ws_path / f\"audit_report_{suffix}.md\"\n        else:\n            audit_file = max(audit_candidates, key=lambda p: p.stat().st_mtime)\n        audit_text = audit_file.read_text(encoding=\"utf-8\", errors=\"ignore\")\n        missing_sections = [\n            label for pat, label in AUDIT_REQUIRED_PATTERNS if not re.search(pat, audit_text, re.I)\n        ]\n        if missing_sections:\n            for ms in missing_sections:\n                log_error(f\"File {audit_file.name} thiếu phần bắt buộc: {ms}\")\n            return False"
+  },
+  {
+    "id": "CF1",
+    "kind": "control_false",
+    "flow": "hooks/agy/agy_guard.py handle_post_invocation()",
+    "claim": "In handle_post_invocation, when errs is empty, it returns an empty dictionary without injectSteps.",
+    "evidence": "REF: hooks/agy/agy_guard.py:505-511\n    edited_names = \", \".join(sorted({Path(f).name for _, f in new_edits}))\n    audit_prompt = FINAL_AUDIT_MSG.format(files=edited_names)\n    if errs:\n        msg = \"⚠️ H6 fast-feedback:\\n\" + \"\\n\".join(errs) + \"\\n\\n\" + audit_prompt\n    else:\n        msg = audit_prompt\n    return {\"injectSteps\": [{\"ephemeralMessage\": msg}]}"
+  },
+  {
+    "id": "CF2",
+    "kind": "control_false",
+    "flow": "tooling/verify_governance.py TIER_RULES",
+    "claim": "In verify_governance.py, TIER_RULES for T1 requires audit_report_*.md and 12_implementation_plan_*.md.",
+    "evidence": "REF: tooling/verify_governance.py:26-30\n    \"T1\": [\n        (\"01_requirements_*.md\", (\"01_requirements*.md\",)),\n        (\"05_progress_*.md\", (\"05_progress*.md\",)),\n        (\"08_tasks_*.md\", (\"08_tasks*.md\",)),\n    ],"
+  },
+  {
+    "id": "CT1",
+    "kind": "control_true",
+    "flow": "hooks/agy/agy_guard.py is_test_file()",
+    "claim": "is_test_file returns True when the lowercased file name ends with _test.go, starts with test_, ends with _test.py, contains .test. or .spec., or its path contains /tests/.",
+    "evidence": "REF: hooks/agy/agy_guard.py:150-160\ndef is_test_file(path_str: str) -> bool:\n    p = Path(str(_unquote(path_str or \"\")))\n    name = p.name.lower()\n    return (\n        name.endswith(\"_test.go\")\n        or name.startswith(\"test_\")\n        or name.endswith(\"_test.py\")\n        or \".test.\" in name\n        or \".spec.\" in name\n        or \"/tests/\" in p.as_posix().lower()\n    )"
+  }
+]

@@ -1,0 +1,52 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "NATSMonitorHandler in cdc-cms-service currently lacks natsClient and calls /connz without subs=detail",
+    "claim": "Struct NATSMonitorHandler hiện tại chỉ lưu natsMonitorURL, httpClient và logger mà không có trường natsClient để tương tác với JetStream.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:16-33\ntype NATSMonitorHandler struct {\n\tnatsMonitorURL string\n\thttpClient     *http.Client\n\tlogger         *zap.Logger\n}\n\nfunc NewNATSMonitorHandler(natsMonitorURL string, logger *zap.Logger) *NATSMonitorHandler {\n\tif natsMonitorURL == \"\" {\n\t\tnatsMonitorURL = \"http://localhost:18222\"\n\t}\n\treturn &NATSMonitorHandler{\n\t\tnatsMonitorURL: strings.TrimRight(natsMonitorURL, \"/\"),\n\t\thttpClient: &http.Client{\n\t\t\tTimeout: 3 * time.Second,\n\t\t},\n\t\tlogger: logger,\n\t}\n}"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Server.New in cdc-cms-service initializes natsClient with Conn and JS",
+    "claim": "Struct NatsClient trong cdc-cms-service gồm hai trường là Conn kiểu *nats.Conn và JS kiểu nats.JetStreamContext.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/pkgs/natsconn/nats_client.go:14-17\ntype NatsClient struct {\n\tConn *nats.Conn\n\tJS   nats.JetStreamContext\n}"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "TransmuteConsumerPool.Start binds WorkerCount push subscriptions once at startup",
+    "claim": "Hàm Start trong transmute_consumer_pool.go khởi tạo consumerCfg với DeliverSubject là nats.NewInbox() và tạo vòng lặp WorkerCount subscriptions.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_consumer_pool.go:110-147\n\t\tMaxDeliver:     p.cfg.MaxDeliver,\n\t\tFilterSubject:  p.cfg.FilterSubject,\n\t\tDeliverSubject: nats.NewInbox(),\n\t\tDeliverGroup:   queueGroup,\n\t}\n\n\tinfo, err := p.js.ConsumerInfo(p.cfg.StreamName, p.cfg.ConsumerName)\n\tif err == nats.ErrConsumerNotFound {\n\t\t_, err = p.js.AddConsumer(p.cfg.StreamName, consumerCfg)\n\t\tif err != nil {\n\t\t\treturn fmt.Errorf(\"failed to create consumer %s: %w\", p.cfg.ConsumerName, err)\n\t\t}\n\t} else if err != nil {\n\t\treturn fmt.Errorf(\"failed to check consumer %s: %w\", p.cfg.ConsumerName, err)\n\t} else if info != nil && info.Config.DeliverGroup != queueGroup {\n\t\t// DeliverGroup là trường bất biến (immutable) trên JetStream Consumer.\n\t\t// Nếu cấu hình lệch nhóm, xóa và tạo lại consumer để áp dụng queue group đúng chuẩn.\n\t\tp.logger.Warn(\"consumer deliver group mismatch, recreating consumer due to JetStream immutability\",\n\t\t\tzap.String(\"stream\", p.cfg.StreamName),\n\t\t\tzap.String(\"consumer\", p.cfg.ConsumerName),\n\t\t\tzap.String(\"current_deliver_group\", info.Config.DeliverGroup),\n\t\t\tzap.String(\"expected_deliver_group\", queueGroup),\n\t\t)\n\t\tif delErr := p.js.DeleteConsumer(p.cfg.StreamName, p.cfg.ConsumerName); delErr != nil {\n\t\t\tp.logger.Error(\"failed to delete mismatched consumer\", zap.Error(delErr))\n\t\t} else {\n\t\t\tif _, addErr := p.js.AddConsumer(p.cfg.StreamName, consumerCfg); addErr != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to recreate consumer %s with deliver group: %w\", p.cfg.ConsumerName, addErr)\n\t\t\t}\n\t\t}\n\t}\n\n\t// 2. VÁ BUG 3: Tạo WorkerCount subscriptions độc lập vào cùng QueueGroup để có True Concurrency\n\tfor i := 0; i < p.cfg.WorkerCount; i++ {\n\t\tworkerID := i\n\t\tsub, err := p.js.QueueSubscribe(p.cfg.FilterSubject, queueGroup, func(msg *nats.Msg) {\n\t\t\tp.processMessage(msg, workerID)\n\t\t}, nats.Bind(p.cfg.StreamName, p.cfg.ConsumerName), nats.ManualAck())"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Destructive middleware chain in router.go",
+    "claim": "Trong router.go dòng 132, biến destructiveChain được tạo bằng chain(middleware.RequireOpsAdmin(), destructive.Idempotency, destructive.Audit).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/router/router.go:130-134\n\tapi.Use(middleware.JWTAuth(cfg))\n\n\tdestructiveChain := chain(middleware.RequireOpsAdmin(), destructive.Idempotency, destructive.Audit)\n\tdestructiveRestartChain := chain(middleware.RequireOpsAdmin(), destructive.RateRestart, destructive.Idempotency, destructive.Audit)"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Hàm NewNATSMonitorHandler đặt giá trị mặc định cho natsMonitorURL là http://localhost:9999.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:22-26\nfunc NewNATSMonitorHandler(natsMonitorURL string, logger *zap.Logger) *NATSMonitorHandler {\n\tif natsMonitorURL == \"\" {\n\t\tnatsMonitorURL = \"http://localhost:18222\"\n\t}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Trong router.go dòng 132, biến destructiveChain không sử dụng middleware.RequireOpsAdmin().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/router/router.go:130-134\n\tapi.Use(middleware.JWTAuth(cfg))\n\n\tdestructiveChain := chain(middleware.RequireOpsAdmin(), destructive.Idempotency, destructive.Audit)\n\tdestructiveRestartChain := chain(middleware.RequireOpsAdmin(), destructive.RateRestart, destructive.Idempotency, destructive.Audit)"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Hàm NewNATSMonitorHandler đặt giá trị mặc định cho natsMonitorURL là http://localhost:18222 khi chuỗi truyền vào rỗng.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:22-26\nfunc NewNATSMonitorHandler(natsMonitorURL string, logger *zap.Logger) *NATSMonitorHandler {\n\tif natsMonitorURL == \"\" {\n\t\tnatsMonitorURL = \"http://localhost:18222\"\n\t}"
+  }
+]

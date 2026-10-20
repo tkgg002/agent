@@ -1,0 +1,382 @@
+[
+  {
+    "id": "NEG_CONTROL_MOCK_TEST_AS_PRODUCTION_DONE",
+    "kind": "control_false",
+    "claim": "Chỉ cần chạy pass unit test với httptest.NewServer giả lập trong client_test.go là đủ để kết luận tính năng Confluence Append Daily đã chạy thành công 100% trên môi trường thực tế, không cần build/restart tiến trình cdc-worker (:8082) đang chạy bản cũ từ ngày 15/10 và không cần kiểm tra thực tế trên Atlassian Confluence Cloud.",
+    "file": "pkgs/confluence/client_test.go",
+    "objective": "Verify whether passing an in-memory httptest.NewServer unit test is sufficient to claim E2E production readiness without live runtime tracing or restarting services.",
+    "flow": "Run go test with httptest.NewServer -> Claim feature is 100% working on live Confluence and Testing environment without restarting worker or testing real Atlassian API.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.26,
+      "probabilities": {
+        "CORRECT": 0.6403,
+        "INCORRECT": 0.3011,
+        "UNSUPPORTED": 0.0585
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6403,
+                "INCORRECT": 0.3011,
+                "UNSUPPORTED": 0.0585
+              },
+              "confidence": 0.26,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 343,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.307,
+      "probabilities": {
+        "YES": 0.814,
+        "NO": 0.186
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.814,
+                "NO": 0.186
+              },
+              "confidence": 0.307,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 317,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "AUDIT_C1_CONFLUENCE_SINGLE_PAGE_APPEND_AND_403_LOGGING",
+    "kind": "code_audit",
+    "claim": "Thiết kế gom báo cáo ngày vào 1 trang cố định bằng cách chuẩn hóa tiêu đề qua resolveSingleReportPageTitle (loại bỏ {{.ReportDate}}), mở rộng findPageByTitle với expand=version,body.storage, đọc toàn bộ resp.Body khi lỗi (không nuốt message 403 của Atlassian), và dùng MergeDailySectionXHTML định vị theo mốc ASCII '(YYYY-MM-DD)</h2>' (an toàn khi Confluence chuyển ký tự tiếng Việt sang HTML entities) giúp nối tiếp ngày mới xuống dưới trang cũ hoặc cập nhật tại chỗ khi chạy lại trong ngày.",
+    "file": "centralized-data-service/pkgs/confluence/client.go & internal/service/confluence/confluence_runner.go",
+    "objective": "Consolidate daily Confluence reports into a single fixed page per schedule, append new daily sections below existing content, update in-place on same-day re-runs, and log full HTTP 403/non-200 error bodies with retry.",
+    "flow": "resolveSingleReportPageTitle strips {{.ReportDate}} -> findPageByTitle fetches expand=version,body.storage and reads full error body on non-200 -> MergeDailySectionXHTML locates (YYYY-MM-DD)</h2> marker to append with <hr/> or update in-place -> updatePage increments version.number+1.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4785,
+      "probabilities": {
+        "CORRECT": 0.8302,
+        "INCORRECT": 0.0901,
+        "UNSUPPORTED": 0.0797
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8302,
+                "INCORRECT": 0.0901,
+                "UNSUPPORTED": 0.0797
+              },
+              "confidence": 0.4785,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 836,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.222,
+      "probabilities": {
+        "YES": 0.77,
+        "NO": 0.23
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.77,
+                "NO": 0.23
+              },
+              "confidence": 0.222,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 810,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "AUDIT_C2_UPDATE_PAGE_ANCESTORS_AND_RETRY_ERROR_PRESERVATION",
+    "kind": "adversarial_code_finding",
+    "claim": "Qua kiểm toán từng dòng trong pkgs/confluence/client.go, phát hiện 2 điểm cần hoàn thiện: (1) Tại hàm updatePage (dòng 286-302), payload PUT chưa truyền trường 'ancestors': [{'id': req.ParentPageID}] giống như createPage (dòng 241-245), dẫn tới rủi ro trên Confluence REST API v1 khi PUT cập nhật trang con mà không gửi kèm ancestors thì trang con có thể bị tách khỏi ParentPageID (500432919) và nhảy ra Root của Space; (2) Tại hàm doWithRetry (dòng 105-106), trước khi đóng resp.Body để retry mã 403/5xx, cần lưu lại lastErr chứa status code và body phòng trường hợp lần retry sau gặp lỗi kết nối hoặc hết hạn context.",
+    "file": "centralized-data-service/pkgs/confluence/client.go",
+    "objective": "Identify line-level defects in pkgs/confluence/client.go during adversarial audit: missing ancestors in updatePage PUT payload and error preservation in doWithRetry.",
+    "flow": "updatePage constructs PUT /wiki/rest/api/content/{id} payload -> Missing 'ancestors' field risks detaching child page to Space root in Confluence REST API v1 -> doWithRetry discards 403 response body before retrying, risking loss of HTTP status/body if a subsequent retry hits a network/context error.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.8904,
+      "probabilities": {
+        "CORRECT": 0.978,
+        "INCORRECT": 0.0131,
+        "UNSUPPORTED": 0.0089
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.978,
+                "INCORRECT": 0.0131,
+                "UNSUPPORTED": 0.0089
+              },
+              "confidence": 0.8904,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 765,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8179,
+      "probabilities": {
+        "YES": 0.9724,
+        "NO": 0.0276
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9724,
+                "NO": 0.0276
+              },
+              "confidence": 0.8179,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 739,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "AUDIT_C3_FRONTEND_TYPO_DEFAULTS_IN_ACTIVITY_MANAGER",
+    "kind": "adversarial_code_finding",
+    "claim": "Qua kiểm toán từng dòng trong cdc-cms-web/src/pages/ActivityManager.tsx, phát hiện ngay sát các dòng vừa sửa confluence_title_template (dòng 1214-1215, 1295-1296, 1369-1370, 1736-1737), giao diện vẫn đang hardcode giá trị mặc định cũ bị sai 1 ký tự: space_key = '~712020a3dcebcbe93646fea463f119dd38b08c' (a463 - gây lỗi 404 No space with key, đúng phải là a464 '~712020a3dcebcbe93646fea464f119dd38b08c') và parent_page_id = '463833042' (gây lỗi 404, đúng phải là '500432919' giống confluence_runner.go dòng 634-637). Ngoài ra khi mở Modal Edit lịch trình cũ, confluence_title_template chưa được chuẩn hóa bỏ '{{.ReportDate}}' trên UI.",
+    "file": "cdc-cms-web/src/pages/ActivityManager.tsx",
+    "objective": "Identify stale/typo default values for confluence_space_key and confluence_parent_page_id in ActivityManager.tsx and unnormalized title_template in Edit Modal.",
+    "flow": "ActivityManager.tsx lines 1214-1215, 1295-1296, 1369-1370, 1736-1737 still use typo space_key '~712020a3dcebcbe93646fea463f119dd38b08c' (a463 instead of a464) and parent_page_id '463833042' (instead of '500432919').",
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.1168,
+      "probabilities": {
+        "CORRECT": 0.2348,
+        "INCORRECT": 0.5784,
+        "UNSUPPORTED": 0.1868
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2348,
+                "INCORRECT": 0.5784,
+                "UNSUPPORTED": 0.1868
+              },
+              "confidence": 0.1168,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 786,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5062,
+      "probabilities": {
+        "YES": 0.892,
+        "NO": 0.108
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.892,
+                "NO": 0.108
+              },
+              "confidence": 0.5062,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 760,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  },
+  {
+    "id": "AUDIT_C4_OMITTED_APPROVED_TASKS_SHUTDOWN_RACE_AND_TIMEZONE",
+    "kind": "process_and_scope_audit",
+    "claim": "Khi User ra lệnh 'APPROVE toàn bộ các vấn đề tìm đc cho anh', trong workspace có 4 hồ sơ giải pháp đang chờ APPROVE nhưng Agent mới chỉ thực thi 2 hồ sơ về Confluence (09_tasks_solution_confluence_scheduled_403.md và 09_tasks_solution_confluence_append_daily.md), mà BỎ SÓT 2 hồ sơ đã phân tích trước đó: (1) 09_tasks_solution_cms_shutdown_db_closed_race.md (vá lỗi Race Condition đóng sqlDB/redis trước khi goroutine healthCollector dừng trong cdc-cms-service/internal/server/server.go và kiểm tra parent.Err() trong system_health_collector.go); (2) 09_tasks_solution_schedule_timezone_testing.md (vá lỗi hiển thị lệch -7 giờ cho last_run_at và next_run_at trên môi trường Testing TZ=UTC tại worker_schedule_read_repo_gorm.go và cdc-cms-web/src/utils/datetime.ts). Theo đúng kỷ luật Audit (Propose-Only Rule #1 & Rule #13), Agent phải báo cáo trung thực sự thiếu sót này trong audit_report và chờ lệnh xác nhận của User trước khi chạm vào code.",
+    "file": "cdc-cms-service/internal/server/server.go, system_health_collector.go, worker_schedule_read_repo_gorm.go & cdc-cms-web/src/utils/datetime.ts",
+    "objective": "Audit scope completeness against User's command 'APPROVE toàn bộ các vấn đề tìm đc cho anh'.",
+    "flow": "Check all 4 pending 09_tasks_solution_*.md files in workspace against actual git diff.",
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3349,
+      "probabilities": {
+        "CORRECT": 0.7524,
+        "INCORRECT": 0.1152,
+        "UNSUPPORTED": 0.1324
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7524,
+                "INCORRECT": 0.1152,
+                "UNSUPPORTED": 0.1324
+              },
+              "confidence": 0.3349,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 839,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6527,
+      "probabilities": {
+        "YES": 0.9349,
+        "NO": 0.0651
+      },
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9349,
+                "NO": 0.0651
+              },
+              "confidence": 0.6527,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 813,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      }
+    }
+  }
+]
