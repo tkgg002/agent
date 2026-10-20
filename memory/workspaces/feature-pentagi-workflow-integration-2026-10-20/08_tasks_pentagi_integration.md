@@ -28,22 +28,26 @@
 - **[Definition of Done]:**
   - Unit tests trong `tooling/tests/test_pentagi_bridge.py` kiểm tra đầy đủ: (a) parse báo cáo Markdown & tạo hồ sơ `01/05/08` chuẩn format; (b) mask 100% secret/token/password trong báo cáo trước khi ghi vào workspace; (c) kiểm tra chặn URL ngoài danh sách `allowed_targets` (chống bắn nhầm vào production khi chưa uỷ quyền); (d) chạy `python3 -m unittest discover -s tooling/tests -p 'test_*.py' -v` đạt `PASS`.
 
-### Task T2.2 — Nâng cấp Hook `H6` (`hooks/agy/agy_guard.py`) với cơ chế "Execution Monitor / Loop Prevention" (Rule #15)
+### Task T2.2 — Nâng cấp Hook `H4b` (Khép vòng `S5 Audit → S3 Re-Plan`) & Hook `H6` (`Execution Monitor / Loop Prevention`) trong `hooks/agy/agy_guard.py`
 - **[Mô tả]:**
-  - Học hỏi cơ chế `Execution Monitoring (Adviser/Mentor)` của PentAGI (`PentAGI README.md:485-496`), nâng cấp `handle_post_invocation` trong `hooks/agy/agy_guard.py:471-511`:
-    - Lưu trạng thái số lần `checks` thất bại liên tiếp hoặc sửa lặp lại cùng một file mà vẫn lỗi trong `<state_dir>/<conv_id>.<u_idx>.loop`.
-    - Khi đạt ngưỡng `>= 3` lần lặp thất bại trong cùng một lượt (khớp `GEMINI.md:107` — Rule #15 Escalation), tự động tiêm cảnh báo `🚨 ESCALATION MENTOR (Rule #15 - Loop Prevention)` buộc Agent dừng sửa mò và báo cáo User để re-plan.
+  - **(a) Khép kín vòng lặp ngược `S5 Audit → S3 Re-Plan` trong `H4b` (`hooks/agy/agy_guard.py:530-580`):**
+    - Hiện tại `H4b` chỉ kiểm tra xem sau `09_tasks_solution` (`sol[-1]`) đã có `APPROVE` hay chưa, dẫn tới khi sang pha `S5 Audit` (đã tạo/cập nhật `audit_report_<suffix>.md`), quyền sửa source code vẫn mở từ lệnh `APPROVE` cũ ở S3.
+    - Nâng cấp `H4b`: nếu phát hiện đã bước vào pha `S5 Audit` (`last_audit_idx > last_sol_idx`, tức là đã chạm `audit_report_` sau lần lập `09_tasks_solution` gần nhất), **chặn cứng (`decision: "deny"`)** mọi lệnh sửa source code! Bắt buộc Agent phải **quay ngược về bước S3** cập nhật lại `09_tasks_solution_<suffix>.md` (`last_sol_idx > last_audit_idx`) + `08_tasks_<suffix>.md`, chạy lại `DG1/DG2` (`PASS` mới hơn `last_sol_idx`) và chờ **lệnh `APPROVE` mới của User** thì mới mở khóa cho sửa source code ở S4.
+  - **(b) Học hỏi cơ chế `Execution Monitoring (Adviser/Mentor)` của PentAGI vào `H6` (`hooks/agy/agy_guard.py:596-636`):**
+    - Lưu trạng thái số lần `checks` thất bại liên tiếp trong `<state_dir>/<conv_id>.<u_idx>.loop`.
+    - Khi đạt ngưỡng `>= 3` lần lặp thất bại trong cùng một lượt (khớp `GEMINI.md:108` — Rule #15 Escalation), tự động tiêm cảnh báo `🚨 ESCALATION MENTOR (Rule #15 - Loop Prevention)` buộc Agent dừng sửa mò và quay về Re-plan cùng User.
 - **[Context & Logs]:**
-  - `GEMINI.md:107`: *"Escalation (>3 lần lặp): Thử sửa cùng 1 lỗi >3 lần thất bại → DỪNG NGAY, báo cáo để re-plan."*
-  - `hooks/agy/agy_guard.py:471-511` (`handle_post_invocation`).
+  - `GEMINI.md:78`, `skills/qa-agent/SKILL.md:71`, `skills/muscle-execute/SKILL.md:66` (quy định hiện tại đang cho phép tự sửa lỗi tại S5 nếu trong phạm vi mà không bắt quay lại S3 làm Plan).
+  - `hooks/agy/agy_guard.py:570-579` (`H4b` check `sol[-1]` và `APPROVE`).
+  - `hooks/agy/agy_guard.py:596-636` (`handle_post_invocation`).
 - **[Definition of Done]:**
-  - Bổ sung test case vào `hooks/agy/tests/test_agy_guard.py` xác minh khi `checks` fail 3 lần liên tiếp thì `handle_post_invocation` trả về thông điệp Escalation; toàn bộ test suite `hooks/agy` đạt `PASS`.
+  - Bổ sung unit tests vào `hooks/agy/tests/test_agy_guard.py` xác minh: (1) sau khi ghi `audit_report_*.md` (S5), mọi lệnh sửa source code bị `H4b` `deny` cho tới khi cập nhật lại `09_tasks_solution_*.md` và có `APPROVE` mới của User; (2) khi `checks` fail 3 lần liên tiếp thì `H6` trả về thông điệp Escalation; toàn bộ test suite `hooks/agy` đạt `PASS`.
 
-### Task T2.3 — Cập nhật `skills/security-agent/SKILL.md` & `skills/workspace-docs/SKILL.md`
+### Task T2.3 — Cập nhật `GEMINI.md`, `skills/qa-agent/SKILL.md`, `skills/muscle-execute/SKILL.md`, `skills/security-agent/SKILL.md` & `skills/workspace-docs/SKILL.md`
 - **[Mô tả]:**
-  - Cập nhật `skills/workspace-docs/SKILL.md:52-69`: Bổ sung trường tùy chọn `pentest_check` và `allowed_pentest_targets` vào chuẩn `.agent-project.json`.
-  - Cập nhật `skills/security-agent/SKILL.md:17-49`: Bổ sung **Tầng 5: Dynamic Pentest Gate (DAST via `pentagi_bridge.py`)** ở chặng S5 và quy trình **Nightly Pentest Intake (`S1`)**.
+  - Cập nhật `GEMINI.md:78`, `skills/qa-agent/SKILL.md:71`, `skills/muscle-execute/SKILL.md:66`: Thay thế quy tắc "tự sửa lỗi trong phạm vi ở S5" bằng quy tắc **Closed-Loop S5 → S3 Re-Plan**: khi `S5 Audit` (hoặc PentAGI DAST) phát hiện bất kỳ lỗi/lỗ hổng nào, **CẤM tự ý sửa source code ngay tại S5**; bắt buộc ghi vào `audit_report_<suffix>.md`, quay ngược về **S3** cập nhật Plan (`09_tasks_solution_<suffix>.md` + `08_tasks_<suffix>.md`), chạy lại `DG1/DG2` và chờ User `APPROVE` mới được quay lại `S4` thực thi.
+  - Cập nhật `skills/workspace-docs/SKILL.md:52-69` & `skills/security-agent/SKILL.md:17-49`: Bổ sung `pentest_check`, `allowed_pentest_targets` và Tầng 5 Dynamic Pentest Gate (`pentagi_bridge.py`).
 - **[Context & Logs]:**
-  - `skills/security-agent/SKILL.md:1-50`, `skills/workspace-docs/SKILL.md:52-70`.
+  - `GEMINI.md:74-80`, `skills/qa-agent/SKILL.md:57-72`, `skills/muscle-execute/SKILL.md:63-68`, `skills/security-agent/SKILL.md:1-50`, `skills/workspace-docs/SKILL.md:52-70`.
 - **[Definition of Done]:**
-  - Tài liệu skill rõ ràng, không chứa thông tin hardcode của bất kỳ dự án cụ thể nào (tuân thủ Rule #3 Agnostic Core), vượt qua `DG3` (`laya_gate.py run --stage dg3`) và `audit_report_pentagi_integration.md` + `verify_governance.py` đạt `PASSED 🟢`.
+  - Tài liệu rule & skill đồng nhất 100%, không chứa thông tin hardcode của bất kỳ dự án cụ thể nào (Rule #3 Agnostic Core), vượt qua `DG3` (`laya_gate.py run --stage dg3`) và `audit_report_pentagi_integration.md` + `verify_governance.py` đạt `PASSED 🟢`.
