@@ -79,20 +79,22 @@ created_at: 2026-10-20T17:03:10+07:00
 
 - **Bài học đã ghi nhận (`Rule #5` & `Rule #6`):**
   - Đã ghi **Lesson `L257` (`[2026-10-20] Paraphrased Verbatim Audit Prompt & Interrupted S5->S3 Self-Healing Loop`)** vào `/Users/trainguyen/Documents/work/agent/memory/global/lessons.md` (`1993 -> 2000` dòng) và đồng bộ `/Users/trainguyen/Documents/work/agent/memory/global/lessons/INDEX.md` (`257/257/257`, `14,329B`).
-- **Kiểm tra vòng lặp tự chữa lành (`S5 -> S3 -> S4 -> S5`):**
-  - Trong quá trình chạy `T9.3`, không phát sinh lỗi logic trong source code `hooks/agy/agy_guard.py` (63/63 unit tests và 3/3 mutants đều PASS ngay từ lần đầu).
+- **Kiểm tra thực chiến vòng lặp tự chữa lành (`H7 Pass #1` -> `S5 -> S3 -> S4 -> S5`):**
+  - Khi `H7 Pass #1` kích hoạt thật ở lần dừng đầu tiên (`n = 0 -> 1`) với nguyên văn `VERBATIM_USER_AUDIT_PROMPT`, quá trình phản biện đối chiếu từng dòng giữa `08_tasks_verbatim_audit_hook_and_self_heal_loop.md:31-32` và `hooks/agy/agy_guard.py:738-748` đã phát hiện thiếu câu lệnh kiểm tra tường minh `if run_linter and not touched(st, r"\bgit\b.*\b(diff|show)\b", last):` trong khối `if src:` của `handle_stop`.
+  - Hệ thống đã thực thi khép kín `S5 -> S3 -> S4 -> S5` ngay trong cùng lượt: cập nhật Revision R1 vào `09_tasks_solution_verbatim_audit_hook_and_self_heal_loop.md` + `08_tasks_verbatim_audit_hook_and_self_heal_loop.md`, `H4b` tự động mở khoá cho sửa `hooks/agy/agy_guard.py:741-742` + `hooks/agy/tests/test_agy_guard.py:1048` mà **không bắt User `APPROVE` lần 2**, sau đó chạy lại toàn bộ 63/63 unit tests, 3-Mutant Gate và `DG3` (`PASS`).
 
 ---
 
 ## Mục 6: Kết quả QC, 3-Mutant Gate & nhận xét từ `/laya_router` (`DG3`)
 
 - **Kết quả 3-Mutant Gate (`mutation_gate.py`):**
-  - File biên bản: `06_mutation_summary_verbatim_audit_hook_and_self_heal_loop_20261020T170034.json`
-  - Kết quả: `gate: "PASS"`, `total_mutants: 3`, `killed_count: 3`, `survived_count: 0`, `all_restored_sha256: true`.
+  - File biên bản: `06_mutation_summary_verbatim_audit_hook_and_self_heal_loop_20261020T170929.json`
+  - Kết quả: `gate: "PASS"`, `total_mutants: 3`, `killed_count: 3`, `survived_count: 0`, `all_restored_sha256: true` (`d82c3cd3a4956998fb8516a5df78400e9e6fad4585bb2cbf70cd05837d52f302`).
     1. `M1_drop_verbatim_prompt_in_h6`: `KILLED`
     2. `M2_break_self_healing_approve_check`: `KILLED`
     3. `M3_disable_h7_first_stop_bounce`: `KILLED`
 - **Kết quả `/laya_router` (`DG3`):**
   - Lệnh: `python3 /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py run --stage dg3 --workspace agent-process-optimization --claims .../06_laya_claims_dg3_verbatim_audit_hook_and_self_heal_loop.json`
-  - File biên bản: `06_laya_summary_dg3_20261020T170256.json`
-  - Kết quả: `gate: "PASS"` (100% `REF:` khớp dòng thực tế trên đĩa; các claim `DG3-VERBATIM-PROMPT`, `DG3-SELF-HEALING-H4B`, `DG3-H7-STOP-BOUNCE` đều đạt `CORRECT`/`YES` ở cả 3 vòng `r1`, `r2`, `r3` với độ tự tin vòng 3 lần lượt `0.8783`, `0.7629`, `0.9546`; do calibration control `UNVALIDATED` trên model local nên kết luận cuối cùng xác lập bằng ground truth code và test thực tế theo Rule #10).
+  - File biên bản: `06_laya_summary_dg3_20261020T170931.json`
+  - Kết quả: `gate: "PASS"` (100% `REF:` khớp dòng thực tế trên đĩa; các claim `DG3-VERBATIM-PROMPT`, `DG3-SELF-HEALING-H4B`, `DG3-H7-STOP-BOUNCE` đều đạt `CORRECT`/`YES` ở cả 3 vòng `r1`, `r2`, `r3` với độ tự tin vòng 3 lần lượt `0.8783`, `0.7629`, `0.9549`).
+

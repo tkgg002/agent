@@ -40,8 +40,10 @@
 - **Mô tả & Phạm vi (`[Mô tả]`):**
   - Chạy `mutation_gate.py` với $\ge 3$ bản cố tình làm hỏng logic mới trong `agy_guard.py` (`3/3 KILLED`).
   - Thực thi đầy đủ `S5` (chạy `git diff` thật sau lần sửa code cuối, gọi `/laya_router` `DG3`, xuất `audit_report_verbatim_audit_hook_and_self_heal_loop.md`, `06_validation_verbatim_audit_hook_and_self_heal_loop.md`, `11_report_verbatim_audit_hook_and_self_heal_loop.md`) và chạy `verify_governance.py`.
+  - **Self-Healing Pass (`H7 Pass #1` -> `S5 -> S3 -> S4 -> S5`):** Bổ sung tường minh kiểm tra `if run_linter and not touched(st, r"\bgit\b.*\b(diff|show)\b", last):` trong `handle_stop` của `hooks/agy/agy_guard.py` đúng 100% với đặc tả mục 3 của `T9.2`.
 - **Dữ liệu & Bằng chứng (`[Context & Logs]`):**
   - `hooks/agy/tests/test_agy_guard.py`
   - `tooling/mutation_gate.py`
 - **Tiêu chí Hoàn thành (`[Definition of Done]`):**
   - `verify_governance.py --workspace agent-process-optimization --suffix verbatim_audit_hook_and_self_heal_loop` đạt `PASSED 🟢`.
+

@@ -1036,7 +1036,7 @@ class TestAgyGuard(unittest.TestCase):
         msg_h6 = res_h6["injectSteps"][0]["ephemeralMessage"]
         self.assertIn(agy_guard.VERBATIM_USER_AUDIT_PROMPT, msg_h6)
 
-        # H7 Pass #1 (n == 0) with run_linter=True MUST bounce with VERBATIM_USER_AUDIT_PROMPT
+        # H7 Pass #1 (n == 0) with run_linter=True MUST bounce with VERBATIM_USER_AUDIT_PROMPT and flag missing git diff
         res_stop_1 = agy_guard.handle_stop(
             {"conversationId": "c31", "transcriptPath": tr_h6},
             mem_root=self.mem_root,
@@ -1046,6 +1046,7 @@ class TestAgyGuard(unittest.TestCase):
         )
         self.assertEqual(res_stop_1.get("decision"), "continue")
         self.assertIn("MANDATORY ADVERSARIAL STOP-AUDIT", res_stop_1.get("reason", ""))
+        self.assertIn("Line-by-Line Diff: chưa chạy `git diff`", res_stop_1.get("reason", ""))
         self.assertIn(agy_guard.VERBATIM_USER_AUDIT_PROMPT, res_stop_1.get("reason", ""))
         self.assertEqual((self.state_dir / "c31.0.stop").read_text(encoding="utf-8"), "1")
 

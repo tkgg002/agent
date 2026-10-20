@@ -26,11 +26,12 @@ created_at: 2026-10-20T17:03:15+07:00
     --suffix verbatim_audit_hook_and_self_heal_loop \
     --mutations /Users/trainguyen/Documents/work/agent/memory/workspaces/agent-process-optimization/06_mutations_verbatim_audit_hook_and_self_heal_loop.json
   ```
-- **Biên bản vật lý:** `06_mutation_summary_verbatim_audit_hook_and_self_heal_loop_20261020T170034.json`
-- **Kết quả:** `gate: "PASS"`, `killed_count: 3/3`, `survived_count: 0`, `all_restored_sha256: true` (`f6537b9a4e8fcc87370b58d4961aa050dad534a8a3bb63945aa7f8395d5278ed`).
+- **Biên bản vật lý:** `06_mutation_summary_verbatim_audit_hook_and_self_heal_loop_20261020T170929.json`
+- **Kết quả:** `gate: "PASS"`, `killed_count: 3/3`, `survived_count: 0`, `all_restored_sha256: true` (`d82c3cd3a4956998fb8516a5df78400e9e6fad4585bb2cbf70cd05837d52f302`).
 
 ## 3. Kết quả Decision Gate (`DG1`, `DG2`, `DG3`)
 
 - **DG1:** `06_laya_summary_dg1_20261020T164016.json` -> `gate: "PASS"`.
 - **DG2:** `06_laya_summary_dg2_20261020T164032.json` -> `gate: "PASS"`.
-- **DG3:** `06_laya_summary_dg3_20261020T170256.json` -> `gate: "PASS"`.
+- **DG3:** `06_laya_summary_dg3_20261020T170931.json` -> `gate: "PASS"`.
+

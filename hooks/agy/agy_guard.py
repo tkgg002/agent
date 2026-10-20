@@ -738,6 +738,8 @@ def handle_stop(
     if src:
         last = src[-1][0]
         task_sfx = sol_sfx or latest_solution_suffix(st, -1)
+        if run_linter and not touched(st, r"\bgit\b.*\b(diff|show)\b", last):
+            miss.append("Line-by-Line Diff: chưa chạy `git diff` hoặc `git show` thật sau lần sửa code cuối")
         if not touched(st, r"05_progress", last):
             miss.append("05_progress: chưa append kết quả sau lần sửa code cuối")
         if not touched(st, r"06_validation", last):

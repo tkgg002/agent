@@ -168,6 +168,12 @@ Và tại `handle_stop` (`H7`):
     if n >= 3:
         return {}
 ...
+    if src:
+        last = src[-1][0]
+        task_sfx = sol_sfx or latest_solution_suffix(st, -1)
+        if run_linter and not touched(st, r"\bgit\b.*\b(diff|show)\b", last):
+            miss.append("Line-by-Line Diff: chưa chạy `git diff` hoặc `git show` thật sau lần sửa code cuối")
+...
     if run_linter and src and n == 0:
         sdir.mkdir(parents=True, exist_ok=True)
         cnt_file.write_text("1", encoding="utf-8")
@@ -208,4 +214,8 @@ Và tại `handle_stop` (`H7`):
 - **DG2 (Code Demo):**
   - Summary: [`06_laya_summary_dg2_20261020T164032.json`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/agent-process-optimization/06_laya_summary_dg2_20261020T164032.json) | **Gate: `PASS`**
   - `D-BEHAV`, `D-EDGE`, `D-API`: Đã kiểm chứng trực tiếp bằng chứng code tại `hooks/agy/agy_guard.py:47-50, 577-584, 718-727`.
+
+### Revision R1 (Vòng Tự Khắc Phục Khép Kín `S5 → S3 → S4 → S5` sau khi `H7 Pass #1` kích hoạt):
+- Khi `H7 Pass #1` dội ngược với `VERBATIM_USER_AUDIT_PROMPT`, qua rà soát đối chiếu từng dòng giữa `08_tasks_verbatim_audit_hook_and_self_heal_loop.md:31-32` (`touched(st, r"\bgit\b.*\b(diff|show)\b", last)`) và `hooks/agy/agy_guard.py:738-748`, phát hiện trong khối `if src:` của `handle_stop` chưa có dòng kiểm tra `if run_linter and not touched(st, r"\bgit\b.*\b(diff|show)\b", last):`.
+- Bổ sung kiểm tra tường minh này vào `hooks/agy/agy_guard.py:741-742` và cập nhật `test_31` trong `hooks/agy/tests/test_agy_guard.py` ngay trong vòng tự chữa lành `S5 → S3 → S4 → S5`.
 
