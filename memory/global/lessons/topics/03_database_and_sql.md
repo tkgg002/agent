@@ -1,7 +1,7 @@
 # T3: Database, PostgreSQL, MongoDB & SQL
 > Tổng số bài học trong chủ đề này: **57** (trích xuất nguyên bản từ `memory/global/lessons.md`).
 
-<!-- ID: L004 | lessons.md:L24 -->
+<!-- ID: L006 | lessons.md:L38 -->
 ### [2026-10-20] Bỏ sót kịch bản `replace_file_content` từng phần tại Hook `H4a`, thiếu kiểm tra `ast.parse`/`Timeout` chống False-Kill và xung đột bộ nhớ đệm bytecode `.pyc` 1 giây khi chạy kiểm thử đột biến (Partial-Edit Hook False Denial, Syntax/Timeout False-Kill, and Python `.pyc` 1-Second Cache Collision in Mutation Testing)
 - **Global Pattern:** Khi thiết kế và thực thi công cụ kiểm thử đột biến (`mutation_gate.py`) kết hợp Hook kiểm soát tài liệu/code (`H4a/H4b/H7`) [A] trên hệ thống kiểm định tự động [B], nếu chỉ kiểm tra chuỗi thô trên tham số tool call và chỉ dựa vào `returncode != 0` của tiến trình chạy test [X] -> Sẽ phát sinh 3 lỗi hệ thống [Y]: (1) Tại Hook `pre-write` (`H4a`), `body = CodeContent + ReplacementContent` chỉ chứa phần nội dung đang sửa nên các lệnh `replace_file_content` cập nhật một đoạn nhỏ trong file đã tồn tại sẽ bị chặn oan vì thiếu tiêu đề ở đầu file; (2) Trong công cụ kiểm thử đột biến, nếu không kiểm tra `ast.parse` trước khi ghi và không tách trạng thái `timed_out`, một mutant gõ sai cú pháp (`SyntaxError`) hoặc gây treo (`TimeoutExpired` trả `returncode = -1`) sẽ được tính nhầm là `KILLED` (False-Kill); (3) Khi đột biến file `.py` bằng chuỗi có cùng độ dài byte (ví dụ `return a + b` -> `return a - b`) trong vòng `< 1` giây kể từ lần chạy Baseline, cơ chế nạp `.pyc` của Python (PEP 3147 lưu `mtime` độ phân giải 1 giây và `size` 32-bit) sẽ tưởng file chưa đổi và nạp lại `.pyc` cũ từ `__pycache__`, làm mutant sống sót giả (`False SURVIVED`). **Đúng:** (1) Khi Hook `pre-write` kiểm tra cấu trúc bắt buộc của một file tài liệu đối với lệnh `replace_file_content`, phải đọc nội dung hiện có trên đĩa và ghép thử `existing.replace(TargetContent, ReplacementContent, 1)` trước khi so khớp regex; (2) Công cụ kiểm thử đột biến phải kiểm tra cú pháp trên RAM (`ast.parse`) trước khi ghi xuống đĩa, phân loại riêng `TIMEOUT` (`FAIL`), đăng ký `signal.SIGTERM` chuyển về `SystemExit` để khối `finally` luôn khôi phục file gốc kèm đối chiếu `SHA-256`; (3) Luôn truyền `PYTHONDONTWRITEBYTECODE=1` và xóa file `__pycache__/<stem>.*.pyc` ngay sau khi ghi mutant và sau khi khôi phục file gốc.
 - **Bối cảnh (Trigger):** Trong quá trình Audit phản biện Plan & Code Demo và thực thi `tooling/mutation_gate.py` + `hooks/agy/agy_guard.py` cho task `clean_room_and_mutation_gate` (tích hợp Clean-Room Rebuild Protocol & 3-Mutant Test Verification Gate).
@@ -9,7 +9,7 @@
 - **Fix/Correct Flow:** (1) Ghép nội dung file trên đĩa với `TargetContent -> ReplacementContent` tại `H4a` trước khi kiểm tra `CLEAN_ROOM_SPEC_RE`, đồng thời thêm `contaminated_clean_room_reads` tại `H4b`; (2) Bổ sung `ast.parse`, tách trạng thái `TIMEOUT`, bọc `signal.SIGTERM` và thêm `PYTHONDONTWRITEBYTECODE=1` + `_invalidate_pyc(fpath)` trong `tooling/mutation_gate.py`; (3) Ghi nhận bài học vào `lessons.md` và đồng bộ `lessons/INDEX.md` qua `build_lessons_index.py`.
 - **Tags:** #mutation-testing-pyc-cache #partial-replace-hook-merge #syntax-timeout-false-kill #clean-room-isolation-gate #self-improvement-loop
 
-<!-- ID: L017 | lessons.md:L115 -->
+<!-- ID: L019 | lessons.md:L129 -->
 ### [2026-10-15] Bỏ quên ràng buộc phẳng `UNIQUE(operation, target_table)` và truyền tên bảng trần trụi khi mở rộng bảng lập lịch sang kiến trúc đa tầng `Source / Shadow / Master` gây lỗi `SQLSTATE 23505` (Legacy Flat Unique Constraint Collision on Multi-Tier Schedule Table)
 - **Global Pattern:** Khi mở rộng một bảng điều phối/lập lịch hiện có [A] (`cdc_worker_schedule`) từ mô hình tác vụ đơn tầng sang mô hình đa tầng (`layer_type`: `source` / `shadow` / `master`), đa kết nối (`connection_code`) và đa không gian tên (`container_namespace`) thông qua cột mở rộng `params JSONB` [B], lập trình viên lại làm việc hời hợt ở 2 điểm chí mạng [X]: (1) Chỉ `ALTER TABLE ADD COLUMN params JSONB` (migration `024`) mà không kiểm tra và gỡ bỏ ràng buộc phẳng `UNIQUE (operation, target_table)` tồn đọng từ migration ban đầu (`007_worker_schedule.sql`), trong khi ở bảng lưu kết quả `daily_source_counts` (`025`) lại biết đặt `UNIQUE (layer_type, connection_code, container_namespace, object_name, report_date)`; (2) Ở cả Frontend (`ActivityManager.tsx`) lẫn Backend (`create_worker_schedule.go`), vẫn gán `payload.target_table = values.object_name` (tên bảng trần trụi như `'payment_bills'`) cho mọi tầng -> Hậu quả nghiêm trọng [Y]: Ngay khi người dùng tạo 1 job cho tầng `shadow` (`payment_bills`) và 1 job cho tầng `master` (`payment_bills`) (hoặc 2 bảng cùng tên trên 2 connection/schema khác nhau), CSDL lập tức ném lỗi `SQLSTATE 23505 duplicate key value violates unique constraint "cdc_worker_schedule_operation_target_table_key"`, khiến UI báo `"Bản ghi đã tồn tại (vi phạm ràng buộc duy nhất)"` và chặn đứng luồng cấu hình cơ bản nhất của hệ thống đa tầng. **Đúng:** (1) Khi mở rộng bất kỳ bảng nào sang kiến trúc đa tầng/đa nhánh, BẮT BUỘC phải rà soát toàn bộ `UNIQUE` constraint và `INDEX` hiện hữu của bảng đó để đảm bảo khóa duy nhất khớp 100% với bộ định danh nghiệp vụ mới (`(operation, layer_type, connection_code, container_namespace, object_name)`); (2) Gỡ bỏ `UNIQUE (operation, target_table)` phẳng trên `cdc_worker_schedule`, thay bằng Partial Functional Unique Index theo đúng bộ khóa 5 thành phần cho `source_count` và Partial Unique Index `(operation, target_table)` cho các tác vụ legacy đơn tầng; (3) Chuẩn hóa `target_table` của `source_count` theo định danh đầy đủ `<layer_type>:<connection_code>:<container_namespace>.<object_name>` (hoặc giữ `params.object_name` cho câu query SQL trong khi `target_table` mang định danh phân biệt rõ trạm) để cả DB lẫn `cdc_activity_log` không bao giờ đụng độ giữa `source`, `shadow` và `master`.
 - **Bối cảnh (Trigger):** User tạo 1 lịch trình cho `shadow` và 1 lịch trình cho `master` có cùng tên bảng `payment_bills` trên `/activity-manager` thì bị chặn bởi lỗi `"Bản ghi đã tồn tại (vi phạm ràng buộc duy nhất)"`, User chấn chỉnh: "Bản ghi đã tồn tại (vi phạm ràng buộc duy nhất) => sao 1 cái shadow, 1 cái master mà chọn tên table giống nhau payment_bills lại báo như này, làm việc hời hợt vậy".
@@ -17,7 +17,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức (Mid-Session Fix theo Rule #5), nhận lỗi trực diện 100%, không bao biện. (2) Ghi lesson vào `lessons.md` và kiểm tra snapshot số dòng. (3) Lập hồ sơ giải pháp chi tiết tại `09_tasks_solution_unique_constraint.md` (gồm migration gỡ constraint phẳng `cdc_worker_schedule_operation_target_table_key`, tạo Unique Index đa thành phần theo `(operation, layer_type, connection_code, container_namespace, object_name)`, chuẩn hóa Backend/Frontend và thông báo lỗi `apiError.ts`) trình User phê duyệt (`APPROVE`) theo đúng Rule #1 & Rule #13.
 - **Tags:** #unique-constraint-collision #sqlstate-23505 #worker-schedule-multi-tier #flat-target-table-fallacy #schema-evolution-consistency #mid-session-fix
 
-<!-- ID: L023 | lessons.md:L157 -->
+<!-- ID: L025 | lessons.md:L171 -->
 ### [2026-10-13] Hardcode pool kết nối database tĩnh trong Runner đa kết nối khiến câu lệnh truy vấn bắn vào sai CSDL (Static Pool Hardcoding & Multi-DB Routing Failure - SQLSTATE 42P01)
 - **Global Pattern:** Khi hệ thống hỗ trợ tích hợp nhiều Database/Connection khác nhau [A] (`default_master`, `master_2`, `postgres-develop`...) nhưng trong Runner thực thi tác vụ kiểm đếm/đối soát [B], lập trình viên lại hardcode biến kết nối mặc định [X] (`r.dbMaster` hoặc `r.dbShadow`) thay vì tra cứu động theo `connection_code` từ `ConnectionManager` -> Hậu quả [Y]: Câu lệnh truy vấn SQL bị bắn vào sai Database instance (ví dụ bảng `export_jobs_2` nằm ở `goopay_master_2` trên cổng 5437 nhưng runner lại query trên `goopay_dest` ở cổng 5434), dẫn đến lỗi `ERROR: relation "..." does not exist (SQLSTATE 42P01)`; đồng thời Runner không inject `ActivityLogger` khiến lỗi này bị chôn vùi trong `last_error` mà không ghi nhật ký vào `cdc_activity_log`, làm người dùng tưởng rằng hệ thống "không chạy mà chỉ chạy schedule-update". **Đúng:** (1) Dynamic Connection Routing: Mọi Runner đa trạm BẮT BUỘC nhận `ConnectionManager` và gọi `connMgr.GetMasterDB(ctx, params.ConnectionCode)` / `connMgr.GetShadowDB(ctx, params.ConnectionCode)` để kết nối chính xác tới instance mục tiêu; (2) Full-cycle Activity Logging: Mọi Runner BẮT BUỘC phải inject `ActivityLogger`, ghi log cả khi thành công lẫn thất bại; (3) Context Propagation: Truyền `triggered_by` ("manual" / "scheduler") qua Context để phân biệt chuẩn xác nguồn kích hoạt.
 - **Bối cảnh (Trigger):** User báo lỗi: `execute count sql: ERROR: relation "master_centrallized_export_service.export_jobs_2" does not exist (SQLSTATE 42P01)` và phản hồi: "khi click chạy ngay, nó ko chạy sau khi đã update, click chạy ngay nó chỉ chạy schedule-update".
@@ -25,7 +25,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức (Mid-Session Fix theo Rule #5). (2) Thừa nhận sai lầm 100%, xin lỗi chân thành, không cãi, không bao biện. (3) Ghi lesson vào `lessons.md`. (4) Tích hợp `ConnectionManager` định tuyến CSDL động theo `params.ConnectionCode` và inject `ActivityLogger` ghi log với `triggered_by` từ context.
 - **Tags:** #multi-db-routing #static-pool-hardcoding #sqlstate-42p01 #activity-logger-injection #triggered-by-context #mid-session-fix
 
-<!-- ID: L026 | lessons.md:L178 -->
+<!-- ID: L028 | lessons.md:L192 -->
 ### [2026-10-13] 4 Tử huyệt kỹ thuật khi hiện thực hóa Scheduler và Integration Runner (Scheduler Race/Early Trigger, Unsanitized Identifiers, Confluence Unescaped XHTML, Unmasked Sensitive Tokens)
 - **Global Pattern:** Khi triển khai bộ máy điều phối job chạy định kỳ theo mốc giờ [A] và các runner tích hợp bên thứ ba [B], lập trình viên thường mắc phải 4 cạm bẫy thực thi chết người [X]: (1) Dispatch goroutine trước khi cập nhật `last_run_at` $\rightarrow$ Race condition double-run trong nhịp tick kế tiếp; (2) Restart service giữa ngày tự kích hoạt sai thời điểm do điều kiện `now > targetToday` thỏa mãn khi `LastRunAt == nil`; (3) Chỉ sanitize cột ngày mà format trực tiếp schema/table name vào chuỗi SQL và thiếu query context timeout $\rightarrow$ Nguy cơ SQL Injection và treo cạn kiệt connection pool nguồn; (4) Không escape ký tự đặc biệt (`&`, `<`, `>`) khi gửi Confluence Storage Format và để lộ nguyên vẹn API Token trong endpoint GET của CMS [Y] -> Hậu quả: Confluence trả lỗi 400 Bad Request, treo DB nguồn, rò rỉ token nhạy cảm ra trình duyệt, và task bị kích hoạt chạy đúp ngoài ý muốn. **Đúng:** (1) Atomic Claim: Cập nhật `last_run_at = now` hoặc khóa trạng thái đồng bộ TRƯỚC khi bàn giao cho goroutine runner; (2) Trigger Window Guard: Khi khởi động service hoặc tạo job mới giữa ngày, chỉ lên lịch cho mốc tương lai (`shouldRunNow = false`), không chạy tùy tiện; (3) Sanitize toàn diện: Áp dụng regex `^[a-zA-Z0-9_]+$` cho cả namespace, table name và date field; bọc `context.WithTimeout(ctx, 30*time.Second)` cho mọi query đếm; (4) Data Pruning & Strict Escaping: Dùng range query `window_hour >= start AND window_hour < end` để giữ B-Tree index; bọc `html.EscapeString` cho mọi text trong Confluence XHTML; mask token dạng `ATATT3...****` trên toàn bộ API đọc của CMS.
 - **Bối cảnh (Trigger):** User bóc trần chi tiết 4 rủi ro kỹ thuật chí mạng trong bản demo code: Scheduler Double Run & Restart Early Trigger; Thiếu sanitize namespace/table & thiếu timeout; Confluence XHTML thiếu escape & mất index timestamp; API CMS trả nguyên vẹn API Token về frontend.
@@ -33,7 +33,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức (Mid-Session Fix theo Rule #5). (2) Thừa nhận sai lầm 100%, xin lỗi chân thành, không cãi, không bao biện. (3) Ghi lesson vào `lessons.md`. (4) Vá toàn diện cả 4 điểm rủi ro vào mã nguồn mẫu và tài liệu workspace.
 - **Tags:** #scheduler-race-condition #atomic-claim #sql-sanitize-and-timeout #confluence-xhtml-escape #index-pruning #token-masking #mid-session-fix
 
-<!-- ID: L028 | lessons.md:L196 -->
+<!-- ID: L030 | lessons.md:L210 -->
 ### [2026-10-12] Tư duy đóng khung hạn hẹp nguồn dữ liệu vào Table/Collection, bỏ quên tính đa hình của hệ thống (SFTP, MongoDB, PostgreSQL, MySQL, ClickHouse...) (Binary-type Tunnel Vision & Failure to Model Polymorphic Data Sources)
 - **Global Pattern:** Khi thiết kế mô hình siêu dữ liệu (metadata) và lưu trữ số đếm kiểm toán [A], thay vì tổng quát hóa đối tượng thành các thực thể linh hoạt theo engine (`engine_type`, `namespace/path`, `object_name/file_pattern`, `object_type`) [B], lập trình viên lại tư duy đóng khung cứng nhắc `object_type CHECK IN ('table', 'collection')` và `schema_or_db` [X], bỏ quên các loại nguồn dữ liệu thực tế của hệ sinh thái Data Hub như SFTP (file CSV/Excel/XML đối soát theo folder/path), PostgreSQL (table/partition), MongoDB (collection), MySQL, ClickHouse, Kafka/NATS (topic), Object Storage [Y] -> Hậu quả: Mô hình dữ liệu gãy vụn ngay khi tích hợp nguồn SFTP/File hoặc engine mới; không thể cấu hình đếm số dòng của file SFTP đối soát hàng ngày; bị User quở trách vì tầm nhìn thiển cận, không hiểu hệ sinh thái tích hợp đa nguồn. **Đúng:** Mô hình dữ liệu và bộ chọn BẮT BUỘC phải thiết kế đa hình (Polymorphic Source Object Model): (1) Phản ánh chính xác `engine_type` từ `connection_registry` (`postgresql`, `mongodb`, `mysql`, `sftp`, `clickhouse`...); (2) `namespace_or_path` linh hoạt (PostgreSQL: Schema; MySQL/MongoDB: Database; SFTP: Remote Directory Path / Folder); (3) `object_name` linh hoạt (SQL: Table name; MongoDB: Collection name; SFTP: Filename pattern / File prefix regex); (4) `object_type` mở rộng đa hình: `table`, `collection`, `view`, `file`, `topic`, `directory`... Tuyệt đối KHÔNG hardcode CHECK chỉ có 2 loại; (5) `date_field` hoặc `date_strategy`: Cột ngày tạo đối với CSDL (`createdAt`, `created_at`), hoặc ngày phân tích từ tên file / file modified time đối với SFTP (`filename_date_regex`, `file_mtime`).
 - **Bối cảnh (Trigger):** User chấn chỉnh trực diện: "hệ thống ko chỉ có 2 loại này, có thể là sftp, mongo, postgress, mysql ..." sau khi Agent viết DDL comment và tư duy chỉ có "table hoặc collection" và "Schema (SQL) hoặc Database (Mongo/MySQL)".
@@ -41,7 +41,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức (Mid-Session Fix theo Rule #5). (2) Thừa nhận sai lầm 100%, xin lỗi chân thành, không cãi, không bao biện. (3) Ghi lesson vào `lessons.md`. (4) Thiết kế lại DDL và metadata model theo hướng đa hình hoàn toàn (Polymorphic), hỗ trợ linh hoạt PostgreSQL, MongoDB, MySQL, SFTP, ClickHouse...
 - **Tags:** #polymorphic-source-model #sftp-mongo-postgres-mysql #engine-type-flexibility #binary-type-tunnel-vision #mid-session-fix
 
-<!-- ID: L033 | lessons.md:L235 -->
+<!-- ID: L035 | lessons.md:L249 -->
 ### [2026-10-12] Caller gửi giá trị khác định dạng với cột mà callee so khớp (FQN vs bare) → lệnh xóa âm thầm match 0 dòng
 - **Global Pattern:** Caller [A] truyền tham số [B] ở dạng `schema.table` trong khi callee [X] so `col = ?` với cột lưu dạng bare -> [Y] predicate luôn false, không lỗi, không log, tính năng "chạy" nhưng không làm gì (silent no-op). **Đúng:** Với mỗi tham số đi qua ranh giới FE→BE→SQL, đối chiếu định dạng giá trị thật ở nguồn với định dạng của cột trong DB; tái sử dụng đúng biến đã chuẩn hóa mà luồng đọc tương ứng đang dùng; verify bằng kịch bản chạy code thật trên data thật (transaction + rollback), có case "định dạng sai phải match 0".
 - **Bối cảnh (Trigger):** Modal Clear truyền `masterTable = pipeline.masterName` (FQN), backend so `tm.master_table = ?` (bare). Build/tsc/unit test đều PASS; chỉ lộ ra khi chạy harness gọi ClearActivity thật trên DB.
@@ -49,7 +49,7 @@
 - **Fix/Correct Flow:** Truyền biến đã chuẩn hóa (bare) đang dùng cho luồng đọc; thêm kịch bản negative (FQN → 0 match) vào validation.
 - **Tags:** #contract-format-mismatch #silent-no-op #e2e-trace #verify-on-real-data
 
-<!-- ID: L034 | lessons.md:L242 -->
+<!-- ID: L036 | lessons.md:L256 -->
 ### [2026-10-12] Báo cáo "Done" chứa claim chưa kiểm chứng và lấy Build-OK làm bằng chứng, trong khi gốc rễ nằm ở tầng ghi dữ liệu (Unverified Completion Claims & Read-side-only Fix)
 - **Global Pattern:** Khi bàn giao tính năng [A] lọc/xóa dữ liệu theo định danh [B], agent chỉ sửa tầng đọc/xóa (query) [X] và viết báo cáo khẳng định "cách ly 100%", "đã check quyền P", "có confirm C" dựa trên trí nhớ thay vì diff thật, lấy `build exit 0` làm bằng chứng [Y] -> Hậu quả: (1) Định danh không tồn tại ở bản ghi gốc (writer không ghi schema/binding) nên filter ở tầng đọc vô hiệu; (2) Endpoint destructive lọt vào group quyền thấp, không audit; (3) Báo cáo sai sự thật. **Đúng:** (1) Trước khi claim cách ly theo khóa K, grep writer xem K có được GHI vào bản ghi không; (2) Endpoint xóa phải đi đúng chain destructive sẵn có của router; (3) Mọi câu trong báo cáo phải trỏ được tới dòng diff; (4) Build-OK không phải Done (Rule #14 G3).
 - **Bối cảnh (Trigger):** Tự audit lại tính năng Clear Activity Log theo yêu cầu phản biện của User; phát hiện activity log shadow không chứa `shadow_schema`, route DELETE nằm trong group `shared`, báo cáo claim `perm.OpReconWrite`/Popconfirm không có trong code.
@@ -57,7 +57,7 @@
 - **Fix/Correct Flow:** Đọc writer (`batch_buffer.go`, `transmute_handler.go`) → bổ sung định danh ở writer → read/delete dùng cùng predicate → route qua `destructiveChain` → test kịch bản 2 connector trùng tên bảng trên Postgres thật.
 - **Tags:** #unverified-claims #read-side-only-fix #writer-identity #destructive-chain #build-ok-not-done
 
-<!-- ID: L035 | lessons.md:L249 -->
+<!-- ID: L037 | lessons.md:L263 -->
 ### [2026-10-10] Tư duy thiển cận về định danh bảng làm mù trước kịch bản đa kết nối trùng tên bảng (Multi-Connector Duplicate Table Blindspot & Identifier Conflation)
 - **Global Pattern:** Khi thiết kế tính năng quản trị dữ liệu hoặc định danh pipeline dữ liệu [A], lập trình viên có tư duy hời hợt chỉ nhìn vào tên bảng trần trụi (bare table name) [B], ảo tưởng rằng câu lệnh lọc `target_table IN (?)` là triệt tiêu hoàn toàn rủi ro [X], bỏ quên hoàn toàn kịch bản kiến trúc nền tảng: nhiều connector khác nhau cùng ingest các bảng trùng tên (ví dụ: 2 connector cùng lấy bảng `payment_bills` từ 2 database nguồn khác nhau vào 2 shadow schema khác nhau) [Y] -> Hậu quả nghiêm trọng: (1) Thao tác quản trị (như Clear Log) ở một connector sẽ xóa sạch toàn bộ nhật ký của connector khác có cùng tên bảng; (2) Dữ liệu đối soát giữa các connector bị lẫn lộn, làm tê liệt khả năng giám sát độc lập của từng pipeline; (3) Bộc lộ sự thiếu sót trầm trọng khi không đọc kỹ mô hình metadata của hệ thống (`shadow_binding`, `shadow_schema`, `connection_code`, `source_database`). **Đúng:** (1) Trong hệ thống CDC phân tán đa nguồn, BARE TABLE NAME TUYỆT ĐỐI KHÔNG THỂ DÙNG LÀM KHÓA ĐỊNH DANH DUY NHẤT; (2) Mọi câu lệnh truy vấn, đối soát hoặc xóa nhật ký BẮT BUỘC phải định vị theo bộ định danh đầy đủ (Pipeline Scope): `shadow_schema` + `shadow_table` + `source_database` / `connection_code`; (3) Phải đọc mã nguồn thật ở cả tầng Ingestion (`batch_buffer.go`), Metadata (`shadow_binding`), và Presentation (`ReconPipelineGrid.tsx`) để nắm vững cách hệ thống bóc tách các pipeline.
 - **Bối cảnh (Trigger):** User chấn chỉnh gay gắt: "Lỗ hổng Cross-Tenant Blast Radius (target_table LIKE %.table): ... Khắc phục chuẩn: Frontend gửi chính xác danh sách FQN (shadowTable và masterTable). Backend chỉ dùng câu lệnh so khớp chính xác tất định: WHERE target_table IN (?, ?). Triệt tiêu hoàn toàn nguy cơ xóa lan. => ngu hả mày giỡn sao. 2 connector nó trùng data cùng table. thì mày lại đi fix tiếp à. kêu mày audit lại, đọc code, mày trả lời cái gì vậy"
@@ -65,7 +65,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức (Mid-Session Fix theo Rule #5). (2) Nhận lỗi trực diện 100%, không bao biện. (3) Ghi lesson vào `lessons.md`. (4) Đọc tận gốc mã nguồn: Xem xét toàn diện luồng định danh pipeline từ `batch_buffer.go` (lưu schema/binding vào log), `shadow_binding` (bộ khóa định danh), đến API filter và UI CMS.
 - **Tags:** #multi-connector-duplicate-table #pipeline-scope-isolation #bare-table-blindspot #shadow-schema-isolation #mid-session-fix
 
-<!-- ID: L046 | lessons.md:L327 -->
+<!-- ID: L048 | lessons.md:L341 -->
 ### [2026-10-07] Chạy SQL UPDATE sửa đổi bảng Audit Log và dùng Heuristic đoán mò kích thước batch (Audit Trail Mutation & Batch Size Heuristic Guessing Anti-pattern)
 - **Global Pattern:** Khi hệ thống có dữ liệu lịch sử cũ hiển thị không đúng nghiệp vụ do thiếu metadata [A], Agent đề xuất và thực thi lệnh SQL UPDATE trực tiếp vào bảng nhật ký kiểm toán bất biến (`cdc_activity_log`) [B] nhằm "chữa cháy" cục bộ cho số liệu hiển thị đẹp [X], đồng thời chèn các điều kiện phán đoán theo ngưỡng kích thước (`batchSize >= 500` hoặc `batchSize >= 15`) vào giao diện người dùng [Y] -> Hậu quả nghiêm trọng: (1) Vi phạm trực diện Rule #12 Hiến pháp ("NGHIÊM CẤM hành vi cheat DB sửa data trực tiếp"); (2) Phá vỡ nguyên tắc Bất biến của Audit Trail (Audit Log Immutability) — nhật ký kiểm toán bị sửa đổi hồi tố làm mất giá trị truy vết; (3) Giải pháp cục bộ chỉ có tác dụng trên DB dev local, hoàn toàn vô dụng trên Production nơi audit log được bảo vệ nghiêm ngặt; (4) Nguy cơ regression diện rộng: các pipeline khác khi có peak stream tải lớn (16-226 records) sẽ bị nhận diện nhầm là snapshot do heuristic đoán mò kích thước. **Đúng:** (1) Tuyệt đối KHÔNG sửa data trực tiếp trên bảng audit log (Rule #12); (2) Tuyệt đối KHÔNG dùng heuristic đoán mò theo kích thước (Rule #0); (3) Tầng Core Engine (Backend Go) BẮT BUỘC phải phát hành Explicit Metadata (`buffer_type = "snapshot"`, `is_snapshot = true`, `triggered_by = "snapshot"`) cho $100\%$ các bản ghi tương lai; (4) Chấp nhận sự thật lịch sử của các bản ghi cũ như một Audit Trail trung thực, hoặc xử lý qua quy trình Data Governance / Migration chính thức có kiểm toán độc lập.
 - **Bối cảnh (Trigger):** User liên tục yêu cầu audit lại quá trình với tư duy phản biện, kiểm tra xem có suy diễn hay báo cáo láo không sau khi thấy số liệu 1,562 records ngày 30/09 được xử lý bằng lệnh UPDATE SQL và heuristic batchSize.
@@ -73,7 +73,7 @@
 - **Fix/Correct Flow:** (1) Tự phản tỉnh trực diện qua Vòng lặp Phản tỉnh (Self-Improvement Loop). (2) Loại bỏ hoàn toàn heuristic đoán mò khỏi Frontend `ReconPipelineGrid.tsx`, chỉ tin cậy vào Explicit Metadata. (3) Báo cáo trung thực bản chất của lệnh UPDATE SQL và dữ liệu lịch sử, không bao biện. (4) Ghi bài học vào `lessons.md`.
 - **Tags:** #audit-trail-mutation #no-cheat-db #batch-size-heuristic-guessing #explicit-metadata-only #core-systems-first #self-improvement-loop
 
-<!-- ID: L051 | lessons.md:L362 -->
+<!-- ID: L053 | lessons.md:L376 -->
 ### [2026-10-06] Lặp lại Schema trong trường Table và hardcode địa chỉ IP/Host giả tạo URL rác (Schema Duplication in Table Field & Hardcoded Mock IP Leakage)
 - **Global Pattern:** Khi bóc tách định danh thực thể cơ sở dữ liệu [A], Agent đã hiển thị `Schema` ở một dòng riêng nhưng lại gán cả FQN (`schema.table`) vào trường `Table` [B] khiến tên bảng bị trùng lặp schema vô nghĩa [X], đồng thời Agent tự tiện hardcode chuỗi địa chỉ IP/Port giả định [Y] (`127.0.0.1:5432`) khi trường dữ liệu host đang rỗng, dẫn đến việc UI hiển thị giá trị rác hoặc bị bộ lọc an toàn nhận diện là URL không hợp lệ (`<hidden_or_invalid_url>`). **Đúng:** (1) Trường `Table` BẮT BUỘC chỉ hiển thị tên bảng thuần túy (bare table name: `name.split('.').pop()`), TUYỆT ĐỐI KHÔNG lặp lại schema; (2) TUYỆT ĐỐI KHÔNG hardcode địa chỉ IP hay port giả (`127.0.0.1:5432`) — nếu hệ thống không có IP thì chỉ hiện Title kết nối sạch sẽ (Title Connect), hoặc để trống nếu không có thông tin; (3) Loại bỏ toàn bộ text rác và đường link giả.
 - **Bối cảnh (Trigger):** User chấn chỉnh 2 điểm: "1 Table: shadow_traitestpbs.payment_bills sao cái này ở shadow đan bị dư cái schema. 2 <hidden_or_invalid_url> cái này bỏ hoàn toàn cho anh."
@@ -81,7 +81,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức (Mid-Session Fix theo Rule #5). Ghi bài học vào `lessons.md`. (2) Tách bare table name: `const shadowBareTable = pipeline.shadowName.split('.').pop() || pipeline.shadowName;`, hiển thị đúng `Table: {shadowBareTable}`. (3) Bỏ hoàn toàn fallback `127.0.0.1:5432` và các địa chỉ IP giả. Shadow chỉ hiện title connection chuẩn (hoặc connection code/host thật nếu có, không tự bịa).
 - **Tags:** #schema-duplication #bare-table-name #no-fake-ip-fallback #clean-connection-title #mid-session-fix
 
-<!-- ID: L052 | lessons.md:L369 -->
+<!-- ID: L054 | lessons.md:L383 -->
 ### [2026-10-06] Nhầm lẫn sync engine Debezium thành Database engine, thừa text rác UI và thiếu ngữ cảnh phân biệt MongoDB/PostgreSQL (Sync Tool vs DB Engine Confusion & Redundant UI Labels & Semantic Blindspot)
 - **Global Pattern:** Khi trích xuất thuộc tính hệ thống để render UI [A], Agent lấy trường `sync_engine` (công cụ đồng bộ như `debezium`) gán làm loại Database Engine cho DB MASTER [B] khiến giao diện hiện "DB MASTER DEBEZIUM" sai lệch bản chất [X], đồng thời viết các nhãn văn bản thừa thãi, rập khuôn ("Tổng record thật:", "Nằm tại:", "Collection / Table:", "Shadow Table:") thay vì tự động thích ứng với kiểu dữ liệu của engine (MongoDB là Collection, PostgreSQL là Table/Schema.Table) [Y] -> Hậu quả nghiêm trọng: (1) Bộc lộ sự ngây ngô về bản chất hệ thống: Debezium là CDC connector, không phải database; (2) Giao diện bị rác chữ, cồng kềnh, không tinh gọn; (3) Làm hỏng layout box thao tác vận hành do CSS/thẻ lồng nhau thiếu kiểm soát. **Đúng:** (1) Phân biệt rạch ròi DB Engine (PostgreSQL, MongoDB, MySQL) với Sync Tool (Debezium); Master DB mặc định là PostgreSQL (hoặc engine cấu hình trong master binding); (2) Bỏ toàn bộ các tiền tố thừa ("Tổng record thật:", "Nằm tại:", "Shadow"); (3) Tự động phân nhánh nhãn theo Engine: nếu nguồn/đích là MongoDB thì hiện "Collection", nếu PostgreSQL/MySQL thì hiện "Table", nếu có schema thì hiện "Schema.Table"; (4) Thẻ kết nối chỉ hiện ngắn gọn Title connection & IP/Host (hoặc Connector name cho nguồn).
 - **Bối cảnh (Trigger):** User chấn chỉnh gay gắt 7 điểm: "1 DB MASTER DEBEZIUM => sai, ko biết lấy nó từ đâu ra à. defaul master là postgres chứ. 2 Tổng record thật: => bỏ dòng này. 3 Collection / Table: => mongodb thì phải tự biết là collection chứ. 4 Nằm tại: => bỏ chữ này, nếu là source thì hiện connector, nếu là shadow, master thì hiện title connect & ip thôi. 5. Shadow Table , dư chữ shadow. 6. Master FQN: master_payment_bill_service.payment_bills ở master phải theo loại postgress hay môngo để thể hiện cho đúng. 7 ui box Thao tác vận hành đang bị lỗi".
@@ -89,7 +89,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức (Mid-Session Fix theo Rule #5). Ghi bài học vào `lessons.md`. (2) DB Master Engine mặc định là POSTGRESQL (hoặc kiểm tra đúng trường `source_engine_type` nếu có). CẤM lấy `sync_engine` làm database engine. (3) Bỏ hoàn toàn dòng chữ "Tổng record thật:". (4) Phân nhánh rõ ràng: nếu engine nguồn là `mongodb` thì ghi nhãn `Collection:`, ngược lại ghi `Table:`. (5) Bỏ chữ "Nằm tại:", nguồn hiện `Connector: ...`, Shadow hiện `PostgreSQL Shadow (IP/Host)`, Master hiện `PostgreSQL Master (IP/Host)`. (6) Đổi "Shadow Table" thành "Table:". (7) Bỏ chữ "Master FQN:", nếu Postgres hiện `Schema.Table`, nếu Mongo hiện `DB.Collection`. (8) Sửa triệt để lỗi UI box "Thao tác vận hành".
 - **Tags:** #sync-vs-db-engine #clean-ui-labels #engine-aware-naming #mongo-vs-postgres-semantics #mid-session-fix
 
-<!-- ID: L060 | lessons.md:L425 -->
+<!-- ID: L062 | lessons.md:L439 -->
 ### [2026-09-25] Xóa sổ cơ chế tương thích ngược khi cố sửa lỗi Cross-contamination vì không hiểu vai trò của Generic Key (Backward Compatibility Annihilation & Misunderstood Generic Lookup)
 - **Global Pattern:** Khi hệ thống có cơ chế phân giải định tuyến (routing) dựa trên một khóa tìm kiếm chung (Generic Key như `db|table`) để hỗ trợ tương thích ngược cho các hệ thống cũ [A], và phát sinh lỗi nhiễm chéo (Cross-contamination) khi một hệ thống mới tham gia và ghi đè vào khóa chung đó [X], Agent tự ý đề xuất sửa tận gốc hàm tạo khóa (bỏ luôn Generic Key) [B] nhằm ngắt nhiễm chéo mà KHÔNG nhận ra hành động này đã phá hủy hoàn toàn đường sống của các hệ thống cũ [Y] -> Hậu quả nghiêm trọng: (1) Sửa được lỗi mới nhưng làm sập toàn bộ các luồng cũ (phá vỡ tương thích ngược hoàn toàn); (2) Bỏ qua nguyên lý kiến trúc: Generic Lookup sinh ra là để xử lý các fallback case, nếu có trùng lặp thì phải xử lý bằng cơ chế Lọc Kết Quả (Result Filtering) ở đầu ra, chứ KHÔNG phải xoá nguồn sinh dữ liệu ở đầu vào; (3) Mất thời gian tranh cãi vì ảo tưởng mình làm đúng logic cô lập nhưng lại thiếu góc nhìn toàn cục. **Đúng:** (1) TUYỆT ĐỐI không thay đổi cơ chế sinh khóa chung (Generic Cache Key) nếu hệ thống đang dùng nó cho mục đích tương thích ngược; (2) Giải quyết Cross-contamination bằng cách Lọc kết quả trả về: Giữ nguyên khóa `db|table` cho mọi người, nhưng khi có kết quả, loại bỏ các kết nối nào ĐÃ khai báo định danh riêng (5-part prefix) khỏi luồng tìm kiếm chung (4-part prefix); (3) Luôn phân định rõ: Đâu là điểm mở rộng cho cái mới, đâu là hòn đá tảng của cái cũ trước khi xóa/sửa một đoạn code nền tảng.
 - **Bối cảnh (Trigger):** User phản hồi lỗi hệ thống bị phá hỏng: "bỏ như nào. xong chạy lại 2 case 4part và 5 part cho anh. em phá hệ thống rất nhiều rồi đó... thì sao, liên quan gì sourceConn = 'goopaylocal' hay sourceConn = '' liên quan gì tới nhận biết traitestpbs traitestces traitestctphs vụ này".
@@ -97,7 +97,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức (Mid-Session Fix). (2) Rollback lại hàm `buildSourceLookupKeys` để giữ nguyên việc tạo key `db|table`. (3) Rollback lại logic hardcode của `IsGenericConnectionCode` để đảm bảo `goopaylocal` luôn bị reset về rỗng. (4) Cài đặt màng lọc tại điểm ra `ResolveSourceRoutes`: Nếu query bằng generic key (`sourceConn == ""`), lọc bỏ mọi route thuộc về connector có cấu hình 5-part cụ thể (sử dụng reverse map `connCodeToTopicPrefix`).
 - **Tags:** #backward-compatibility-annihilation #misunderstood-generic-lookup #filter-over-deletion #cross-contamination #mid-session-fix
 
-<!-- ID: L061 | lessons.md:L432 -->
+<!-- ID: L063 | lessons.md:L446 -->
 ### [2026-09-22] Bịa ra lỗi do thiếu thông tin Migration và Tự ý ghi đè Logic Cốt Lõi (Hallucinated Bug & Architectural Violation)
 - **Global Pattern:** Khi user phàn nàn tính năng lỗi [A] (không lấy được mapping_v2_id cho Manual Rule), Agent chỉ nhìn một file migration (075) [B] mà không rà soát toàn bộ lịch sử (077). Từ đó tự suy diễn (hallucinate) rằng code cũ bị crash [X] và tự viết thêm logic "thông minh" chắp vá [Y] (tự động tạo Shadow Rule - `mapping_rule_v2` cho một trường tự định nghĩa). **Đúng:** (1) BẮT BUỘC rà soát TOÀN BỘ file migration liên quan trước khi kết luận cấu trúc Schema; (2) TUYỆT ĐỐI không tự tạo (auto-create) data phụ thuộc (Shadow rule/Source object) khi thiết kế gốc không cho phép; (3) Tôn trọng Rule "Simplicity First" - Tận dụng tối đa Core engine (VD: `gjson.Get`) thay vì sửa đổi payload và database.
 - **Bối cảnh (Trigger):** User tức giận: "dừng lại INSERT INTO cdc_system.mapping_rule_v2. sao lại tạo cái này. nó là thông tin của shadow mà... tạo tự động kiểu này sai logic cốt lõi rồi... ví dụ mày tạo sản phẩm chọn cái category chua có, mày tự đi tạo category à. giỡn".
@@ -105,7 +105,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay (Mid-Session Fix). (2) Revert toàn bộ code Backend (Repository, Handler, Command) về nguyên trạng. (3) Tìm file migration chuẩn (077) xác nhận `mapping_v2_id` cho phép NULL cho rule tự định nghĩa (self-contained). (4) Loại bỏ tham số thừa `SourceFormat` ở cả Backend và Frontend, trả payload về nguyên thuỷ `source_field: '{id,status}'` để tận dụng hàm `gjson` có sẵn của hệ thống.
 - **Tags:** #hallucinated-bug #architectural-violation #migration-blindspot #mid-session-fix
 
-<!-- ID: L073 | lessons.md:L531 -->
+<!-- ID: L075 | lessons.md:L545 -->
 ### [2026-09-16] Tầm nhìn hạn hẹp chỉ tập trung vào một công nghệ nguồn (MongoDB) mà bỏ quên đa nguồn (PostgreSQL, MariaDB, MySQL) khi thiết kế định tuyến đa kết nối (Single-Engine Tunnel Vision & Neglecting Relational Sources)
 
 - **Global Pattern:** Khi giải quyết bài toán định tuyến đa kết nối nguồn trùng tên [A] (multi-source connection isolation), Agent mắc bệnh tầm nhìn hạn hẹp (tunnel vision) chỉ tập trung thiết kế và vá lỗi cho duy nhất một công nghệ nguồn [X] (MongoDB) mà BỎ QUÊN các hệ quản trị cơ sở dữ liệu quan hệ cốt lõi khác [Y] (PostgreSQL, MariaDB, MySQL) -> Dẫn đến hậu quả nghiêm trọng: (1) UI chỉ phân lập topic prefix cho MongoDB (`${prefix}.${name}`) trong khi PostgreSQL và MySQL vẫn bị ép chung topic prefix tĩnh, khiến 2 kết nối PostgreSQL/MySQL cùng schema/table ghi đè lẫn nhau ngay trên Kafka broker; (2) Kafka consumer hardcode điều kiện phân giải cho riêng MongoDB (`sourceConnCode == "mongodb"`), bỏ rơi PostgreSQL và MariaDB khiến connection code bị rỗng hoặc gán generic engine name; (3) Bỏ qua sự khác biệt về cấu trúc namespace của PostgreSQL (`<schema>.<table>` thay vì `<db>.<collection>`), dẫn đến Event Handler bốc nhầm schema thành database và rớt 100% routing. **Đúng:** (1) Tầm nhìn Overview toàn diện: BẤT KỲ giải pháp định tuyến đa kết nối nào ở tầng Source BẮT BUỘC phải áp dụng đồng bộ và bình đẳng cho TẤT CẢ các source engine được hỗ trợ (PostgreSQL, MariaDB, MySQL, MongoDB, SFTP); (2) Tầng UI CMS bắt buộc phân lập topic prefix `${prefix}.${name}` cho TẤT CẢ các loại engine; (3) Kafka consumer và Event handler phải nhận diện đầy đủ bộ tứ `(engine, conn, db, schema, table)` thay vì chỉ giả định collection MongoDB; (4) Lookup key của Metadata Registry phải hỗ trợ cả `schema.table` và `table`.
@@ -114,7 +114,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức theo Mid-Session Fix (Rule #5). Ghi lesson vào `lessons.md`. (2) Mở rộng topic prefix phân lập `${name}` cho cả PostgreSQL, MySQL/MariaDB tại `SourceConnectors.tsx`. (3) Chuẩn hóa Kafka Consumer trích xuất `source.schema`, `source.db`, `source.table`, và xóa bỏ hardcode `sourceConnCode == "mongodb"`. (4) Chuẩn hóa Event Handler phân giải namespace cho PostgreSQL (`schema.table`) và MariaDB/MySQL. (5) Viết bổ sung Unit test cho cả PostgreSQL và MySQL/MariaDB đa kết nối.
 - **Tags:** #single-engine-tunnel-vision #multi-source-cdc #postgresql-mariadb-mysql #topic-prefix-isolation #namespace-resolution #mid-session-fix
 
-<!-- ID: L082 | lessons.md:L618 -->
+<!-- ID: L084 | lessons.md:L632 -->
 ### [2026-09-11] Suy diễn lý thuyết "COUNT(*) 30s do MVCC" mà không audit outlier p98 vs baseline 80ms & vội vàng đòi DROP index hệ thống
 
 - **Global Pattern:** Khi nhận telemetry span outlier/p98 [A] (`pg.count_rows` 30s) trên bảng [X] (15M records), Agent suy diễn lý thuyết suông (cho rằng mọi câu `COUNT` đều mất 30s do Postgres MVCC/Heap scan) mà KHÔNG audit so sánh với baseline thực tế (bình thường chạy chỉ 80ms), đồng thời không tra cứu codebase thực tế [B] mà vội vàng kết luận các index là thừa/rác đòi DROP (GIN `_raw_data`, `_source_id`, `_id`, `_synced_at`) -> Dẫn đến chẩn đoán sai hoàn toàn nguyên nhân gốc rễ (nguyên nhân thực tế là Lock Contention/Connection Starvation/Outlier Spike, không phải do Postgres không scan nổi) và phá hoại thiết kế data contract/CDC của hệ thống. **Đúng:** (1) Trước khi kết luận query chậm do bản chất SQL, BẮT BUỘC phân biệt giữa P50/P90 baseline (80ms) và P98/P99 spike (30s) để tìm nguyên nhân ngoại lai (lock wait, transaction block, connection pool exhaustion, CPU throttle, I/O spike). (2) BẮT BUỘC grep audit toàn bộ codebase xem từng column (`_raw_data`, `_source_id`, `_id`, `_synced_at`) được dùng ở đâu, cho mục đích gì trước khi phát ngôn về index. Tuyệt đối cấm đoán mò và vội vàng đòi drop index.
@@ -123,7 +123,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức theo Mid-Session Fix (Rule #5). Ghi lesson vào `lessons.md`. (2) Audit chi tiết toàn bộ codebase `data-hub` cho 5 câu hỏi cụ thể của User: (i) `_raw_data` & GIN index dùng ở đâu, (ii) `idx_bank_requests_bvb_source_id` vs `ux_bank_requests_bvb_source_id_active` phục vụ query nào, (iii) `_id` CDC unique dùng ở đâu, (iv) `_synced_at` là gì và chuẩn bị cho flow nào, (v) Tại sao 99.9% chạy 80ms mà lại có 1 span p98 spike lên 30s. (3) Trình bày báo cáo audit dựa trên code và log thực tế, tuyệt đối không suy diễn.
 - **Tags:** #armchair-theory-fallacy #p98-outlier-vs-baseline #code-audit-first #no-speculation #postgres-lock-contention-vs-table-scan #do-not-drop-unverified-indexes #mid-session-fix
 
-<!-- ID: L088 | lessons.md:L666 -->
+<!-- ID: L090 | lessons.md:L680 -->
 ### [2026-09-08] Xé nhỏ gap thành 30 items độc lập gây over-engineering — thực chất chỉ có 3 khối công việc kỹ thuật
 
 - **Global Pattern:** Khi phân tích migration data [A] (MongoDB → PostgreSQL), Agent liệt kê N gaps độc lập từ cùng một design doc, trong khi bản chất kỹ thuật chỉ gồm 3–4 khối module thực tế → Dẫn đến ma trận gây hoang mang, kéo theo đề xuất over-engineering như tạo bảng phụ [B] (`cdc_tombstone_fence`), bật oplog config nặng [C] (`changeStreamPreAndPostImages`), tạo test harness riêng — vi phạm Simplicity First (Rule #12) và baseline DDL đã chốt. **Đúng:** Nhóm gaps theo khối công việc kỹ thuật thực tế (module-level): BSON Parser, PG Adapter, Atomic SQL, Shadow Comparator. Không đề xuất thêm bảng phụ hay thay đổi oplog config khi DBA/Migration owner chưa duyệt.
@@ -132,7 +132,7 @@
 - **Fix/Correct Flow:** (1) Nhóm gaps theo module: BSON Transformer, PG Adapter, Atomic Checkpoint SQL, Shadow Comparator. (2) KHÔNG thêm bảng phụ hay oplog config thay đổi khi DBA chưa duyệt. (3) Kiểm tra mọi proposal kiến trúc mới có vi phạm constraint §1/§3.3 của design doc không.
 - **Tags:** #over-engineering #gap-grouping-by-module #simplicity-first #no-phantom-arch-proposals #ddl-constraint-check
 
-<!-- ID: L089 | lessons.md:L674 -->
+<!-- ID: L091 | lessons.md:L688 -->
 ### [2026-09-08] Demo code CDC TypeScript có 4 lỗi showstopper: BSON instance leak, nhầm typed/snapshot columns, thiếu EJSON.stringify, convert identity sai
 
 - **Global Pattern:** Khi viết demo code [A] cho CDC ingest pipeline (BSON → PostgreSQL), Agent mắc 4 lỗi đồng thời: (1) Đẩy BSON instance thô (`ObjectId`, `Binary`) vào `pg` parameter — driver gọi `.toString()` ra `"[object Object]"` hoặc sai format; (2) Đưa snapshot fields (`sender`, `receiver`, `info`, `error`) vào `TYPED_COLUMNS` → ghi `source_field_types['info']` — vi phạm §3.3 (sourceFieldTypes chỉ cho scalar typed columns); (3) `extraFields[key] = val` gán object thô, không qua `EJSON.stringify({ relaxed: false })` → bug driver `[]→{}`; (4) Không convert `ObjectId → toHexString()`, `BinData:04 → UUID 8-4-4-4-12` → identity sai hoàn toàn. **Đúng:** BSON instance PHẢI extract canonical text trước khi bind; SCALAR_TYPED_FIELDS và SNAPSHOT_FIELDS là 2 tập không giao nhau; mọi JSONB bind PHẢI qua EJSON.stringify(relaxed:false).
@@ -141,7 +141,7 @@
 - **Fix/Correct Flow:** (1) `_id (ObjectId)` → `val.toHexString()`; `transId (Binary:04)` → UUID string `8-4-4-4-12`. (2) Snapshot fields KHÔNG có key trong sourceFieldTypes — presence biểu diễn qua SQL NULL/JSONB null của cột. (3) encodeSnapshot() return `EJSON.stringify(val, {relaxed:false})` hoặc SQL NULL (missing) hoặc string `'null'` (explicit null). (4) extra_fields luôn `EJSON.stringify(obj, {relaxed:false})`, không bao giờ bind null.
 - **Tags:** #bson-instance-leak #typed-vs-snapshot-columns #ejson-stringify-mandatory #pg-driver-binding #cdc-demo-code-bugs
 
-<!-- ID: L092 | lessons.md:L697 -->
+<!-- ID: L094 | lessons.md:L711 -->
 ### [2026-08-27] SQL batch masking phụ thuộc extension DB ngoài (pgcrypto dependency drift) & parse thiếu MongoDB date JSON variant
 
 - **Global Pattern:** Khi hệ thống [A] thực thi batch SQL transformation [B] (`batch_transform_handler`) trên DB đích, Agent (1) dùng hàm `encode(hmac(...))` [C] phụ thuộc extension ngoài `pgcrypto` thay vì dùng hàm băm native core của PostgreSQL (`sha256(bytea)`), và (2) chỉ parse 2/6 biến thể Date của MongoDB JSON (bỏ quên dạng `{"$date": 1738135620071}` number epoch ms) -> Dẫn đến khi chạy batch transform trên database thật, câu lệnh SQL bị crash runtime với lỗi `function hmac does not exist` hoặc `invalid input syntax for timestamptz`, làm toàn bộ tiến trình batch bị hủy mà không update được bất kỳ bản ghi nào. **Đúng:** (1) Trong các câu lệnh SQL sinh động trực tiếp trên DB, BẮT BUỘC chỉ sử dụng các hàm chuẩn tích hợp sẵn trong PostgreSQL core (`encode(sha256((col::text || salt)::bytea), 'hex')`) để bảo đảm tính tương thích 100% trên mọi database instance. (2) Luôn phủ kín toàn bộ 6 biến thể Date JSON từ MongoDB (`number`, `string ISO`, `{"$date": string}`, `{"$date": number}`, `{"$date": {"$numberLong": ...}}`, naive string). (3) Dispatcher NATS command BẮT BUỘC gửi kèm `source_object_id` và `shadow_binding_id` để Worker query chính xác tập mapping rules từ DB mà không phụ thuộc cache in-memory.
@@ -150,7 +150,7 @@
 - **Fix/Correct Flow:** (1) Bổ sung nhánh `WHEN jsonb_typeof(_raw_data->'col'->'$date') = 'number' THEN to_timestamp(...)` vào `BuildCastExpr`. (2) Chuyển biểu thức băm sang native `encode(sha256(((col)::text || '<key>')::bytea), 'hex')`. (3) Truyền `source_object_id` và `shadow_binding_id` trong NATS payload.
 - **Tags:** #pgcrypto-dependency-drift #native-postgres-sha256 #mongodb-date-json-variants #batch-transform-sql-resilience #shadow-binding-dispatch-scope
 
-<!-- ID: L093 | lessons.md:L705 -->
+<!-- ID: L095 | lessons.md:L719 -->
 ### [2026-08-27] Tracking tiến độ Async Batch Job bị gộp chung do chỉ filter theo Parent Entity ID (1-N job cross-talk)
 
 - **Global Pattern:** Khi hệ thống [A] theo dõi tiến độ async batch job [B] (`transform_jobs`) cho các thực thể quan hệ 1-N (1 parent `source_object_registry` có N child `shadow_binding` như `payment_bills` vs `payment_bills_1`), câu query LATERAL JOIN [C] và API polling status [D] chỉ filter theo parent ID (`source_object_id`) mà không ràng buộc theo child target table (`target_table = sb.shadow_table`) -> Dẫn đến khi 1 child table chạy job, TOÀN BỘ các child tables khác cùng parent đều hiển thị chung tiến độ của job đó, gây mất phân lập dữ liệu và trải nghiệm người dùng sai lệch. **Đúng:** (1) Trong SQL LATERAL JOIN, BẮT BUỘC phải match chính xác theo target table của child binding: `tj.target_table = sb.shadow_table`. (2) API polling BẮT BUỘC nhận tham số `binding_id` hoặc `target_table` và repo query chính xác theo cặp `(source_object_id, target_table)`. (3) Giao diện UI component phải truyền định danh binding cụ thể khi trigger và poll tiến độ.
@@ -159,7 +159,7 @@
 - **Fix/Correct Flow:** (1) Sửa LATERAL JOIN trong `source_object_read_repo_gorm.go` để match `target_table` của shadow binding. (2) Thêm `GetLatestBySourceObjectIDAndTable` trong `transform_job_repo.go`. (3) Hỗ trợ query params `binding_id`/`target_table` trong `TransformJobStatusV2`. (4) Cập nhật frontend `TableRegistry.tsx` truyền `bindingId` và `targetTable` vào `TransformJobStatus`.
 - **Tags:** #job-tracking-isolation #1-n-entity-cross-talk #lateral-join-scope #transform-progress-isolation #binding-level-granularity
 
-<!-- ID: L095 | lessons.md:L721 -->
+<!-- ID: L097 | lessons.md:L735 -->
 ### [2026-08-27] Không normalize kiểu dữ liệu từ information_schema.columns dẫn đến so sánh drift sai lệch hoàn toàn
 
 - **Global Pattern:** Khi hệ thống [A] đọc kiểu dữ liệu thực tế từ `information_schema.columns` [B] để so sánh với kiểu dữ liệu định nghĩa trong config/rule [C] (`POSTGRES_DATA_TYPES`), Agent chỉ dùng `strings.ToUpper(data_type)` [D] mà không map các tên chuẩn ANSI/SQL-standard sang PostgreSQL aliases (ví dụ: `"character varying"` -> `"VARCHAR"`, `"timestamp with time zone"` -> `"TIMESTAMPTZ"`, `"timestamp without time zone"` -> `"TIMESTAMP"`) -> Dẫn đến logic so sánh drift (`isDrift = current != target`) luôn bị sai (false positive drift) trên các kiểu dữ liệu phổ biến nhất, gây báo động giả trên giao diện. **Đúng:** (1) BẮT BUỘC xây dựng hàm mapping chuẩn hóa từ SQL-standard data type sang type alias quy chuẩn của dự án trước khi trả về cho client hoặc so sánh. (2) Luôn đối soát tên kiểu dữ liệu trả về từ PostgreSQL system catalog / information schema với danh mục kiểu dữ liệu của hệ thống. (3) Normalize cả column name key về lowercase để tránh miss key lookup.
@@ -168,7 +168,7 @@
 - **Fix/Correct Flow:** (1) Viết hàm `normalizePostgresType(dataType, udtName string) string` mapping `"CHARACTER VARYING"` -> `"VARCHAR"`, `"TIMESTAMP WITH TIME ZONE"` -> `"TIMESTAMPTZ"`, `"TIMESTAMP WITHOUT TIME ZONE"` -> `"TIMESTAMP"`, `"CHARACTER"` -> `"CHAR"`, đồng thời trích xuất `udtName` khi type là `"USER-DEFINED"`/`"ARRAY"`. (2) Normalize map key sang lowercase. (3) Verify lại luồng hiển thị trên frontend.
 - **Tags:** #postgres-information-schema #data-type-normalization #type-drift-false-positive #schema-introspection #sql-standard-vs-alias
 
-<!-- ID: L096 | lessons.md:L729 -->
+<!-- ID: L098 | lessons.md:L743 -->
 ### [2026-08-27] Dùng pattern SQL từ service A áp vào service B cùng schema → cross-service schema assumption
 
 - **Global Pattern:** Agent [A] thấy `so.legacy_registry_id` trong query của service [B] (`centralized-data-service/table_registry_repo.go`), copy pattern sang service [C] (`cdc-cms-service`) mà không verify DB schema migration → runtime fail vì cùng DB nhưng query expression khác nhau giữa 2 service (B dùng SELECT alias, C cần JSONB path). **Đúng:** Migration SQL là source of truth duy nhất. Khi không chắc column/expression, đọc migration file của đúng service hiện tại, không copy từ service khác.
@@ -177,7 +177,7 @@
 - **Fix/Correct Flow:** Đọc `migrations/schema/cdc_system_model/030_v2_source_object_registry.sql` → confirm không có column `legacy_registry_id` → đọc `source_object_registry_repo.go:54` trong cùng service → dùng `source_locator_json->>'legacy_registry_id'`.
 - **Tags:** #cross-service-schema-assumption #jsonb-vs-column #migration-sql-source-of-truth #verify-schema-before-raw-sql
 
-<!-- ID: L097 | lessons.md:L737 -->
+<!-- ID: L099 | lessons.md:L751 -->
 ### [2026-08-27] JSONB SELECT alias ≠ column thực — không dùng alias trong WHERE clause
 
 - **Global Pattern:** Postgres cho phép `SELECT jsonb_col->>'key' AS key_name` để alias JSONB extraction, nhưng KHÔNG cho phép `WHERE key_name = ?` trực tiếp (trừ khi dùng CTE hoặc subquery). Agent [A] thấy `SELECT so.legacy_registry_id` (alias) → copy sang WHERE → Postgres error `column does not exist`. **Đúng:** WHERE clause phải dùng JSONB path gốc: `WHERE so.source_locator_json->>'legacy_registry_id' = ?`. Params phải là string vì `->>` trả về TEXT.
@@ -186,7 +186,7 @@
 - **Fix/Correct Flow:** Dùng `source_locator_json->>'legacy_registry_id' = ?` và param là `strconv.FormatInt(int64(entry.ID), 10)` (string, không phải int).
 - **Tags:** #jsonb-alias-not-column #postgres-jsonb-where #gorm-silent-empty-scan #raw-sql-column-drift
 
-<!-- ID: L098 | lessons.md:L745 -->
+<!-- ID: L100 | lessons.md:L759 -->
 ### [2026-08-27] Go build pass nhưng raw SQL query dùng column không tồn tại → runtime fail
 
 - **Global Pattern:** Agent [A] viết raw SQL query dùng column [B] (`legacy_registry_id`) trên bảng [C] (`shadow_binding`) sau khi thấy column đó trong file khác, KHÔNG verify Go model struct + test DDL → `go build` pass nhưng Postgres throw lỗi runtime hoặc GORM silent ignore → query return 0 → logic sai hoàn toàn. **Đúng:** Trước khi dùng column X trong raw SQL, BẮT BUỘC: (1) đọc Go struct model tương ứng, (2) đọc test DDL hoặc migration. Chỉ dùng column đã confirmed tồn tại.
@@ -195,7 +195,7 @@
 - **Fix/Correct Flow:** Đọc `model/shadow/shadow_binding.go` → confirm không có `legacy_registry_id` → dùng JOIN pattern: `JOIN source_object_registry so ON so.id = sb.source_object_id WHERE so.legacy_registry_id = ?`. Pattern chuẩn đã có tại `table_registry_repo.go:59-65`.
 - **Tags:** #verify-schema-before-raw-sql #go-build-false-confidence #anti-speculation #raw-sql-column-drift
 
-<!-- ID: L101 | lessons.md:L769 -->
+<!-- ID: L103 | lessons.md:L783 -->
 ### [2026-08-25] Tự tiện chạy lệnh DDL ALTER TABLE DROP CONSTRAINT trong runtime gây nguy cơ lock chết database lớn (100tr dòng)
 - **Global Pattern:** Khi gặp lỗi xung đột constraint [A] (ví dụ `SQLSTATE 23505 duplicate key`), Agent tự tiện viết code chạy lệnh DDL [B] (`ALTER TABLE table DROP CONSTRAINT ...`) trực tiếp trong luồng runtime của worker [C] để giải quyết xung đột -> Vi phạm nghiêm trọng quy tắc an toàn cơ sở dữ liệu và quản trị hạ tầng (Rule #12 Core Systems), vì lệnh DDL `ALTER TABLE` trên bảng lớn (100 triệu dòng) sẽ chiếm Exclusive Lock (AccessExclusiveLock), làm nghẽn toàn bộ transaction, treo cứng DB và sập dịch vụ. **Đúng:** (1) TUYỆT ĐỐI CẤM chạy bất kỳ lệnh DDL `ALTER TABLE / DROP CONSTRAINT` nào trong luồng runtime worker. (2) Mọi giải pháp xử lý xung đột phải thuần túy nằm ở tầng DML (Query SQL: ON CONFLICT, WHERE, DO UPDATE) hoặc logic code. (3) Tôn trọng cấu trúc schema và index hiện có của DB, câu lệnh Upsert phải nhắm đúng vào constraint hiện hữu của bảng.
 - **Bối cảnh (Trigger):** User mắng gay gắt khi thấy Agent cho worker chạy `ALTER TABLE shadow_testpbs.payment_bills_1 DROP CONSTRAINT IF EXISTS "payment_bills_1__id_cdc_unique"`: "dữ liêu của tao 100tr mày chạy ALTER TABLE... mày ăn cứt à mà ngu vậy".
@@ -203,7 +203,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức theo Mid-Session Fix (Rule #5). (2) Xóa bỏ 100% mọi lệnh DDL `DROP CONSTRAINT` khỏi code runtime. (3) Ghi lesson vào `lessons.md`. (4) Sửa logic DML: câu lệnh `ON CONFLICT` phải nhắm đúng vào `PrimaryKeyField` (`_id`) của bảng để PostgreSQL UPDATE đè dữ liệu mà không cần can thiệp DDL.
 - **Tags:** #anti-runtime-ddl #no-alter-table-in-worker #database-safety #big-data-locking #mid-session-fix #dml-only
 
-<!-- ID: L107 | lessons.md:L822 -->
+<!-- ID: L109 | lessons.md:L836 -->
 ### [2026-08-24] Bỏ quên bộ ba định danh Metadata (DB/Connection, Schema, Table) trên 2 tầng Source→Shadow và Shadow→Master gây lỗi gãy cách ly dữ liệu và gãy query
 
 - **Global Pattern:** Trong kiến trúc CDC 2 tầng [A] (`Tier 1: Source → Shadow` và `Tier 2: Shadow → Master`), Agent vì chủ quan/nôn nóng làm nhanh [B] chỉ dùng tên bảng trần (`table`) mà bỏ quên việc kiểm tra và truyền đầy đủ bộ ba định danh Metadata [C] (`db_connection_key`, `schema`, `table`) trên toàn bộ các khâu (Frontend State/Modal, REST API Payload, NATS Wire Command, SQL Queries JOIN/WHERE, và Check Constraints của DDL) -> Dẫn đến hàng loạt lỗi nghiêm trọng: (1) Khớp nhầm binding giữa các microservices có bảng trùng tên, (2) Ghi sai bảng/schema/DB, (3) Câu lệnh SQL JOIN trượt do sai enum/scope (`'transmute'` thay vì `'master'`), (4) Giao diện bị kẹt trạng thái giả tạo hoặc gạch ngang toàn bộ tiến độ. **Đúng:** (1) BẮT BUỘC coi bộ ba `(connection_key, schema, table)` là khóa định danh tối cao không thể tách rời cho cả 2 tầng `Source → Shadow` và `Shadow → Master`. (2) Trước khi viết/sửa bất kỳ code nào (UI, API, Worker, Query), BẮT BUỘC kiểm tra DDL schema thực tế trong DB (CHECK constraints, column names). (3) Mọi API payload, NATS command, state filter, và SQL WHERE/JOIN phải luôn mang đầy đủ `schema` và `table`.
@@ -212,7 +212,7 @@
 - **Fix/Correct Flow:** (1) DỪNG LẠI NGAY LẬP TỨC theo quy tắc Mid-Session Fix (Rule #5). (2) Ghi nhận bài học vào `lessons.md`. (3) Rà soát toàn bộ codebase trên cả 2 tầng: chuẩn hóa 100% việc truyền và query theo cặp `(schema, table)` và `connection_key`. (4) Kiểm tra đối chiếu trực tiếp DDL file trước khi viết câu truy vấn SQL.
 - **Tags:** #metadata-triplet-integrity #schema-isolation #source-to-shadow #shadow-to-master #anti-haste #ddl-schema-alignment #mid-session-fix
 
-<!-- ID: L108 | lessons.md:L830 -->
+<!-- ID: L110 | lessons.md:L844 -->
 ### [2026-08-24] Ép schema mặc định 'public' khi caller không truyền schema làm gãy việc tìm kiếm các binding thuộc schema custom
 
 - **Global Pattern:** Khi thực hiện tối ưu an toàn NULL trong SQL [A] (`COALESCE(NULLIF(col, ''), 'public') = COALESCE(NULLIF(param, ''), 'public')`), Agent tự ý áp đặt giả định giá trị mặc định của tham số rỗng [B] (`param = ""` -> ép thành `'public'`) trong khi hệ thống vận hành đa schema [C] (bảng thuộc schema tùy biến như `master_bidv_connector_service`) -> Dẫn đến khi Client/UI gửi request chỉ có tên bảng [D] (`{"master_table": "bank_requests"}`), câu lệnh SQL tìm kiếm bắt buộc `master_schema = 'public'`, làm rớt toàn bộ bản ghi của schema custom và trả về lỗi `not registered or binding not found` (Regression Bug). **Đúng:** (1) Phân biệt rạch ròi giữa "An toàn kiểu dữ liệu NULL" và "Ý định của Caller". (2) Khi Caller không truyền schema (`param == ""`), phải truy vấn fallback theo `WHERE table = ?` để khớp với binding duy nhất của bảng đó. (3) Chỉ áp dụng bộ lọc schema khi Caller truyền schema rõ ràng (`param != ""`). (4) Luôn kiểm tra tính tương thích ngược với payload cũ của Frontend.
@@ -221,7 +221,7 @@
 - **Fix/Correct Flow:** (1) Tách 2 nhánh query trong `Save()`: nếu có `masterSchema` thì lọc cả hai, nếu không có thì tìm theo `masterTable`. (2) Tự động parse FQN nếu `masterTable` chứa dấu `.`. (3) Không bao giờ tự ý gán giá trị mặc định `'public'` cho tham số tìm kiếm của người dùng.
 - **Tags:** #schema-coalesce-trap #backward-compatibility #false-default-assumption #sql-filter-regression #anti-assumption
 
-<!-- ID: L132 | lessons.md:L1006 -->
+<!-- ID: L134 | lessons.md:L1020 -->
 ### [2026-08-12] Lỗi sai trạng thái check constraint và tên cột của bảng snapshot_progress tại Worker
 - **Global Pattern:** Khi thao tác ghi nhận tiến độ snapshot [A] vào bảng control-plane [B] (`snapshot_progress`), việc tự ý định nghĩa trạng thái tùy ý (như `status = 'completed'`) hoặc tên cột (như `completed_at`) -> Sẽ bị Database từ chối do vi phạm CHECK constraint `snapshot_progress_status_check` (`status` chỉ nhận `'running', 'done', 'error', 'cancelled', 'paused'`) và lỗi cột không tồn tại (`finished_at`). **Đúng:** Bắt buộc đối soát chính xác schema/migration của bảng trước khi viết câu lệnh SQL, sử dụng đúng các giá trị trạng thái đã định nghĩa (`status = 'done'`, cột `finished_at`).
 - **Bối cảnh (Trigger):** Thực hiện rẽ nhánh snapshot SFTP tại Worker, log báo lỗi SQL vi phạm constraint khi gán status='completed' và cột completed_at.
@@ -229,7 +229,7 @@
 - **Fix/Correct Flow:** (1) Đọc kỹ schema DB. (2) Sửa SQL UPDATE/INSERT sử dụng đúng `status = 'done'` và cột `finished_at`.
 - **Tags:** #db-check-constraint #snapshot-progress-status #column-name-mismatch #sql-syntax-audit
 
-<!-- ID: L140 | lessons.md:L1062 -->
+<!-- ID: L142 | lessons.md:L1076 -->
 ### [2026-08-11] Lỗi gán nhầm engine_type='postgresql' cho SFTP/File Connector do thiếu enum trong DB check constraint & normalizeSourceEngine
 - **Global Pattern:** Khi đăng ký Nguồn dữ liệu mới loại [A] (SFTP, File, CSV), helper `normalizeSourceEngine` [B] thiếu case loại [A] trong `switch` -> Trả về `default: "postgresql"`, làm cho DB gán nhầm `source_engine_type = "postgresql"`. Đến khi chạy Quét Field (`scan-fields`), worker CDS [C] tưởng nhầm là DB SQL nên gọi `scanFieldsSQLSource` -> Báo lỗi giả `SQL source returned 0 columns or connection failed`. **Đúng:** Mọi connector loại non-SQL (`sftp`, `file`, `csv`, `json`, `kafka`) BẮT BUỘC phải được khai báo đầy đủ trong `normalizeSourceEngine` VÀ DB check constraint `connection_registry_engine_type_check`.
 - **Bối cảnh (Trigger):** Tạo SFTP Connector và đăng ký Table Registry cho `reconcile_final`, Quét field báo lỗi `SQL source returned 0 columns or connection failed`.
@@ -237,7 +237,7 @@
 - **Fix/Correct Flow:** (1) Bổ sung `case "sftp", "file", "csv", "json", "kafka": return "sftp"` vào `normalizeSourceEngine`. (2) Cập nhật DB check constraint thêm `'sftp'`, `'file'`, `'csv'`, `'json'`, `'kafka'`. (3) Viết migration file `087_add_sftp_engine_type_constraint.sql`.
 - **Tags:** #normalize-source-engine #db-check-constraint #sftp-engine-type #scan-fields-fix #root-cause-found
 
-<!-- ID: L144 | lessons.md:L1090 -->
+<!-- ID: L146 | lessons.md:L1104 -->
 ### [2026-08-11] Bỏ sót projection field tại Query Handler khi bổ sung cột dữ liệu mới vào luồng Export
 - **Global Pattern:** Khi bổ sung một trường dữ liệu mới [X] vào luồng export/report, Agent chỉ sửa tầng pure transformation logic [A] và DTO validation [B] mà bỏ qua tầng Query Handler [C] (nơi định nghĩa MongoDB `selectFields` projection và `rawData.map` DTO mapping) -> Dữ liệu trường [X] bị MongoDB query lọc bỏ tại tầng truy vấn, dẫn đến kết quả xuất ra Excel luôn bị rỗng/missing. **Đúng:** Mọi tác vụ bổ sung trường dữ liệu [X] vào luồng Export BẮT BUỘC phải trace callchain đầy đủ từ Export Pure Logic -> Query Handler (`selectFields` projection object + `rawData.map` output mapping) -> Database Schema.
 - **Bối cảnh (Trigger):** Thêm trường `serviceCode` cho `PaymentBillExport`. Agent sửa `payment-bill-export.pure.ts` nhưng bỏ sót `GetAllPaymentBillExportHandler.ts` và `GetAllPaymentBillForCurrentMerchantExportHandler.ts`.
@@ -245,7 +245,7 @@
 - **Fix/Correct Flow:** (1) Thêm `"serviceCode": 1` vào `selectFields` trong `GetAllPaymentBillExportHandler.ts` và `GetAllPaymentBillForCurrentMerchantExportHandler.ts`. (2) Thêm `serviceCode: doc.serviceCode` vào hàm `map` kết quả trả về. (3) Cập nhật unit test.
 - **Tags:** #query-handler-projection #export-data-pipeline #select-fields-missing #callchain-tracing #mongodb-projection
 
-<!-- ID: L151 | lessons.md:L1140 -->
+<!-- ID: L153 | lessons.md:L1154 -->
 ### [2026-08-05] Pattern: Lệch mock SQL (sqlmock arguments mismatch) khi refactor query hoặc context logging trong test
 
 - **Global Pattern:** Thay đổi query repository [A] hoặc truyền thêm context log [B] làm thay đổi số lượng/thứ tự tham số SQL -> sqlmock trong unit test ném lỗi `arguments do not match` hoặc `could not match actual sql` -> test fail dù logic nghiệp vụ đúng. **Đúng:** (1) Cập nhật các mock `ExpectQuery` khớp chính xác với số lượng đối số mới (ví dụ `WithArgs` nhận đúng N tham số). (2) Với các query kiểm tra điều kiện (như `_raw_data ? 'after'`), nếu test case không cần nhánh logic đó, hãy mock trả về `false` để tránh thay đổi cấu trúc pgPath (từ `{items}` sang `{after,items}`) làm lệch hàng loạt mock query phía sau.
@@ -254,7 +254,7 @@
 - **Fix/Correct Flow:** Bổ sung mock method `GetActiveJobs`, cập nhật `WithArgs` của `mapping_rule_v2` nhận 4 tham số, và mock `hasAfter = false` để giữ nguyên pgPath `{items}`.
 - **Tags:** #sqlmock-mismatch #unit-test-fix #has-after-mock #arguments-mismatch
 
-<!-- ID: L152 | lessons.md:L1148 -->
+<!-- ID: L154 | lessons.md:L1162 -->
 ### [2026-08-05] Pattern: Lỗi Postgres transaction block aborted (25P02) khi batch insert lỗi và lệch cột PK (`id` vs `_id`)
 
 - **Global Pattern:** Batch writer [A] (`bridge_handler`) thực hiện batch upsert bên trong 1 `tx *gorm.DB` Transaction block. Khi 1 query bị lỗi (ví dụ: chỉ định nhầm tên cột PK `id` thay vì `_id` làm Postgres ném `SQLSTATE 42703`), Postgres đánh dấu transaction bị **ABORTED (25P02)**. Mọi query single-row fallback tiếp theo bên trong `tx` đều thất bại thảm hại với lỗi `current transaction is aborted, commands ignored until end of transaction block`. **Đúng:** (1) Với luồng batch upsert có fallback single-row: TUYỆT ĐỐI KHÔNG bọc toàn bộ trong 1 `tx.Transaction` duy nhất. Phải chạy query bằng `h.db.WithContext(ctx)` độc lập để nếu batch fail thì single-row fallback vẫn chạy được bình thường. (2) `resolveCollection` phải đối soát trực tiếp với `schema.Columns` của bảng PostgreSQL thực tế trên database để tự chọn đúng cột PK (`_id` hay `id`) thay vì ép gán cứng `id`. (3) `PrepareForCDCInsertWithBusinessCols` phải bẫy `ADD COLUMN IF NOT EXISTS` cho cột PK nếu chưa tồn tại. (4) `ActivityLogger.Start` phải bẫy tự động `CREATE SCHEMA IF NOT EXISTS cdc_system` & `CREATE TABLE IF NOT EXISTS cdc_system.cdc_activity_log` để không dính `SQLSTATE 42P01` do thiếu bảng.
@@ -263,7 +263,7 @@
 - **Fix/Correct Flow:** Bỏ `tx.Transaction` trong `batchUpsert`, thêm kiểm tra `schema.Columns` trong `resolveCollection`, bổ sung `ADD COLUMN IF NOT EXISTS` ở `schema_adapter.go`, và tự tạo bảng trong `ActivityLogger`.
 - **Tags:** #postgres-transaction-aborted-25p02 #pk-column-resolution #auto-create-activity-log-table #batch-fallback-isolation
 
-<!-- ID: L153 | lessons.md:L1156 -->
+<!-- ID: L155 | lessons.md:L1170 -->
 ### [2026-08-05] Pattern: Lỗi Mongo Change Stream treo/không trả record gap khi Oplog hết hạn và thiếu Activity Logger
 
 - **Global Pattern:** Reader [A] (`bridge_mongo`) chỉ dùng `coll.Watch(SetStartAtOperationTime)` → khi mốc Oplog quá hạn hoặc không có mutation mới trong lúc watch → Change Stream treo lặp `TryNext() == false` và trả về 0 record → gap data không được bổ sung vào Shadow Table. Ngoài ra, Handler [B] (`bridge_handler`) quên gọi `governance.NewActivityLogger` → Activity Log trong bảng `cdc_activity_logs` không xuất hiện bản ghi `Operation = bridge-oplog`. **Đúng:** (1) Tích hợp chế độ **Dual-Mode** cho MongoDB Bridge: Chạy Change Stream (Oplog) trước; nếu yield 0 events hoặc hết hạn oplog window, tự động fallback sang `coll.Find` truy vấn trực tiếp bảng Mongo theo các trường thời gian (`updatedAt`, `createdAt`, dải `ObjectID`) để đảm bảo 100% gap records được kéo về. (2) Luôn khởi tạo `governance.NewActivityLogger(h.db, h.logger)` trong handler để ghi log `Start`, `Complete`, `Fail` cho mọi job.
@@ -272,7 +272,7 @@
 - **Fix/Correct Flow:** Thêm ActivityLogger vào `bridge_handler.go`, bổ sung `coll.Find` fallback trong `bridge_mongo.go`, và trích xuất NATS `ctx` trước khi spawn background goroutine.
 - **Tags:** #mongo-bridge-dual-mode #collection-query-fallback #activity-log-integration #bridge-oplog-gap
 
-<!-- ID: L154 | lessons.md:L1164 -->
+<!-- ID: L156 | lessons.md:L1178 -->
 ### [2026-08-05] Pattern: Lỗi fallback lastSeg mù quáng vơ nhầm Mongo $oid (_id) của sub-object/element vào cột số nghiệp vụ
 
 - **Global Pattern:** Extractor / Transmuter [A] khi trích xuất cột nghiệp vụ kiểu số [X] (như `paymentBillId`) từ mảng JSON/document [B] → khi `path` bị miss, cờ fallback tự tiện cắt lấy `lastSeg` (đoạn cuối của path như `._id`) → vơ nhầm thuộc tính ExtJSON `_id` (`"$oid": "6a71aca854617f0aa9055582"`) của phần tử mảng con ném vào cột [X] → Validator báo rớt kiểu `BIGINT` và skip record. **Đúng:** (1) Tuyệt đối KHÔNG dùng fallback `lastSeg` mù quáng trên sub-object/element. (2) Chặn tuyệt đối cờ fallback trúng `_id` khi `path` khai báo ban đầu của rule không phải là `_id`. (3) Luôn dựa vào Payload JSON thật của User để trace đúng path chứ TUYỆT ĐỐI KHÔNG đoán mò datatype hay suy diễn linh tinh.
@@ -281,7 +281,7 @@
 - **Fix/Correct Flow:** Xóa bỏ fallback `lastSeg` trong `flatten.go` và thêm guard `if lastSeg != "_id" || path == "_id"` trong `transmuter.go`.
 - **Tags:** #mongo-extjson-oid #lastseg-fallback-mismatch #gjson-path-extraction #strict-path-boundary #transmuter-validation
 
-<!-- ID: L161 | lessons.md:L1220 -->
+<!-- ID: L163 | lessons.md:L1234 -->
 ### [2026-08-05] Pattern: Audit lặt vặt (Incremental fixing) gây tiêu tốn token và làm phiền User
 
 - **Global Pattern:** Agent [A] thực thi task → thay vì audit TOÀN DIỆN 100% end-to-end (compile + runtime + DSN + data shape + PK format) trong đúng 1 lần → Agent audit lặt vặt từng vòng 1, 2, 3, 4, báo cáo từng bug nhỏ → làm rác conversation, tiêu tốn token và làm User tức giận. **Đúng:** Ngay từ vòng audit đầu tiên, BẮT BUỘC rà soát TOÀN DIỆN từ (1) Compile/Types → (2) Flow Async/NATS → (3) Fallback values → (4) Security/Credentials → (5) Data transformation (DynamicMapper) → (6) PK Data format (BSON/Hex). Gom 100% bugs/issues lại trong đúng 1 báo cáo duy nhất và fix dứt điểm.
@@ -290,7 +290,7 @@
 - **Fix/Correct Flow:** (1) Dừng ngay việc báo cáo nhỏ lẻ. (2) Ghi lesson vào lessons.md. (3) Tự kiểm tra lại toàn bộ codebase Bridge Oplog lần cuối dứt điểm và chốt trạng thái hoàn chỉnh 100%.
 - **Tags:** #incremental-fix #holistic-audit #token-waste #self-improvement-loop
 
-<!-- ID: L168 | lessons.md:L1281 -->
+<!-- ID: L170 | lessons.md:L1295 -->
 ### [2026-07-31] Pattern: Phân tách Async Job Tracking giữa Manual Command và Realtime Stream
 
 - **Global Pattern:** Engine [A] phục vụ cả 2 luồng: Realtime Stream (vài dòng/batch, 15ms) và Manual Bulk Run (hàng triệu dòng, hàng giờ) → nếu vô tình ghi DB tracking cho luồng Realtime Stream → phình DB rác & làm trễ luồng 15ms. **Đúng:** Kiểm tra cờ `jobID != ""` tại Engine. Luồng Realtime mang `jobID = ""` → skip 100% việc tạo/cập nhật DB tracking. Luồng Manual mang `jobID` duy nhất → kích hoạt heartbeat progress & cancel listener.
@@ -299,7 +299,7 @@
 - **Fix/Correct Flow:** CMS sinh `job_id` chỉ khi bấm "Transmute Now". Worker `TransmuterModule.Run` check `isManualJob := jobID != ""`.
 - **Tags:** #async-job-tracking #boundary-isolation #oplog-stream #manual-run-now #transmute-engine
 
-<!-- ID: L169 | lessons.md:L1289 -->
+<!-- ID: L171 | lessons.md:L1303 -->
 ### [2026-07-31] Pattern: LIMIT 1 trên bảng quan hệ 1-N gây lookup sai resource khi có nhiều row
 
 - **Global Pattern:** Service [A] lookup `target_table` của entity [X] bằng `JOIN relation_table LIMIT 1` → entity [X] có N rows trong relation_table → LIMIT 1 chỉ pick 1 row ngẫu nhiên/theo sort → nếu pick sai → resource lookup tiếp theo trả empty. **Đúng:** Collect TẤT CẢ candidate rows, sau đó query resource với `WHERE key IN (all_candidates) ORDER BY created_at DESC`.
@@ -308,7 +308,7 @@
 - **Fix/Correct Flow:** `SELECT shadow_table FROM shadow_binding WHERE source_object_id = ?` (không LIMIT) → `tableNames = [...]` → `WHERE target_table IN (tableNames) ORDER BY created_at DESC FIRST`.
 - **Tags:** #one-to-many #limit-1-wrong #multi-binding #target-table-lookup #golang-gorm
 
-<!-- ID: L175 | lessons.md:L1337 -->
+<!-- ID: L177 | lessons.md:L1351 -->
 ### [2026-07-23] Không dùng từ khóa CONCURRENTLY trong các file SQL Auto-Migration (Gây lỗi SQLSTATE 25001)
 
 - **Global Pattern:** Agent [A] thêm từ khóa `CONCURRENTLY` vào câu `CREATE INDEX` trong file SQL Auto-Migration -> Migration Runner trong Go bọc file `.sql` bằng khối Transaction (`BEGIN ... COMMIT`) -> PostgreSQL từ chối thực thi và ném lỗi `ERROR: CREATE INDEX CONCURRENTLY cannot run inside a transaction block (SQLSTATE 25001)`. **Đúng:** Trong các file Auto-Migration `.sql` của hệ thống, BẮT BUỘC sử dụng cú pháp `CREATE INDEX IF NOT EXISTS` (loại bỏ từ khóa `CONCURRENTLY`) để tương thích 100% với cơ chế Auto-Migration Transaction.
@@ -317,7 +317,7 @@
 - **Fix/Correct Flow:** Loại bỏ `CONCURRENTLY`, giữ `CREATE INDEX IF NOT EXISTS`.
 - **Tags:** #postgres-index-concurrently #sqlstate-25001 #transaction-block #auto-migration-fix
 
-<!-- ID: L180 | lessons.md:L1377 -->
+<!-- ID: L182 | lessons.md:L1391 -->
 ### [2026-07-22] Không được tự ý đưa ra kết luận giả định về SQL error khi chưa verify thực tế dữ liệu API
 
 - **Global Pattern:** Agent [A] thấy dữ liệu [X] thiếu bản ghi -> vội vàng suy đoán câu SQL query bị lỗi `relation "cdc_table_registry" does not exist` và tự bịa ra nguyên nhân fall-back [Y] -> User đưa ra bằng chứng kết quả API 8083 thật -> Vi phạm kỷ luật Deep Verification (Rule #9). **Đúng:** (1) Tuyệt đối KHÔNG suy đoán lỗi SQL/DB khi chưa verify từ log thật hoặc response thực tế. (2) Bắt buộc phân tích trực tiếp trên từng item JSON data của API do User cung cấp để tìm nguyên nhân gốc rễ.
@@ -326,7 +326,7 @@
 - **Fix/Correct Flow:** Ghi bài học tự phản tỉnh, rà soát lại 10 items trong response `http://localhost:8083/api/reconciliation/report` để tìm lý do chính xác tại sao `payment_bills_1` không có trong danh sách.
 - **Tags:** #no-assumption #verify-real-api-data #deep-verification #root-cause-precision
 
-<!-- ID: L182 | lessons.md:L1393 -->
+<!-- ID: L184 | lessons.md:L1407 -->
 ### [2026-07-21] Schema DDL phải được viết vào file SQL migration, KHÔNG hardcode db.Exec DDL trong Go Repository
 
 - **Global Pattern:** Agent [A] cần mở rộng schema database [X] → tự ý hardcode `db.Exec("ALTER TABLE ...")` trong constructor/repository Go [Y] → bỏ qua hệ thống migration SQL của dự án. **Đúng:** Mọi thay đổi DDL (thêm/sửa cột, bảng) BẮT BUỘC phải được tạo thành file SQL migration theo đúng hệ thống đánh số thứ tự trong thư mục `migrations/schema/...` của project.
@@ -335,7 +335,7 @@
 - **Fix/Correct Flow:** (1) Tạo file migration chuẩn `095_add_recon_jobs_drift_metrics.sql` trong `cdc-cms-service/migrations/schema/recon_dlq/`. (2) Xoá bỏ câu lệnh `db.Exec` DDL ra khỏi repository Go constructor.
 - **Tags:** #sql-migration #no-inline-ddl #go-repository-clean #database-governance
 
-<!-- ID: L184 | lessons.md:L1409 -->
+<!-- ID: L186 | lessons.md:L1423 -->
 ### [2026-07-21] raw TableRegistryRepo trả SourceURL rỗng — phải dùng MetadataRegistry
 
 - **Global Pattern:** Agent [A] dùng `repo.GetByTargetTable(ctx, table)` cho execution path [X] → `entry.SourceURL=""` → engine fail "no mongo client". **Đúng:** Mọi call cần SourceURL thật BẮT BUỘC dùng `metadata.GetTableConfig(table)` (in-memory MetadataRegistryService đã resolve connection_code → URI). Raw repo chỉ dùng cho CRUD admin.
@@ -344,7 +344,7 @@
 - **Fix/Correct Flow:** Trace `resolveTargetTableConfig` → thấy `metadata.GetTableConfig()` → inject `MetadataRegistry` (interface `TableMetadataLookup`) vào worker.
 - **Tags:** #source-url-empty #metadata-registry #raw-repo-incomplete #execution-path
 
-<!-- ID: L185 | lessons.md:L1417 -->
+<!-- ID: L187 | lessons.md:L1431 -->
 ### [2026-07-20] KHÔNG implement solution khi root cause chưa được verify bằng thực nghiệm
 
 
@@ -353,7 +353,7 @@
 - **Root Cause:** Assumption "MongoDB $or duplicates docs" sai về mặt database behavior. Không verify bằng thực nghiệm trước khi implement.
 - **Fix/Correct Flow:** Với bất kỳ DB behavior assumption nào → chạy query test trên data thật TRƯỚC → confirm output → sau đó mới plan + implement.
 
-<!-- ID: L193 | lessons.md:L1487 -->
+<!-- ID: L195 | lessons.md:L1501 -->
 ### [2026-07-16] Lệch múi giờ Go-level do logic hoán đổi timezone thủ công trên cột TIMESTAMP và TIMESTAMPTZ
 - **Global Pattern:** Driver [A] (pgx) đọc cột Postgres [B] trả về múi giờ khác nhau tùy kiểu cột (`TIMESTAMP` trả về UTC, `TIMESTAMPTZ` trả về Local timezone). Việc dùng logic thủ công `time.Date(v.Year(), ..., time.UTC)` [X] hoán đổi múi giờ làm sai lệch vật lý 7 tiếng đối với cột Local. **Đúng:** Sử dụng phương thức native `v.UTC()` [Y] để chuẩn hóa đúng thời gian vật lý của cả hai kiểu cột về múi giờ UTC.
 - **Bối cảnh (Trigger):** Đối soát nhanh bằng XOR Hash báo lệch dữ liệu giả mạo trên bảng `schedule_histories` do cột `lastUpdatedAt` có kiểu `TIMESTAMPTZ` bị parse lệch 7 tiếng.
@@ -361,7 +361,7 @@
 - **Fix/Correct Flow:** Thay thế toàn bộ logic chuyển múi giờ thủ công bằng việc gọi trực tiếp `v.UTC()` trên giá trị time nhận được từ driver DB.
 - **Tags:** #timezone-drift #timestamptz-parsing #postgres-driver-timezone #data-parity-issue
 
-<!-- ID: L194 | lessons.md:L1494 -->
+<!-- ID: L196 | lessons.md:L1508 -->
 ### [2026-07-14] Tự động tạo hoặc đề xuất index cho các cột không tồn tại vật lý trong bảng đích gây lỗi SQL runtime (SQLSTATE 42703)
 - **Global Pattern:** Tự động tạo hoặc đề xuất index [A] dựa trên thông tin cấu hình registry `timestamp_field` hoặc metadata [B] mà không kiểm tra sự tồn tại vật lý của cột trong DB đích [X] -> Gây ra lỗi SQL runtime `42703` (column does not exist) làm sập luồng đồng bộ hoặc hỏng chức năng UI [Y]. **Đúng:** Luôn truy vấn `information_schema.columns` để xác định danh sách các cột vật lý thực tế của bảng đích, thực hiện so khớp linh hoạt (exact, snake_case, camelCase) trước khi khuyến nghị hoặc chạy câu lệnh DDL index.
 - **Bối cảnh (Trigger):** Lỗi sập luồng hoặc nút "Tạo Index ngay" trên UI báo lỗi `42703` khi click vì cột timestamp field cấu hình trên registry chưa được provision thực tế trên shadow table.
@@ -369,14 +369,14 @@
 - **Fix/Correct Flow:** Bổ sung bước kiểm tra cột trong target table schema. Nếu không tồn tại cột đó trong danh sách cột thực tế, log cảnh báo và bỏ qua an toàn thay vì cố thực thi DDL index.
 - **Tags:** #column-existence-check #sql-42703-error #schema-drift-prevention #robust-ddl
 
-<!-- ID: L195 | lessons.md:L1501 -->
+<!-- ID: L197 | lessons.md:L1515 -->
 ### [2026-07-13] Tự ý chạy các script SQL phá hủy schema cấu hình (control plane) mà không phân tích kỹ tác động
 - **Global Pattern:** Agent [A] tự ý chạy câu lệnh SQL phá hủy hoặc các script wipe (`wipe_cdc.sql`) [B] khi gặp lỗi di trú/conflict mà không phân tích kỹ nội dung file -> làm mất toàn bộ schema cấu hình control plane (`cdc_system` có chứa registry, mapping, connections) [X] -> gây mất cấu hình tùy chỉnh của nhà phát triển và gây gián đoạn nghiêm trọng môi trường local [Y]. **Đúng:** Trước khi chạy bất kỳ câu lệnh SQL phá hủy (DROP/DELETE) hoặc script wipe, bắt buộc phải đọc và phân tích nội dung, xin chỉ thị rõ ràng từ User. Nếu chỉ cần dọn dẹp dữ liệu chạy (logs, reports), hãy chỉ truncate các bảng log cụ thể hoặc shadow schema thay vì drop cả schema control plane.
 - **Bối cảnh (Trigger):** AI Agent ở phiên trước tự ý chạy `wipe_cdc.sql` khi thấy lỗi di trú database.
 - **Root Cause:** Hành động cẩu thả, chạy script destructive (`DROP SCHEMA IF EXISTS cdc_system CASCADE`) mà không đánh giá tác động làm mất cấu hình registry và mapping rules.
 - **Tags:** #destructive-sql-execution #database-wipe-incident #carelessness #repeated-offense
 
-<!-- ID: L196 | lessons.md:L1507 -->
+<!-- ID: L198 | lessons.md:L1521 -->
 ### [2026-07-09] Lệnh CREATE/DROP INDEX CONCURRENTLY liên tục không kiểm soát gây lock storm và treo hệ thống transmuter
 - **Global Pattern:** Chạy kiểm tra index và tự động tạo/xóa index `CREATE INDEX CONCURRENTLY` [A] mỗi khi xử lý batch transmute [B] mà không có cache trạng thái -> khi index bị INVALID, hệ thống spawn liên tục các câu lệnh DDL ngầm tạo nên lock storm [X] -> làm giảm hiệu năng transmuter nghiêm trọng (từ vài mili-giây lên 10 giây) và treo các luồng Full Sync [Y]. **Đúng:** Sử dụng cache map (`ensuredShadowIndexes`) để lưu trữ trạng thái kiểm tra index; gán giá trị cache = true ngay lập tức trước khi chạy tiến trình ngầm để tránh spawn trùng lặp goroutine.
 - **Bối cảnh (Trigger):** Transmute realtime chạy chậm (~10s cho batch 1-4 records) và Full Sync chạy ngay 3 triệu dòng bị treo hơn 10 phút. Phát hiện nhiều index ở trạng thái `INVALID`.
@@ -392,7 +392,7 @@
 - **State Flag vs Reality:** Cờ trạng thái tồn tại (`in_master`) phải ĐỌC từ thực tế bảng DB (`information_schema.columns`), KHÔNG suy đoán từ logic app.
 - **LATERAL LIMIT 1 Hides Rows:** Dùng `LEFT JOIN LATERAL (... LIMIT 1)` ở API List sẽ collapse dữ liệu 1:N thành 1:1, làm mất rows trên UI. Dùng LEFT JOIN thuần và xử lý group ở FE.
 
-<!-- ID: L214 | lessons.md:L1668 -->
+<!-- ID: L216 | lessons.md:L1682 -->
 ### [2026-07-20] Đề xuất tạo index trực tiếp lên Source DB readonly production quy mô lớn mà không kiểm tra constraint
 - **Global Pattern:** Agent [A] phát hiện bottleneck query [B] trên Source DB [X] (MongoDB/Postgres) → đề xuất `createIndex` trực tiếp mà không kiểm tra: (1) DB có readonly không, (2) collection size bao nhiêu record, (3) impact production là gì → gây nguy hiểm hoặc không khả thi [Y]. **Đúng:** Trước khi đề xuất bất kỳ DDL (index/schema) lên Source DB, BẮT BUỘC kiểm tra: readonly policy, record count, và impact. Nếu Source DB là readonly → phải tìm giải pháp thay thế ở tầng code recon, không phải ở DB.
 - **Bối cảnh (Trigger):** Audit recon payment_bills phát hiện MongoDB `ListIDTsInWindow` chậm 5.3s/window do COLLSCAN → đề xuất `createIndex({ lastUpdatedAt: 1 }, { background: true })` lên production MongoDB.
@@ -400,7 +400,7 @@
 - **Fix/Correct Flow:** Khi Source DB readonly và/hoặc collection lớn → giải pháp phải nằm ở **tầng code recon**: giảm lookback window, dùng `_id`-based keyset scan, tối ưu query pattern không phụ thuộc timestamp index, hoặc phối hợp DBA qua proper channel.
 - **Tags:** #readonly-db-constraint #index-proposal-danger #production-risk #carelessness #config-assumption
 
-<!-- ID: L217 | lessons.md:L1689 -->
+<!-- ID: L219 | lessons.md:L1703 -->
 ### [2026-07-22] Lỗi áp dụng sai Gradient dải màu cố định khiến Gauge Progress Arc bị sai lệch màu với chỉ số điểm rủi ro
 - **Global Pattern:** Gauge progress arc [A] dùng `linearGradient` ngang cố định (từ Đỏ sang Xanh) cho thanh tiến trình stroke [B] -> khi khách hàng có điểm rủi ro [X] (vd: 75 điểm - Rủi ro Thấp, màu Vàng), phần đầu của stroke tiến trình lại bị tô màu Đỏ/Cam -> người xem thấy sai màu phân hạng rủi ro thực tế [Y]. **Đúng:** (1) Hoặc cho thanh progress arc tô màu đồng nhất theo đúng `riskInfo.color` của chỉ số điểm rủi ro hiện tại. (2) Hoặc nếu dùng dải màu gradient dải phân đoạn trên arc, phải thiết kế đúng cấu trúc hiển thị hoặc thanh nền track.
 - **Bối cảnh (Trigger):** Gauge chart hiển thị 75/100 điểm rủi ro thấp (màu Vàng) nhưng dải arc tiến trình bị lệch màu Đỏ ở chân arc.
@@ -408,7 +408,7 @@
 - **Fix/Correct Flow:** Cho thanh progress arc tô màu `stroke="${riskInfo.color}"` (đã được tính toán chính xác theo `getRiskDetails(mainScore)`), đồng thời nếu dùng gradient cho background arc track thì thiết kế mượt mà hài hòa.
 - **Tags:** #risk-color-mismatch #gauge-stroke-color #ui-correctness #business-color-alignment
 
-<!-- ID: L222 | lessons.md:L1726 -->
+<!-- ID: L224 | lessons.md:L1740 -->
 ### [2026-07-22] Bắt buộc soi khớp mã màu trong linearGradient với Bảng Thang Điểm Rủi Ro (risk-scale-table) trên UI
 - **Global Pattern:** Mã màu của linearGradient [A] bị lệch với mã màu của các viên màu (`color-pill`) trong Bảng Thang Điểm Rủi Ro [B] nằm ngay bên cạnh trên giao diện -> gây chỏi màu thị giác giữa đồng hồ Gauge và Bảng mô tả [Y]. **Đúng:** Soi trực tiếp bảng `risk-scale-table` và hàm `getRiskDetails` để gán đúng 100% 4 mã màu: `#dc2626` (Đỏ), `#f97316` (Cam), `#eab308` (Vàng), `#16a34a` (Xanh lá) tại các mốc điểm `0%`, `50%`, `65%`, `85%`.
 - **Bối cảnh (Trigger):** User phản ánh màu gradient bị chọi với Bảng Thang Điểm bên cạnh.
@@ -416,7 +416,7 @@
 - **Fix/Correct Flow:** Đổi 4 stop color của `linearGradient` trùng khớp 100% với 4 màu `#dc2626`, `#f97316`, `#eab308`, `#16a34a` trong Bảng Thang Điểm.
 - **Tags:** #risk-scale-table-match #ui-color-consistency #gauge-color-alignment
 
-<!-- ID: L228 | lessons.md:L1768 -->
+<!-- ID: L230 | lessons.md:L1782 -->
 ### [2026-07-27] Field mapping sai vì không đọc BE schema trước khi định nghĩa interface FE
 
 - **Global Pattern:** Trước khi định nghĩa interface TypeScript [A] cho response từ API [B], bắt buộc đọc handler Go + read model Go [X] để lấy field names thật. Tự đặt field names theo giả định → `dataIndex` sai → cột hiển thị trống/undefined.
@@ -425,7 +425,7 @@
 - **Fix/Correct Flow:** Đọc Go struct/read model → copy chính xác JSON field names → định nghĩa interface TS.
 - **Tags:** #field-mapping-wrong #interface-ts #read-be-schema-first
 
-<!-- ID: L230 | lessons.md:L1783 -->
+<!-- ID: L232 | lessons.md:L1797 -->
 ### [2026-07-27] Báo cáo audit sai vì không trace thật query param name FE→BE
 
 - **Global Pattern:** Khi thêm HTTP endpoint mới [X] với query param [A], PHẢI cross-check: (1) tên param trong BE handler (`c.Query("target_table")`), (2) tên key FE gán vào params object. Nếu lệch tên → BE không filter → trả toàn bộ data → FE hiển thị sai record của pipeline khác.
@@ -434,7 +434,7 @@
 - **Fix/Correct Flow:** Đọc handler Go → xác định tên param (`target_table`) → kiểm tra FE params object có dùng đúng tên đó không. Nếu lệch → fix.
 - **Tags:** #wrong-param-name #fe-be-param-mismatch #audit-must-trace-data-flow #no-blind-audit
 
-<!-- ID: L231 | lessons.md:L1791 -->
+<!-- ID: L233 | lessons.md:L1805 -->
 ### [2026-07-27] Không dùng workaround sửa query Read để che giấu dữ liệu ghi sai — BẮT BUỘC chuẩn hóa chuẩn Data từ nguồn Ghi (Writer)
 
 - **Global Pattern:** Agent [A] phát hiện dữ liệu ghi [X] không thống nhất làm query Read [Y] trượt/lỗi -> Vội vã sửa logic câu lệnh Read (SQL Join / Filter) để "hợp thức hóa" dữ liệu lỗi thay vì chuẩn hóa định dạng dữ liệu ngay tại nguồn Ghi (Writer) -> Vi phạm tư duy Core Systems (Rule #12). **Đúng:** Giữ câu query Read chuẩn mực. BẮT BUỘC sửa và chuẩn hóa dữ liệu ghi ngay tại nguồn Writer (gốc rễ) để dữ liệu lưu xuống DB luôn thống nhất 100%.
@@ -443,7 +443,7 @@
 - **Fix/Correct Flow:** Chuẩn hóa `target_table` ở tất cả các nơi ghi ActivityLog (`batch_buffer.go`, `transmute_handler.go`, v.v.) về đúng 1 định dạng chuẩn duy nhất (tên bảng thuần `tableName`), không sửa câu SQL Read.
 - **Tags:** #core-systems-mindset #no-read-workaround #standardize-writer-data #root-cause-fix
 
-<!-- ID: L241 | lessons.md:L1875 -->
+<!-- ID: L243 | lessons.md:L1889 -->
 ### [2026-08-05] Pattern: Fallback cứng `_id → id` trong pgPKField resolution che khuất PK thực của bảng PG
 
 - **Global Pattern:** Resolver [A] (`resolveCollection`) resolve `pgPKField` từ config → nếu `pgPKField == "_id"` áp fallback cứng thành `"id"` → trước khi có schema inspection thực tế từ PG → bảng [X] (`export_jobs`) có cột PK là `_id` (không phải `id`) → Bridge Oplog ghi upsert vào cột `id` sai → record không match, data corrupt. **Đúng:** BỎ HOÀN TOÀN fallback cứng `_id → id`. Chỉ dựa vào schema inspection thực tế từ PG (`GetSchemaInSchema`) để quyết định pgPKField: nếu bảng có `_id` → dùng `_id`; nếu có `id` → dùng `id`; nếu chưa có bảng (schema nil) → giữ nguyên value từ config.
@@ -452,7 +452,7 @@
 - **Fix/Correct Flow:** Xóa block fallback cứng `_id → id` trong `bridge_handler.go`. Schema inspection (GetSchemaInSchema) đã đủ để detect đúng PK column.
 - **Tags:** #pgpkfield-fallback-bug #bridge-oplog-pk-resolution #id-vs-_id #export-jobs
 
-<!-- ID: L242 | lessons.md:L1883 -->
+<!-- ID: L244 | lessons.md:L1897 -->
 ### [2026-08-05] Pattern: Browser subagent tự ý click Create Shadow Table / Snapshot nằm hoàn toàn ngoài task
 
 - **Global Pattern:** Browser subagent [A] được giao task READ-ONLY verify [X] → agent lang thang sang trang `/shadow` → tự ý click "Create shadow table" hoặc nút Snapshot cho collection [Y] → trigger DDL/heavy-job không kiểm soát trên hệ thống production → User phải clean up hậu quả. **Đúng:** Browser subagent BẮT BUỘC được cấp DANH SÁCH URL TRẮNG (allowed URLs) tường minh. Nếu agent cần navigate sang URL ngoài whitelist → DỪNG NGAY, báo cáo User, KHÔNG TỰ Ý NAVIGATE. Mọi action có tên "Create", "Snapshot", "Delete", "Drop", "Reset", "Migrate" đều là FORBIDDEN bất kể context.
@@ -461,7 +461,7 @@
 - **Fix/Correct Flow:** (1) Mọi browser subagent task phải có section ALLOWED_URLS = [danh sách URL cụ thể]. (2) Nếu agent cần navigate ra ngoài ALLOWED_URLS → STOP và báo cáo. (3) BAN VĨNH VIỄN mọi click vào nút có text: Create/Snapshot/Delete/Drop/Reset/Migrate/Execute.
 - **Tags:** #browser-agent-create-shadow-table #browser-agent-url-whitelist #no-ddl-from-browser-agent
 
-<!-- ID: L243 | lessons.md:L1891 -->
+<!-- ID: L245 | lessons.md:L1905 -->
 ### [2026-08-13] Hiểu sai bản chất cấu hình database của nhiều alias trong dự án dẫn đến đề xuất gom chung database
 - **Global Pattern:** Agent [A] phân tích cấu hình MongoDB [B] có nhiều alias khác nhau chọc vào các database khác nhau -> vội vàng đề xuất gộp chung toàn bộ connection URI về cùng một database name duy nhất [X] -> làm sai lệch nghiệp vụ phân tách database và gây lỗi ghi đè dữ liệu chọc chung DB [Y]. **Đúng:** Giữ nguyên bản chất phân tách database của từng alias, đề xuất giải pháp đưa về cùng một Host/Port local nhưng bắt buộc phải phân tách database name tương ứng với thiết kế nghiệp vụ của từng alias.
 - **Bối cảnh (Trigger):** User yêu cầu đưa toàn bộ env url của mongo về 1 file .run.local.env. Agent đề xuất phương án gom chung database name của tất cả các service về cùng một link (ví dụ `/centralized-export-local`).
@@ -469,14 +469,14 @@
 - **Fix/Correct Flow:** Sửa đổi các file phân tích, hướng dẫn cấu hình trong `.run.local.env` phải giữ đúng cấu trúc database name cho từng alias (chỉ chung Host/Port local `mongodb://localhost:27017/`), đồng thời đề xuất giải pháp dynamic fallback giữ nguyên database name cho từng alias.
 - **Tags:** #mongo-db-isolation #alias-database-mismatch #carelessness
 
-<!-- ID: L245 | lessons.md:L1906 -->
+<!-- ID: L247 | lessons.md:L1920 -->
 ### [2026-08-25] Bẫy ép đè cứng 'if pkField == "_id" { pgPKField = "id" }' trong handler gây gãy CDC sync bảng MongoDB
 - **Global Pattern:** Mặc dù `PrimaryKeyField` trong Registry và TableConfig đã được khai báo chính xác là `_id` [A], nhưng tại các handler xử lý CDC event (`event_handler.go`, `bridge_handler.go`), Agent/Dev trước đây đã cài cắm logic ép đè cứng [B] (`if !mappedPK && pkField == "_id" { pgPKField = "id" }` và `if pgPKField == "_id" { pgPKField = "id" }`) -> Dẫn đến khi xử lý CDC record từ MongoDB, `record.PrimaryKeyField` bị đổi trái phép thành `"id"`, làm câu lệnh SQL upsert sinh ra `INSERT INTO table ("id", ...)` văng lỗi `SQLSTATE 42703 column "id" does not exist`. **Đúng:** (1) TUYỆT ĐỐI CẤM ép đè cứng `_id → id` ở các handler. (2) Tôn trọng 100% tên cột khoá chính `_id` khi nguồn là MongoDB hoặc khi schema shadow chứa cột `_id`. (3) Phải xoá sạch các câu lệnh `if pkField == "_id" { pgPKField = "id" }` khỏi `event_handler.go` và `bridge_handler.go`.
 - **Bối cảnh (Trigger):** User bức xúc chỉ ra: "ko phải cái lỗi trên, vì PrimaryKeyField đang là _id, nên nó ko về cái id đc" khi thấy log `hyperverge_face_match` bị văng lỗi column "id" does not exist.
 - **Root Cause:** Cài cắm các câu lệnh ép đè cứng `if pkField == "_id" { pgPKField = "id" }` trong `event_handler.go` (dòng 353-355, 384-386) và `bridge_handler.go` (dòng 281-283).
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức theo Mid-Session Fix (Rule #5). (2) Ghi lesson vào `lessons.md`. (3) Xoá bỏ 100% các câu lệnh `if ... == "_id" { ... = "id" }` trong `event_handler.go` và `bridge_handler.go`. (4) Giữ nguyên `_id` khi `PrimaryKeyField` là `_id`.
 
-<!-- ID: L247 | lessons.md:L1920 -->
+<!-- ID: L249 | lessons.md:L1934 -->
 ### [2026-08-26] Tự tiện suy diễn Shadow Table fallback về '_source_ts' khi chưa kiểm tra DDL schema thực tế
 - **Global Pattern:** Agent thấy đoạn code fallback `_source_ts` trong logic phân giải timestamp [A] -> vội vàng suy diễn rằng Shadow Table của User bị thiếu cột timestamp và đã fallback về `_source_ts` [B] mà KHÔNG kiểm tra DDL schema thực tế của DB hay log runtime [C] -> Vi phạm nghiêm trọng cấm suy diễn (Rule #0), vì khi tạo Shadow Table trong hệ thống, cột timestamp (`updated_at` / `created_at`) luôn là bắt buộc và tồn tại 100%. **Đúng:** (1) BẮT BUỘC coi cột timestamp trên Shadow Table là mặc định tồn tại. (2) TUYỆT ĐỐI KHÔNG tự tiện đoán mò rằng hệ thống bị fallback `_source_ts` nếu chưa có log chứng minh. (3) Khi phân tích lỗi Recon, phải đi tìm nguyên nhân thực sự ở logic so sánh/query hoặc dữ liệu thực tế.
 - **Bối cảnh (Trigger):** User phản ứng gay gắt: "Nếu Shadow Postgres chưa có cột timestamp tương ứng với Source nên sao em biết là nó fallback về. a cấm phỏng đoán mà. và timestamp luôn có nhé, khi tạo shadow nó là bắt buộc rồi".
@@ -484,7 +484,7 @@
 - **Fix/Correct Flow:** (1) Dừng lại ngay lập tức theo Mid-Session Fix (Rule #5). (2) Thành thật nhận lỗi suy diễn với User. (3) Ghi lesson vào `lessons.md`. (4) Phân tích chính xác dựa trên giả định cột timestamp đầy đủ.
 - **Tags:** #anti-speculation #no-schema-guessing #shadow-table-timestamp-mandatory #mid-session-fix
 
-<!-- ID: L248 | lessons.md:L1928 -->
+<!-- ID: L250 | lessons.md:L1942 -->
 ### [2026-08-26] Không tự ý chèn logic lookup DB schema bên trong hàm `Execute` của Recon Engine
 - **Global Pattern:** Khi thấy tên bảng [A] chưa có schema prefix, vội vàng chèn logic `ResolveShadowTable` (truy vấn `cdc_system.master_binding`) ở đầu hàm `Execute` [B] -> Làm sai lệch luồng dữ liệu thực tế do `master_binding` chỉ dành cho Segment B, đồng thời coi thường các tham số `shadow_schema` và `shadow_table` mà API Caller đã truyền trực tiếp trong Payload [C]. **Đúng:** (1) Tôn trọng 100% các tham số `shadow_schema` và `shadow_table` từ Payload API/NATS event. (2) Bổ sung fallback tự động tại `IsColTimestamptz` và `ColumnExists` để query xuyên user schemas nếu tên bảng truyền vào là bare table name. (3) Không chèn logic lookup gượng ép vào hàm `Execute`.
 - **Bối cảnh (Trigger):** User phản hồi gay gắt sau khi test request `POST /api/reconciliation/check?type_recon=hash_window`: "rồi đã chạy đúng chưa, chưa tao vừa test lại, nó vẫn sai... rồi việc vào trong func excute rồi tìm schema có đúng chưa vì POST tao gửi payload lên như này {"shadow_schema":"shadow_traitestctphs","shadow_table":"trans_his"}".

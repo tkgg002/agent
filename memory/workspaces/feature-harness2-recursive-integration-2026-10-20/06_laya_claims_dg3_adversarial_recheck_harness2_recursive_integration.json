@@ -1,0 +1,52 @@
+[
+  {
+    "id": "A-AF01-MERGE",
+    "kind": "claim",
+    "claim": "In RecursiveHarnessEngine.execute_task_recursion mode 'agg', merged_seed is initialized via dict(base_tree) and then updated sequentially with candidate_trees[f'inv{i}'] and candidate_trees[f'dom{i}'] before calling _run_cached_session.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py:640-646\n            for i in range(1, k + 1):\n                lbl = f\"agg{i}\"\n                merged_seed = dict(base_tree)\n                merged_seed.update(candidate_trees[f\"inv{i}\"])\n                merged_seed.update(candidate_trees[f\"dom{i}\"])\n                t_agg, hit = self._run_cached_session(lbl, \"COMPOSE\", merged_seed, proposer_fn)",
+    "flow": "execute_task_recursion(mode='agg') -> merged_seed.update(inv{i}) -> merged_seed.update(dom{i}) -> _run_cached_session(lbl, 'COMPOSE', merged_seed, proposer_fn)"
+  },
+  {
+    "id": "A-AF02-CACHE",
+    "kind": "claim",
+    "claim": "In RecursiveHarnessEngine._run_cached_session, fp is computed by calling call_fingerprint_sha256 with label=label, mission=f'propose:{dim}:{label}', and system=self.surface.name.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py:552-564\n    def _run_cached_session(\n        self,\n        label: str,\n        dim: str,\n        base_tree: Tree,\n        proposer_fn: Callable[[str, str, Tree], Tree],\n    ) -> Tuple[Tree, bool]:\n        fp = call_fingerprint_sha256(\n            label=label,\n            mission=f\"propose:{dim}:{label}\",\n            system=self.surface.name,\n        )\n        if self.cache_dir is not None:",
+    "flow": "_run_cached_session -> call_fingerprint_sha256(label, mission, system) -> check cache_dir / f'{label}_{fp}.json'"
+  },
+  {
+    "id": "A-AF03-S3DOCS",
+    "kind": "claim",
+    "claim": "In RecursiveHarnessEngine.execute_task_recursion, line 703 looks up (rollout_outputs.get(id_map[aid]) or {}).get('score', 0.0) and line 711 sets s3_docs = [f'{pfx}_ok.md' for pfx in STAGE_S3_PREFIXES].",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py:700-712\n        best_anon_id = max(\n            sorted(id_map),\n            key=lambda aid: float(\n                (rollout_outputs.get(id_map[aid]) or {}).get(\"score\", 0.0)\n            ),\n        )\n        chosen_label = id_map[best_anon_id]\n        winning_tree = candidate_trees[chosen_label]\n\n        # Lưu vào Domain Harness Library (F1) nếu đạt cổng DG3 + 3-Mutant Gate\n        library_slot: Optional[str] = None\n        s3_docs = [f\"{pfx}_ok.md\" for pfx in STAGE_S3_PREFIXES]\n        if self.library is not None and can_commit_adopted_harness_to_domain_library(",
+    "flow": "execute_task_recursion -> select best_anon_id by rollout_outputs score -> construct s3_docs -> can_commit_adopted_harness_to_domain_library"
+  },
+  {
+    "id": "A-AF04-SURFACE",
+    "kind": "claim",
+    "claim": "In validate_agent_surface, body is joined from surface.always_on and checked via if len(body) > surface.always_on_max, while fm is sliced via fm = src[:600].",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py:115-131\n    body = \"\\n\\n\".join(tree.get(a, \"\") for a in surface.always_on)\n    if len(body) > surface.always_on_max:\n        errs.append(\n            f\"always-on vượt trần: {len(body)} > {surface.always_on_max} (INDEX cap={MAX_INDEX_BYTES})\"\n        )\n\n    skill_rx = re.compile(rf\"^{re.escape(surface.skill_dir)}/([a-z0-9][a-z0-9_\\-]*)/SKILL\\.md$\")\n    script_ref_rx = re.compile(\n        r\"python3?\\s+(?:/Users/\\S+/agent/|agent/)?((?:tooling|hooks/agy)/[\\w./\\-]+\\.py)\"\n    )\n\n    for rel, src in sorted(tree.items()):\n        m = skill_rx.fullmatch(rel)\n        if m:\n            sname = m.group(1)\n            fm = src[:600]\n            if not re.search(r\"^description:\\s*\\S\", fm, re.M):",
+    "flow": "validate_agent_surface -> check len(body) > surface.always_on_max -> slice fm = src[:600]"
+  },
+  {
+    "id": "A-K1",
+    "kind": "control_false",
+    "claim": "In _run_cached_session, fp is computed using hashlib.md5(label.encode('ascii')).hexdigest() and system is hardcoded to 'legacy_v1'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py:559-563\n        fp = call_fingerprint_sha256(\n            label=label,\n            mission=f\"propose:{dim}:{label}\",\n            system=self.surface.name,\n        )",
+    "flow": "control_false check for _run_cached_session"
+  },
+  {
+    "id": "A-K2",
+    "kind": "control_false",
+    "claim": "In validate_agent_surface, always_on_max is checked via if len(body) < 10 and raises ZeroDivisionError.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py:115-119\n    body = \"\\n\\n\".join(tree.get(a, \"\") for a in surface.always_on)\n    if len(body) > surface.always_on_max:\n        errs.append(\n            f\"always-on vượt trần: {len(body)} > {surface.always_on_max} (INDEX cap={MAX_INDEX_BYTES})\"\n        )",
+    "flow": "control_false check for validate_agent_surface"
+  },
+  {
+    "id": "A-K3",
+    "kind": "control_true",
+    "claim": "AgentSurfaceSpec defines name: str = 'agy_agent', always_on: Tuple[str, ...] = ('GEMINI.md', 'OPERATOR_MAP.md'), always_on_max: int = 24_000, skill_dir: str = 'skills', and autotrigger_file: str = 'OPERATOR_MAP.md'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py:78-85\n@dataclass(frozen=True)\nclass AgentSurfaceSpec:\n    name: str = \"agy_agent\"\n    always_on: Tuple[str, ...] = (\"GEMINI.md\", \"OPERATOR_MAP.md\")\n    always_on_max: int = 24_000\n    skill_dir: str = \"skills\"\n    autotrigger_file: str = \"OPERATOR_MAP.md\"",
+    "flow": "control_true check for AgentSurfaceSpec"
+  }
+]
+

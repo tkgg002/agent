@@ -1,0 +1,1223 @@
+[
+  {
+    "id": "AF-01-HARDCODED-BINDINGS-AND-PK-RESOLVER",
+    "category": "A-FINDING",
+    "kind": "target",
+    "claim": "In TestLiveBindings_46_47_48_TransmuteAndVerifyZeroDrift, the loop hardcodes binding IDs []int64{46, 47, 48} instead of querying all active bindings from cdc_system.master_binding, and ExecuteHealHandler.resolvePKColumnAndType resolves pkCol from ref.TransformSpec and resolveTargetTableConfig with fallback \"_id\" without querying information_schema.columns.",
+    "flow": "TestLiveBindings_46_47_48_TransmuteAndVerifyZeroDrift -> []int64{46, 47, 48}; ExecuteHealHandler.resolvePKColumnAndType -> json.Unmarshal(ref.TransformSpec) -> resolveTargetTableConfig -> fallback \"_id\"",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_gpayid_test.go:400-406\ntm := NewTransmuterModule(sysDB, connMgr, nil, nil, typeRes, zap.NewNop())\n\nfor _, bID := range []int64{46, 47, 48} {\n\trow, errLoad := tm.loadMaster(ctx, fmt.Sprintf(\"%d\", bID), bID)\n\tif errLoad != nil || row == nil {\n\t\tt.Skipf(\"binding %d not found: %v\", bID, errLoad)\n\t}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:595-621\nfunc (h *ExecuteHealHandler) resolvePKColumnAndType(targetTable string, ref *servicerecon.MasterBindingRef) (string, string) {\n\tpkCol := \"\"\n\tpkType := \"string\"\n\tif ref != nil && strings.TrimSpace(ref.TransformSpec) != \"\" {\n\t\tvar spec struct {\n\t\t\tPK string `json:\"pk\"`\n\t\t}\n\t\tif err := json.Unmarshal([]byte(ref.TransformSpec), &spec); err == nil {\n\t\t\tcand := strings.TrimSpace(spec.PK)\n\t\t\tif cand != \"\" && cand != \"_gpay_id\" {\n\t\t\t\tpkCol = cand\n\t\t\t}\n\t\t}\n\t}\n\tif entry := h.resolveTargetTableConfig(targetTable); entry != nil {\n\t\tif pkCol == \"\" && entry.PrimaryKeyField != \"\" {\n\t\t\tpkCol = entry.PrimaryKeyField\n\t\t}\n\t\tif entry.PrimaryKeyType != \"\" {\n\t\t\tpkType = strings.ToLower(strings.TrimSpace(entry.PrimaryKeyType))\n\t\t}\n\t}\n\tif pkCol == \"\" {\n\t\tpkCol = \"_id\"\n\t}\n\treturn pkCol, pkType\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.514,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8334,
+                "INCORRECT": 0.1333,
+                "UNSUPPORTED": 0.0334
+              },
+              "confidence": 0.514,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 851,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In TestLiveBindings_46_47_48_TransmuteAndVerifyZeroDrift, the loop hardcodes binding IDs []int64{46, 47, 48} instead of querying all active bindings from cdc_system.master_binding, and ExecuteHealHandler.resolvePKColumnAndType resolves pkCol from ref.TransformSpec and resolveTargetTableConfig with fallback \"_id\" without querying information_schema.columns.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_gpayid_test.go:400-406\ntm := NewTransmuterModule(sysDB, connMgr, nil, nil, typeRes, zap.NewNop())\n\nfor _, bID := range []int64{46, 47, 48} {\n\trow, errLoad := tm.loadMaster(ctx, fmt.Sprintf(\"%d\", bID), bID)\n\tif errLoad != nil || row == nil {\n\t\tt.Skipf(\"binding %d not found: %v\", bID, errLoad)\n\t}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:595-621\nfunc (h *ExecuteHealHandler) resolvePKColumnAndType(targetTable string, ref *servicerecon.MasterBindingRef) (string, string) {\n\tpkCol := \"\"\n\tpkType := \"string\"\n\tif ref != nil && strings.TrimSpace(ref.TransformSpec) != \"\" {\n\t\tvar spec struct {\n\t\t\tPK string `json:\"pk\"`\n\t\t}\n\t\tif err := json.Unmarshal([]byte(ref.TransformSpec), &spec); err == nil {\n\t\t\tcand := strings.TrimSpace(spec.PK)\n\t\t\tif cand != \"\" && cand != \"_gpay_id\" {\n\t\t\t\tpkCol = cand\n\t\t\t}\n\t\t}\n\t}\n\tif entry := h.resolveTargetTableConfig(targetTable); entry != nil {\n\t\tif pkCol == \"\" && entry.PrimaryKeyField != \"\" {\n\t\t\tpkCol = entry.PrimaryKeyField\n\t\t}\n\t\tif entry.PrimaryKeyType != \"\" {\n\t\t\tpkType = strings.ToLower(strings.TrimSpace(entry.PrimaryKeyType))\n\t\t}\n\t}\n\tif pkCol == \"\" {\n\t\tpkCol = \"_id\"\n\t}\n\treturn pkCol, pkType\n}",
+          "flow": "TestLiveBindings_46_47_48_TransmuteAndVerifyZeroDrift -> []int64{46, 47, 48}; ExecuteHealHandler.resolvePKColumnAndType -> json.Unmarshal(ref.TransformSpec) -> resolveTargetTableConfig -> fallback \"_id\""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1991,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5109,
+                "INCORRECT": 0.4265,
+                "UNSUPPORTED": 0.0625
+              },
+              "confidence": 0.1991,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 856,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "TestLiveBindings_46_47_48_TransmuteAndVerifyZeroDrift -> []int64{46, 47, 48}; ExecuteHealHandler.resolvePKColumnAndType -> json.Unmarshal(ref.TransformSpec) -> resolveTargetTableConfig -> fallback \"_id\"",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_gpayid_test.go:400-406\ntm := NewTransmuterModule(sysDB, connMgr, nil, nil, typeRes, zap.NewNop())\n\nfor _, bID := range []int64{46, 47, 48} {\n\trow, errLoad := tm.loadMaster(ctx, fmt.Sprintf(\"%d\", bID), bID)\n\tif errLoad != nil || row == nil {\n\t\tt.Skipf(\"binding %d not found: %v\", bID, errLoad)\n\t}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:595-621\nfunc (h *ExecuteHealHandler) resolvePKColumnAndType(targetTable string, ref *servicerecon.MasterBindingRef) (string, string) {\n\tpkCol := \"\"\n\tpkType := \"string\"\n\tif ref != nil && strings.TrimSpace(ref.TransformSpec) != \"\" {\n\t\tvar spec struct {\n\t\t\tPK string `json:\"pk\"`\n\t\t}\n\t\tif err := json.Unmarshal([]byte(ref.TransformSpec), &spec); err == nil {\n\t\t\tcand := strings.TrimSpace(spec.PK)\n\t\t\tif cand != \"\" && cand != \"_gpay_id\" {\n\t\t\t\tpkCol = cand\n\t\t\t}\n\t\t}\n\t}\n\tif entry := h.resolveTargetTableConfig(targetTable); entry != nil {\n\t\tif pkCol == \"\" && entry.PrimaryKeyField != \"\" {\n\t\t\tpkCol = entry.PrimaryKeyField\n\t\t}\n\t\tif entry.PrimaryKeyType != \"\" {\n\t\t\tpkType = strings.ToLower(strings.TrimSpace(entry.PrimaryKeyType))\n\t\t}\n\t}\n\tif pkCol == \"\" {\n\t\tpkCol = \"_id\"\n\t}\n\treturn pkCol, pkType\n}",
+          "claim": "In TestLiveBindings_46_47_48_TransmuteAndVerifyZeroDrift, the loop hardcodes binding IDs []int64{46, 47, 48} instead of querying all active bindings from cdc_system.master_binding, and ExecuteHealHandler.resolvePKColumnAndType resolves pkCol from ref.TransformSpec and resolveTargetTableConfig with fallback \"_id\" without querying information_schema.columns."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7129,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9498,
+                "NO": 0.0502
+              },
+              "confidence": 0.7129,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 723,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_gpayid_test.go:400-406\ntm := NewTransmuterModule(sysDB, connMgr, nil, nil, typeRes, zap.NewNop())\n\nfor _, bID := range []int64{46, 47, 48} {\n\trow, errLoad := tm.loadMaster(ctx, fmt.Sprintf(\"%d\", bID), bID)\n\tif errLoad != nil || row == nil {\n\t\tt.Skipf(\"binding %d not found: %v\", bID, errLoad)\n\t}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:595-621\nfunc (h *ExecuteHealHandler) resolvePKColumnAndType(targetTable string, ref *servicerecon.MasterBindingRef) (string, string) {\n\tpkCol := \"\"\n\tpkType := \"string\"\n\tif ref != nil && strings.TrimSpace(ref.TransformSpec) != \"\" {\n\t\tvar spec struct {\n\t\t\tPK string `json:\"pk\"`\n\t\t}\n\t\tif err := json.Unmarshal([]byte(ref.TransformSpec), &spec); err == nil {\n\t\t\tcand := strings.TrimSpace(spec.PK)\n\t\t\tif cand != \"\" && cand != \"_gpay_id\" {\n\t\t\t\tpkCol = cand\n\t\t\t}\n\t\t}\n\t}\n\tif entry := h.resolveTargetTableConfig(targetTable); entry != nil {\n\t\tif pkCol == \"\" && entry.PrimaryKeyField != \"\" {\n\t\t\tpkCol = entry.PrimaryKeyField\n\t\t}\n\t\tif entry.PrimaryKeyType != \"\" {\n\t\t\tpkType = strings.ToLower(strings.TrimSpace(entry.PrimaryKeyType))\n\t\t}\n\t}\n\tif pkCol == \"\" {\n\t\tpkCol = \"_id\"\n\t}\n\treturn pkCol, pkType\n}",
+          "claim": "In TestLiveBindings_46_47_48_TransmuteAndVerifyZeroDrift, the loop hardcodes binding IDs []int64{46, 47, 48} instead of querying all active bindings from cdc_system.master_binding, and ExecuteHealHandler.resolvePKColumnAndType resolves pkCol from ref.TransformSpec and resolveTargetTableConfig with fallback \"_id\" without querying information_schema.columns."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "AF-02-SPLIT-SINGLE-TASK-PARTIAL-ERROR-SWALLOW",
+    "category": "A-FINDING",
+    "kind": "target",
+    "claim": "In TransmuteHandler.splitSingleTaskPayload, after running processSubBatch on leftReq and rightReq, the function only returns an error via task.complete(leftErr) when both leftErr != nil && rightErr != nil (unless isTransientError is true), and calls task.complete(nil) when only one half fails.",
+    "flow": "TransmuteHandler.splitSingleTaskPayload -> processSubBatch(leftReq) & processSubBatch(rightReq) -> if leftErr != nil && rightErr != nil -> task.complete(nil)",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:782-795\nif isTransientError(leftErr) {\n\ttask.complete(leftErr)\n\treturn\n}\nif isTransientError(rightErr) {\n\ttask.complete(rightErr)\n\treturn\n}\nif leftErr != nil && rightErr != nil {\n\ttask.complete(leftErr)\n\treturn\n}\ntask.complete(nil)",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7675,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9417,
+                "INCORRECT": 0.0435,
+                "UNSUPPORTED": 0.0148
+              },
+              "confidence": 0.7675,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 366,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In TransmuteHandler.splitSingleTaskPayload, after running processSubBatch on leftReq and rightReq, the function only returns an error via task.complete(leftErr) when both leftErr != nil && rightErr != nil (unless isTransientError is true), and calls task.complete(nil) when only one half fails.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:782-795\nif isTransientError(leftErr) {\n\ttask.complete(leftErr)\n\treturn\n}\nif isTransientError(rightErr) {\n\ttask.complete(rightErr)\n\treturn\n}\nif leftErr != nil && rightErr != nil {\n\ttask.complete(leftErr)\n\treturn\n}\ntask.complete(nil)",
+          "flow": "TransmuteHandler.splitSingleTaskPayload -> processSubBatch(leftReq) & processSubBatch(rightReq) -> if leftErr != nil && rightErr != nil -> task.complete(nil)"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.7089,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9213,
+                "INCORRECT": 0.0591,
+                "UNSUPPORTED": 0.0196
+              },
+              "confidence": 0.7089,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 371,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "TransmuteHandler.splitSingleTaskPayload -> processSubBatch(leftReq) & processSubBatch(rightReq) -> if leftErr != nil && rightErr != nil -> task.complete(nil)",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:782-795\nif isTransientError(leftErr) {\n\ttask.complete(leftErr)\n\treturn\n}\nif isTransientError(rightErr) {\n\ttask.complete(rightErr)\n\treturn\n}\nif leftErr != nil && rightErr != nil {\n\ttask.complete(leftErr)\n\treturn\n}\ntask.complete(nil)",
+          "claim": "In TransmuteHandler.splitSingleTaskPayload, after running processSubBatch on leftReq and rightReq, the function only returns an error via task.complete(leftErr) when both leftErr != nil && rightErr != nil (unless isTransientError is true), and calls task.complete(nil) when only one half fails."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.0342,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.3916,
+                "NO": 0.6084
+              },
+              "confidence": 0.0342,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 262,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:782-795\nif isTransientError(leftErr) {\n\ttask.complete(leftErr)\n\treturn\n}\nif isTransientError(rightErr) {\n\ttask.complete(rightErr)\n\treturn\n}\nif leftErr != nil && rightErr != nil {\n\ttask.complete(leftErr)\n\treturn\n}\ntask.complete(nil)",
+          "claim": "In TransmuteHandler.splitSingleTaskPayload, after running processSubBatch on leftReq and rightReq, the function only returns an error via task.complete(leftErr) when both leftErr != nil && rightErr != nil (unless isTransientError is true), and calls task.complete(nil) when only one half fails."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "AF-03-SYNC-BEFORE-CURSOR-7DAYS-AND-CURSOR-RESET",
+    "category": "A-FINDING",
+    "kind": "target",
+    "claim": "In TransmuterModule.syncUpdatedShadowRowsBeforeCursor, the query filters by cutoff := time.Now().UTC().Add(-7 * 24 * time.Hour) with condition (COALESCE(_deleted, false) = true OR _updated_at >= ?), and in TransmuterModule.Run, when len(onlySourceIDs) == 0, item.LastCursorJSON is overwritten with []byte(\"{}\") regardless of whether runType is \"full\" or incremental.",
+    "flow": "TransmuterModule.Run -> syncUpdatedShadowRowsBeforeCursor (cutoff 7 days) -> if len(onlySourceIDs) == 0 -> item.LastCursorJSON = []byte(\"{}\")",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1504-1513\ncutoff := time.Now().UTC().Add(-7 * 24 * time.Hour)\n\nvar scanCursor int64\nfor {\n\tvar rows []shadowBatchRow\n\tquery := fmt.Sprintf(\n\t\t`SELECT %s, _source_id, _raw_data, _source_ts, _deleted FROM %s WHERE %s > ? AND %s <= ? AND (COALESCE(_deleted, false) = true OR _updated_at >= ?) ORDER BY 1 LIMIT ?`,\n\t\tpkSelect, shadowQT, pkBigint, pkBigint,\n\t)\n\terrQ := shadowDB.WithContext(ctx).Raw(query, scanCursor, maxCursor, cutoff, t.batchSize).Scan(&rows).Error\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:552-557\n// Reset checkpoint sau khi đồng bộ Full Sync hoàn tất thành công\nif len(onlySourceIDs) == 0 && t.runtimeRepo != nil {\n\tt.persistRuntimeState(ctx, masterRow.ID, func(item *mastermodel.SyncRuntimeState, now time.Time) {\n\t\titem.LastCursorJSON = []byte(`{}`)\n\t})\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4427,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7835,
+                "INCORRECT": 0.1851,
+                "UNSUPPORTED": 0.0315
+              },
+              "confidence": 0.4427,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 625,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In TransmuterModule.syncUpdatedShadowRowsBeforeCursor, the query filters by cutoff := time.Now().UTC().Add(-7 * 24 * time.Hour) with condition (COALESCE(_deleted, false) = true OR _updated_at >= ?), and in TransmuterModule.Run, when len(onlySourceIDs) == 0, item.LastCursorJSON is overwritten with []byte(\"{}\") regardless of whether runType is \"full\" or incremental.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1504-1513\ncutoff := time.Now().UTC().Add(-7 * 24 * time.Hour)\n\nvar scanCursor int64\nfor {\n\tvar rows []shadowBatchRow\n\tquery := fmt.Sprintf(\n\t\t`SELECT %s, _source_id, _raw_data, _source_ts, _deleted FROM %s WHERE %s > ? AND %s <= ? AND (COALESCE(_deleted, false) = true OR _updated_at >= ?) ORDER BY 1 LIMIT ?`,\n\t\tpkSelect, shadowQT, pkBigint, pkBigint,\n\t)\n\terrQ := shadowDB.WithContext(ctx).Raw(query, scanCursor, maxCursor, cutoff, t.batchSize).Scan(&rows).Error\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:552-557\n// Reset checkpoint sau khi đồng bộ Full Sync hoàn tất thành công\nif len(onlySourceIDs) == 0 && t.runtimeRepo != nil {\n\tt.persistRuntimeState(ctx, masterRow.ID, func(item *mastermodel.SyncRuntimeState, now time.Time) {\n\t\titem.LastCursorJSON = []byte(`{}`)\n\t})\n}",
+          "flow": "TransmuterModule.Run -> syncUpdatedShadowRowsBeforeCursor (cutoff 7 days) -> if len(onlySourceIDs) == 0 -> item.LastCursorJSON = []byte(\"{}\")"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.391,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7581,
+                "INCORRECT": 0.1973,
+                "UNSUPPORTED": 0.0447
+              },
+              "confidence": 0.391,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 631,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "TransmuterModule.Run -> syncUpdatedShadowRowsBeforeCursor (cutoff 7 days) -> if len(onlySourceIDs) == 0 -> item.LastCursorJSON = []byte(\"{}\")",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1504-1513\ncutoff := time.Now().UTC().Add(-7 * 24 * time.Hour)\n\nvar scanCursor int64\nfor {\n\tvar rows []shadowBatchRow\n\tquery := fmt.Sprintf(\n\t\t`SELECT %s, _source_id, _raw_data, _source_ts, _deleted FROM %s WHERE %s > ? AND %s <= ? AND (COALESCE(_deleted, false) = true OR _updated_at >= ?) ORDER BY 1 LIMIT ?`,\n\t\tpkSelect, shadowQT, pkBigint, pkBigint,\n\t)\n\terrQ := shadowDB.WithContext(ctx).Raw(query, scanCursor, maxCursor, cutoff, t.batchSize).Scan(&rows).Error\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:552-557\n// Reset checkpoint sau khi đồng bộ Full Sync hoàn tất thành công\nif len(onlySourceIDs) == 0 && t.runtimeRepo != nil {\n\tt.persistRuntimeState(ctx, masterRow.ID, func(item *mastermodel.SyncRuntimeState, now time.Time) {\n\t\titem.LastCursorJSON = []byte(`{}`)\n\t})\n}",
+          "claim": "In TransmuterModule.syncUpdatedShadowRowsBeforeCursor, the query filters by cutoff := time.Now().UTC().Add(-7 * 24 * time.Hour) with condition (COALESCE(_deleted, false) = true OR _updated_at >= ?), and in TransmuterModule.Run, when len(onlySourceIDs) == 0, item.LastCursorJSON is overwritten with []byte(\"{}\") regardless of whether runType is \"full\" or incremental."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6767,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9411,
+                "NO": 0.0589
+              },
+              "confidence": 0.6767,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 520,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1504-1513\ncutoff := time.Now().UTC().Add(-7 * 24 * time.Hour)\n\nvar scanCursor int64\nfor {\n\tvar rows []shadowBatchRow\n\tquery := fmt.Sprintf(\n\t\t`SELECT %s, _source_id, _raw_data, _source_ts, _deleted FROM %s WHERE %s > ? AND %s <= ? AND (COALESCE(_deleted, false) = true OR _updated_at >= ?) ORDER BY 1 LIMIT ?`,\n\t\tpkSelect, shadowQT, pkBigint, pkBigint,\n\t)\n\terrQ := shadowDB.WithContext(ctx).Raw(query, scanCursor, maxCursor, cutoff, t.batchSize).Scan(&rows).Error\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:552-557\n// Reset checkpoint sau khi đồng bộ Full Sync hoàn tất thành công\nif len(onlySourceIDs) == 0 && t.runtimeRepo != nil {\n\tt.persistRuntimeState(ctx, masterRow.ID, func(item *mastermodel.SyncRuntimeState, now time.Time) {\n\t\titem.LastCursorJSON = []byte(`{}`)\n\t})\n}",
+          "claim": "In TransmuterModule.syncUpdatedShadowRowsBeforeCursor, the query filters by cutoff := time.Now().UTC().Add(-7 * 24 * time.Hour) with condition (COALESCE(_deleted, false) = true OR _updated_at >= ?), and in TransmuterModule.Run, when len(onlySourceIDs) == 0, item.LastCursorJSON is overwritten with []byte(\"{}\") regardless of whether runType is \"full\" or incremental."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "AF-04-SEG-A-HARDCODED-CONN-KEY-AND-UNCHUNKED-PUBLISH",
+    "category": "A-FINDING",
+    "kind": "target",
+    "claim": "In ExecuteHealHandler.publishTransmuteShadowForSegA, tPayload sets \"shadow_connection_key\": \"default\" and publishes the entire sourceIDs slice in a single NATS message to \"cdc.cmd.transmute-shadow\" without chunking by healChunkSize.",
+    "flow": "ExecuteHealHandler.executeSegmentA -> publishTransmuteShadowForSegA -> tPayload[\"shadow_connection_key\"] = \"default\" -> PublishMsg",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:358-373\ntPayload := map[string]any{\n\t\"shadow_table\":          shadowTable,\n\t\"shadow_schema\":         shadowSchema,\n\t\"shadow_connection_key\": \"default\",\n\t\"_source_ids\":           sourceIDs,\n\t\"triggered_by\":          triggeredBy,\n}\nif b, err := json.Marshal(tPayload); err == nil {\n\toutMsg := &nats.Msg{\n\t\tSubject: \"cdc.cmd.transmute-shadow\",\n\t\tData:    b,\n\t\tHeader:  make(nats.Header),\n\t}\n\tobservability.InjectNATSHeader(ctx, outMsg.Header)\n\tif errPub := h.natsPub.PublishMsg(outMsg); errPub != nil {",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5599,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8489,
+                "INCORRECT": 0.1312,
+                "UNSUPPORTED": 0.0199
+              },
+              "confidence": 0.5599,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 482,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In ExecuteHealHandler.publishTransmuteShadowForSegA, tPayload sets \"shadow_connection_key\": \"default\" and publishes the entire sourceIDs slice in a single NATS message to \"cdc.cmd.transmute-shadow\" without chunking by healChunkSize.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:358-373\ntPayload := map[string]any{\n\t\"shadow_table\":          shadowTable,\n\t\"shadow_schema\":         shadowSchema,\n\t\"shadow_connection_key\": \"default\",\n\t\"_source_ids\":           sourceIDs,\n\t\"triggered_by\":          triggeredBy,\n}\nif b, err := json.Marshal(tPayload); err == nil {\n\toutMsg := &nats.Msg{\n\t\tSubject: \"cdc.cmd.transmute-shadow\",\n\t\tData:    b,\n\t\tHeader:  make(nats.Header),\n\t}\n\tobservability.InjectNATSHeader(ctx, outMsg.Header)\n\tif errPub := h.natsPub.PublishMsg(outMsg); errPub != nil {",
+          "flow": "ExecuteHealHandler.executeSegmentA -> publishTransmuteShadowForSegA -> tPayload[\"shadow_connection_key\"] = \"default\" -> PublishMsg"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5172,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8217,
+                "INCORRECT": 0.1587,
+                "UNSUPPORTED": 0.0195
+              },
+              "confidence": 0.5172,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 488,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "ExecuteHealHandler.executeSegmentA -> publishTransmuteShadowForSegA -> tPayload[\"shadow_connection_key\"] = \"default\" -> PublishMsg",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:358-373\ntPayload := map[string]any{\n\t\"shadow_table\":          shadowTable,\n\t\"shadow_schema\":         shadowSchema,\n\t\"shadow_connection_key\": \"default\",\n\t\"_source_ids\":           sourceIDs,\n\t\"triggered_by\":          triggeredBy,\n}\nif b, err := json.Marshal(tPayload); err == nil {\n\toutMsg := &nats.Msg{\n\t\tSubject: \"cdc.cmd.transmute-shadow\",\n\t\tData:    b,\n\t\tHeader:  make(nats.Header),\n\t}\n\tobservability.InjectNATSHeader(ctx, outMsg.Header)\n\tif errPub := h.natsPub.PublishMsg(outMsg); errPub != nil {",
+          "claim": "In ExecuteHealHandler.publishTransmuteShadowForSegA, tPayload sets \"shadow_connection_key\": \"default\" and publishes the entire sourceIDs slice in a single NATS message to \"cdc.cmd.transmute-shadow\" without chunking by healChunkSize."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.591,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.918,
+                "NO": 0.082
+              },
+              "confidence": 0.591,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 387,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:358-373\ntPayload := map[string]any{\n\t\"shadow_table\":          shadowTable,\n\t\"shadow_schema\":         shadowSchema,\n\t\"shadow_connection_key\": \"default\",\n\t\"_source_ids\":           sourceIDs,\n\t\"triggered_by\":          triggeredBy,\n}\nif b, err := json.Marshal(tPayload); err == nil {\n\toutMsg := &nats.Msg{\n\t\tSubject: \"cdc.cmd.transmute-shadow\",\n\t\tData:    b,\n\t\tHeader:  make(nats.Header),\n\t}\n\tobservability.InjectNATSHeader(ctx, outMsg.Header)\n\tif errPub := h.natsPub.PublishMsg(outMsg); errPub != nil {",
+          "claim": "In ExecuteHealHandler.publishTransmuteShadowForSegA, tPayload sets \"shadow_connection_key\": \"default\" and publishes the entire sourceIDs slice in a single NATS message to \"cdc.cmd.transmute-shadow\" without chunking by healChunkSize."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "AF-05-RESOLVE-SOURCE-IDS-DUPLICATES-AND-DEDUP-ORDER",
+    "category": "A-FINDING",
+    "kind": "target",
+    "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB, when len(mapped) < (end - start), the fallback query on masterDB queries the entire gpayIDs[start:end] slice and appends masterMapped to out without deduplicating against already-mapped IDs, and in dedupByConflictKey, records are deduplicated by slice index order without comparing r.SourceTsMs.",
+    "flow": "resolveSourceIDsForSegmentB -> append(out, mapped...) -> masterDB query WHERE _gpay_id IN (gpayIDs[start:end]) -> append(out, masterMapped...); dedupByConflictKey -> lastIdx[r.PrimaryKeyValue] = i",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:726-749\nif err == nil && len(mapped) > 0 {\n\tout = append(out, mapped...)\n}\n\n// Fix F2: Nếu một số _gpay_id trong report là giá trị băm SHA-256 đang nằm trên bảng Master\n// (không khớp với _gpay_id của bảng Shadow), tra cứu bổ sung trên bảng Master theo cột khóa chính\n// đọc động từ transform_spec.pk (ví dụ \"_id\" hoặc \"id\").\nif len(mapped) < (end - start) {\n\tif masterDB := h.resolveMasterDBForRef(ctx, ref); masterDB != nil {\n\t\tpkCol, _ := h.resolvePKColumnAndType(targetTable, ref)\n\t\tmasterRel := targetTable\n\t\tif ref != nil && ref.MasterSchema != \"\" && ref.MasterTable != \"\" {\n\t\t\tmasterRel = ref.MasterRel()\n\t\t}\n\t\tif masterRel != \"\" && pkCol != \"\" && pkCol != \"_gpay_id\" {\n\t\t\tvar masterMapped []string\n\t\t\terrM := masterDB.WithContext(ctx).Raw(\n\t\t\t\tfmt.Sprintf(`SELECT %s::text FROM %s WHERE \"_gpay_id\" IN (?)`, quoteIdent(pkCol), quoteRelation(masterRel)),\n\t\t\t\tgpayIDs[start:end],\n\t\t\t).Scan(&masterMapped).Error\n\t\t\tif errM == nil && len(masterMapped) > 0 {\n\t\t\t\tout = append(out, masterMapped...)\n\t\t\t}\n\t\t}\n\t}\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go:95-101\nlastIdx := make(map[string]int, len(records))\nfor i, r := range records {\n\tif r == nil {\n\t\tcontinue\n\t}\n\tlastIdx[r.PrimaryKeyValue] = i // overwrite → retain last\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5485,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8596,
+                "INCORRECT": 0.0924,
+                "UNSUPPORTED": 0.0481
+              },
+              "confidence": 0.5485,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 840,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB, when len(mapped) < (end - start), the fallback query on masterDB queries the entire gpayIDs[start:end] slice and appends masterMapped to out without deduplicating against already-mapped IDs, and in dedupByConflictKey, records are deduplicated by slice index order without comparing r.SourceTsMs.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:726-749\nif err == nil && len(mapped) > 0 {\n\tout = append(out, mapped...)\n}\n\n// Fix F2: Nếu một số _gpay_id trong report là giá trị băm SHA-256 đang nằm trên bảng Master\n// (không khớp với _gpay_id của bảng Shadow), tra cứu bổ sung trên bảng Master theo cột khóa chính\n// đọc động từ transform_spec.pk (ví dụ \"_id\" hoặc \"id\").\nif len(mapped) < (end - start) {\n\tif masterDB := h.resolveMasterDBForRef(ctx, ref); masterDB != nil {\n\t\tpkCol, _ := h.resolvePKColumnAndType(targetTable, ref)\n\t\tmasterRel := targetTable\n\t\tif ref != nil && ref.MasterSchema != \"\" && ref.MasterTable != \"\" {\n\t\t\tmasterRel = ref.MasterRel()\n\t\t}\n\t\tif masterRel != \"\" && pkCol != \"\" && pkCol != \"_gpay_id\" {\n\t\t\tvar masterMapped []string\n\t\t\terrM := masterDB.WithContext(ctx).Raw(\n\t\t\t\tfmt.Sprintf(`SELECT %s::text FROM %s WHERE \"_gpay_id\" IN (?)`, quoteIdent(pkCol), quoteRelation(masterRel)),\n\t\t\t\tgpayIDs[start:end],\n\t\t\t).Scan(&masterMapped).Error\n\t\t\tif errM == nil && len(masterMapped) > 0 {\n\t\t\t\tout = append(out, masterMapped...)\n\t\t\t}\n\t\t}\n\t}\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go:95-101\nlastIdx := make(map[string]int, len(records))\nfor i, r := range records {\n\tif r == nil {\n\t\tcontinue\n\t}\n\tlastIdx[r.PrimaryKeyValue] = i // overwrite → retain last\n}",
+          "flow": "resolveSourceIDsForSegmentB -> append(out, mapped...) -> masterDB query WHERE _gpay_id IN (gpayIDs[start:end]) -> append(out, masterMapped...); dedupByConflictKey -> lastIdx[r.PrimaryKeyValue] = i"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.287,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6913,
+                "INCORRECT": 0.2388,
+                "UNSUPPORTED": 0.07
+              },
+              "confidence": 0.287,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 846,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "resolveSourceIDsForSegmentB -> append(out, mapped...) -> masterDB query WHERE _gpay_id IN (gpayIDs[start:end]) -> append(out, masterMapped...); dedupByConflictKey -> lastIdx[r.PrimaryKeyValue] = i",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:726-749\nif err == nil && len(mapped) > 0 {\n\tout = append(out, mapped...)\n}\n\n// Fix F2: Nếu một số _gpay_id trong report là giá trị băm SHA-256 đang nằm trên bảng Master\n// (không khớp với _gpay_id của bảng Shadow), tra cứu bổ sung trên bảng Master theo cột khóa chính\n// đọc động từ transform_spec.pk (ví dụ \"_id\" hoặc \"id\").\nif len(mapped) < (end - start) {\n\tif masterDB := h.resolveMasterDBForRef(ctx, ref); masterDB != nil {\n\t\tpkCol, _ := h.resolvePKColumnAndType(targetTable, ref)\n\t\tmasterRel := targetTable\n\t\tif ref != nil && ref.MasterSchema != \"\" && ref.MasterTable != \"\" {\n\t\t\tmasterRel = ref.MasterRel()\n\t\t}\n\t\tif masterRel != \"\" && pkCol != \"\" && pkCol != \"_gpay_id\" {\n\t\t\tvar masterMapped []string\n\t\t\terrM := masterDB.WithContext(ctx).Raw(\n\t\t\t\tfmt.Sprintf(`SELECT %s::text FROM %s WHERE \"_gpay_id\" IN (?)`, quoteIdent(pkCol), quoteRelation(masterRel)),\n\t\t\t\tgpayIDs[start:end],\n\t\t\t).Scan(&masterMapped).Error\n\t\t\tif errM == nil && len(masterMapped) > 0 {\n\t\t\t\tout = append(out, masterMapped...)\n\t\t\t}\n\t\t}\n\t}\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go:95-101\nlastIdx := make(map[string]int, len(records))\nfor i, r := range records {\n\tif r == nil {\n\t\tcontinue\n\t}\n\tlastIdx[r.PrimaryKeyValue] = i // overwrite → retain last\n}",
+          "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB, when len(mapped) < (end - start), the fallback query on masterDB queries the entire gpayIDs[start:end] slice and appends masterMapped to out without deduplicating against already-mapped IDs, and in dedupByConflictKey, records are deduplicated by slice index order without comparing r.SourceTsMs."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6613,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9371,
+                "NO": 0.0629
+              },
+              "confidence": 0.6613,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 720,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:726-749\nif err == nil && len(mapped) > 0 {\n\tout = append(out, mapped...)\n}\n\n// Fix F2: Nếu một số _gpay_id trong report là giá trị băm SHA-256 đang nằm trên bảng Master\n// (không khớp với _gpay_id của bảng Shadow), tra cứu bổ sung trên bảng Master theo cột khóa chính\n// đọc động từ transform_spec.pk (ví dụ \"_id\" hoặc \"id\").\nif len(mapped) < (end - start) {\n\tif masterDB := h.resolveMasterDBForRef(ctx, ref); masterDB != nil {\n\t\tpkCol, _ := h.resolvePKColumnAndType(targetTable, ref)\n\t\tmasterRel := targetTable\n\t\tif ref != nil && ref.MasterSchema != \"\" && ref.MasterTable != \"\" {\n\t\t\tmasterRel = ref.MasterRel()\n\t\t}\n\t\tif masterRel != \"\" && pkCol != \"\" && pkCol != \"_gpay_id\" {\n\t\t\tvar masterMapped []string\n\t\t\terrM := masterDB.WithContext(ctx).Raw(\n\t\t\t\tfmt.Sprintf(`SELECT %s::text FROM %s WHERE \"_gpay_id\" IN (?)`, quoteIdent(pkCol), quoteRelation(masterRel)),\n\t\t\t\tgpayIDs[start:end],\n\t\t\t).Scan(&masterMapped).Error\n\t\t\tif errM == nil && len(masterMapped) > 0 {\n\t\t\t\tout = append(out, masterMapped...)\n\t\t\t}\n\t\t}\n\t}\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go:95-101\nlastIdx := make(map[string]int, len(records))\nfor i, r := range records {\n\tif r == nil {\n\t\tcontinue\n\t}\n\tlastIdx[r.PrimaryKeyValue] = i // overwrite → retain last\n}",
+          "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB, when len(mapped) < (end - start), the fallback query on masterDB queries the entire gpayIDs[start:end] slice and appends masterMapped to out without deduplicating against already-mapped IDs, and in dedupByConflictKey, records are deduplicated by slice index order without comparing r.SourceTsMs."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "category": "CTRL",
+    "kind": "control_true",
+    "claim": "In ExecuteHealHandler.publishTransmuteChunked, sourceIDs are iterated in chunks of healChunkSize using for start := 0; start < len(sourceIDs); start += healChunkSize.",
+    "flow": "ExecuteHealHandler.publishTransmuteChunked -> chunk loop",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:623-625\nfunc (h *ExecuteHealHandler) publishTransmuteChunked(ctx context.Context, table string, sourceIDs []string, triggeredBy string, masterBindingID int64) (int, error) {\n\tdispatched := 0\n\tfor start := 0; start < len(sourceIDs); start += healChunkSize {",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1636,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6252,
+                "INCORRECT": 0.2081,
+                "UNSUPPORTED": 0.1666
+              },
+              "confidence": 0.1636,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 302,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In ExecuteHealHandler.publishTransmuteChunked, sourceIDs are iterated in chunks of healChunkSize using for start := 0; start < len(sourceIDs); start += healChunkSize.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:623-625\nfunc (h *ExecuteHealHandler) publishTransmuteChunked(ctx context.Context, table string, sourceIDs []string, triggeredBy string, masterBindingID int64) (int, error) {\n\tdispatched := 0\n\tfor start := 0; start < len(sourceIDs); start += healChunkSize {",
+          "flow": "ExecuteHealHandler.publishTransmuteChunked -> chunk loop"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2878,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7129,
+                "INCORRECT": 0.1913,
+                "UNSUPPORTED": 0.0959
+              },
+              "confidence": 0.2878,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 308,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "ExecuteHealHandler.publishTransmuteChunked -> chunk loop",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:623-625\nfunc (h *ExecuteHealHandler) publishTransmuteChunked(ctx context.Context, table string, sourceIDs []string, triggeredBy string, masterBindingID int64) (int, error) {\n\tdispatched := 0\n\tfor start := 0; start < len(sourceIDs); start += healChunkSize {",
+          "claim": "In ExecuteHealHandler.publishTransmuteChunked, sourceIDs are iterated in chunks of healChunkSize using for start := 0; start < len(sourceIDs); start += healChunkSize."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.1232,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.7036,
+                "NO": 0.2964
+              },
+              "confidence": 0.1232,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 228,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:623-625\nfunc (h *ExecuteHealHandler) publishTransmuteChunked(ctx context.Context, table string, sourceIDs []string, triggeredBy string, masterBindingID int64) (int, error) {\n\tdispatched := 0\n\tfor start := 0; start < len(sourceIDs); start += healChunkSize {",
+          "claim": "In ExecuteHealHandler.publishTransmuteChunked, sourceIDs are iterated in chunks of healChunkSize using for start := 0; start < len(sourceIDs); start += healChunkSize."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "category": "CTRL",
+    "kind": "control_false",
+    "claim": "In TransmuteHandler.splitSingleTaskPayload, the function returns an error whenever either leftErr != nil OR rightErr != nil using if leftErr != nil || rightErr != nil.",
+    "flow": "TransmuteHandler.splitSingleTaskPayload -> error check",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:790-794\nif leftErr != nil && rightErr != nil {\n\ttask.complete(leftErr)\n\treturn\n}\ntask.complete(nil)",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.569,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8703,
+                "INCORRECT": 0.0769,
+                "UNSUPPORTED": 0.0529
+              },
+              "confidence": 0.569,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 252,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In TransmuteHandler.splitSingleTaskPayload, the function returns an error whenever either leftErr != nil OR rightErr != nil using if leftErr != nil || rightErr != nil.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:790-794\nif leftErr != nil && rightErr != nil {\n\ttask.complete(leftErr)\n\treturn\n}\ntask.complete(nil)",
+          "flow": "TransmuteHandler.splitSingleTaskPayload -> error check"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3403,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7214,
+                "INCORRECT": 0.2272,
+                "UNSUPPORTED": 0.0514
+              },
+              "confidence": 0.3403,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 258,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "TransmuteHandler.splitSingleTaskPayload -> error check",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:790-794\nif leftErr != nil && rightErr != nil {\n\ttask.complete(leftErr)\n\treturn\n}\ntask.complete(nil)",
+          "claim": "In TransmuteHandler.splitSingleTaskPayload, the function returns an error whenever either leftErr != nil OR rightErr != nil using if leftErr != nil || rightErr != nil."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5594,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9088,
+                "NO": 0.0912
+              },
+              "confidence": 0.5594,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 179,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:790-794\nif leftErr != nil && rightErr != nil {\n\ttask.complete(leftErr)\n\treturn\n}\ntask.complete(nil)",
+          "claim": "In TransmuteHandler.splitSingleTaskPayload, the function returns an error whenever either leftErr != nil OR rightErr != nil using if leftErr != nil || rightErr != nil."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "category": "CTRL",
+    "kind": "control_false",
+    "claim": "In TransmuterModule.Run, LastCursorJSON is only reset to []byte(\"{}\") when runType == \"full\" && len(onlySourceIDs) == 0.",
+    "flow": "TransmuterModule.Run -> checkpoint reset",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:552-557\n// Reset checkpoint sau khi đồng bộ Full Sync hoàn tất thành công\nif len(onlySourceIDs) == 0 && t.runtimeRepo != nil {\n\tt.persistRuntimeState(ctx, masterRow.ID, func(item *mastermodel.SyncRuntimeState, now time.Time) {\n\t\titem.LastCursorJSON = []byte(`{}`)\n\t})\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7636,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9414,
+                "INCORRECT": 0.0401,
+                "UNSUPPORTED": 0.0186
+              },
+              "confidence": 0.7636,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 302,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In TransmuterModule.Run, LastCursorJSON is only reset to []byte(\"{}\") when runType == \"full\" && len(onlySourceIDs) == 0.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:552-557\n// Reset checkpoint sau khi đồng bộ Full Sync hoàn tất thành công\nif len(onlySourceIDs) == 0 && t.runtimeRepo != nil {\n\tt.persistRuntimeState(ctx, masterRow.ID, func(item *mastermodel.SyncRuntimeState, now time.Time) {\n\t\titem.LastCursorJSON = []byte(`{}`)\n\t})\n}",
+          "flow": "TransmuterModule.Run -> checkpoint reset"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2374,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4852,
+                "INCORRECT": 0.4729,
+                "UNSUPPORTED": 0.0418
+              },
+              "confidence": 0.2374,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 308,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "TransmuterModule.Run -> checkpoint reset",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:552-557\n// Reset checkpoint sau khi đồng bộ Full Sync hoàn tất thành công\nif len(onlySourceIDs) == 0 && t.runtimeRepo != nil {\n\tt.persistRuntimeState(ctx, masterRow.ID, func(item *mastermodel.SyncRuntimeState, now time.Time) {\n\t\titem.LastCursorJSON = []byte(`{}`)\n\t})\n}",
+          "claim": "In TransmuterModule.Run, LastCursorJSON is only reset to []byte(\"{}\") when runType == \"full\" && len(onlySourceIDs) == 0."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4831,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8843,
+                "NO": 0.1157
+              },
+              "confidence": 0.4831,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 231,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:552-557\n// Reset checkpoint sau khi đồng bộ Full Sync hoàn tất thành công\nif len(onlySourceIDs) == 0 && t.runtimeRepo != nil {\n\tt.persistRuntimeState(ctx, masterRow.ID, func(item *mastermodel.SyncRuntimeState, now time.Time) {\n\t\titem.LastCursorJSON = []byte(`{}`)\n\t})\n}",
+          "claim": "In TransmuterModule.Run, LastCursorJSON is only reset to []byte(\"{}\") when runType == \"full\" && len(onlySourceIDs) == 0."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

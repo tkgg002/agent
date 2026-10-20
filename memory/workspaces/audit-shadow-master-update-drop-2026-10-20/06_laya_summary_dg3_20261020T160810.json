@@ -1,0 +1,128 @@
+{
+  "mode": "claim",
+  "stage": "dg3",
+  "workspace": "audit-shadow-master-update-drop-2026-10-20",
+  "ts": "20261020T160810",
+  "trusted_rounds": [
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/06_laya_raw_dg3_20261020T160810.json",
+  "claims": [
+    {
+      "id": "AF-01-HARDCODED-BINDINGS-AND-PK-RESOLVER",
+      "kind": "target",
+      "basis": "code",
+      "claim": "In TestLiveBindings_46_47_48_TransmuteAndVerifyZeroDrift, the loop hardcodes binding IDs []int64{46, 47, 48} instead of querying all active bindings from cdc_system.master_binding, and ExecuteHealHandler.resolvePKColumnAndType resolves pkCol from ref.TransformSpec and resolveTargetTableConfig with fallback \"_id\" without querying information_schema.columns.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.514
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1991
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7129
+        }
+      }
+    },
+    {
+      "id": "AF-02-SPLIT-SINGLE-TASK-PARTIAL-ERROR-SWALLOW",
+      "kind": "target",
+      "basis": "code",
+      "claim": "In TransmuteHandler.splitSingleTaskPayload, after running processSubBatch on leftReq and rightReq, the function only returns an error via task.complete(leftErr) when both leftErr != nil && rightErr != nil (unless isTransientError is true), and calls task.complete(nil) when only one half fails.",
+      "decision": "FLAG",
+      "resolved": "Verified directly in code (r1=CORRECT 0.7675, r2=CORRECT 0.7089): lines 790-794 check if leftErr != nil && rightErr != nil before calling task.complete(leftErr), otherwise calling task.complete(nil). REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:790-795",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.7675
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.7089
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.0342
+        }
+      }
+    },
+    {
+      "id": "AF-03-SYNC-BEFORE-CURSOR-7DAYS-AND-CURSOR-RESET",
+      "kind": "target",
+      "basis": "code",
+      "claim": "In TransmuterModule.syncUpdatedShadowRowsBeforeCursor, the query filters by cutoff := time.Now().UTC().Add(-7 * 24 * time.Hour) with condition (COALESCE(_deleted, false) = true OR _updated_at >= ?), and in TransmuterModule.Run, when len(onlySourceIDs) == 0, item.LastCursorJSON is overwritten with []byte(\"{}\") regardless of whether runType is \"full\" or incremental.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4427
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.391
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6767
+        }
+      }
+    },
+    {
+      "id": "AF-04-SEG-A-HARDCODED-CONN-KEY-AND-UNCHUNKED-PUBLISH",
+      "kind": "target",
+      "basis": "code",
+      "claim": "In ExecuteHealHandler.publishTransmuteShadowForSegA, tPayload sets \"shadow_connection_key\": \"default\" and publishes the entire sourceIDs slice in a single NATS message to \"cdc.cmd.transmute-shadow\" without chunking by healChunkSize.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5599
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.5172
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.591
+        }
+      }
+    },
+    {
+      "id": "AF-05-RESOLVE-SOURCE-IDS-DUPLICATES-AND-DEDUP-ORDER",
+      "kind": "target",
+      "basis": "code",
+      "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB, when len(mapped) < (end - start), the fallback query on masterDB queries the entire gpayIDs[start:end] slice and appends masterMapped to out without deduplicating against already-mapped IDs, and in dedupByConflictKey, records are deduplicated by slice index order without comparing r.SourceTsMs.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5485
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.287
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6613
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

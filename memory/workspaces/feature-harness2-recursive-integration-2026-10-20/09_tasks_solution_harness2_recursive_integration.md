@@ -354,3 +354,52 @@ def can_commit_adopted_harness_to_domain_library(
 | **DG2** | `D-EDGE` | `mutation_gate.py` định nghĩa `MIN_MUTANTS = 3` và `DEFAULT_WS_ROOT = AGENT_ROOT / 'memory' / 'workspaces'`. | `tooling/mutation_gate.py:27-30` | **`ACCEPT`** (`r2: 0.89`, `r3: 0.96`) | **PASS** 🟢 |
 | **DG2** | `D-API` | `PROD_MOCK_POLLUTION` trong `agy_guard.py` chặn `*Fn`, `lookupMasterTargetsFn`, `runEventsFn`, `sqlmock`, `fakemodel`. | `hooks/agy/agy_guard.py:51-53` | **`ACCEPT`** (`r1: 0.54`, `r3: 0.81`) | **PASS** 🟢 |
 | **DG3** | `A-F1..A-SCOPE` | 4/4 audit claims (`GEMINI.md:46-50`, `verify_governance.py:28-33`, `agy_guard.py:282-301`, `laya_gate.py:10-15`) đạt chuẩn kiểm định. | Xem bảng chi tiết tại `13_analysis` | **PASS** (`trusted_rounds: ["r2"]`) | **PASS** 🟢 |
+
+---
+
+## 6. Thiết kế Khắc phục Vòng Kín `S5 → S3 Re-Plan` (Xử lý Triệt để 1:1 `AF-01 → AF-07` — Chờ User `APPROVE`)
+
+Thực hiện đúng quy tắc **Closed-Loop Re-Plan (`S5 → S3`)** tại `GEMINI.md:36` (Rule #9 S5(d) & Lesson `L021`), sau khi phát hiện 7 lỗi/lỗ hổng (`AF-01 → AF-07`) qua đợt Adversarial Audit và thẩm định `/laya_router` (`06_laya_summary_dg3_20261020T160852.json`), dưới đây là phương án kỹ thuật duy nhất để khắc phục triệt để từng điểm ngay khi nhận lệnh `APPROVE` mới từ User:
+
+1. **Khắc phục `AF-01` (`tooling/orchestrator/harness2_engine.py:642-644, 675-677`):**
+   - Viết hàm `three_way_merge_trees(base_tree: Tree, inv_tree: Tree, dom_tree: Tree) -> Tree`:
+     ```python
+     def three_way_merge_trees(base_tree: Tree, inv_tree: Tree, dom_tree: Tree) -> Tree:
+         """Hợp nhất 3 chiều bảo toàn thay đổi và phép xóa của cả 2 trục trực giao INV & DOM."""
+         merged: Tree = dict(base_tree)
+         for branch in (inv_tree, dom_tree):
+             deleted = set(base_tree) - set(branch)
+             for k in deleted:
+                 merged.pop(k, None)
+             for k, v in branch.items():
+                 if k not in base_tree or branch[k] != base_tree[k]:
+                     merged[k] = v
+         return merged
+     ```
+2. **Khắc phục `AF-02` (`tooling/orchestrator/harness2_engine.py:559-569`):**
+   - Trong `_run_cached_session`, đưa `task_id`, mã băm `SHA-256` tất định của toàn bộ `base_tree`, và `context_dir` vào `call_fingerprint_sha256`:
+     ```python
+     tree_digest = hashlib.sha256(
+         json.dumps(base_tree, sort_keys=True, ensure_ascii=False).encode("utf-8")
+     ).hexdigest()[:16]
+     fp = call_fingerprint_sha256(
+         label=label,
+         mission=f"task={task_id}|propose:{dim}:{label}|tree={tree_digest}",
+         system=self.surface.name,
+         context_dir=context_dir,
+     )
+     ```
+3. **Khắc phục `AF-03` (`tooling/orchestrator/harness2_engine.py:616, 660, 700-706`):**
+   - Tổng hợp `rollout_outputs["base"]` từ `base1..basek` (chế độ `agg`) hoặc `b1` (chế độ `seq`) để ứng viên `"base"` luôn có dữ liệu so sánh công bằng (`KEEP_BASE`).
+   - Hỗ trợ `selector_fn: Optional[Callable[[Dict[str, str], Mapping[str, Tree], Mapping[str, Dict[str, Any]]], str]] = None` nhận bảng mã ẩn danh `A, B, C...` để chấm chọn không cần trường `score` có sẵn.
+4. **Khắc phục `AF-04` (`tooling/orchestrator/harness2_engine.py:116, 130, 136, 168, 204`):**
+   - Đổi kiểm tra trần `always_on_max` sang đếm byte UTF-8: `len(body.encode("utf-8")) > surface.always_on_max`.
+   - Tách YAML frontmatter bằng `re.match(r"\A---\r?\n(.*?)\r?\n---\r?\n", src, re.S)` thay vì `src[:600]`.
+   - Kiểm tra tên skill trong `always_on` bằng regex ranh giới token: `re.search(rf"(?<![\w\-]){re.escape(sname)}(?![\w\-])", body)`.
+5. **Khắc phục `AF-05` (`tooling/orchestrator/harness2_engine.py:43, 711-716`):**
+   - Bỏ mảng tự thỏa mãn `s3_docs = [f"{pfx}_ok.md" ...]` tại dòng `711`; đọc danh sách file thật từ `workspace_dir: Optional[Path]` truyền vào `execute_task_recursion` và gọi hàm đồng bộ `build_lessons_index` khi ghi nhận bài học mới.
+6. **Khắc phục `AF-06` (`tooling/orchestrator/proposer_axes.py` & `harness2_engine.py:210`):**
+   - Tạo module `tooling/orchestrator/proposer_axes.py` đúng cam kết tại `08_tasks:19` và chặn `INV Proposer` sửa bất kỳ file nào thuộc `skills/` (`rel.startswith("skills/")`).
+7. **Khắc phục `AF-07` (`SubprocessRunner` & CLI `run-recursion`):**
+   - Bổ sung `SubprocessProposerRunner` / `SubprocessRolloutRunner` kèm `timeout_sec` và subcommand CLI `run-recursion` để trace runtime value thật trên đĩa cùng User.
+

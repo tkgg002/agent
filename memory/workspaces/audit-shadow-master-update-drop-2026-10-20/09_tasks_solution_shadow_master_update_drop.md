@@ -323,10 +323,73 @@ Tại [`transmuter.go`](file:///Users/trainguyen/Documents/work/data-hub/central
    - Kiểm chứng `BatchBuffer.batchUpsert` với 2 sự kiện khác signature của cùng 1 `PrimaryKeyValue` trong cùng cửa sổ flush.
 2. **Runtime Verification trên môi trường thật (`docker` containers):**
    - Build và restart container `cdc-ingestion-service`.
-   - Kích hoạt Transmute / Execute Heal cho `Binding 46` (`payment_bills`), `Binding 47` (`payment_bills_1`) và `Binding 48` (`export_jobs`).
-   - Truy vấn đối soát trực tiếp giữa `gpay-postgres-shadow` và `gpay-postgres-dest`:
+   - Kích hoạt Transmute / Execute Heal cho toàn bộ 5 Active Bindings: `Binding 46` (`payment_bills`), `Binding 47` (`payment_bills_1`), `Binding 48` (`export_jobs`), `Binding 51` (`export_jobs_2`), `Binding 52` (`export_jobs_1`).
+   - Truy vấn đối soát trực tiếp giữa `gpay-postgres-shadow` (`:5436`) và `gpay-postgres-dest` (`:5434`) / `gpay-postgres-master-2` (`:5437`):
      - Số dòng rớt `DELETE` (`55853, 55854`): giảm từ **`2` $\rightarrow$ `0`**.
      - Số dòng rớt `UPDATE` (`s._source_ts > m._source_ts`): giảm từ **`14` $\rightarrow$ `0`** trên `payment_bills` và từ **`344` $\rightarrow$ `0`** trên `payment_bills_1`.
      - Số dòng lệch `_gpay_id` (`s._gpay_id <> m._gpay_id`): giảm từ **`1,482` $\rightarrow$ `0`** trên `payment_bills`/`payment_bills_1` và từ **`520` $\rightarrow$ `0`** trên `export_jobs`.
      - Chạy lại Recon Segment B: `missing_in_shadow = 0`, `missing_in_master = 0`, `mismatched_Hash = 0`.
 
+---
+
+## 6. Kế Hoạch Bổ Sung Từ Phản Biện Cuối Workflow (`S5 → S3 Closed-Loop Re-Plan` Cho `AF-01..AF-05` — Chờ User `APPROVE`)
+
+### 6.1. Giải pháp cho `AF-01`: Quét động toàn bộ `is_active = true` trong `cdc_system.master_binding` (bao gồm `Binding 51, 52`) & Phối hợp Restart 3 Daemon Runtime (`:8081/:8082/:8083`)
+- **Tại `internal/service/master/transmuter_gpayid_test.go:402`:** Thay vì hardcode `for _, bID := range []int64{46, 47, 48}`, truy vấn động `SELECT id FROM cdc_system.master_binding WHERE is_active = true ORDER BY id` để chạy đồng bộ và kiểm chứng `droppedDelete = 0, droppedUpdate = 0, gpayMismatch = 0` trên toàn bộ **5 active bindings (`46, 47, 48, 51, 52`)** (lấy đúng `masterDB` theo `row.MasterConnectionKey` cho cả `default_master` `:5434` lẫn `master_2` `:5437`).
+- **Phối hợp Runtime:** Sau khi hoàn tất code & test, phối hợp với User rebuild binary và restart 3 tiến trình `main` đang lắng nghe trên `:8081` (`PID 34453`), `:8082` (`PID 50249`), `:8083` (`PID 50156`).
+
+### 6.2. Giải pháp cho `AF-02`: Sửa lỗi nuốt lỗi 1 nửa trong `splitSingleTaskPayload` & Tránh chạy lặp các `Events` đã thành công trong `RunEvents`
+- **Tại `internal/handler/master/transmute_handler.go:782-795` (`splitSingleTaskPayload`):**
+  - Khi `leftErr != nil || rightErr != nil` (dù chỉ 1 nửa thất bại), bắt buộc lấy lỗi khác `nil` (`firstErr`) để gọi `h.replyErr(ctx, task.Msg, task.Req.CorrelationID, firstErr.Error())` và `task.complete(firstErr)` (thay vì `if leftErr != nil && rightErr != nil`), đảm bảo JetStream `Nak()`/redeliver đúng phần tử lỗi và không treo RPC reply. Khi cả 2 nửa thành công (`leftErr == nil && rightErr == nil`), gọi `h.reply(task.Msg, ...)` trước `task.complete(nil)`.
+- **Code Demo (`internal/handler/master/transmute_handler.go`):**
+  ```go
+  if isTransientError(leftErr) {
+      task.complete(leftErr)
+      return
+  }
+  if isTransientError(rightErr) {
+      task.complete(rightErr)
+      return
+  }
+  if leftErr != nil || rightErr != nil {
+      firstErr := leftErr
+      if firstErr == nil {
+          firstErr = rightErr
+      }
+      h.replyErr(ctx, task.Msg, task.Req.CorrelationID, firstErr.Error())
+      task.complete(firstErr)
+      return
+  }
+  h.reply(task.Msg, map[string]any{
+      "status":         "COMPLETED",
+      "correlation_id": task.Req.CorrelationID,
+      "table":          masterTable,
+  })
+  task.complete(nil)
+  ```
+
+### 6.3. Giải pháp cho `AF-03`: Bảo toàn `LastCursorJSON` khi chạy Incremental Sync & Giới hạn `cutoff` của `syncUpdatedShadowRowsBeforeCursor` theo `LastSuccessAt`
+- **Tại `internal/service/master/transmuter.go:552-557`:** Chỉ reset `item.LastCursorJSON = []byte("{}")` khi `runType == "full" && len(onlySourceIDs) == 0 && lastBatchErr == nil`. Với Incremental Sync (`runType != "full"`), giữ nguyên `last_gpay_id` vừa cập nhật!
+- **Tại `internal/service/master/transmuter.go:1475-1525` (`syncUpdatedShadowRowsBeforeCursor`):**
+  - Đọc `last_success_at` từ `t.runtimeRepo.GetByMasterID(ctx, masterRow.ID)` làm mốc `cutoff` (lùi biên an toàn 10 phút: `state.LastSuccessAt.Add(-10 * time.Minute)`), và chỉ khi chưa có `LastSuccessAt` mới fallback `24h` kèm điều kiện `_updated_at > _created_at` để không quét lại 54,754 dòng mới `INSERT`.
+- **Code Demo (`internal/service/master/transmuter.go`):**
+  ```go
+  // Chỉ reset checkpoint khi đồng bộ Full Sync hoàn tất thành công
+  if runType == "full" && len(onlySourceIDs) == 0 && lastBatchErr == nil && t.runtimeRepo != nil {
+      t.persistRuntimeState(ctx, masterRow.ID, func(item *mastermodel.SyncRuntimeState, now time.Time) {
+          item.LastCursorJSON = []byte(`{}`)
+      })
+  }
+  ```
+
+### 6.4. Giải pháp cho `AF-04`: Chia chunk & lấy động `shadow_connection_key` trong `publishTransmuteShadowForSegA` + Bổ sung publish Transmute cho `executeLegacyHeal`
+- **Tại `internal/handler/recon/recon_execute_heal_handler.go:339-381` (`publishTransmuteShadowForSegA`):**
+  - Lấy `shadowConnKey` từ `MasterBindingRef` (hoặc mặc định `"default_shadow"` thay vì `"default"`), khử trùng lặp `uniqueStrings(sourceIDs)` và chia lô theo `healChunkSize = 200` giống `publishTransmuteChunked`.
+- **Tại `internal/handler/recon/recon_check_heal_handler.go:302-360` (`executeLegacyHeal`):**
+  - Sau khi `healSvc.HealMissingIDs` hoặc `healSvc.HealWindow` hoàn tất với `healed > 0`, publish thông điệp `cdc.cmd.transmute-shadow` để đồng bộ sang Master.
+
+### 6.5. Giải pháp cho `AF-05`: Khử trùng lặp `sourceIDs` trong `resolveSourceIDsForSegmentB` & So sánh `SourceTsMs` trong `dedupByConflictKey`
+- **Tại `internal/handler/recon/recon_execute_heal_handler.go:733-753` (`resolveSourceIDsForSegmentB`):**
+  - Khử trùng lặp `return uniqueStrings(out)` ở cuối hàm `resolveSourceIDsForSegmentB` để không bắn trùng `sourceIDs` khi vừa khớp một phần trên Shadow vừa fallback lên Master.
+- **Tại `internal/handler/shadow/batch_buffer_utils.go:90-136` (`dedupByConflictKey`):**
+  - Khi hai bản ghi trong cùng `sc.Records` có cùng `PrimaryKeyValue`, so sánh `r.SourceTsMs >= records[prevIdx].SourceTsMs` trước khi cập nhật `lastIdx[pk]` và chỉ cho phép giá trị cột của bản ghi có `SourceTsMs` mới hơn (hoặc đứng sau khi `SourceTsMs` bằng nhau) ghi đè lên `mergedData[pk]`.

@@ -1,0 +1,1063 @@
+[
+  {
+    "id": "DG3-R1-QUEUE-FTS5",
+    "kind": "target",
+    "claim": "Store.Open in internal/queue/store.go opens SQLite with WAL journal mode and busy_timeout=5000, and IndexExternalDir in internal/memory/store.go skips Markdown files larger than 256KB while indexing external directories into FTS5.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/queue/store.go:84-99\nfunc Open(dbPath string) (*Store, error) {\n\tif err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil {\n\t\treturn nil, fmt.Errorf(\"queue: mkdir: %w\", err)\n\t}\n\tdb, err := sql.Open(\"sqlite\", dbPath+\"?_pragma=busy_timeout=5000&_pragma=journal_mode=WAL\")\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"queue: open db: %w\", err)\n\t}\n\tdb.SetMaxOpenConns(1)\n\ts := &Store{db: db}\n\tif err := s.initSchema(); err != nil {\n\t\t_ = db.Close()\n\t\treturn nil, err\n\t}\n\treturn s, nil\n}\nREF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/memory/store.go:317-345\nfunc (s *Store) IndexExternalDir(ctx context.Context, prefix, absDir string) (int, error) {\n\tinfo, err := os.Stat(absDir)\n\tif err != nil || !info.IsDir() {\n\t\treturn 0, err\n\t}\n\tindexedCount := 0\n\twalkErr := filepath.Walk(absDir, func(path string, fi os.FileInfo, err error) error {\n\t\tif err != nil || fi.IsDir() {\n\t\t\treturn nil\n\t\t}\n\t\tif !strings.HasSuffix(strings.ToLower(fi.Name()), \".md\") {\n\t\t\treturn nil\n\t\t}\n\t\t// Skip oversized raw monolithic files (>256KB per Rule #21).\n\t\tif fi.Size() > 256*1024 {\n\t\t\treturn nil\n\t\t}\n\t\trel, relErr := filepath.Rel(absDir, path)\n\t\tif relErr != nil {\n\t\t\treturn nil\n\t\t}\n\t\tkey := prefix + \":\" + filepath.ToSlash(rel)\n\t\tupdated, idxErr := s.IndexAbsoluteFile(ctx, key, path)\n\t\tif idxErr == nil && updated {\n\t\t\tindexedCount++\n\t\t}\n\t\treturn nil\n\t})\n\treturn indexedCount, walkErr",
+    "flow": "Queue Store.Open initializes SQLite WAL tables task_queue and autopilot_rounds; Memory Store.IndexExternalDir indexes /agent lessons and workspaces.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3687,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7431,
+                "INCORRECT": 0.2089,
+                "UNSUPPORTED": 0.048
+              },
+              "confidence": 0.3687,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 865,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Store.Open in internal/queue/store.go opens SQLite with WAL journal mode and busy_timeout=5000, and IndexExternalDir in internal/memory/store.go skips Markdown files larger than 256KB while indexing external directories into FTS5.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/queue/store.go:84-99\nfunc Open(dbPath string) (*Store, error) {\n\tif err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil {\n\t\treturn nil, fmt.Errorf(\"queue: mkdir: %w\", err)\n\t}\n\tdb, err := sql.Open(\"sqlite\", dbPath+\"?_pragma=busy_timeout=5000&_pragma=journal_mode=WAL\")\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"queue: open db: %w\", err)\n\t}\n\tdb.SetMaxOpenConns(1)\n\ts := &Store{db: db}\n\tif err := s.initSchema(); err != nil {\n\t\t_ = db.Close()\n\t\treturn nil, err\n\t}\n\treturn s, nil\n}\nREF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/memory/store.go:317-345\nfunc (s *Store) IndexExternalDir(ctx context.Context, prefix, absDir string) (int, error) {\n\tinfo, err := os.Stat(absDir)\n\tif err != nil || !info.IsDir() {\n\t\treturn 0, err\n\t}\n\tindexedCount := 0\n\twalkErr := filepath.Walk(absDir, func(path string, fi os.FileInfo, err error) error {\n\t\tif err != nil || fi.IsDir() {\n\t\t\treturn nil\n\t\t}\n\t\tif !strings.HasSuffix(strings.ToLower(fi.Name()), \".md\") {\n\t\t\treturn nil\n\t\t}\n\t\t// Skip oversized raw monolithic files (>256KB per Rule #21).\n\t\tif fi.Size() > 256*1024 {\n\t\t\treturn nil\n\t\t}\n\t\trel, relErr := filepath.Rel(absDir, path)\n\t\tif relErr != nil {\n\t\t\treturn nil\n\t\t}\n\t\tkey := prefix + \":\" + filepath.ToSlash(rel)\n\t\tupdated, idxErr := s.IndexAbsoluteFile(ctx, key, path)\n\t\tif idxErr == nil && updated {\n\t\t\tindexedCount++\n\t\t}\n\t\treturn nil\n\t})\n\treturn indexedCount, walkErr",
+          "flow": "Queue Store.Open initializes SQLite WAL tables task_queue and autopilot_rounds; Memory Store.IndexExternalDir indexes /agent lessons and workspaces."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4159,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7829,
+                "INCORRECT": 0.166,
+                "UNSUPPORTED": 0.0511
+              },
+              "confidence": 0.4159,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 870,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "Queue Store.Open initializes SQLite WAL tables task_queue and autopilot_rounds; Memory Store.IndexExternalDir indexes /agent lessons and workspaces.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/queue/store.go:84-99\nfunc Open(dbPath string) (*Store, error) {\n\tif err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil {\n\t\treturn nil, fmt.Errorf(\"queue: mkdir: %w\", err)\n\t}\n\tdb, err := sql.Open(\"sqlite\", dbPath+\"?_pragma=busy_timeout=5000&_pragma=journal_mode=WAL\")\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"queue: open db: %w\", err)\n\t}\n\tdb.SetMaxOpenConns(1)\n\ts := &Store{db: db}\n\tif err := s.initSchema(); err != nil {\n\t\t_ = db.Close()\n\t\treturn nil, err\n\t}\n\treturn s, nil\n}\nREF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/memory/store.go:317-345\nfunc (s *Store) IndexExternalDir(ctx context.Context, prefix, absDir string) (int, error) {\n\tinfo, err := os.Stat(absDir)\n\tif err != nil || !info.IsDir() {\n\t\treturn 0, err\n\t}\n\tindexedCount := 0\n\twalkErr := filepath.Walk(absDir, func(path string, fi os.FileInfo, err error) error {\n\t\tif err != nil || fi.IsDir() {\n\t\t\treturn nil\n\t\t}\n\t\tif !strings.HasSuffix(strings.ToLower(fi.Name()), \".md\") {\n\t\t\treturn nil\n\t\t}\n\t\t// Skip oversized raw monolithic files (>256KB per Rule #21).\n\t\tif fi.Size() > 256*1024 {\n\t\t\treturn nil\n\t\t}\n\t\trel, relErr := filepath.Rel(absDir, path)\n\t\tif relErr != nil {\n\t\t\treturn nil\n\t\t}\n\t\tkey := prefix + \":\" + filepath.ToSlash(rel)\n\t\tupdated, idxErr := s.IndexAbsoluteFile(ctx, key, path)\n\t\tif idxErr == nil && updated {\n\t\t\tindexedCount++\n\t\t}\n\t\treturn nil\n\t})\n\treturn indexedCount, walkErr",
+          "claim": "Store.Open in internal/queue/store.go opens SQLite with WAL journal mode and busy_timeout=5000, and IndexExternalDir in internal/memory/store.go skips Markdown files larger than 256KB while indexing external directories into FTS5."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.834,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9755,
+                "NO": 0.0245
+              },
+              "confidence": 0.834,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 773,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/queue/store.go:84-99\nfunc Open(dbPath string) (*Store, error) {\n\tif err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil {\n\t\treturn nil, fmt.Errorf(\"queue: mkdir: %w\", err)\n\t}\n\tdb, err := sql.Open(\"sqlite\", dbPath+\"?_pragma=busy_timeout=5000&_pragma=journal_mode=WAL\")\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"queue: open db: %w\", err)\n\t}\n\tdb.SetMaxOpenConns(1)\n\ts := &Store{db: db}\n\tif err := s.initSchema(); err != nil {\n\t\t_ = db.Close()\n\t\treturn nil, err\n\t}\n\treturn s, nil\n}\nREF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/memory/store.go:317-345\nfunc (s *Store) IndexExternalDir(ctx context.Context, prefix, absDir string) (int, error) {\n\tinfo, err := os.Stat(absDir)\n\tif err != nil || !info.IsDir() {\n\t\treturn 0, err\n\t}\n\tindexedCount := 0\n\twalkErr := filepath.Walk(absDir, func(path string, fi os.FileInfo, err error) error {\n\t\tif err != nil || fi.IsDir() {\n\t\t\treturn nil\n\t\t}\n\t\tif !strings.HasSuffix(strings.ToLower(fi.Name()), \".md\") {\n\t\t\treturn nil\n\t\t}\n\t\t// Skip oversized raw monolithic files (>256KB per Rule #21).\n\t\tif fi.Size() > 256*1024 {\n\t\t\treturn nil\n\t\t}\n\t\trel, relErr := filepath.Rel(absDir, path)\n\t\tif relErr != nil {\n\t\t\treturn nil\n\t\t}\n\t\tkey := prefix + \":\" + filepath.ToSlash(rel)\n\t\tupdated, idxErr := s.IndexAbsoluteFile(ctx, key, path)\n\t\tif idxErr == nil && updated {\n\t\t\tindexedCount++\n\t\t}\n\t\treturn nil\n\t})\n\treturn indexedCount, walkErr",
+          "claim": "Store.Open in internal/queue/store.go opens SQLite with WAL journal mode and busy_timeout=5000, and IndexExternalDir in internal/memory/store.go skips Markdown files larger than 256KB while indexing external directories into FTS5."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "DG3-R2-SCOUT-SORTER",
+    "kind": "target",
+    "claim": "scout.Worker.LLMTokensUsed always returns 0 and PollBacklogFile masks secrets before calling EnqueueRaw, while sorter.Worker.ComputeScore boosts priority score when memStore.Search returns FTS5 hits.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/scout/scout.go:62-93\n// LLMTokensUsed always returns 0 because Scout is a pure API/file script worker.\nfunc (w *Worker) LLMTokensUsed() int {\n\treturn 0\n}\n\n// PollBacklogFile reads an array of RawTask items from a JSON file, masks secrets,\n// and enqueues new items into the Task Queue (stage=RAW).\nfunc (w *Worker) PollBacklogFile(ctx context.Context, path string) (int, error) {\n\tdata, err := os.ReadFile(path) // #nosec G304 -- path configured by operator\n\tif err != nil {\n\t\treturn 0, fmt.Errorf(\"scout: read backlog file: %w\", err)\n\t}\n\tvar items []queue.RawTask\n\tif err := json.Unmarshal(data, &items); err != nil {\n\t\treturn 0, fmt.Errorf(\"scout: parse backlog json: %w\", err)\n\t}\n\tinsertedCount := 0\n\tfor _, item := range items {\n\t\titem.Title = MaskSecrets(strings.TrimSpace(item.Title))\n\t\titem.Description = MaskSecrets(strings.TrimSpace(item.Description))\n\t\tif item.Source == \"\" {\n\t\t\titem.Source = \"backlog\"\n\t\t}\n\t\t_, inserted, err := w.store.EnqueueRaw(ctx, item)\n\t\tif err != nil {\n\t\t\treturn insertedCount, err\n\t\t}\n\t\tif inserted {\n\t\t\tinsertedCount++\n\t\t}\n\t}\n\treturn insertedCount, nil\nREF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/sorter/sorter.go:76-97\n\t// Boost priority if FTS5 BM25 memory index finds past lessons/incidents matching this task.\n\tif w.memStore != nil {\n\t\thits, err := w.memStore.Search(ctx, t.Title+\" \"+t.Description, memory.SearchOptions{\n\t\t\tK:           3,\n\t\t\tHybridAlpha: 1.0,\n\t\t})\n\t\tif err == nil && len(hits) > 0 {\n\t\t\tscore += math.Min(10.0, float64(len(hits))*3.5)\n\t\t}\n\t}\n\n\tif score > 100.0 {\n\t\tscore = 100.0\n\t}\n\tif score < 0.0 {\n\t\tscore = 0.0\n\t}\n\tif score >= 70.0 {\n\t\tcomplexity = \"high\"\n\t}\n\treturn math.Round(score*100) / 100, complexity\n}",
+    "flow": "Scout polls backlog JSON with 0 LLM tokens and H3 secret masking -> Sorter scores tasks in [0, 100] with FTS5 BM25 hotspot boost.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4711,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8164,
+                "INCORRECT": 0.1369,
+                "UNSUPPORTED": 0.0468
+              },
+              "confidence": 0.4711,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 951,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "scout.Worker.LLMTokensUsed always returns 0 and PollBacklogFile masks secrets before calling EnqueueRaw, while sorter.Worker.ComputeScore boosts priority score when memStore.Search returns FTS5 hits.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/scout/scout.go:62-93\n// LLMTokensUsed always returns 0 because Scout is a pure API/file script worker.\nfunc (w *Worker) LLMTokensUsed() int {\n\treturn 0\n}\n\n// PollBacklogFile reads an array of RawTask items from a JSON file, masks secrets,\n// and enqueues new items into the Task Queue (stage=RAW).\nfunc (w *Worker) PollBacklogFile(ctx context.Context, path string) (int, error) {\n\tdata, err := os.ReadFile(path) // #nosec G304 -- path configured by operator\n\tif err != nil {\n\t\treturn 0, fmt.Errorf(\"scout: read backlog file: %w\", err)\n\t}\n\tvar items []queue.RawTask\n\tif err := json.Unmarshal(data, &items); err != nil {\n\t\treturn 0, fmt.Errorf(\"scout: parse backlog json: %w\", err)\n\t}\n\tinsertedCount := 0\n\tfor _, item := range items {\n\t\titem.Title = MaskSecrets(strings.TrimSpace(item.Title))\n\t\titem.Description = MaskSecrets(strings.TrimSpace(item.Description))\n\t\tif item.Source == \"\" {\n\t\t\titem.Source = \"backlog\"\n\t\t}\n\t\t_, inserted, err := w.store.EnqueueRaw(ctx, item)\n\t\tif err != nil {\n\t\t\treturn insertedCount, err\n\t\t}\n\t\tif inserted {\n\t\t\tinsertedCount++\n\t\t}\n\t}\n\treturn insertedCount, nil\nREF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/sorter/sorter.go:76-97\n\t// Boost priority if FTS5 BM25 memory index finds past lessons/incidents matching this task.\n\tif w.memStore != nil {\n\t\thits, err := w.memStore.Search(ctx, t.Title+\" \"+t.Description, memory.SearchOptions{\n\t\t\tK:           3,\n\t\t\tHybridAlpha: 1.0,\n\t\t})\n\t\tif err == nil && len(hits) > 0 {\n\t\t\tscore += math.Min(10.0, float64(len(hits))*3.5)\n\t\t}\n\t}\n\n\tif score > 100.0 {\n\t\tscore = 100.0\n\t}\n\tif score < 0.0 {\n\t\tscore = 0.0\n\t}\n\tif score >= 70.0 {\n\t\tcomplexity = \"high\"\n\t}\n\treturn math.Round(score*100) / 100, complexity\n}",
+          "flow": "Scout polls backlog JSON with 0 LLM tokens and H3 secret masking -> Sorter scores tasks in [0, 100] with FTS5 BM25 hotspot boost."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5174,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8234,
+                "INCORRECT": 0.1558,
+                "UNSUPPORTED": 0.0208
+              },
+              "confidence": 0.5174,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 956,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "Scout polls backlog JSON with 0 LLM tokens and H3 secret masking -> Sorter scores tasks in [0, 100] with FTS5 BM25 hotspot boost.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/scout/scout.go:62-93\n// LLMTokensUsed always returns 0 because Scout is a pure API/file script worker.\nfunc (w *Worker) LLMTokensUsed() int {\n\treturn 0\n}\n\n// PollBacklogFile reads an array of RawTask items from a JSON file, masks secrets,\n// and enqueues new items into the Task Queue (stage=RAW).\nfunc (w *Worker) PollBacklogFile(ctx context.Context, path string) (int, error) {\n\tdata, err := os.ReadFile(path) // #nosec G304 -- path configured by operator\n\tif err != nil {\n\t\treturn 0, fmt.Errorf(\"scout: read backlog file: %w\", err)\n\t}\n\tvar items []queue.RawTask\n\tif err := json.Unmarshal(data, &items); err != nil {\n\t\treturn 0, fmt.Errorf(\"scout: parse backlog json: %w\", err)\n\t}\n\tinsertedCount := 0\n\tfor _, item := range items {\n\t\titem.Title = MaskSecrets(strings.TrimSpace(item.Title))\n\t\titem.Description = MaskSecrets(strings.TrimSpace(item.Description))\n\t\tif item.Source == \"\" {\n\t\t\titem.Source = \"backlog\"\n\t\t}\n\t\t_, inserted, err := w.store.EnqueueRaw(ctx, item)\n\t\tif err != nil {\n\t\t\treturn insertedCount, err\n\t\t}\n\t\tif inserted {\n\t\t\tinsertedCount++\n\t\t}\n\t}\n\treturn insertedCount, nil\nREF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/sorter/sorter.go:76-97\n\t// Boost priority if FTS5 BM25 memory index finds past lessons/incidents matching this task.\n\tif w.memStore != nil {\n\t\thits, err := w.memStore.Search(ctx, t.Title+\" \"+t.Description, memory.SearchOptions{\n\t\t\tK:           3,\n\t\t\tHybridAlpha: 1.0,\n\t\t})\n\t\tif err == nil && len(hits) > 0 {\n\t\t\tscore += math.Min(10.0, float64(len(hits))*3.5)\n\t\t}\n\t}\n\n\tif score > 100.0 {\n\t\tscore = 100.0\n\t}\n\tif score < 0.0 {\n\t\tscore = 0.0\n\t}\n\tif score >= 70.0 {\n\t\tcomplexity = \"high\"\n\t}\n\treturn math.Round(score*100) / 100, complexity\n}",
+          "claim": "scout.Worker.LLMTokensUsed always returns 0 and PollBacklogFile masks secrets before calling EnqueueRaw, while sorter.Worker.ComputeScore boosts priority score when memStore.Search returns FTS5 hits."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6468,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9334,
+                "NO": 0.0666
+              },
+              "confidence": 0.6468,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 850,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/scout/scout.go:62-93\n// LLMTokensUsed always returns 0 because Scout is a pure API/file script worker.\nfunc (w *Worker) LLMTokensUsed() int {\n\treturn 0\n}\n\n// PollBacklogFile reads an array of RawTask items from a JSON file, masks secrets,\n// and enqueues new items into the Task Queue (stage=RAW).\nfunc (w *Worker) PollBacklogFile(ctx context.Context, path string) (int, error) {\n\tdata, err := os.ReadFile(path) // #nosec G304 -- path configured by operator\n\tif err != nil {\n\t\treturn 0, fmt.Errorf(\"scout: read backlog file: %w\", err)\n\t}\n\tvar items []queue.RawTask\n\tif err := json.Unmarshal(data, &items); err != nil {\n\t\treturn 0, fmt.Errorf(\"scout: parse backlog json: %w\", err)\n\t}\n\tinsertedCount := 0\n\tfor _, item := range items {\n\t\titem.Title = MaskSecrets(strings.TrimSpace(item.Title))\n\t\titem.Description = MaskSecrets(strings.TrimSpace(item.Description))\n\t\tif item.Source == \"\" {\n\t\t\titem.Source = \"backlog\"\n\t\t}\n\t\t_, inserted, err := w.store.EnqueueRaw(ctx, item)\n\t\tif err != nil {\n\t\t\treturn insertedCount, err\n\t\t}\n\t\tif inserted {\n\t\t\tinsertedCount++\n\t\t}\n\t}\n\treturn insertedCount, nil\nREF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/sorter/sorter.go:76-97\n\t// Boost priority if FTS5 BM25 memory index finds past lessons/incidents matching this task.\n\tif w.memStore != nil {\n\t\thits, err := w.memStore.Search(ctx, t.Title+\" \"+t.Description, memory.SearchOptions{\n\t\t\tK:           3,\n\t\t\tHybridAlpha: 1.0,\n\t\t})\n\t\tif err == nil && len(hits) > 0 {\n\t\t\tscore += math.Min(10.0, float64(len(hits))*3.5)\n\t\t}\n\t}\n\n\tif score > 100.0 {\n\t\tscore = 100.0\n\t}\n\tif score < 0.0 {\n\t\tscore = 0.0\n\t}\n\tif score >= 70.0 {\n\t\tcomplexity = \"high\"\n\t}\n\treturn math.Round(score*100) / 100, complexity\n}",
+          "claim": "scout.Worker.LLMTokensUsed always returns 0 and PollBacklogFile masks secrets before calling EnqueueRaw, while sorter.Worker.ComputeScore boosts priority score when memStore.Search returns FTS5 hits."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "DG3-R3-R4-WAVE-MODEL",
+    "kind": "target",
+    "claim": "NewPMAgent defaults cfg.Model to opus when empty, and TaskRunner.implementBeadWithTask resolves the coder model via ResolveModelForComplexity and isolates multi-task waves using git worktrees.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agent/pm.go:35-46\nfunc NewPMAgent(b *bus.Bus, r runner.LLMRunner, ws artifacts.Workspace, skills []string, model string) *PMAgent {\n\tif strings.TrimSpace(model) == \"\" {\n\t\tmodel = \"opus\"\n\t}\n\treturn &PMAgent{\n\t\tBaseAgent: NewBase(bus.RolePM, b),\n\t\trunner:    r,\n\t\tws:        ws,\n\t\tskills:    skills,\n\t\tmodel:     model,\n\t}\n}\nREF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/orchestrator/task_runner.go:1152-1196\n// concurrently inside a multi-task Wave.\nfunc (tr *TaskRunner) implementBeadWithTask(ctx context.Context, ctxFragment string, st agent.SubTask, useWorktree bool) ([]string, error) {\n\ttr.setState(PipelineCoding)\n\ttr.statsMu.Lock()\n\tif tr.codingStarted.IsZero() {\n\t\ttr.codingStarted = time.Now()\n\t}\n\ttr.statsMu.Unlock()\n\n\tcoderCfg := tr.cfg.Agents[string(bus.RoleCoder)]\n\troutedModel := coderCfg.ResolveModelForComplexity(st.Complexity)\n\tif routedModel != \"\" && routedModel != coderCfg.Model {\n\t\ttr.event(fmt.Sprintf(\"dynamic model routing [%s]: complexity=%s → model=%s\", st.Key, st.Complexity, routedModel))\n\t}\n\n\tworktreeDir := \"\"\n\tvar gc *gitclient.GitClient\n\tif useWorktree {\n\t\tgc = gitclient.New(tr.root)\n\t\twtDir := filepath.Join(os.TempDir(), fmt.Sprintf(\"orch-wt-%s-%s-%d\", tr.runID, st.Key, time.Now().UnixNano()))\n\t\tif err := gc.WorktreeAdd(wtDir, \"\"); err == nil {\n\t\t\tworktreeDir = wtDir\n\t\t\tdefer func() { _ = gc.WorktreeRemove(wtDir) }()\n\t\t}\n\t}\n\n\tresp, err := tr.runAgent(ctx, bus.RoleCoder, agent.CoderPayload{\n\t\tPlan:           st.Title + \"\\n\\n\" + st.Description,\n\t\tProjectContext: ctxFragment,\n\t\tStageName:      st.Title,\n\t\tStageIndex:     st.Wave + 1,\n\t\tTotalStages:    1,\n\t\tModelOverride:  routedModel,\n\t\tWorktreeRoot:   worktreeDir,\n\t})\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"coder: %w\", err)\n\t}\n\tfiles := extractCoderResult(resp).Files\n\tif worktreeDir != \"\" && gc != nil && len(files) > 0 {\n\t\ttr.statsMu.Lock()\n\t\tsyncErr := gc.SyncWorktreeFiles(worktreeDir, files)\n\t\ttr.statsMu.Unlock()\n\t\tif syncErr != nil {\n\t\t\treturn nil, fmt.Errorf(\"sync worktree %s: %w\", st.Key, syncErr)",
+    "flow": "Planner defaults to opus and computes topological waves -> TaskRunner executes each wave in parallel across isolated git worktrees with dynamic model routing.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3422,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.744,
+                "INCORRECT": 0.1822,
+                "UNSUPPORTED": 0.0738
+              },
+              "confidence": 0.3422,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "NewPMAgent defaults cfg.Model to opus when empty, and TaskRunner.implementBeadWithTask resolves the coder model via ResolveModelForComplexity and isolates multi-task waves using git worktrees.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agent/pm.go:35-46\nfunc NewPMAgent(b *bus.Bus, r runner.LLMRunner, ws artifacts.Workspace, skills []string, model string) *PMAgent {\n\tif strings.TrimSpace(model) == \"\" {\n\t\tmodel = \"opus\"\n\t}\n\treturn &PMAgent{\n\t\tBaseAgent: NewBase(bus.RolePM, b),\n\t\trunner:    r,\n\t\tws:        ws,\n\t\tskills:    skills,\n\t\tmodel:     model,\n\t}\n}\nREF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/orchestrator/task_runner.go:1152-1196\n// concurrently inside a multi-task Wave.\nfunc (tr *TaskRunner) implementBeadWithTask(ctx context.Context, ctxFragment string, st agent.SubTask, useWorktree bool) ([]string, error) {\n\ttr.setState(PipelineCoding)\n\ttr.statsMu.Lock()\n\tif tr.codingStarted.IsZero() {\n\t\ttr.codingStarted = time.Now()\n\t}\n\ttr.statsMu.Unlock()\n\n\tcoderCfg := tr.cfg.Agents[string(bus.RoleCoder)]\n\troutedModel := coderCfg.ResolveModelForComplexity(st.Complexity)\n\tif routedModel != \"\" && routedModel != coderCfg.Model {\n\t\ttr.event(fmt.Sprintf(\"dynamic model routing [%s]: complexity=%s → model=%s\", st.Key, st.Complexity, routedModel))\n\t}\n\n\tworktreeDir := \"\"\n\tvar gc *gitclient.GitClient\n\tif useWorktree {\n\t\tgc = gitclient.New(tr.root)\n\t\twtDir := filepath.Join(os.TempDir(), fmt.Sprintf(\"orch-wt-%s-%s-%d\", tr.runID, st.Key, time.Now().UnixNano()))\n\t\tif err := gc.WorktreeAdd(wtDir, \"\"); err == nil {\n\t\t\tworktreeDir = wtDir\n\t\t\tdefer func() { _ = gc.WorktreeRemove(wtDir) }()\n\t\t}\n\t}\n\n\tresp, err := tr.runAgent(ctx, bus.RoleCoder, agent.CoderPayload{\n\t\tPlan:           st.Title + \"\\n\\n\" + st.Description,\n\t\tProjectContext: ctxFragment,\n\t\tStageName:      st.Title,\n\t\tStageIndex:     st.Wave + 1,\n\t\tTotalStages:    1,\n\t\tModelOverride:  routedModel,\n\t\tWorktreeRoot:   worktreeDir,\n\t})\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"coder: %w\", err)\n\t}\n\tfiles := extractCoderResult(resp).Files\n\tif worktreeDir != \"\" && gc != nil && len(files) > 0 {\n\t\ttr.statsMu.Lock()\n\t\tsyncErr := gc.SyncWorktreeFiles(worktreeDir, files)\n\t\ttr.statsMu.Unlock()\n\t\tif syncErr != nil {\n\t\t\treturn nil, fmt.Errorf(\"sync worktree %s: %w\", st.Key, syncErr)",
+          "flow": "Planner defaults to opus and computes topological waves -> TaskRunner executes each wave in parallel across isolated git worktrees with dynamic model routing."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1162,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.489,
+                "INCORRECT": 0.3914,
+                "UNSUPPORTED": 0.1196
+              },
+              "confidence": 0.1162,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "Planner defaults to opus and computes topological waves -> TaskRunner executes each wave in parallel across isolated git worktrees with dynamic model routing.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agent/pm.go:35-46\nfunc NewPMAgent(b *bus.Bus, r runner.LLMRunner, ws artifacts.Workspace, skills []string, model string) *PMAgent {\n\tif strings.TrimSpace(model) == \"\" {\n\t\tmodel = \"opus\"\n\t}\n\treturn &PMAgent{\n\t\tBaseAgent: NewBase(bus.RolePM, b),\n\t\trunner:    r,\n\t\tws:        ws,\n\t\tskills:    skills,\n\t\tmodel:     model,\n\t}\n}\nREF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/orchestrator/task_runner.go:1152-1196\n// concurrently inside a multi-task Wave.\nfunc (tr *TaskRunner) implementBeadWithTask(ctx context.Context, ctxFragment string, st agent.SubTask, useWorktree bool) ([]string, error) {\n\ttr.setState(PipelineCoding)\n\ttr.statsMu.Lock()\n\tif tr.codingStarted.IsZero() {\n\t\ttr.codingStarted = time.Now()\n\t}\n\ttr.statsMu.Unlock()\n\n\tcoderCfg := tr.cfg.Agents[string(bus.RoleCoder)]\n\troutedModel := coderCfg.ResolveModelForComplexity(st.Complexity)\n\tif routedModel != \"\" && routedModel != coderCfg.Model {\n\t\ttr.event(fmt.Sprintf(\"dynamic model routing [%s]: complexity=%s → model=%s\", st.Key, st.Complexity, routedModel))\n\t}\n\n\tworktreeDir := \"\"\n\tvar gc *gitclient.GitClient\n\tif useWorktree {\n\t\tgc = gitclient.New(tr.root)\n\t\twtDir := filepath.Join(os.TempDir(), fmt.Sprintf(\"orch-wt-%s-%s-%d\", tr.runID, st.Key, time.Now().UnixNano()))\n\t\tif err := gc.WorktreeAdd(wtDir, \"\"); err == nil {\n\t\t\tworktreeDir = wtDir\n\t\t\tdefer func() { _ = gc.WorktreeRemove(wtDir) }()\n\t\t}\n\t}\n\n\tresp, err := tr.runAgent(ctx, bus.RoleCoder, agent.CoderPayload{\n\t\tPlan:           st.Title + \"\\n\\n\" + st.Description,\n\t\tProjectContext: ctxFragment,\n\t\tStageName:      st.Title,\n\t\tStageIndex:     st.Wave + 1,\n\t\tTotalStages:    1,\n\t\tModelOverride:  routedModel,\n\t\tWorktreeRoot:   worktreeDir,\n\t})\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"coder: %w\", err)\n\t}\n\tfiles := extractCoderResult(resp).Files\n\tif worktreeDir != \"\" && gc != nil && len(files) > 0 {\n\t\ttr.statsMu.Lock()\n\t\tsyncErr := gc.SyncWorktreeFiles(worktreeDir, files)\n\t\ttr.statsMu.Unlock()\n\t\tif syncErr != nil {\n\t\t\treturn nil, fmt.Errorf(\"sync worktree %s: %w\", st.Key, syncErr)",
+          "claim": "NewPMAgent defaults cfg.Model to opus when empty, and TaskRunner.implementBeadWithTask resolves the coder model via ResolveModelForComplexity and isolates multi-task waves using git worktrees."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4964,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8888,
+                "NO": 0.1112
+              },
+              "confidence": 0.4964,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 994,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agent/pm.go:35-46\nfunc NewPMAgent(b *bus.Bus, r runner.LLMRunner, ws artifacts.Workspace, skills []string, model string) *PMAgent {\n\tif strings.TrimSpace(model) == \"\" {\n\t\tmodel = \"opus\"\n\t}\n\treturn &PMAgent{\n\t\tBaseAgent: NewBase(bus.RolePM, b),\n\t\trunner:    r,\n\t\tws:        ws,\n\t\tskills:    skills,\n\t\tmodel:     model,\n\t}\n}\nREF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/orchestrator/task_runner.go:1152-1196\n// concurrently inside a multi-task Wave.\nfunc (tr *TaskRunner) implementBeadWithTask(ctx context.Context, ctxFragment string, st agent.SubTask, useWorktree bool) ([]string, error) {\n\ttr.setState(PipelineCoding)\n\ttr.statsMu.Lock()\n\tif tr.codingStarted.IsZero() {\n\t\ttr.codingStarted = time.Now()\n\t}\n\ttr.statsMu.Unlock()\n\n\tcoderCfg := tr.cfg.Agents[string(bus.RoleCoder)]\n\troutedModel := coderCfg.ResolveModelForComplexity(st.Complexity)\n\tif routedModel != \"\" && routedModel != coderCfg.Model {\n\t\ttr.event(fmt.Sprintf(\"dynamic model routing [%s]: complexity=%s → model=%s\", st.Key, st.Complexity, routedModel))\n\t}\n\n\tworktreeDir := \"\"\n\tvar gc *gitclient.GitClient\n\tif useWorktree {\n\t\tgc = gitclient.New(tr.root)\n\t\twtDir := filepath.Join(os.TempDir(), fmt.Sprintf(\"orch-wt-%s-%s-%d\", tr.runID, st.Key, time.Now().UnixNano()))\n\t\tif err := gc.WorktreeAdd(wtDir, \"\"); err == nil {\n\t\t\tworktreeDir = wtDir\n\t\t\tdefer func() { _ = gc.WorktreeRemove(wtDir) }()\n\t\t}\n\t}\n\n\tresp, err := tr.runAgent(ctx, bus.RoleCoder, agent.CoderPayload{\n\t\tPlan:           st.Title + \"\\n\\n\" + st.Description,\n\t\tProjectContext: ctxFragment,\n\t\tStageName:      st.Title,\n\t\tStageIndex:     st.Wave + 1,\n\t\tTotalStages:    1,\n\t\tModelOverride:  routedModel,\n\t\tWorktreeRoot:   worktreeDir,\n\t})\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"coder: %w\", err)\n\t}\n\tfiles := extractCoderResult(resp).Files\n\tif worktreeDir != \"\" && gc != nil && len(files) > 0 {\n\t\ttr.statsMu.Lock()\n\t\tsyncErr := gc.SyncWorktreeFiles(worktreeDir, files)\n\t\ttr.statsMu.Unlock()\n\t\tif syncErr != nil {\n\t\t\treturn nil, fmt.Errorf(\"sync worktree %s: %w\", st.Key, syncErr)",
+          "claim": "NewPMAgent defaults cfg.Model to opus when empty, and TaskRunner.implementBeadWithTask resolves the coder model via ResolveModelForComplexity and isolates multi-task waves using git worktrees."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "DG3-R5-AGENTGATE",
+    "kind": "target",
+    "claim": "TaskRunner.implementAndReview calls tr.gatekeeper.ScanProductionFiles after qualityReview and appends any /agent Gate Violations to secFeedback.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/orchestrator/task_runner.go:471-488\n\t\tfiles := collectProjectFilesFromRoot(nil, tr.root)\n\n\t\tqaFeedback, uxFeedback, secFeedback := tr.qualityReview(ctx, ctxFragment, files, opts.skipUX)\n\t\tif tr.gatekeeper != nil {\n\t\t\tif violations, _ := tr.gatekeeper.ScanProductionFiles(tr.root, files); len(violations) > 0 {\n\t\t\t\tgateNote := \"/agent Gate Violations:\\n- \" + strings.Join(violations, \"\\n- \")\n\t\t\t\ttr.event(fmt.Sprintf(\"/agent gate caught %d violation(s)\", len(violations)))\n\t\t\t\tif secFeedback != \"\" {\n\t\t\t\t\tsecFeedback += \"\\n\\n\" + gateNote\n\t\t\t\t} else {\n\t\t\t\t\tsecFeedback = gateNote\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\n\t\tif qaFeedback == \"\" && uxFeedback == \"\" && secFeedback == \"\" {\n\t\t\ttr.event(\"quality review passed — all checks clean\")\n\t\t\treturn nil",
+    "flow": "Phase 4 qualityReview runs QA/UX/Security and Gatekeeper.ScanProductionFiles to block production mock closures (H4b) and raw secrets (H3).",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4612,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.813,
+                "INCORRECT": 0.1356,
+                "UNSUPPORTED": 0.0514
+              },
+              "confidence": 0.4612,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 542,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "TaskRunner.implementAndReview calls tr.gatekeeper.ScanProductionFiles after qualityReview and appends any /agent Gate Violations to secFeedback.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/orchestrator/task_runner.go:471-488\n\t\tfiles := collectProjectFilesFromRoot(nil, tr.root)\n\n\t\tqaFeedback, uxFeedback, secFeedback := tr.qualityReview(ctx, ctxFragment, files, opts.skipUX)\n\t\tif tr.gatekeeper != nil {\n\t\t\tif violations, _ := tr.gatekeeper.ScanProductionFiles(tr.root, files); len(violations) > 0 {\n\t\t\t\tgateNote := \"/agent Gate Violations:\\n- \" + strings.Join(violations, \"\\n- \")\n\t\t\t\ttr.event(fmt.Sprintf(\"/agent gate caught %d violation(s)\", len(violations)))\n\t\t\t\tif secFeedback != \"\" {\n\t\t\t\t\tsecFeedback += \"\\n\\n\" + gateNote\n\t\t\t\t} else {\n\t\t\t\t\tsecFeedback = gateNote\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\n\t\tif qaFeedback == \"\" && uxFeedback == \"\" && secFeedback == \"\" {\n\t\t\ttr.event(\"quality review passed — all checks clean\")\n\t\t\treturn nil",
+          "flow": "Phase 4 qualityReview runs QA/UX/Security and Gatekeeper.ScanProductionFiles to block production mock closures (H4b) and raw secrets (H3)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.4498,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.0607,
+                "INCORRECT": 0.8104,
+                "UNSUPPORTED": 0.1289
+              },
+              "confidence": 0.4498,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 548,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "Phase 4 qualityReview runs QA/UX/Security and Gatekeeper.ScanProductionFiles to block production mock closures (H4b) and raw secrets (H3).",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/orchestrator/task_runner.go:471-488\n\t\tfiles := collectProjectFilesFromRoot(nil, tr.root)\n\n\t\tqaFeedback, uxFeedback, secFeedback := tr.qualityReview(ctx, ctxFragment, files, opts.skipUX)\n\t\tif tr.gatekeeper != nil {\n\t\t\tif violations, _ := tr.gatekeeper.ScanProductionFiles(tr.root, files); len(violations) > 0 {\n\t\t\t\tgateNote := \"/agent Gate Violations:\\n- \" + strings.Join(violations, \"\\n- \")\n\t\t\t\ttr.event(fmt.Sprintf(\"/agent gate caught %d violation(s)\", len(violations)))\n\t\t\t\tif secFeedback != \"\" {\n\t\t\t\t\tsecFeedback += \"\\n\\n\" + gateNote\n\t\t\t\t} else {\n\t\t\t\t\tsecFeedback = gateNote\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\n\t\tif qaFeedback == \"\" && uxFeedback == \"\" && secFeedback == \"\" {\n\t\t\ttr.event(\"quality review passed — all checks clean\")\n\t\t\treturn nil",
+          "claim": "TaskRunner.implementAndReview calls tr.gatekeeper.ScanProductionFiles after qualityReview and appends any /agent Gate Violations to secFeedback."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.0024,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.4709,
+                "NO": 0.5291
+              },
+              "confidence": 0.0024,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 445,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/orchestrator/task_runner.go:471-488\n\t\tfiles := collectProjectFilesFromRoot(nil, tr.root)\n\n\t\tqaFeedback, uxFeedback, secFeedback := tr.qualityReview(ctx, ctxFragment, files, opts.skipUX)\n\t\tif tr.gatekeeper != nil {\n\t\t\tif violations, _ := tr.gatekeeper.ScanProductionFiles(tr.root, files); len(violations) > 0 {\n\t\t\t\tgateNote := \"/agent Gate Violations:\\n- \" + strings.Join(violations, \"\\n- \")\n\t\t\t\ttr.event(fmt.Sprintf(\"/agent gate caught %d violation(s)\", len(violations)))\n\t\t\t\tif secFeedback != \"\" {\n\t\t\t\t\tsecFeedback += \"\\n\\n\" + gateNote\n\t\t\t\t} else {\n\t\t\t\t\tsecFeedback = gateNote\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\n\t\tif qaFeedback == \"\" && uxFeedback == \"\" && secFeedback == \"\" {\n\t\t\ttr.event(\"quality review passed — all checks clean\")\n\t\t\treturn nil",
+          "claim": "TaskRunner.implementAndReview calls tr.gatekeeper.ScanProductionFiles after qualityReview and appends any /agent Gate Violations to secFeedback."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "DG3-CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "CalculateCostUSD in internal/runner/budget.go returns 0 when inputTokens <= 0 and outputTokens <= 0, and computes USD cost using per-million token rates.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/budget.go:38-67\n\n// CalculateCostUSD computes the estimated USD cost for a completion turn given\n// the model identifier and token counts. Local models cost $0.00.\nfunc CalculateCostUSD(model string, inputTokens, outputTokens int) float64 {\n\tif inputTokens <= 0 && outputTokens <= 0 {\n\t\treturn 0\n\t}\n\tm := strings.ToLower(strings.TrimSpace(model))\n\tfor _, localPrefix := range []string{\"ollama\", \"mlx\", \"lmstudio\", \"llama\", \"qwen\", \"deepseek-r1:\"} {\n\t\tif strings.Contains(m, localPrefix) {\n\t\t\treturn 0\n\t\t}\n\t}\n\n\t// Default standard tier pricing ($3 / 1M input, $15 / 1M output — Claude Sonnet).\n\tinRatePerM := 3.0\n\toutRatePerM := 15.0\n\n\tswitch {\n\tcase strings.Contains(m, \"opus\"):\n\t\tinRatePerM = 15.0\n\t\toutRatePerM = 75.0\n\tcase strings.Contains(m, \"sonnet\"):\n\t\tinRatePerM = 3.0\n\t\toutRatePerM = 15.0\n\tcase strings.Contains(m, \"haiku\"):\n\t\tinRatePerM = 0.80\n\t\toutRatePerM = 4.0\n\t}\n",
+    "flow": "CalculateCostUSD computes USD cost from input and output token counts.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2594,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6735,
+                "INCORRECT": 0.2463,
+                "UNSUPPORTED": 0.0802
+              },
+              "confidence": 0.2594,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 583,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "CalculateCostUSD in internal/runner/budget.go returns 0 when inputTokens <= 0 and outputTokens <= 0, and computes USD cost using per-million token rates.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/budget.go:38-67\n\n// CalculateCostUSD computes the estimated USD cost for a completion turn given\n// the model identifier and token counts. Local models cost $0.00.\nfunc CalculateCostUSD(model string, inputTokens, outputTokens int) float64 {\n\tif inputTokens <= 0 && outputTokens <= 0 {\n\t\treturn 0\n\t}\n\tm := strings.ToLower(strings.TrimSpace(model))\n\tfor _, localPrefix := range []string{\"ollama\", \"mlx\", \"lmstudio\", \"llama\", \"qwen\", \"deepseek-r1:\"} {\n\t\tif strings.Contains(m, localPrefix) {\n\t\t\treturn 0\n\t\t}\n\t}\n\n\t// Default standard tier pricing ($3 / 1M input, $15 / 1M output — Claude Sonnet).\n\tinRatePerM := 3.0\n\toutRatePerM := 15.0\n\n\tswitch {\n\tcase strings.Contains(m, \"opus\"):\n\t\tinRatePerM = 15.0\n\t\toutRatePerM = 75.0\n\tcase strings.Contains(m, \"sonnet\"):\n\t\tinRatePerM = 3.0\n\t\toutRatePerM = 15.0\n\tcase strings.Contains(m, \"haiku\"):\n\t\tinRatePerM = 0.80\n\t\toutRatePerM = 4.0\n\t}\n",
+          "flow": "CalculateCostUSD computes USD cost from input and output token counts."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.3568,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.0851,
+                "INCORRECT": 0.7603,
+                "UNSUPPORTED": 0.1545
+              },
+              "confidence": 0.3568,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 588,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "CalculateCostUSD computes USD cost from input and output token counts.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/budget.go:38-67\n\n// CalculateCostUSD computes the estimated USD cost for a completion turn given\n// the model identifier and token counts. Local models cost $0.00.\nfunc CalculateCostUSD(model string, inputTokens, outputTokens int) float64 {\n\tif inputTokens <= 0 && outputTokens <= 0 {\n\t\treturn 0\n\t}\n\tm := strings.ToLower(strings.TrimSpace(model))\n\tfor _, localPrefix := range []string{\"ollama\", \"mlx\", \"lmstudio\", \"llama\", \"qwen\", \"deepseek-r1:\"} {\n\t\tif strings.Contains(m, localPrefix) {\n\t\t\treturn 0\n\t\t}\n\t}\n\n\t// Default standard tier pricing ($3 / 1M input, $15 / 1M output — Claude Sonnet).\n\tinRatePerM := 3.0\n\toutRatePerM := 15.0\n\n\tswitch {\n\tcase strings.Contains(m, \"opus\"):\n\t\tinRatePerM = 15.0\n\t\toutRatePerM = 75.0\n\tcase strings.Contains(m, \"sonnet\"):\n\t\tinRatePerM = 3.0\n\t\toutRatePerM = 15.0\n\tcase strings.Contains(m, \"haiku\"):\n\t\tinRatePerM = 0.80\n\t\toutRatePerM = 4.0\n\t}\n",
+          "claim": "CalculateCostUSD in internal/runner/budget.go returns 0 when inputTokens <= 0 and outputTokens <= 0, and computes USD cost using per-million token rates."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4985,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8895,
+                "NO": 0.1105
+              },
+              "confidence": 0.4985,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 508,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/budget.go:38-67\n\n// CalculateCostUSD computes the estimated USD cost for a completion turn given\n// the model identifier and token counts. Local models cost $0.00.\nfunc CalculateCostUSD(model string, inputTokens, outputTokens int) float64 {\n\tif inputTokens <= 0 && outputTokens <= 0 {\n\t\treturn 0\n\t}\n\tm := strings.ToLower(strings.TrimSpace(model))\n\tfor _, localPrefix := range []string{\"ollama\", \"mlx\", \"lmstudio\", \"llama\", \"qwen\", \"deepseek-r1:\"} {\n\t\tif strings.Contains(m, localPrefix) {\n\t\t\treturn 0\n\t\t}\n\t}\n\n\t// Default standard tier pricing ($3 / 1M input, $15 / 1M output — Claude Sonnet).\n\tinRatePerM := 3.0\n\toutRatePerM := 15.0\n\n\tswitch {\n\tcase strings.Contains(m, \"opus\"):\n\t\tinRatePerM = 15.0\n\t\toutRatePerM = 75.0\n\tcase strings.Contains(m, \"sonnet\"):\n\t\tinRatePerM = 3.0\n\t\toutRatePerM = 15.0\n\tcase strings.Contains(m, \"haiku\"):\n\t\tinRatePerM = 0.80\n\t\toutRatePerM = 4.0\n\t}\n",
+          "claim": "CalculateCostUSD in internal/runner/budget.go returns 0 when inputTokens <= 0 and outputTokens <= 0, and computes USD cost using per-million token rates."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "DG3-CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "scout.Worker.LLMTokensUsed always returns 999999 because Scout calls an LLM on every ticket.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/scout/scout.go:62-66\n// LLMTokensUsed always returns 0 because Scout is a pure API/file script worker.\nfunc (w *Worker) LLMTokensUsed() int {\n\treturn 0\n}\n",
+    "flow": "LLMTokensUsed returns 0.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3539,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6257,
+                "INCORRECT": 0.3636,
+                "UNSUPPORTED": 0.0107
+              },
+              "confidence": 0.3539,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 236,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "scout.Worker.LLMTokensUsed always returns 999999 because Scout calls an LLM on every ticket.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/scout/scout.go:62-66\n// LLMTokensUsed always returns 0 because Scout is a pure API/file script worker.\nfunc (w *Worker) LLMTokensUsed() int {\n\treturn 0\n}\n",
+          "flow": "LLMTokensUsed returns 0."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.4301,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.0172,
+                "INCORRECT": 0.7491,
+                "UNSUPPORTED": 0.2337
+              },
+              "confidence": 0.4301,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 241,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "LLMTokensUsed returns 0.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/scout/scout.go:62-66\n// LLMTokensUsed always returns 0 because Scout is a pure API/file script worker.\nfunc (w *Worker) LLMTokensUsed() int {\n\treturn 0\n}\n",
+          "claim": "scout.Worker.LLMTokensUsed always returns 999999 because Scout calls an LLM on every ticket."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.9739,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0026,
+                "NO": 0.9974
+              },
+              "confidence": 0.9739,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 166,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/scout/scout.go:62-66\n// LLMTokensUsed always returns 0 because Scout is a pure API/file script worker.\nfunc (w *Worker) LLMTokensUsed() int {\n\treturn 0\n}\n",
+          "claim": "scout.Worker.LLMTokensUsed always returns 999999 because Scout calls an LLM on every ticket."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "DG3-CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "AgentConfig.ResolveModelForComplexity always returns haiku for high complexity tasks and ignores HighComplexityModel.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/config/config.go:154-165\nfunc (ac AgentConfig) ResolveModelForComplexity(complexity string) string {\n\tswitch complexity {\n\tcase \"high\", \"HIGH\":\n\t\tif ac.HighComplexityModel != \"\" {\n\t\t\treturn ac.HighComplexityModel\n\t\t}\n\t\tif ac.Runner == \"\" || ac.Runner == \"claude\" || ac.Model == \"\" || ac.Model == \"opus\" || ac.Model == \"sonnet\" {\n\t\t\treturn \"opus\"\n\t\t}\n\t\treturn ac.Model\n\tcase \"medium\", \"MEDIUM\", \"low\", \"LOW\":\n\t\tif ac.StandardModel != \"\" {",
+    "flow": "ResolveModelForComplexity returns HighComplexityModel or opus for high complexity.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.416,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7212,
+                "INCORRECT": 0.2667,
+                "UNSUPPORTED": 0.0121
+              },
+              "confidence": 0.416,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 362,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "AgentConfig.ResolveModelForComplexity always returns haiku for high complexity tasks and ignores HighComplexityModel.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/config/config.go:154-165\nfunc (ac AgentConfig) ResolveModelForComplexity(complexity string) string {\n\tswitch complexity {\n\tcase \"high\", \"HIGH\":\n\t\tif ac.HighComplexityModel != \"\" {\n\t\t\treturn ac.HighComplexityModel\n\t\t}\n\t\tif ac.Runner == \"\" || ac.Runner == \"claude\" || ac.Model == \"\" || ac.Model == \"opus\" || ac.Model == \"sonnet\" {\n\t\t\treturn \"opus\"\n\t\t}\n\t\treturn ac.Model\n\tcase \"medium\", \"MEDIUM\", \"low\", \"LOW\":\n\t\tif ac.StandardModel != \"\" {",
+          "flow": "ResolveModelForComplexity returns HighComplexityModel or opus for high complexity."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.3503,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3709,
+                "INCORRECT": 0.6184,
+                "UNSUPPORTED": 0.0107
+              },
+              "confidence": 0.3503,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 367,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "ResolveModelForComplexity returns HighComplexityModel or opus for high complexity.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/config/config.go:154-165\nfunc (ac AgentConfig) ResolveModelForComplexity(complexity string) string {\n\tswitch complexity {\n\tcase \"high\", \"HIGH\":\n\t\tif ac.HighComplexityModel != \"\" {\n\t\t\treturn ac.HighComplexityModel\n\t\t}\n\t\tif ac.Runner == \"\" || ac.Runner == \"claude\" || ac.Model == \"\" || ac.Model == \"opus\" || ac.Model == \"sonnet\" {\n\t\t\treturn \"opus\"\n\t\t}\n\t\treturn ac.Model\n\tcase \"medium\", \"MEDIUM\", \"low\", \"LOW\":\n\t\tif ac.StandardModel != \"\" {",
+          "claim": "AgentConfig.ResolveModelForComplexity always returns haiku for high complexity tasks and ignores HighComplexityModel."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.0458,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.3747,
+                "NO": 0.6253
+              },
+              "confidence": 0.0458,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 286,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/config/config.go:154-165\nfunc (ac AgentConfig) ResolveModelForComplexity(complexity string) string {\n\tswitch complexity {\n\tcase \"high\", \"HIGH\":\n\t\tif ac.HighComplexityModel != \"\" {\n\t\t\treturn ac.HighComplexityModel\n\t\t}\n\t\tif ac.Runner == \"\" || ac.Runner == \"claude\" || ac.Model == \"\" || ac.Model == \"opus\" || ac.Model == \"sonnet\" {\n\t\t\treturn \"opus\"\n\t\t}\n\t\treturn ac.Model\n\tcase \"medium\", \"MEDIUM\", \"low\", \"LOW\":\n\t\tif ac.StandardModel != \"\" {",
+          "claim": "AgentConfig.ResolveModelForComplexity always returns haiku for high complexity tasks and ignores HighComplexityModel."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

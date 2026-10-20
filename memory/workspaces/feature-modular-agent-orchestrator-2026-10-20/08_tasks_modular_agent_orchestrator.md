@@ -1,12 +1,12 @@
 # 08 — Tasks & Execution Checklist: `modular_agent_orchestrator` (Fork & Extend `Open-Makers` Go Engine + Queue-Driven + `/agent` Kernel)
 
-> **Trạng thái:** `PROPOSED` — Chờ User `APPROVE` trước khi thực thi (Rule #1, Rule #13).
+> **Trạng thái:** `DONE` — Đã hoàn tất thực thi S4, kiểm định S5 (`DG3 PASS`) và đóng hồ sơ S6 (`verify_governance.py PASSED`).
 > **Chiến lược cốt lõi (`Fork & Extend` — Tái sử dụng 80% Engine Go sẵn có):**
 > Tuyệt đối **KHÔNG viết lại từ đầu bằng Python**. Chúng ta kế thừa trực tiếp codebase Go của `Open-Makers/ai-coding-agents-orchestrator` (đã có sẵn `internal/runner`, `internal/agent`, `internal/beads`, `internal/memory` SQLite FTS5, `internal/bus`, `internal/multiplexer/tmux.go`, `internal/tui`) và chỉ code bổ sung **5 Nâng Cấp Delta (`20%` phần còn thiếu)** trực tiếp vào các package Go của repo đó để đạt đúng mô hình `Scout -> Sorting -> Priority Queue -> Opus Planner Wave DAG -> Dynamic Opus/Sonnet Worktree Coders -> Reviewer + /agent Gatekeeper`.
 
 ---
 
-## Task 1 (Upgrade 1 — Đóng `F1`, `F2`, `F6`): Xây dựng `internal/queue`, `internal/scout` (Non-LLM `$0`) & `internal/sorter` trên nền `modernc.org/sqlite` có sẵn của Repo Go
+## [x] Task 1 (Upgrade 1 — Đóng `F1`, `F2`, `F6`): Xây dựng `internal/queue`, `internal/scout` (Non-LLM `$0`) & `internal/sorter` trên nền `modernc.org/sqlite` có sẵn của Repo Go
 - **[Mô tả & Phạm vi]:**
   - **Tái sử dụng 100%:** Driver pure-Go `modernc.org/sqlite` (`go.mod:15`) và bộ đánh chỉ mục `internal/memory/store.go:58-136` (`chunks_fts USING fts5` + WAL mode). Mở rộng `store.go` để index thêm `agent/memory/global/lessons/topics/*.md` và `agent/memory/workspaces/*/`.
   - **Code bổ sung (`internal/queue/store.go`, `internal/scout/scout.go`, `internal/sorter/sorter.go`):**
@@ -17,11 +17,11 @@
 - **[Context & Bằng chứng `file:line`]:**
   - Tái sử dụng `internal/memory/store.go:58-136` và `cmd/orchestrator/main.go:40-68`.
 - **[Definition of Done (DoD)]:**
-  - `go test ./internal/queue/... ./internal/scout/... ./internal/sorter/...` PASS 100%; chứng minh `Scout` không gọi LLM (`$0`) và `Sorter` xếp đúng thứ tự `priority_score DESC`.
+  - [x] `go test ./internal/queue/... ./internal/scout/... ./internal/sorter/...` PASS 100%; chứng minh `Scout` không gọi LLM (`$0`) và `Sorter` xếp đúng thứ tự `priority_score DESC`.
 
 ---
 
-## Task 2 (Upgrade 2 & 3 — Đóng `F3`, `F4`): Nâng cấp `internal/agent/pm.go`, `internal/gitclient` & `internal/orchestrator/task_runner.go` để hỗ trợ Dynamic Model Routing (`Opus` vs `Sonnet`) và Chạy Song Song Đa Coder theo `Wave 0..N` trên `git worktree`
+## [x] Task 2 (Upgrade 2 & 3 — Đóng `F3`, `F4`): Nâng cấp `internal/agent/pm.go`, `internal/gitclient` & `internal/orchestrator/task_runner.go` để hỗ trợ Dynamic Model Routing (`Opus` vs `Sonnet`) và Chạy Song Song Đa Coder theo `Wave 0..N` trên `git worktree`
 - **[Mô tả & Phạm vi]:**
   - **Tái sử dụng 100%:**
     - `internal/runner/claude.go:64-100` (đã hỗ trợ truyền `--model` động theo `CompletionRequest.Model` tại `internal/runner/runner.go:37-42`).
@@ -34,11 +34,11 @@
 - **[Context & Bằng chứng `file:line`]:**
   - Độ trực tiếp trên `internal/orchestrator/task_runner.go:823-1006`, `internal/beads/beads.go:103-145`, `internal/gitclient/gitclient.go:26-132`, và `internal/runner/claude.go:64-100`.
 - **[Definition of Done (DoD)]:**
-  - `go test ./internal/orchestrator/... ./internal/gitclient/...` PASS; kiểm chứng Wave 0 có 2 sub-task độc lập được chạy song song trên 2 `git worktree` (1 `opus`, 1 `sonnet`) và tự động mở khóa (`unblock`) sub-task ở Wave 1 khi cả 2 `Close`.
+  - [x] `go test ./internal/orchestrator/... ./internal/gitclient/...` PASS; kiểm chứng Wave 0 có 2 sub-task độc lập được chạy song song trên 2 `git worktree` (1 `opus`, 1 `sonnet`) và tự động mở khóa (`unblock`) sub-task ở Wave 1 khi cả 2 `Close`.
 
 ---
 
-## Task 3 (Upgrade 4 & 5 — Đóng `F5` & Gắn Lõi `/agent`): Xây dựng `internal/agentgate` (Trạm Kiểm Soát `/agent`) & Sổ Cái Chi Phí `Autopilot Cost ($) Ledger`
+## [x] Task 3 (Upgrade 4 & 5 — Đóng `F5` & Gắn Lõi `/agent`): Xây dựng `internal/agentgate` (Trạm Kiểm Soát `/agent`) & Sổ Cái Chi Phí `Autopilot Cost ($) Ledger`
 - **[Mô tả & Phạm vi]:**
   - **Tái sử dụng 100%:**
     - `internal/runner/runner.go:52-76` (`ResolveSkills` tự động nối `<skills>...</skills>` vào `SystemPrompt`).
@@ -52,11 +52,11 @@
 - **[Context & Bằng chứng `file:line`]:**
   - Kết nối `internal/orchestrator/task_runner.go:437-500` & `674-717` với `/Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:10-24`, `tooling/mutation_gate.py:8-11`, `hooks/agy/agy_guard.py:51-53`.
 - **[Definition of Done (DoD)]:**
-  - Test tích hợp chứng minh: nếu `Coder` lén nhét `*Fn` mock hoặc rớt `mutation_gate.py` / `DG3`, `TaskRunner` chặn không cho qua `PipelineDone` và tự động kích hoạt vòng Fix.
+  - [x] Test tích hợp chứng minh: nếu `Coder` lén nhét `*Fn` mock hoặc rớt `mutation_gate.py` / `DG3`, `TaskRunner` chặn không cho qua `PipelineDone` và tự động kích hoạt vòng Fix.
 
 ---
 
-## Task 4 (Upgrade UI — Mở rộng `internal/tui` & `internal/multiplexer`): Bổ sung 3 Tab Hiển Thị (`Wave 0..N DAG`, `Autopilot Cost & Gate Ledger`, `Multi-Worker Grid`) vào Bubble Tea TUI có sẵn
+## [x] Task 4 (Upgrade UI — Mở rộng `internal/tui` & `internal/multiplexer`): Bổ sung 3 Tab Hiển Thị (`Wave 0..N DAG`, `Autopilot Cost & Gate Ledger`, `Multi-Worker Grid`) vào Bubble Tea TUI có sẵn
 - **[Mô tả & Phạm vi]:**
   - **Tái sử dụng 100%:** Bộ khung Bubble Tea TUI sẵn có trong `internal/tui/` (`model.go`, `agent_panel.go`, `control.go`, `statusbar.go`, `sysmon.go`) và `internal/multiplexer/tmux.go` (`CreateSession`, `NewPane`, `SpawnAgent`).
   - **Code bổ sung (`internal/tui/wave_dag_view.go`, `internal/tui/autopilot_view.go`):**
@@ -65,6 +65,6 @@
 - **[Context & Bằng chứng `file:line`]:**
   - Mở rộng trực tiếp trên `internal/tui/model.go` và `internal/multiplexer/tmux.go:11-96`.
 - **[Definition of Done (DoD)]:**
-  - Build binary `go build ./cmd/orchestrator` và chạy `go test ./...` toàn repo PASS 100%.
+  - [x] Build binary `go build ./cmd/orchestrator` và chạy `go test ./...` toàn repo PASS 100%.
 
 

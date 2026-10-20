@@ -1,3 +1,5 @@
 # 04 — Decisions (Append ONLY)
 
 - [2026-10-20T12:05:47+07:00] [Agent:laya_gate] DG3 A-F1 FLAG resolved: Đã kiểm chứng trực tiếp vòng lặp for g in ('dg1', 'dg2') tại REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:666-670
+- [2026-10-20T16:03:15+07:00] [Agent:laya_gate] DG3 DG3-R3-R4-WAVE-MODEL FLAG resolved: Verified directly in code: NewPMAgent defaults cfg.Model to opus and implementBeadWithTask calls ResolveModelForComplexity and WorktreeAdd/SyncWorktreeFiles REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/orchestrator/task_runner.go:1152-1196
+- [2026-10-20T16:03:29+07:00] [Agent:laya_gate] DG3 DG3-R5-AGENTGATE FLAG resolved: Verified directly in code: implementAndReview calls tr.gatekeeper.ScanProductionFiles(tr.root, files) and appends violations to secFeedback REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/orchestrator/task_runner.go:473-485

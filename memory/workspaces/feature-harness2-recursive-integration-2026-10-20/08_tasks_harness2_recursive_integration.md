@@ -67,3 +67,20 @@
   - Đối chiếu chuẩn `Harness²` tại `harness2/core/ledger.py:26-114`, `harness2/core/proposer.py:507-534`, và `harness2/core/schedule.py:289-329`.
 - **[Definition of Done]:**
   - Ném lỗi `BudgetError` ngay lập tức nếu có nhãn trùng lặp hoặc lệch số lượt chạy `R != 4k`, `P != 3k`; resume từ cache SHA-256 tốn `0.0 USD` và an toàn khi chạy đa tiến trình với `flock`.
+
+---
+
+## [ ] Task 7 (`S5 → S3 Re-Plan` — Khắc phục 7 Lỗi Phản biện `AF-01 → AF-07` sau khi có User `APPROVE` mới)
+- **[Mô tả]:**
+  - **`AF-01` (3-Way Tree Merge):** Thay thế `merged_seed.update(inv{i})` + `merged_seed.update(dom{i})` tuần tự tại `tooling/orchestrator/harness2_engine.py:642-644, 675-677` bằng hàm `three_way_merge_trees(base_tree, inv_tree, dom_tree)` bảo toàn cả các file có sẵn được sửa bởi `INV` lẫn các file bị xóa chủ đích.
+  - **`AF-02` (Full SHA-256 Cache Fingerprint):** Sửa `_run_cached_session` (`harness2_engine.py:559-569`) đưa `task_id`, mã băm `SHA-256` của toàn bộ `base_tree` (`json.dumps(base_tree, sort_keys=True)`) và `context_dir` vào `call_fingerprint_sha256`, chống ngộ độc cache liên task và liên vòng.
+  - **`AF-03` (`"base"` Rollout Aggregation & Grader-Free `selector_fn`):** Ghi nhận `rollout_outputs["base"]` (tổng hợp từ `base1..basek` ở chế độ `agg` và `b1` ở chế độ `seq`) và bổ sung tham số `selector_fn(id_map, candidate_trees, rollout_outputs)` hoạt động trên mã ẩn danh `A, B, C...` mà không cần trường `score` có sẵn (`harness2_engine.py:616, 660, 700-706`).
+  - **`AF-04` (UTF-8 Byte Cap, YAML Frontmatter Delimiter & Word-Boundary Trigger):** Sửa `validate_agent_surface` & `autotrigger_agent_skills` (`harness2_engine.py:116, 130, 136, 168, 204`) kiểm tra `len(body.encode("utf-8")) > surface.always_on_max`, tách khối YAML frontmatter giữa `--- ... ---`, và dùng regex ranh giới từ `(?<![\w\-]){re.escape(sname)}(?![\w\-])`.
+  - **`AF-05` (Real Workspace `s3_docs` & `build_lessons_index` Sync):** Xóa mảng giả `s3_docs = [f"{pfx}_ok.md" ...]` tại `harness2_engine.py:711`, đọc danh sách file thật từ `workspace_dir`, và gọi hàm đồng bộ `build_lessons_index.py` khi ghi nhận bài học mới.
+  - **`AF-06` (`proposer_axes.py` Module & Strict Axis Whitelist):** Tạo `tooling/orchestrator/proposer_axes.py` đúng cam kết tại `08_tasks:19` và chặn `INV` sửa bất kỳ file nào trong `skills/` (`harness2_engine.py:210`).
+  - **`AF-07` (Subprocess CLI Runner & Live Runtime Trace):** Bổ sung `SubprocessProposerRunner` / `SubprocessRolloutRunner` kèm `timeout` và lệnh CLI `run-recursion` để trace runtime value thật trên đĩa cùng User.
+- **[Context & Logs]:**
+  - Biên bản phản biện `audit_report_harness2_recursive_integration.md` và kết quả `/laya_router` `DG3` (`06_laya_summary_dg3_20261020T160852.json`).
+- **[Definition of Done]:**
+  - Thực thi sau khi User `APPROVE`; bổ sung unit/integration test phá hủy cho từng lỗi `AF-01..AF-07`, chạy lại `mutation_gate.py` (`>= 3` mutants `KILLED`), chạy trace CLI thật và vượt qua `DG3` post-edit.
+
