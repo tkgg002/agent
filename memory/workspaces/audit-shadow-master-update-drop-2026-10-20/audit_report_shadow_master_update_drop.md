@@ -115,3 +115,27 @@ Qua rà soát phản biện từng chữ trong báo cáo lúc `15:28` đối chi
 - **Re-Plan `DG1` & `DG2` (cho Giải pháp & Code Demo khắc phục `AF-01..AF-05` trong `09_tasks_solution_shadow_master_update_drop.md`):**
   - `DG1`: `06_laya_summary_dg1_20261020T160744.json` (`trusted_rounds: ["r3"]`, `gate: "PASS"`).
   - `DG2`: `06_laya_summary_dg2_20261020T160746.json` (`trusted_rounds: ["r3"]`, `gate: "PASS"`).
+
+---
+
+## 7. Kết quả Thực thi Khắc phục `AF-01..AF-05` (Round 2 — Commit `08c05a8`) & Kiểm định DG3 Cuối Phiên
+
+Sau khi nhận lệnh `APPROVE` của User (`2026-10-20T16:23:58+07:00`), toàn bộ 5 phát hiện phản biện `AF-01..AF-05` (`Task 9..Task 13`) đã được triển khai, kiểm thử thực tế trên PostgreSQL và kiểm định qua `/laya_router` **DG3**:
+1. **`AF-01` (`Task 9` — `internal/service/master/transmuter_gpayid_test.go:403-574`):**
+   - Đã nâng cấp `TestLiveBindings_46_47_48_TransmuteAndVerifyZeroDrift` tự động truy vấn toàn bộ `activeBindingIDs` từ `cdc_system.master_binding WHERE is_active = true ORDER BY id` (`[46, 47, 48, 51, 52]`) và lấy đúng `ShadowConnectionKey`/`MasterConnectionKey` cho từng binding (`default_master` `:5434` và `master_2` `:5437`).
+   - Kết quả chạy thực tế trên PostgreSQL:
+     - `Binding 46` (`default_master`, `payment_bills`): `activeShadow = 54,755`, `masterCount = 54,755`, `droppedDelete = 0`, `droppedUpdate = 0`, `gpayMismatch = 0`.
+     - `Binding 47` (`default_master`, `payment_bills_1`): `activeShadow = 54,755`, `masterCount = 54,755`, `droppedDelete = 0`, `droppedUpdate = 0`, `gpayMismatch = 0`.
+     - `Binding 48` (`default_master`, `export_jobs`): `activeShadow = 540`, `masterCount = 540`, `droppedDelete = 0`, `droppedUpdate = 0`, `gpayMismatch = 0`.
+     - `Binding 51` (`master_2` `:5437`, `export_jobs_2`): Đã heal `523` dòng (`1` dòng xóa mềm `_deleted = true` và `521` dòng lệch `_gpay_id` SHA-256), đạt `activeShadow = 540`, `masterCount = 540`, `droppedDelete = 0`, `droppedUpdate = 0`, `gpayMismatch = 0`.
+     - `Binding 52` (`default_master` `:5434`, `export_jobs_1`): Đã heal `4` dòng (`1` dòng xóa mềm `_deleted = true` và `2` dòng lệch `_gpay_id` SHA-256), đạt `activeShadow = 540`, `masterCount = 540`, `droppedDelete = 0`, `droppedUpdate = 0`, `gpayMismatch = 0`.
+2. **`AF-02` (`Task 10` — `internal/handler/master/transmute_handler.go:782-805`):**
+   - Đã sửa `splitSingleTaskPayload` dùng `if leftErr != nil || rightErr != nil` kèm `h.replyErr(...)` và `task.complete(firstErr)` để không bao giờ `Ack()` sớm khi 1 nửa payload bị lỗi; bổ sung unit test `TestSplitSingleTaskPayload_ReturnsErrorWhenSubTaskFails` (`PASS`).
+3. **`AF-03` (`Task 11` — `internal/service/master/transmuter.go:357-365, 558-563, 1510-1518`):**
+   - Đã lưu checkpoint `last_gpay_id` khi `inferLastGpayIDFromMaster` khôi phục cursor, chỉ reset `LastCursorJSON = "{}"` khi `runType == "full" && len(onlySourceIDs) == 0 && lastBatchErr == nil`, và giới hạn `cutoff` trong `syncUpdatedShadowRowsBeforeCursor` theo `LastSuccessAt - 10m` (fallback `24h`). Kiểm chứng thực tế trên cả 5 bindings: `last_cursor_json` luôn được bảo toàn sau mỗi nhịp Incremental Sync.
+4. **`AF-04` (`Task 12` — `internal/handler/recon/recon_execute_heal_handler.go:339-392` & `recon_check_heal_handler.go:308-311`):**
+   - Đã khử trùng lặp `uniqueStrings(sourceIDs)`, chia chunk theo `healChunkSize = 200`, truyền `"shadow_connection_key": "default_shadow"`, và bổ sung gọi `publishTransmuteShadowForSegA` trong `executeLegacyHeal`.
+5. **`AF-05` (`Task 13` — `internal/handler/shadow/batch_buffer_utils.go:90-153` & `recon_execute_heal_handler.go:732-780`):**
+   - Đã nâng cấp `dedupByConflictKey` so sánh `r.SourceTsMs` (unit test `TestDedupByConflictKey_OrdersBySourceTsMsWhenOutOfOrder` `PASS`), đồng thời chỉ truy vấn `missingGpayIDs` chưa tìm thấy trên Shadow và khử trùng lặp `uniqueStrings(out)` trong `resolveSourceIDsForSegmentB`.
+6. **Decision Gate `/laya_router` DG3 Final Verdict (Round 2 — sau commit `08c05a8`):**
+   - **Summary file:** `06_laya_summary_dg3_20261020T164916.json` | **Trusted Rounds:** `["r2", "r3"]` | **Gate:** **`PASS`** (`DG3-R2-AF01`: `ACCEPT`, `DG3-R2-AF02`: `ACCEPT`, `DG3-R2-AF03`: `ACCEPT`, `DG3-R2-AF04`: `FLAG -> RESOLVED`, `DG3-R2-AF05`: `FLAG -> RESOLVED`).

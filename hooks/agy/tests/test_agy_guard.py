@@ -930,9 +930,9 @@ class TestAgyGuard(unittest.TestCase):
             ws_root=self.ws_root,
         )
         self.assertEqual(res_locked.get("decision"), "deny")
-        self.assertIn("S5 -> S3 Re-Plan Loop", res_locked.get("reason", ""))
+        self.assertIn("S5 -> S3 -> S4 Self-Healing Loop", res_locked.get("reason", ""))
 
-        # Case B: Agent updates 09_tasks_solution AFTER audit_report_, and User sends new APPROVE -> ask
+        # Case B: Agent updates 09_tasks_solution AFTER audit_report_ -> immediately unlocked ("ask") WITHOUT needing a second USER_INPUT APPROVE
         tr_replanned = self._write_transcript(
             [
                 {
@@ -945,7 +945,6 @@ class TestAgyGuard(unittest.TestCase):
                 {"tool_calls": [{"name": "replace_file_content", "args": {"TargetFile": str(src_file)}}]},
                 {"tool_calls": [{"name": "write_to_file", "args": {"TargetFile": str(aud_file)}}]},
                 {"tool_calls": [{"name": "replace_file_content", "args": {"TargetFile": str(sol_file)}}]},
-                {"type": "USER_INPUT", "content": "APPROVE"},
             ]
         )
         res_unlocked = agy_guard.handle_pre_write(
@@ -1017,6 +1016,52 @@ class TestAgyGuard(unittest.TestCase):
         self.assertNotIn("H6 EXECUTION MONITOR", msg_pass)
         self.assertEqual((self.state_dir / "c30.0.loop").read_text(encoding="utf-8"), "0")
 
+    # 31. H6 & H7: Embed VERBATIM_USER_AUDIT_PROMPT and enforce mandatory n==0 adversarial stop-bounce
+    def test_31_h6_and_h7_enforce_verbatim_user_audit_prompt_and_first_stop_bounce(self) -> None:
+        src_file = self.tmp / "app" / "feature.py"
+        src_file.parent.mkdir(parents=True, exist_ok=True)
+        src_file.write_text("x = 1\n", encoding="utf-8")
+
+        tr_h6 = self._write_transcript(
+            [
+                {"type": "USER_INPUT", "content": "APPROVE"},
+                {"tool_calls": [{"name": "replace_file_content", "args": {"TargetFile": str(src_file)}}]},
+            ]
+        )
+        res_h6 = agy_guard.handle_post_invocation(
+            {"conversationId": "c31", "transcriptPath": tr_h6},
+            mem_root=self.mem_root,
+            state_dir=self.state_dir,
+        )
+        msg_h6 = res_h6["injectSteps"][0]["ephemeralMessage"]
+        self.assertIn(agy_guard.VERBATIM_USER_AUDIT_PROMPT, msg_h6)
+
+        # H7 Pass #1 (n == 0) with run_linter=True MUST bounce with VERBATIM_USER_AUDIT_PROMPT
+        res_stop_1 = agy_guard.handle_stop(
+            {"conversationId": "c31", "transcriptPath": tr_h6},
+            mem_root=self.mem_root,
+            ws_root=self.ws_root,
+            state_dir=self.state_dir,
+            run_linter=True,
+        )
+        self.assertEqual(res_stop_1.get("decision"), "continue")
+        self.assertIn("MANDATORY ADVERSARIAL STOP-AUDIT", res_stop_1.get("reason", ""))
+        self.assertIn(agy_guard.VERBATIM_USER_AUDIT_PROMPT, res_stop_1.get("reason", ""))
+        self.assertEqual((self.state_dir / "c31.0.stop").read_text(encoding="utf-8"), "1")
+
+        # H7 Pass #2 (n == 1) when miss is non-empty also includes VERBATIM_USER_AUDIT_PROMPT
+        res_stop_2 = agy_guard.handle_stop(
+            {"conversationId": "c31", "transcriptPath": tr_h6},
+            mem_root=self.mem_root,
+            ws_root=self.ws_root,
+            state_dir=self.state_dir,
+            run_linter=False,
+        )
+        self.assertEqual(res_stop_2.get("decision"), "continue")
+        self.assertIn(agy_guard.VERBATIM_USER_AUDIT_PROMPT, res_stop_2.get("reason", ""))
+        self.assertEqual((self.state_dir / "c31.0.stop").read_text(encoding="utf-8"), "2")
+
 
 if __name__ == "__main__":
     unittest.main()
+

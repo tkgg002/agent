@@ -26,40 +26,33 @@ suffix: shadow_master_update_drop
 
 ---
 
-## 2. Danh sách 11 File Thay đổi Thực tế (`git show --stat 30b1b00`)
+## 2. Danh sách File Thay đổi Thực tế (`30b1b00` & `08c05a8`)
 
-- Commit Restore-Point (Local, nhánh `recon-heal`, không push): `30b1b0061ac4d6150196076d28d7732916ea1b9a` (`fix(master,shadow,recon): resolve F1-F5 shadow-to-master update/delete drop and dynamic pk conflict target` — `11 files changed, 1089 insertions(+), 153 deletions(-)`)
-  1. `internal/handler/master/transmute_debounce_group_test.go` (`+20`)
-  2. `internal/handler/master/transmute_handler.go` (`+90 / -29`)
-  3. `internal/handler/recon/recon_execute_heal_handler.go` (`+221 / -55`)
-  4. `internal/handler/shadow/adaptive_batcher_test.go` (`+48`)
-  5. `internal/handler/shadow/batch_buffer.go` (`+22 / -5`)
-  6. `internal/handler/shadow/batch_buffer_utils.go` (`+30 / -2`)
-  7. `internal/service/master/transmuter.go` (`+415 / -65`)
-  8. `internal/service/master/transmuter_gpayid_test.go` (`+340`)
-  9. `internal/service/master/transmuter_orphan_test.go` (`+24 / -1`)
-  10. `internal/service/master/transmuter_utils.go` (`+30`)
-  11. `internal/service/recon/recon_engine_segment_b.go` (`+2`)
+- **Commit Restore-Point Round 1:** `30b1b0061ac4d6150196076d28d7732916ea1b9a` (`fix(master,shadow,recon): resolve F1-F5 shadow-to-master update/delete drop and dynamic pk conflict target` — `11 files changed, 1089 insertions(+), 153 deletions(-)`)
+- **Commit Restore-Point Round 2 (Khắc phục `AF-01..AF-05`):** `08c05a8` (`fix(cdc): resolve audit findings AF-01..AF-05 for shadow-master sync and heal` — `8 files changed, 287 insertions(+), 79 deletions(-)`):
+  1. `internal/handler/master/transmute_handler.go` (sửa `splitSingleTaskPayload` dùng `leftErr != nil || rightErr != nil` + `h.replyErr` / `h.reply` — `AF-02`)
+  2. `internal/handler/master/transmute_debounce_group_test.go` (bổ sung `TestSplitSingleTaskPayload_ReturnsErrorWhenSubTaskFails` — `AF-02`)
+  3. `internal/service/master/transmuter.go` (persist `inferred last_gpay_id`, chỉ reset `LastCursorJSON = "{}"` khi `runType == "full"`, giới hạn `cutoff` trong `syncUpdatedShadowRowsBeforeCursor` theo `LastSuccessAt - 10m` — `AF-03`)
+  4. `internal/service/master/transmuter_gpayid_test.go` (quét động cả 5 Active Bindings `46, 47, 48, 51, 52`, lấy DB theo `ShadowConnectionKey`/`MasterConnectionKey`, kiểm tra bảo toàn `last_cursor_json` — `AF-01`, `AF-03`)
+  5. `internal/handler/recon/recon_execute_heal_handler.go` (chia chunk `healChunkSize = 200`, `"shadow_connection_key": "default_shadow"`, lọc `missingGpayIDs` và `uniqueStrings(out)` — `AF-04`, `AF-05`)
+  6. `internal/handler/recon/recon_check_heal_handler.go` (bổ sung gọi `publishTransmuteShadowForSegA` trong `executeLegacyHeal` — `AF-04`)
+  7. `internal/handler/shadow/batch_buffer_utils.go` (so sánh `r.SourceTsMs` trong `dedupByConflictKey` — `AF-05`)
+  8. `internal/handler/shadow/adaptive_batcher_test.go` (bổ sung `TestDedupByConflictKey_OrdersBySourceTsMsWhenOutOfOrder` — `AF-05`)
 
 ---
 
 ## 3. Kết quả Đối soát Dữ liệu Thực tế trên PostgreSQL Trước & Sau khi Thực thi (Cả 5 Active Bindings)
 
-| Master Binding | Cụm DB & Bảng Master (`transform_spec`) | Trước khi chạy Transmute | Hiện trạng thực tế trên DB |
+| Master Binding | Cụm DB & Bảng Master (`transform_spec`) | Trước khi chạy Transmute | Sau khi chạy Transmute (Round 2 — `08c05a8`) |
 |---|---|---|---|
-| **Binding 46** | `goopay_dest:5434` — `master_payment_bill_service.payment_bills` (`{"pk": "_id"}`) | `driftedIDs = 54,725` (`droppedDelete = 3`, `droppedUpdate = 54,719`, `gpayMismatch = 1,514`) | `activeShadow = 54,722`, `masterCount = 54,722`, **`droppedDelete = 0`**, **`droppedUpdate = 0`**, **`gpayMismatch = 0`** (Đã khớp 100%) |
-| **Binding 47** | `goopay_dest:5434` — `master_payment_bill_service.payment_bills_1` (`{"pk": "_id"}`) | `driftedIDs = 1,862` (`droppedDelete = 3`, `droppedUpdate = 344`, `gpayMismatch = 1,514`) | `activeShadow = 54,722`, `masterCount = 54,722`, **`droppedDelete = 0`**, **`droppedUpdate = 0`**, **`gpayMismatch = 0`** (Đã khớp 100%) |
-| **Binding 48** | `goopay_dest:5434` — `master_centrallized_export_service.export_jobs` (`{"pk": "_id"}`) | `driftedIDs = 523` (`droppedDelete = 1`, `droppedUpdate = 0`, `gpayMismatch = 521`) | `activeShadow = 540`, `masterCount = 540`, **`droppedDelete = 0`**, **`droppedUpdate = 0`**, **`gpayMismatch = 0`** (Đã khớp 100%) |
-| **Binding 51** | `goopay_master_2:5437` — `master_centrallized_export_service.export_jobs_2` (`{"pk": "_id"}`) | `activeShadow = 540` (`1` dòng `_deleted = true`), `masterCount = 541` | Bị bỏ sót trong `TestLiveBindings` (`AF-01`) — đang chờ lệnh `APPROVE` để chạy đồng bộ về `540/540` |
-| **Binding 52** | `goopay_dest:5434` — `master_centrallized_export_service.export_jobs_1` (`{"pk": "_id"}`) | `activeShadow = 540` (`1` dòng `_deleted = true`), `masterCount = 541` | Bị bỏ sót trong `TestLiveBindings` (`AF-01`) — đang chờ lệnh `APPROVE` để chạy đồng bộ về `540/540` |
+| **Binding 46** | `goopay_dest:5434` (`default_master`) — `master_payment_bill_service.payment_bills` (`{"pk": "_id"}`) | `driftedIDs = 54,725` (`droppedDelete = 3`, `droppedUpdate = 54,719`, `gpayMismatch = 1,514`) | `activeShadow = 54,755`, `masterCount = 54,755`, **`droppedDelete = 0`**, **`droppedUpdate = 0`**, **`gpayMismatch = 0`** |
+| **Binding 47** | `goopay_dest:5434` (`default_master`) — `master_payment_bill_service.payment_bills_1` (`{"pk": "_id"}`) | `driftedIDs = 1,862` (`droppedDelete = 3`, `droppedUpdate = 344`, `gpayMismatch = 1,514`) | `activeShadow = 54,755`, `masterCount = 54,755`, **`droppedDelete = 0`**, **`droppedUpdate = 0`**, **`gpayMismatch = 0`** |
+| **Binding 48** | `goopay_dest:5434` (`default_master`) — `master_centrallized_export_service.export_jobs` (`{"pk": "_id"}`) | `driftedIDs = 523` (`droppedDelete = 1`, `droppedUpdate = 0`, `gpayMismatch = 521`) | `activeShadow = 540`, `masterCount = 540`, **`droppedDelete = 0`**, **`droppedUpdate = 0`**, **`gpayMismatch = 0`** |
+| **Binding 51** | `goopay_master_2:5437` (`master_2`) — `master_centrallized_export_service.export_jobs_2` (`{"pk": "_id"}`) | `driftedIDs = 523` (`droppedDelete = 1`, `droppedUpdate = 0`, `gpayMismatch = 521`, `masterCount = 541`) | `activeShadow = 540`, `masterCount = 540`, **`droppedDelete = 0`**, **`droppedUpdate = 0`**, **`gpayMismatch = 0`** |
+| **Binding 52** | `goopay_dest:5434` (`default_master`) — `master_centrallized_export_service.export_jobs_1` (`{"pk": "_id"}`) | `driftedIDs = 4` (`droppedDelete = 1`, `droppedUpdate = 0`, `gpayMismatch = 2`, `masterCount = 541`) | `activeShadow = 540`, `masterCount = 540`, **`droppedDelete = 0`**, **`droppedUpdate = 0`**, **`gpayMismatch = 0`** |
 
 ---
 
-## 4. Kết quả Phản Biện Cuối Workflow (`S5 Adversarial Audit` & `S5 -> S3 Re-Plan`)
+## 4. Kết quả Phản Biện Cuối Workflow & Đóng Vòng Lặp `AF-01..AF-05` (`06_laya_summary_dg3_20261020T164916.json`)
 
-Qua phản biện từng dòng diff của commit `30b1b00` và kiểm tra runtime thật, phát hiện 5 vấn đề (`AF-01..AF-05` — chi tiết tại `audit_report_shadow_master_update_drop.md` và giải pháp tại `09_tasks_solution_shadow_master_update_drop.md` mục 6):
-1. **`AF-01`:** Báo cáo cũ viết từ tóm tắt nén ngữ cảnh bị sai tên 4 file test, ghi dư chi tiết `information_schema.columns`, nhầm port Docker; `TestLiveBindings` hardcode `{46, 47, 48}` bỏ sót `Binding 51, 52`; 3 tiến trình daemon `:8081/:8082/:8083` chưa được restart.
-2. **`AF-02`:** `splitSingleTaskPayload` (`transmute_handler.go:790-794`) trả `task.complete(nil)` khi 1 nửa thành công và 1 nửa lỗi làm JetStream `Ack()` sớm; `RunEvents` trả `lastEventErr` làm `binarySearchSplit` chạy lặp lại các event đã thành công.
-3. **`AF-03`:** `syncUpdatedShadowRowsBeforeCursor` (`transmuter.go:1504-1512`) dùng `cutoff = 7 days` làm quét lại cả 54,754 dòng mỗi nhịp Incremental Sync; `transmuter.go:553-557` ghi đè `LastCursorJSON = "{}"` cho cả Incremental Sync.
-4. **`AF-04`:** `publishTransmuteShadowForSegA` (`recon_execute_heal_handler.go:361`) hardcode `"shadow_connection_key": "default"` và không chia chunk; chưa cập nhật `recon_heal.go` / `executeLegacyHeal` (`Task 6.2`).
-5. **`AF-05`:** `resolveSourceIDsForSegmentB` (`recon_execute_heal_handler.go:733-751`) không khử trùng lặp `out`; `dedupByConflictKey` (`batch_buffer_utils.go:96-135`) chưa so sánh `r.SourceTsMs`.
+Toàn bộ 5 phát hiện phản biện (`AF-01..AF-05`) từ đợt Audit trước đã được khắc phục triệt để trong commit `08c05a8`, vượt qua toàn bộ unit/integration tests trên PostgreSQL thật và đạt `gate: "PASS"` tại cổng `/laya_router` **DG3** (`06_laya_summary_dg3_20261020T164916.json`, `trusted_rounds: ["r2", "r3"]`).

@@ -1,0 +1,58 @@
+[
+  {
+    "id": "DG3-R2-AF01",
+    "kind": "claim",
+    "claim": "TestLiveBindings_46_47_48_TransmuteAndVerifyZeroDrift dynamically queries all active master_binding IDs (46, 47, 48, 51, 52), resolves each binding's ShadowConnectionKey and MasterConnectionKey, verifies incremental cursor persistence, and asserts zero drift across all active bindings.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_gpayid_test.go:403-432\nvar activeBindingIDs []int64\nfor _, bID := range activeBindingIDs {\nbShadowDB, errS := connMgr.GetShadowDB(ctx, shadowKey)\nbMasterDB, errM := connMgr.GetMasterDB(ctx, masterKey)",
+    "flow": "TestLiveBindings_46_47_48_TransmuteAndVerifyZeroDrift -> SELECT id FROM cdc_system.master_binding WHERE is_active = true -> GetShadowDB/GetMasterDB per binding -> tm.Run -> verify zero drift"
+  },
+  {
+    "id": "DG3-R2-AF02",
+    "kind": "claim",
+    "claim": "splitSingleTaskPayload returns an error via task.complete(firstErr) and sends h.replyErr whenever either sub-half fails (leftErr != nil || rightErr != nil), preventing premature ACK when one half fails.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:790-804\nif leftErr != nil || rightErr != nil {\nfirstErr := leftErr\nh.replyErr(ctx, task.Msg, task.Req.CorrelationID, firstErr.Error())\ntask.complete(firstErr)",
+    "flow": "splitSingleTaskPayload -> processSubBatch(left) + processSubBatch(right) -> leftErr != nil || rightErr != nil -> task.complete(firstErr)"
+  },
+  {
+    "id": "DG3-R2-AF03",
+    "kind": "claim",
+    "claim": "TransmuterModule.Run persists the inferred last_gpay_id into sync_runtime_state, only resets LastCursorJSON to {} on full sync completion, and bounds syncUpdatedShadowRowsBeforeCursor by LastSuccessAt minus 10 minutes.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:558-563\nif runType == \"full\" && len(onlySourceIDs) == 0 && lastBatchErr == nil && t.runtimeRepo != nil {\nt.persistRuntimeState(ctx, masterRow.ID, func(item *mastermodel.SyncRuntimeState, now time.Time) {\nitem.LastCursorJSON = []byte(`{}`)",
+    "flow": "TransmuterModule.Run -> persist inferred last_gpay_id -> syncUpdatedShadowRowsBeforeCursor bounded by LastSuccessAt - 10m -> preserve LastCursorJSON on incremental runs"
+  },
+  {
+    "id": "DG3-R2-AF04",
+    "kind": "claim",
+    "claim": "publishTransmuteShadowForSegA deduplicates sourceIDs via uniqueStrings, chunks payloads by healChunkSize (200) with shadow_connection_key set to default_shadow, and is invoked from executeLegacyHeal.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:339-375\ncleanIDs := uniqueStrings(sourceIDs)\nfor start := 0; start < len(cleanIDs); start += healChunkSize {\n\"shadow_connection_key\": \"default_shadow\",",
+    "flow": "executeHealSegA / executeLegacyHeal -> publishTransmuteShadowForSegA -> uniqueStrings -> chunk by healChunkSize -> publish cdc.cmd.transmute-shadow"
+  },
+  {
+    "id": "DG3-R2-AF05",
+    "kind": "claim",
+    "claim": "dedupByConflictKey orders duplicate records within a batch by SourceTsMs (with slice index tie-breaking) and resolveSourceIDsForSegmentB only queries missingGpayIDs on the Master table.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go:95-138\nif prevIdx, exists := lastIdx[r.PrimaryKeyValue]; !exists || r.SourceTsMs >= records[prevIdx].SourceTsMs {\nlastIdx[r.PrimaryKeyValue] = i\nif r.SourceTsMs >= maxTs[pk] {",
+    "flow": "dedupByConflictKey -> compare r.SourceTsMs >= maxTs[pk] -> preserve newer field values and merge older non-conflicting fields"
+  },
+  {
+    "id": "DG3-R2-CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "executeLegacyHeal invokes h.executeHeal.publishTransmuteShadowForSegA when res.Upserted > 0 and h.executeHeal != nil and len(missingIDs) > 0.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_check_heal_handler.go:308-311\nif res.Upserted > 0 && h.executeHeal != nil && len(missingIDs) > 0 {\nh.executeHeal.publishTransmuteShadowForSegA(ctx, report, missingIDs, \"recon-heal-legacy\")",
+    "flow": "executeLegacyHeal -> HealWindow -> publishTransmuteShadowForSegA"
+  },
+  {
+    "id": "DG3-R2-CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "splitSingleTaskPayload uses logical AND (leftErr != nil && rightErr != nil) and calls task.complete(nil) when only one sub-half fails.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:790-798\nif leftErr != nil || rightErr != nil {\nfirstErr := leftErr\ntask.complete(firstErr)",
+    "flow": "false control claim contradicting || check in splitSingleTaskPayload"
+  },
+  {
+    "id": "DG3-R2-CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "TransmuterModule.Run unconditionally resets LastCursorJSON to {} at the end of every incremental run regardless of runType.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:558-563\nif runType == \"full\" && len(onlySourceIDs) == 0 && lastBatchErr == nil && t.runtimeRepo != nil {\nitem.LastCursorJSON = []byte(`{}`)",
+    "flow": "false control claim contradicting runType == full guard"
+  }
+]

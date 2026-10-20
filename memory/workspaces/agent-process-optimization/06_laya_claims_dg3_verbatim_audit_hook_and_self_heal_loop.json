@@ -1,0 +1,44 @@
+[
+  {
+    "id": "DG3-VERBATIM-PROMPT",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "hooks/agy/agy_guard.py:78-109",
+    "claim": "Hằng số VERBATIM_USER_AUDIT_PROMPT tại dòng 78-87 chứa nguyên văn prompt Audit của User và được nối trực tiếp vào FINAL_AUDIT_MSG tại dòng 92.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:78-94\nVERBATIM_USER_AUDIT_PROMPT = (\n    'Audit lại \"quá trình\" vừa thực hiện, sử dụng tư duy phản biện cho các task đã làm, '\n    \"các file đã update, từng dòng update.\\n\"\n    \"Kiểm tra các xem có suy diễn, báo cáo láo không.\\n\"\n    \"Áp dụng Vòng Lặp Phản Tỉnh & Khắc Phục (Self-Improvement Loop).\\n\"\n    \"Chạy 1 tiến trình QC gắt gao, soạn context đầy đủ & gọi /laya_router ra nhận xét lại \"\n    \"1 lần xem quyết định làm như vậy là ổn chưa cùng\\n\"\n    \"Lưu toàn bộ vào file audit_report_*.md trong workspace của task\\n\"\n    \"Đặc biệt : ko test bằng mockup và Hallucination kết quả, nếu cần phải nói phối hợp với anh trace runtime value.\"\n)\nFINAL_AUDIT_MSG = (\n    \"🔍 MANDATORY FINAL ADVERSARIAL AUDIT & ANTI-SMOKE-SPECULATION PROTOCOL (Rule #9 S5/S6, #14 G3/G7/G8, #18):\\n\"\n    \"Đã phát hiện chỉnh sửa source code ({files}). TRƯỚC KHI báo cáo hoàn tất, BẮT BUỘC tự động thực thi NGUYÊN VĂN mệnh lệnh Audit sau của User:\\n\"\n    \"«\\n\"\n    + VERBATIM_USER_AUDIT_PROMPT\n    + \"\\n»\\n\""
+  },
+  {
+    "id": "DG3-SELF-HEALING-H4B",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "hooks/agy/agy_guard.py:595-623",
+    "claim": "Tại dòng 601-617 của agy_guard.py, khi last_aud_idx > last_sol_idx hàm trả về decision là deny, còn biến ok kiểm tra APPROVE dựa trên first_sol_idx thay vì last_sol_idx.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:601-618\n        first_sol_idx = sol[0] if sol else -1\n        last_sol_idx = sol[-1] if sol else -1\n        last_aud_idx = aud[-1] if aud else -1\n        if last_aud_idx > last_sol_idx:\n            return {\n                \"decision\": \"deny\",\n                \"reason\": (\n                    \"Rule 9/13 (S5 -> S3 -> S4 Self-Healing Loop): Đã bước vào chặng S5 Audit (audit_report_). \"\n                    \"Nếu phát hiện bug/gap mới, CẤM sửa mò trực tiếp! Bắt buộc cập nhật bổ sung vào \"\n                    \"09_tasks_solution_<suffix>.md + 08_tasks_<suffix>.md (kèm DG1/DG2) trước, sau đó hệ thống \"\n                    \"sẽ tự động mở khoá cho sửa code dứt điểm ngay trong cùng lượt (không cần chờ User APPROVE lần 2).\"\n                ),\n            }\n        ok = any(\n            s.get(\"type\") == \"USER_INPUT\" and APPROVE.search(s.get(\"content\", \"\"))\n            for s in st[(first_sol_idx + 1 if first_sol_idx >= 0 else 0) :]\n        )"
+  },
+  {
+    "id": "DG3-H7-STOP-BOUNCE",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "hooks/agy/agy_guard.py:705-804",
+    "claim": "Trong handle_stop, ngưỡng dừng là n >= 3 (dòng 711) và khi run_linter and src and n == 0 (dòng 787) hàm ghi '1' vào cnt_file rồi trả về decision là continue kèm VERBATIM_USER_AUDIT_PROMPT.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:787-803\n    if run_linter and src and n == 0:\n        sdir.mkdir(parents=True, exist_ok=True)\n        cnt_file.write_text(\"1\", encoding=\"utf-8\")\n        extra_miss = (\"\\n\\n⚠️ Các mục Done-gate còn thiếu:\\n- \" + \"\\n- \".join(miss)) if miss else \"\"\n        return {\n            \"decision\": \"continue\",\n            \"reason\": (\n                \"⛔ MANDATORY ADVERSARIAL STOP-AUDIT (H7 Pass #1 — Chống báo cáo OK sớm khi còn bug/lỗ hổng):\\n\"\n                + VERBATIM_USER_AUDIT_PROMPT\n                + \"\\n\\n👉 BẮT BUỘC: Thực hiện rà soát phản biện thực sự từng dòng `git diff` vừa sửa. \"\n                \"Nếu phát hiện bất kỳ bug, lỗ hổng hay thiếu sót nào: CẤM báo cáo đẩy trách nhiệm cho User và CẤM bắt User APPROVE lại! \"\n                \"Hãy cập nhật ngay `09_tasks_solution_<suffix>.md` + `08_tasks_<suffix>.md` + chạy `DG1/DG2`, \"\n                \"tự sửa dứt điểm source code, chạy lại test + `DG3` + cập nhật `audit_report_<suffix>.md` + `06_validation_<suffix>.md` + `05_progress` \"\n                \"rồi mới kết thúc lượt!\"\n                + extra_miss\n            ),\n        }"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Khi n >= 3 ở dòng 711, hàm handle_stop trả về decision là deny.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:711-712\n    if n >= 3:\n        return {}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Khi run_linter and src and n == 0 ở dòng 787, hàm handle_stop trả về dict rỗng {} mà không ghi cnt_file.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:787-792\n    if run_linter and src and n == 0:\n        sdir.mkdir(parents=True, exist_ok=True)\n        cnt_file.write_text(\"1\", encoding=\"utf-8\")\n        extra_miss = (\"\\n\\n⚠️ Các mục Done-gate còn thiếu:\\n- \" + \"\\n- \".join(miss)) if miss else \"\"\n        return {\n            \"decision\": \"continue\","
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Khi n >= 3 ở dòng 711, hàm handle_stop trả về dict rỗng {}.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:711-712\n    if n >= 3:\n        return {}"
+  }
+]

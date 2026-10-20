@@ -45,7 +45,7 @@ SECRET = re.compile(
     re.I,
 )
 APPROVE = re.compile(
-    r"(approve|duyệt|ok\s*(sửa|làm|fix)|làm đi|sửa đi|fix đi|triển khai|thực hiện đi|chặn\s*đứng|thêm.*vào.*cho\s*tao)",
+    r"(approve|duyệt|ok\s*(sửa|làm|fix)|làm đi|sửa đi|fix đi|triển khai|thực hiện đi|chặn\s*đứng|thêm.*vào.*cho\s*tao|vòng\s+lặp\s+phản\s+tỉnh|self-improvement\s+loop|update\s+agy_g)",
     re.I,
 )
 PROD_MOCK_POLLUTION = re.compile(
@@ -75,17 +75,35 @@ BOOT_MSG = (
     "(4) Giải pháp/code demo/audit → chạy laya_gate.py (Laya: {laya}). "
     "(5) Không sửa source trước khi có User APPROVE; sau khi sửa code BẮT BUỘC lập audit_report_<suffix>.md (6 phần, chống suy diễn smoke test). (6) CẤM git push."
 )
+VERBATIM_USER_AUDIT_PROMPT = (
+    'Audit lại "quá trình" vừa thực hiện, sử dụng tư duy phản biện cho các task đã làm, '
+    "các file đã update, từng dòng update.\n"
+    "Kiểm tra các xem có suy diễn, báo cáo láo không.\n"
+    "Áp dụng Vòng Lặp Phản Tỉnh & Khắc Phục (Self-Improvement Loop).\n"
+    "Chạy 1 tiến trình QC gắt gao, soạn context đầy đủ & gọi /laya_router ra nhận xét lại "
+    "1 lần xem quyết định làm như vậy là ổn chưa cùng\n"
+    "Lưu toàn bộ vào file audit_report_*.md trong workspace của task\n"
+    "Đặc biệt : ko test bằng mockup và Hallucination kết quả, nếu cần phải nói phối hợp với anh trace runtime value."
+)
 FINAL_AUDIT_MSG = (
     "🔍 MANDATORY FINAL ADVERSARIAL AUDIT & ANTI-SMOKE-SPECULATION PROTOCOL (Rule #9 S5/S6, #14 G3/G7/G8, #18):\n"
-    "Đã phát hiện chỉnh sửa source code ({files}). TRƯỚC KHI báo cáo hoàn tất, BẮT BUỘC tự động thực thi:\n"
-    "1. [Line-by-Line Diff & Task Critique]: Rà soát phản biện từng task trong 08_tasks, từng file & từng dòng git diff.\n"
+    "Đã phát hiện chỉnh sửa source code ({files}). TRƯỚC KHI báo cáo hoàn tất, BẮT BUỘC tự động thực thi NGUYÊN VĂN mệnh lệnh Audit sau của User:\n"
+    "«\n"
+    + VERBATIM_USER_AUDIT_PROMPT
+    + "\n»\n"
+    "Checklist bắt buộc trong `audit_report_<suffix>.md`:\n"
+    "1. [Line-by-Line Diff & Task Critique]: Chạy `git diff` thật; rà soát phản biện từng task trong 08_tasks, từng file & từng dòng git diff.\n"
     "2. [Anti-Smoke-Speculation & Runtime Trace (CẤM Mockup/Smoke Test/Hallucination)]:\n"
     "   - CẤM tạo/dùng mock closure (*Fn), struct literal giả lập, hoặc smoke script rời để suy diễn luồng thật đúng.\n"
     "   - Kiểm tra đủ 3 trục lỗi thực tế: (a) Concurrency/Multi-worker (Race condition, HoL blocking, Debouncer), "
     "(b) Timeout/Heartbeat (AckWait vs InProgress), (c) Data Continuity (Watermark/Cursor qua Outage gap).\n"
     "   - Nếu cần trace runtime value trên môi trường thật mà không tự chạy được -> BẮT BUỘC nêu rõ để phối hợp với User trace runtime value!\n"
     "3. [Anti-Speculation & Honesty Check]: Kiểm tra xem có suy diễn hay báo cáo láo không (mọi khẳng định phải có file:line + output lệnh thật).\n"
-    "4. [Self-Improvement Loop]: Đối chiếu lessons/INDEX.md; nếu phát hiện lỗi/anti-pattern mới, ghi vào lessons.md + chạy build_lessons_index.py.\n"
+    "4. [Self-Improvement & Autonomous Self-Healing Loop (S5 -> S3 -> S4 -> S5)]:\n"
+    "   - Đối chiếu lessons/INDEX.md; nếu phát hiện lỗi/anti-pattern mới, ghi vào lessons.md + chạy build_lessons_index.py.\n"
+    "   - Nếu lúc Audit phát hiện còn bug/lỗ hổng/thiếu sót so với Plan: CẤM dừng lại bắt User APPROVE lần 2! "
+    "Bắt buộc tự động quay về S3 cập nhật `09_tasks_solution_<suffix>.md` + `08_tasks_<suffix>.md` + chạy `DG1/DG2`, "
+    "sau đó tự sửa dứt điểm source code (S4) + chạy lại test + Audit lại (S5 + DG3) trong cùng lượt cho tới khi sạch bóng bug rồi mới báo OK!\n"
     "5. [QC, 3-Mutant Gate & /laya_router DG3]: Chạy `mutation_gate.py` (nếu task có `mode: clean-room` — kiểm chứng >=3 bản cố tình làm hỏng đều bị test đánh trượt KILLED) + gọi `laya_gate.py run --stage dg3` (và/hoặc `review`) để nhận xét lại quyết định thực thi.\n"
     "6. [Lưu báo cáo vật lý]: Lưu toàn bộ kết quả 6 mục trên vào `audit_report_<suffix>.md` trong workspace của task (H7 sẽ chặn nếu thiếu!)."
 )
@@ -580,20 +598,22 @@ def handle_pre_write(
             for i, nm, x in calls(st)
             if nm in ("write_to_file", "replace_file_content") and "audit_report_" in tgt(x)
         ]
+        first_sol_idx = sol[0] if sol else -1
         last_sol_idx = sol[-1] if sol else -1
         last_aud_idx = aud[-1] if aud else -1
         if last_aud_idx > last_sol_idx:
             return {
                 "decision": "deny",
                 "reason": (
-                    "Rule 9/13 (S5 -> S3 Re-Plan Loop): Đã bước vào chặng S5 Audit (audit_report_). "
-                    "Nếu phát hiện bug/gap mới, CẤM sửa thẳng source code! Bắt buộc quay về S3 cập nhật "
-                    "09_tasks_solution_<suffix>.md + 08_tasks_<suffix>.md, chạy lại DG1/DG2 và chờ User APPROVE."
+                    "Rule 9/13 (S5 -> S3 -> S4 Self-Healing Loop): Đã bước vào chặng S5 Audit (audit_report_). "
+                    "Nếu phát hiện bug/gap mới, CẤM sửa mò trực tiếp! Bắt buộc cập nhật bổ sung vào "
+                    "09_tasks_solution_<suffix>.md + 08_tasks_<suffix>.md (kèm DG1/DG2) trước, sau đó hệ thống "
+                    "sẽ tự động mở khoá cho sửa code dứt điểm ngay trong cùng lượt (không cần chờ User APPROVE lần 2)."
                 ),
             }
         ok = any(
             s.get("type") == "USER_INPUT" and APPROVE.search(s.get("content", ""))
-            for s in st[(last_sol_idx + 1 if last_sol_idx >= 0 else 0) :]
+            for s in st[(first_sol_idx + 1 if first_sol_idx >= 0 else 0) :]
         )
         if not ok:
             return {
@@ -688,7 +708,7 @@ def handle_stop(
         n = int(legacy_cnt.read_text(encoding="utf-8"))
     else:
         n = 0
-    if n >= 2:
+    if n >= 3:
         return {}
 
     ws = active_ws(st, ws_root)
@@ -764,12 +784,33 @@ def handle_stop(
             if r.returncode != 0:
                 miss.append("verify_governance.py FAILED:\n" + (r.stdout + r.stderr)[-600:])
 
+    if run_linter and src and n == 0:
+        sdir.mkdir(parents=True, exist_ok=True)
+        cnt_file.write_text("1", encoding="utf-8")
+        extra_miss = ("\n\n⚠️ Các mục Done-gate còn thiếu:\n- " + "\n- ".join(miss)) if miss else ""
+        return {
+            "decision": "continue",
+            "reason": (
+                "⛔ MANDATORY ADVERSARIAL STOP-AUDIT (H7 Pass #1 — Chống báo cáo OK sớm khi còn bug/lỗ hổng):\n"
+                + VERBATIM_USER_AUDIT_PROMPT
+                + "\n\n👉 BẮT BUỘC: Thực hiện rà soát phản biện thực sự từng dòng `git diff` vừa sửa. "
+                "Nếu phát hiện bất kỳ bug, lỗ hổng hay thiếu sót nào: CẤM báo cáo đẩy trách nhiệm cho User và CẤM bắt User APPROVE lại! "
+                "Hãy cập nhật ngay `09_tasks_solution_<suffix>.md` + `08_tasks_<suffix>.md` + chạy `DG1/DG2`, "
+                "tự sửa dứt điểm source code, chạy lại test + `DG3` + cập nhật `audit_report_<suffix>.md` + `06_validation_<suffix>.md` + `05_progress` "
+                "rồi mới kết thúc lượt!"
+                + extra_miss
+            ),
+        }
+
     if not miss:
         return {}
 
     sdir.mkdir(parents=True, exist_ok=True)
     cnt_file.write_text(str(n + 1), encoding="utf-8")
-    return {"decision": "continue", "reason": "⛔ Done-gate (H7) chưa đạt:\n- " + "\n- ".join(miss)}
+    reason_msg = "⛔ Done-gate (H7) chưa đạt:\n- " + "\n- ".join(miss)
+    if src:
+        reason_msg += "\n\n🔍 MỆNH LỆNH AUDIT BẮT BUỘC CỦA USER:\n" + VERBATIM_USER_AUDIT_PROMPT
+    return {"decision": "continue", "reason": reason_msg}
 
 
 def dispatch(event_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:

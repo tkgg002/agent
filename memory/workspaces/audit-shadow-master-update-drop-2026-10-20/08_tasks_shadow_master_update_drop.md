@@ -54,31 +54,29 @@
 
 ---
 
-## Chặng Bổ Sung: S5 → S3 Closed-Loop Re-Plan (Khắc phục 5 phát hiện Phản Biện `AF-01..AF-05` — Chờ User `APPROVE`)
+## Chặng Bổ Sung: S5 → S3 Closed-Loop Re-Plan (Khắc phục 5 phát hiện Phản Biện `AF-01..AF-05` — Đã hoàn tất sau User `APPROVE`, Commit `08c05a8`)
 
-- [ ] **Task 9 (Khắc phục `AF-01` — Quét động toàn bộ 5 Active Bindings `46, 47, 48, 51, 52` & Phối hợp Restart 3 Daemon Runtime `:8081/:8082/:8083`):**
-  - **Mô tả:** Cập nhật `TestLiveBindings_46_47_48_TransmuteAndVerifyZeroDrift` tại `internal/service/master/transmuter_gpayid_test.go:402` để truy vấn động toàn bộ `id` có `is_active = true` từ `cdc_system.master_binding` (gồm `46, 47, 48, 51, 52`) và kết nối đúng `row.MasterConnectionKey` (`default_master` `:5434` và `master_2` `:5437`). Phối hợp với User rebuild & restart 3 tiến trình `main` trên `:8081`, `:8082`, `:8083`.
-  - **Logs/Test:** `go test -v -count=1 ./internal/service/master/... -run TestLiveBindings`
-  - **Definition of Done:** Cả 5 active bindings (`46, 47, 48, 51, 52`) đều đạt `droppedDelete = 0, droppedUpdate = 0, gpayMismatch = 0` (`Binding 51, 52` giảm từ `541` xuống `540` dòng khớp với Shadow); 3 tiến trình daemon chạy binary mới.
+- [x] **Task 9 (Khắc phục `AF-01` — Quét động toàn bộ 5 Active Bindings `46, 47, 48, 51, 52` & Phối hợp Restart 3 Daemon Runtime `:8081/:8082/:8083`):**
+  - **Mô tả:** Cập nhật `TestLiveBindings_46_47_48_TransmuteAndVerifyZeroDrift` tại `internal/service/master/transmuter_gpayid_test.go:403-574` để truy vấn động toàn bộ `id` có `is_active = true` từ `cdc_system.master_binding` (gồm `46, 47, 48, 51, 52`) và kết nối đúng `row.MasterConnectionKey` (`default_master` `:5434` và `master_2` `:5437`).
+  - **Logs/Test:** `go test -v -count=1 ./internal/service/master/... -run TestLiveBindings` (`PASS`: cả 5 bindings `46, 47, 48, 51, 52` đều đạt `droppedDelete = 0, droppedUpdate = 0, gpayMismatch = 0`; `Binding 51` và `Binding 52` đã giảm từ `541` về `540/540` dòng khớp với Shadow).
+  - **Definition of Done:** Cả 5 active bindings (`46, 47, 48, 51, 52`) đều đạt `droppedDelete = 0, droppedUpdate = 0, gpayMismatch = 0` (`Binding 51, 52` giảm từ `541` xuống `540` dòng khớp với Shadow).
 
-- [ ] **Task 10 (Khắc phục `AF-02` — Sửa lỗi nuốt lỗi 1 nửa trong `splitSingleTaskPayload` tại `internal/handler/master/transmute_handler.go:782-795`):**
-  - **Mô tả:** Sửa điều kiện `if leftErr != nil && rightErr != nil` thành `if leftErr != nil || rightErr != nil` để bất kỳ nửa nào lỗi cũng trả lỗi về `task.complete(firstErr)` và gọi `h.replyErr(...)`, không để JetStream `Ack()` sớm mất cơ hội redeliver của nửa bị lỗi; khi cả hai nửa thành công thì gọi `h.reply(task.Msg, ...)` trước `task.complete(nil)`. Bổ sung unit test kiểm chứng trong `internal/handler/master/transmute_debounce_group_test.go`.
-  - **Logs/Test:** `go test -v ./internal/handler/master/...`
-  - **Definition of Done:** Khi 1 nửa payload lỗi và 1 nửa thành công, `task.complete` nhận khác `nil` để JetStream redeliver đúng chuẩn.
+- [x] **Task 10 (Khắc phục `AF-02` — Sửa lỗi nuốt lỗi 1 nửa trong `splitSingleTaskPayload` tại `internal/handler/master/transmute_handler.go:782-805`):**
+  - **Mô tả:** Sửa điều kiện `if leftErr != nil && rightErr != nil` thành `if leftErr != nil || rightErr != nil` để bất kỳ nửa nào lỗi cũng trả lỗi về `task.complete(firstErr)` và gọi `h.replyErr(...)`, không để JetStream `Ack()` sớm mất cơ hội redeliver của nửa bị lỗi; khi cả hai nửa thành công thì gọi `h.reply(task.Msg, ...)` trước `task.complete(nil)`. Bổ sung unit test `TestSplitSingleTaskPayload_ReturnsErrorWhenSubTaskFails` trong `internal/handler/master/transmute_debounce_group_test.go:839-875`.
+  - **Logs/Test:** `go test -v -count=1 ./internal/handler/master/...` (`PASS`)
+  - **Definition of Done:** Khi 1 nửa payload lỗi, `task.complete` nhận khác `nil` để JetStream redeliver đúng chuẩn.
 
-- [ ] **Task 11 (Khắc phục `AF-03` — Bảo toàn `LastCursorJSON` khi Incremental Sync & Giới hạn `cutoff` theo `LastSuccessAt` trong `syncUpdatedShadowRowsBeforeCursor`):**
-  - **Mô tả:** Tại `internal/service/master/transmuter.go:553-557`, chỉ reset `item.LastCursorJSON = []byte("{}")` khi `runType == "full" && len(onlySourceIDs) == 0 && lastBatchErr == nil`. Tại `transmuter.go:1504-1513`, lấy `cutoff` từ `runtimeState.LastSuccessAt` (lùi 10 phút an toàn) thay vì hardcode `7 days` gây quét lại toàn bộ 54,754 dòng.
-  - **Logs/Test:** `go test -v ./internal/service/master/...`
-  - **Definition of Done:** `LastCursorJSON` giữ nguyên `{"last_gpay_id": ...}` sau khi chạy Incremental Sync; `syncUpdatedShadowRowsBeforeCursor` chỉ quét các dòng mới cập nhật kể từ `LastSuccessAt`.
+- [x] **Task 11 (Khắc phục `AF-03` — Bảo toàn `LastCursorJSON` khi Incremental Sync & Giới hạn `cutoff` theo `LastSuccessAt` trong `syncUpdatedShadowRowsBeforeCursor`):**
+  - **Mô tả:** Tại `internal/service/master/transmuter.go:357-365, 558-563`, lưu checkpoint `last_gpay_id` khi `inferLastGpayIDFromMaster` khôi phục cursor và chỉ reset `item.LastCursorJSON = []byte("{}")` khi `runType == "full" && len(onlySourceIDs) == 0 && lastBatchErr == nil`. Tại `transmuter.go:1510-1518`, lấy `cutoff` từ `runtimeState.LastSuccessAt` (lùi 10 phút an toàn, fallback `24h`) thay vì hardcode `7 days`.
+  - **Logs/Test:** `go test -v -count=1 ./internal/service/master/...` (`PASS`)
+  - **Definition of Done:** `LastCursorJSON` giữ nguyên `{"last_gpay_id": ...}` sau khi chạy Incremental Sync; `syncUpdatedShadowRowsBeforeCursor` chỉ quét các dòng mới cập nhật kể từ `LastSuccessAt - 10m`.
 
-- [ ] **Task 12 (Khắc phục `AF-04` — Chia chunk & dùng đúng `shadow_connection_key` trong `publishTransmuteShadowForSegA` + Bổ sung publish Transmute cho `executeLegacyHeal`):**
-  - **Mô tả:** Tại `internal/handler/recon/recon_execute_heal_handler.go:339-381`, truyền đúng `shadow_connection_key` (`"default_shadow"` hoặc từ binding) và chia chunk theo `healChunkSize = 200`. Tại `internal/handler/recon/recon_check_heal_handler.go:302-360` (`executeLegacyHeal`), bắn NATS `cdc.cmd.transmute-shadow` sau khi heal Shadow thành công.
-  - **Logs/Test:** `go test -v ./internal/handler/recon/...`
+- [x] **Task 12 (Khắc phục `AF-04` — Chia chunk & dùng đúng `shadow_connection_key` trong `publishTransmuteShadowForSegA` + Bổ sung publish Transmute cho `executeLegacyHeal`):**
+  - **Mô tả:** Tại `internal/handler/recon/recon_execute_heal_handler.go:339-392`, khử trùng lặp `uniqueStrings(sourceIDs)`, truyền đúng `"shadow_connection_key": "default_shadow"` và chia chunk theo `healChunkSize = 200`. Tại `internal/handler/recon/recon_check_heal_handler.go:308-311` (`executeLegacyHeal`), bắn NATS `cdc.cmd.transmute-shadow` sau khi heal Shadow thành công.
+  - **Logs/Test:** `go test -v -count=1 ./internal/handler/recon/...` (`PASS`)
   - **Definition of Done:** Cả `ExecuteHealHandler` và `executeLegacyHeal` đều bắn NATS transmute theo từng chunk `200` ID với đúng `shadow_connection_key`.
 
-- [ ] **Task 13 (Khắc phục `AF-05` — Khử trùng lặp `sourceIDs` trong `resolveSourceIDsForSegmentB` & So sánh `SourceTsMs` trong `dedupByConflictKey`):**
-  - **Mô tả:** Tại `internal/handler/recon/recon_execute_heal_handler.go:753`, bọc `uniqueStrings(out)` trước khi trả về. Tại `internal/handler/shadow/batch_buffer_utils.go:96-135`, so sánh `r.SourceTsMs` khi gộp `MappedData` và chọn bản ghi mới nhất cho cùng `PrimaryKeyValue`.
-  - **Logs/Test:** `go test -v ./internal/handler/recon/... ./internal/handler/shadow/...`
+- [x] **Task 13 (Khắc phục `AF-05` — Khử trùng lặp `sourceIDs` trong `resolveSourceIDsForSegmentB` & So sánh `SourceTsMs` trong `dedupByConflictKey`):**
+  - **Mô tả:** Tại `internal/handler/recon/recon_execute_heal_handler.go:732-780`, lọc `missingGpayIDs` chưa tìm thấy trên Shadow và bọc `uniqueStrings(out)` trước khi trả về. Tại `internal/handler/shadow/batch_buffer_utils.go:90-153`, so sánh `r.SourceTsMs` khi gộp `MappedData` và chọn bản ghi mới nhất cho cùng `PrimaryKeyValue`. Bổ sung unit test `TestDedupByConflictKey_OrdersBySourceTsMsWhenOutOfOrder` tại `internal/handler/shadow/adaptive_batcher_test.go:134-174`.
+  - **Logs/Test:** `go test -v -count=1 ./internal/handler/recon/... ./internal/handler/shadow/...` (`PASS`)
   - **Definition of Done:** Unit test kiểm chứng 2 sự kiện cùng PK bị đảo thứ tự `SourceTsMs` vẫn giữ giá trị của sự kiện có `SourceTsMs` lớn hơn; `resolveSourceIDsForSegmentB` không trả về ID trùng lặp.
-
-

@@ -80,11 +80,11 @@
 
 ## 3. Kết quả Decision Gate (`DG1`, `DG2`, `DG3`), Security Gate & Final Audit (Gate G7)
 
-### 3.1. Decision Gate `/laya_router`
-- **DG1 (Solution Gate):** `06_laya_summary_dg1_20261020T142129.json` | Gate: `PASS`
-- **DG2 (Demo Code Gate):** `06_laya_summary_dg2_20261020T142031.json` | Gate: `PASS`
-- **DG3 (Final Implementation & Audit Gate):** `06_laya_summary_dg3_20261020T160259.json` | Gate: `PASS`
-- **Final Adversarial Audit Report:** `audit_report_modular_agent_orchestrator.md`
+### 3.1. Decision Gate `/laya_router` & Adversarial Re-Audit (`S5 -> S3 Re-Plan`)
+- **DG1 (Solution Gate — Re-Plan `AF-1..AF-6`):** `06_laya_summary_dg1_20261020T163901.json` | Gate: `PASS`
+- **DG2 (Demo Code Gate — Re-Plan `AF-1..AF-6`):** `06_laya_summary_dg2_20261020T163925.json` | Gate: `PASS`
+- **DG3 (Adversarial Re-Audit Gate):** `06_laya_summary_dg3_20261020T163241.json` | Gate: `PASS` (đã xác thực 6 phát hiện phản biện `AF-1..AF-6` trên commit `54e36e4`)
+- **Final Adversarial Audit Report:** `audit_report_modular_agent_orchestrator.md` (chuyển trạng thái sang `S5 -> S3 Re-Plan` chờ User `APPROVE` để thực thi `Task 5` khắc phục `AF-1..AF-6`).
 
 ### 3.2. Security Gate Report (`/security-agent`)
 | Hạng mục | Kết quả | Chi tiết |

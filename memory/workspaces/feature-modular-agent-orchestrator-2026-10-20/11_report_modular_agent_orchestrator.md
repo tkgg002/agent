@@ -52,3 +52,9 @@
 | `internal/sorter/sorter_test.go` | New | `+95` | Test xếp hạng ưu tiên và tích hợp FTS5 BM25 |
 | `internal/tui/wave_dag_view.go` | New | `+155` | Giao diện 3 tầng `RenderWaveDAGDashboard` |
 | `internal/tui/wave_dag_view_test.go` | New | `+62` | Test kết xuất `RenderWaveDAGDashboard` |
+
+---
+
+## 3. Kết quả Adversarial Re-Audit (`AF-1` $\rightarrow$ `AF-6`) & Vòng lặp Khép kín `S5 -> S3 Re-Plan`
+
+Qua quá trình rà soát phản biện từng dòng diff (`commit 54e36e4`) và kiểm định lại với hội đồng `/laya_router` (`06_laya_summary_dg3_20261020T163241.json`, `06_laya_summary_dg1_20261020T163901.json`, `06_laya_summary_dg2_20261020T163925.json`), chúng tôi đã phát hiện và lập đặc tả khắc phục 1:1 cho **6 sơ hở (`AF-1` đến `AF-6`)** trong `audit_report_modular_agent_orchestrator.md` và `09_tasks_solution_modular_agent_orchestrator.md` (Mục 6), hiện giữ nguyên trạng mã nguồn (`Propose-Only` theo Rule #9.7d / Hook `H4b`) chờ lệnh `APPROVE` của User để thực thi `Task 5`.
