@@ -12,3 +12,4 @@
 - [2026-10-16T16:18:06+07:00] [Agent:laya_gate] DG1 S-RC4 FLAG resolved: Verified in match_any and verify_workspace_docs REF: tooling/verify_governance.py:63-67
 - [2026-10-19T11:41:34+07:00] [Agent:laya_gate] DG2 D-EDGE FLAG resolved: Verified directly in handle_stop stop-counter check (if n >= 2: return {}) REF: hooks/agy/agy_guard.py:428-450
 - [2026-10-20T11:50:16+07:00] [Agent:laya_gate] DG3 A-F1 FLAG resolved: REF: hooks/agy/agy_guard.py:344-348 — Dòng 347 gán trực tiếp body = str(args.get('CodeContent') or '') + str(args.get('ReplacementContent') or ''), xác nhận 100% ở code thực tế là body chỉ chứa phần nội dung truyền trong args mà chưa đọc nội dung file hiện có trên đĩa.
+- [2026-10-20T16:40:31+07:00] [Agent:laya_gate] DG1 S-FIX FLAG resolved: Đã kiểm chứng trực tiếp tại REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:682-692: stop_key = f'{conv_id}.{u_idx}.stop', cnt_file = sdir / stop_key, và if n >= 2: return {}.

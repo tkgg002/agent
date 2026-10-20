@@ -198,4 +198,14 @@ Và tại `handle_stop` (`H7`):
 ---
 
 ## 5. Kết quả Kiểm định Decision Gate (`/laya_router` `DG1` & `DG2`)
-*(Cập nhật tự động sau khi chạy `laya_gate.py run --stage dg1` và `--stage dg2`)*
+
+- **DG1 (Giải pháp Kỹ thuật):**
+  - Summary: [`06_laya_summary_dg1_20261020T164016.json`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/agent-process-optimization/06_laya_summary_dg1_20261020T164016.json) | Trusted Rounds: `["r3"]` | **Gate: `PASS`**
+  - `S-RC`: `ACCEPT` (`r1: CORRECT 0.5134`, `r2: CORRECT 0.7639`, `r3: YES 0.6380`)
+  - `S-FIX`: `FLAG -> RESOLVED` (đối chiếu trực tiếp `REF: hooks/agy/agy_guard.py:682-692`)
+  - `S-IMPACT`: `ACCEPT` (`r1: CORRECT 0.7098`, `r3: YES 0.8925`)
+  - `S-PATTERN`: `ACCEPT` (`r1: CORRECT 0.7526`, `r2: CORRECT 0.7143`, `r3: YES 0.8985`)
+- **DG2 (Code Demo):**
+  - Summary: [`06_laya_summary_dg2_20261020T164032.json`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/agent-process-optimization/06_laya_summary_dg2_20261020T164032.json) | **Gate: `PASS`**
+  - `D-BEHAV`, `D-EDGE`, `D-API`: Đã kiểm chứng trực tiếp bằng chứng code tại `hooks/agy/agy_guard.py:47-50, 577-584, 718-727`.
+
