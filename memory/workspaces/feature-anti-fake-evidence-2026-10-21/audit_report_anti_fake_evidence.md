@@ -19,4 +19,9 @@ Mọi dòng khẳng định trong 06_validation trích biên lai EV; ca chưa ki
 S5 → S3 → S4 hai lần (plan mục 4, 5). Lesson: biên lai chỉ giữ đuôi output nên verdict phải in ở dòng cuối (đã thêm `MUTATION_GATE ...`).
 
 ## 6. laya_router DG3
-Xem `05_progress_anti_fake_evidence.md`.
+Xem `05_progress_anti_fake_evidence.md`. Vòng 2: `06_laya_summary_dg3_20261021T104018.json` gate PASS, không FLAG.
+
+## Vòng 2 — H7 stop-audit (10:39)
+- Diff critique tìm ra: `current_fingerprint` lấy Cwd của run_command cuối phiên ⇒ chạy lệnh ở repo khác là mọi biên lai bị báo "cũ" giả. Sửa: `_fp_for(rec["cwd"])` theo từng biên lai; test hồi quy trên repo git thật trong tmp; mutant M8 thay M2.
+- Diff-anchor tự bắt lỗi của chính em: chạy `--base HEAD` sau khi đã commit thì mutant cũ không chạm dòng đổi → INVALID_INPUT (EV-20261021T103942-2f79, exit 3). Base đúng là commit trước task: 74840c8.
+- Số liệu sau sửa: xem 06_validation mục Vòng 2; DG3 chốt: `06_laya_summary_dg3_20261021T104512.json`.

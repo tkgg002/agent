@@ -544,6 +544,7 @@ def claim_issues(text: str, ws_dir: Path, st: List[Dict[str, Any]], fingerprint:
         n in ("write_to_file", "replace_file_content") and "06_evidence/" in tgt(a).replace("\\", "/")
         for _, n, a in calls(st)
     )
+    fp_cache: Dict[str, Optional[str]] = {}
     for line in _claim_lines(text):
         short = line.strip()[:90]
         evs = EV_RE.findall(line)
@@ -561,7 +562,8 @@ def claim_issues(text: str, ws_dir: Path, st: List[Dict[str, Any]], fingerprint:
                 issues.append(f"{ev}: phiên có tool ghi tay vào 06_evidence/ (biên lai không đáng tin)")
             if not any("evidence_run.py" in c and f"--kind {rec.get('kind')}" in c for c in ran):
                 issues.append(f"{ev}: không thấy run_command evidence_run.py --kind {rec.get('kind')} trong phiên")
-            if fingerprint and rec.get("src_fingerprint") != fingerprint:
+            want = fingerprint if fingerprint is not None else _fp_for(str(rec.get("cwd") or ""), fp_cache)
+            if want and rec.get("src_fingerprint") != want:
                 issues.append(f"{ev}: code đã thay đổi sau khi chạy (bằng chứng cũ)")
             recs.append(rec)
         if not recs:
@@ -577,16 +579,18 @@ def claim_issues(text: str, ws_dir: Path, st: List[Dict[str, Any]], fingerprint:
     return issues
 
 
-def current_fingerprint(st: List[Dict[str, Any]]) -> Optional[str]:
-    """Fingerprint source hiện tại theo cwd của biên lai gần nhất (repo được kiểm)."""
-    try:
-        if str(AGENT / "tooling") not in sys.path:
-            sys.path.insert(0, str(AGENT / "tooling"))
-        from evidence_run import source_fingerprint  # type: ignore
-    except ImportError:
-        return None
-    cwds = [str(a.get("Cwd")) for _, n, a in calls(st) if n == "run_command" and a.get("Cwd")]
-    return source_fingerprint(Path(cwds[-1])) if cwds else None
+def _fp_for(cwd: str, cache: Dict[str, Optional[str]]) -> Optional[str]:
+    """Fingerprint source hiện tại của repo mà biên lai đã chạy (theo cwd ghi trong biên lai)."""
+    if cwd not in cache:
+        try:
+            if str(AGENT / "tooling") not in sys.path:
+                sys.path.insert(0, str(AGENT / "tooling"))
+            from evidence_run import source_fingerprint  # type: ignore
+
+            cache[cwd] = source_fingerprint(Path(cwd)) if cwd and Path(cwd).is_dir() else None
+        except ImportError:
+            cache[cwd] = None
+    return cache[cwd]
 
 
 def mutation_gate_status(
@@ -809,7 +813,7 @@ def handle_pre_write(
             if ln not in old_lines
         )
         st_c = steps(payload)
-        c_issues = claim_issues(new_text, (ws_root or WS_ROOT) / claim_doc.group(1), st_c, current_fingerprint(st_c))
+        c_issues = claim_issues(new_text, (ws_root or WS_ROOT) / claim_doc.group(1), st_c, None)
         if c_issues:
             return {
                 "decision": "deny",

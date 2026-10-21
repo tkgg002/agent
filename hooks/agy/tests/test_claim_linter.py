@@ -63,6 +63,19 @@ class TestClaimLinter(unittest.TestCase):
         st = self.st + [{"tool_calls": [{"name": "write_to_file", "args": {"TargetFile": str(self.ws / "06_evidence" / f"{EV}.json")}}]}]
         self.assertTrue(any("ghi tay" in i for i in agy_guard.claim_issues(f"- PASS {EV}", self.ws, st, "fp1")))
 
+    def test_fingerprint_computed_from_ev_cwd(self) -> None:
+        import subprocess
+        repo = Path(self._t.name) / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+        (repo / "a.py").write_text("X = 1\n", encoding="utf-8")
+        sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tooling"))
+        import evidence_run
+        self._ev(cwd=str(repo), src_fingerprint=evidence_run.source_fingerprint(repo))
+        self.assertEqual(agy_guard.claim_issues(f"- PASS {EV}", self.ws, self.st, None), [])
+        (repo / "a.py").write_text("X = 2\n", encoding="utf-8")
+        self.assertTrue(any("cũ" in i for i in agy_guard.claim_issues(f"- PASS {EV}", self.ws, self.st, None)))
+
     def test_exempt_section_and_code_fence_ignored(self) -> None:
         text = "## Chưa kiểm được\n- runtime thật chưa chạy 0/1\n## Khác\n```\nPASS\n```\n"
         self.assertEqual(agy_guard.claim_issues(text, self.ws, self.st, "fp1"), [])

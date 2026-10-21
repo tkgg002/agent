@@ -8,3 +8,4 @@
 - [x] T6: Test Red→Green + mutation gate cho chính T1–T5; runtime: replay transcript phiên 05bada14 (các claim cũ phải bị bắt).
 
 DoD: replay báo cáo cũ (audit harness2 AF-07, audit_report rea_cleanroom_gap) → linter chỉ ra đúng các claim không có EV; claim có EV hợp lệ qua.
+- [x] T7: fingerprint theo cwd của từng biên lai.

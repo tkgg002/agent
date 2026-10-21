@@ -22,3 +22,6 @@ def claim_issues(text, ws_dir, st, fingerprint):
         if not evs: yield f"claim không có EV: {line[:80]}"; continue
         for ev in map(load_ev(ws_dir), evs): yield from check_ev(ev, line, st, fingerprint)
 ```
+
+## S5 → S3 (10:40)
+6. `current_fingerprint` dùng Cwd của run_command cuối phiên ⇒ sai repo thì báo "bằng chứng cũ" giả. Fix: khi H4c không truyền fingerprint, tính `source_fingerprint(rec["cwd"])` cho từng biên lai (cache theo cwd).
