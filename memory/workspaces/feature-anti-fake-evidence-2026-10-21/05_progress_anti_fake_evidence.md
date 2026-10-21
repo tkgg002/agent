@@ -1,0 +1,4 @@
+# 05 — Progress (Append-Only) `anti_fake_evidence`
+
+- [2026-10-21T10:24:50+07:00] [Agent:Claude-Opus-5.5] START S1–S3 (Propose-Only): điều tra vì sao "test láo" lặp lại; bằng chứng: 10 lesson mock/fake/hallucination trong INDEX, `verify_governance.py` AUDIT_REQUIRED_PATTERNS chỉ kiểm từ khoá, `mutation_gate.py` không ràng mutant vào dòng vừa sửa, sự cố AF-5/stub harness2 trong phiên.
+- [2026-10-21T10:38:40+07:00] [Agent:Claude-Opus-5.5] DONE S4–S5: evidence_run.py + H4c claim linter + mutation_gate --base/CRASHED. Biên lai: hooks EV-20261021T103714-c9a2, tooling EV-20261021T103714-9f02, mutation EV-20261021T103719-b403, runtime H4c EV-20261021T103738-aa1a. S5→S3 hai lần (CRASHED; khớp biên lai theo --kind thay vì nguyên văn cmd). DG1 `..._dg1_20261021T102945` PASS, DG2 PASS, DG3 `..._dg3_20261021T103821` PASS sau resolve A-PATTERN.

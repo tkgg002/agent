@@ -1,0 +1,58 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "verify_governance audit patterns",
+    "claim": "verify_governance.py validates audit reports with a list of keyword regex patterns in AUDIT_REQUIRED_PATTERNS.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/verify_governance.py:66-68\nAUDIT_REQUIRED_PATTERNS: List[Tuple[str, str]] = [\n    (r\"(line-by-line|từng dòng|git diff)\", \"Mục 1: Phản biện từng dòng update / git diff & từng task\"),\n    (r\"(mockup|hallucination|runtime|trace|smoke)\", \"Mục 2: Chống suy diễn Smoke Test / Mockup / Hallucination & Trace Runtime thật\"),"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "mutation_gate target check",
+    "claim": "mutation_gate.py only requires target_content to appear exactly once in the file and does not check it against a git diff.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/mutation_gate.py:161-165\n        if text.count(t_content) != 1:\n            return 3, {\n                \"gate\": \"INVALID_INPUT\",\n                \"error\": f\"Mutant {mid}: target_content phải xuất hiện đúng 1 lần trong {fpath.name} (hiện tại: {text.count(t_content)}).\",\n            }"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "agy_guard audit check",
+    "claim": "agy_guard computes missing audit sections by searching each AUDIT_REQUIRED_PATTERNS regex in the report text.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:569-569\n    missing = [label for pat, label in AUDIT_REQUIRED_PATTERNS if not re.search(pat, text, re.I)]"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "agy_guard audit patterns",
+    "claim": "In agy_guard.py, AUDIT_REQUIRED_PATTERNS is assigned at top level (no indentation) to a list literal of (regex, label) tuples.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:144-147\nAUDIT_REQUIRED_PATTERNS = [\n    (r\"(line-by-line|từng dòng|git diff)\", \"Mục 1: Phản biện từng dòng update / git diff & từng task\"),\n    (r\"(mockup|hallucination|runtime|trace|smoke)\", \"Mục 2: Chống suy diễn Smoke Test / Mockup / Hallucination & Trace Runtime thật\"),\n    (r\"(concurrency|multi-worker|worker|timeout|heartbeat|ackwait|watermark|continuity|debouncer)\", \"Mục 3: Kiểm tra Concurrency / Timeout-Heartbeat / Data Continuity\"),"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "mutation_gate target check",
+    "claim": "mutation_gate.py requires target_content to appear at least 3 times.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/mutation_gate.py:161-165\n        if text.count(t_content) != 1:\n            return 3, {\n                \"gate\": \"INVALID_INPUT\",\n                \"error\": f\"Mutant {mid}: target_content phải xuất hiện đúng 1 lần trong {fpath.name} (hiện tại: {text.count(t_content)}).\",\n            }"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "verify_governance audit patterns",
+    "claim": "verify_governance.py validates audit reports by executing the commands listed in them.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/verify_governance.py:66-68\nAUDIT_REQUIRED_PATTERNS: List[Tuple[str, str]] = [\n    (r\"(line-by-line|từng dòng|git diff)\", \"Mục 1: Phản biện từng dòng update / git diff & từng task\"),\n    (r\"(mockup|hallucination|runtime|trace|smoke)\", \"Mục 2: Chống suy diễn Smoke Test / Mockup / Hallucination & Trace Runtime thật\"),"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "agy_guard audit patterns",
+    "claim": "agy_guard.py declares AUDIT_REQUIRED_PATTERNS.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:144-144\nAUDIT_REQUIRED_PATTERNS = ["
+  }
+]

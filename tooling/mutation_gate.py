@@ -18,6 +18,7 @@ import datetime as dt
 import hashlib
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -85,6 +86,11 @@ def auto_detect_component(fpath: Path) -> Tuple[Path, Optional[str]]:
     return fpath.resolve().parent, None
 
 
+# Mutant làm test crash / không chạy test nào KHÔNG phải là "bị test bắt" (anti_fake_evidence).
+KILL_SIGNAL_RE = re.compile(r"(FAILED \(failures=|AssertionError|--- FAIL|\b\d+ failed\b|^FAIL\b|✕|expect\()", re.M)
+CRASH_RE = re.compile(r"(Ran 0 tests|NO TESTS RAN|no tests ran|collected 0 items|ImportError|ModuleNotFoundError|SyntaxError)")
+
+
 def run_test_cmd(cmd: str, cwd: Path, timeout_sec: int = 60) -> Dict[str, Any]:
     env = dict(os.environ)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -98,10 +104,12 @@ def run_test_cmd(cmd: str, cwd: Path, timeout_sec: int = 60) -> Dict[str, Any]:
             text=True,
             timeout=timeout_sec,
         )
+        full = r.stdout + r.stderr
         return {
             "returncode": r.returncode,
-            "output_tail": (r.stdout + r.stderr)[-800:],
+            "output_tail": full[-800:],
             "timed_out": False,
+            "crashed": bool(CRASH_RE.search(full)) and not KILL_SIGNAL_RE.search(full),
         }
     except subprocess.TimeoutExpired as e:
         return {
@@ -111,12 +119,61 @@ def run_test_cmd(cmd: str, cwd: Path, timeout_sec: int = 60) -> Dict[str, Any]:
         }
 
 
+SRC_SUFFIXES = (".py", ".go", ".ts", ".tsx", ".js", ".jsx", ".rs", ".java", ".kt", ".sql", ".sh")
+
+
+def _git_out(repo: Path, *args: str) -> Optional[str]:
+    try:
+        r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def diff_anchor_issues(prepared: List[Dict[str, Any]], base: str) -> List[str]:
+    """Mỗi mutant phải chạm dòng '+' của git diff <base>; mỗi file source đã đổi (trừ test) phải có >=1 mutant."""
+    issues: List[str] = []
+    if not prepared:
+        return ["không có mutant"]
+    root_out = _git_out(prepared[0]["fpath"].parent, "rev-parse", "--show-toplevel")
+    if not root_out:
+        return ["không tìm thấy git repo"]
+    root = Path(root_out.strip())
+    if _git_out(root, "rev-parse", "--verify", base) is None:
+        return [f"base '{base}' không hợp lệ"]
+    untracked = set((_git_out(root, "ls-files", "-o", "--exclude-standard") or "").splitlines())
+    changed = set((_git_out(root, "diff", "--name-only", base) or "").splitlines()) | untracked
+    src_changed = {
+        c for c in changed
+        if c.endswith(SRC_SUFFIXES) and not c.startswith("memory/")
+        and not re.search(r"(^|/)(tests?|__tests__)/|(^|/)test_[^/]*$|_test\.\w+$|\.test\.\w+$", c)
+    }
+    covered = set()
+    for item in prepared:
+        rel = str(item["fpath"].resolve().relative_to(root.resolve()))
+        if rel in untracked:
+            added = {ln.strip() for ln in item["fpath"].read_text(encoding="utf-8").splitlines()}
+        else:
+            diff = _git_out(root, "diff", base, "--", rel) or ""
+            added = {ln[1:].strip() for ln in diff.splitlines() if ln.startswith("+") and not ln.startswith("+++")}
+        tlines = [ln.strip() for ln in item["target_content"].splitlines() if ln.strip()]
+        if not any(t in added for t in tlines):
+            issues.append(f"{item['id']} không chạm dòng nào đã đổi trong {rel} so với {base}")
+        else:
+            covered.add(rel)
+    missing = sorted(src_changed - covered)
+    if missing:
+        issues.append("file source đã đổi chưa có mutant: " + ", ".join(missing))
+    return issues
+
+
 def execute_mutation_gate(
     ws_name: str,
     suffix: str,
     mutations_file: Path,
     workspaces_dir: Path = DEFAULT_WS_ROOT,
     timeout_sec: int = 60,
+    base: Optional[str] = None,
 ) -> Tuple[int, Dict[str, Any]]:
     try:
         raw = json.loads(mutations_file.read_text(encoding="utf-8"))
@@ -189,6 +246,12 @@ def execute_mutation_gate(
             }
         )
 
+    # Diff-anchor (anti_fake_evidence): mutant phải đánh vào code vừa đổi so với --base.
+    if base:
+        issues = diff_anchor_issues(prepared, base)
+        if issues:
+            return 3, {"gate": "INVALID_INPUT", "error": "Diff-anchor: " + "; ".join(issues)}
+
     # Bước 1: Chạy Baseline trên các lệnh test duy nhất
     baseline_results: Dict[str, Dict[str, Any]] = {}
     for item in prepared:
@@ -241,6 +304,9 @@ def execute_mutation_gate(
             if res["timed_out"]:
                 status = "TIMEOUT"
                 timeout_ids.append(mid)
+            elif res["returncode"] != 0 and res.get("crashed"):
+                status = "CRASHED"
+                survived_ids.append(mid)
             elif res["returncode"] != 0:
                 status = "KILLED"
             else:
@@ -290,6 +356,7 @@ def execute_mutation_gate(
         "timeout_count": len(timeout_ids),
         "timeout_ids": timeout_ids,
         "all_restored_sha256": all_restored,
+        "base": base,
         "gate": gate,
         "mutants": results,
         "summary_file": str(summary_path),
@@ -305,6 +372,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     ap.add_argument("--mutations", "-m", required=True, help="Đường dẫn tới file JSON chứa >=3 mutants")
     ap.add_argument("--workspaces-dir", default=str(DEFAULT_WS_ROOT), help="Thư mục gốc chứa workspaces")
     ap.add_argument("--timeout", type=int, default=60, help="Timeout (giây) cho mỗi lần chạy test")
+    ap.add_argument("--base", default=None, help="Git ref gốc (restore-point): mutant phải chạm dòng đã đổi so với ref này")
     return ap.parse_args(argv)
 
 
@@ -316,8 +384,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         mutations_file=Path(args.mutations).resolve(),
         workspaces_dir=Path(args.workspaces_dir).resolve(),
         timeout_sec=args.timeout,
+        base=args.base,
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
+    # Dòng kết luận cuối: biên lai evidence_run chỉ giữ phần đuôi output nên verdict phải nằm cuối.
+    print(
+        f"MUTATION_GATE gate={summary.get('gate')} killed={summary.get('killed_count')}/{summary.get('total_mutants')} "
+        f"base={summary.get('base')}"
+    )
     return code
 
 

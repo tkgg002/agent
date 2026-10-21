@@ -509,6 +509,86 @@ def tripwire_violations(
     return out
 
 
+CLAIM_RE = re.compile(r"\b(PASS(?:ED)?|OK|KILLED|xanh|chạy thật|runtime)\b|\b\d+\s*/\s*\d+\b", re.I)
+EV_RE = re.compile(r"\bEV-\d{8}T\d{6}-[0-9a-f]{4}\b")
+RATIO_RE = re.compile(r"\b(\d+)\s*/\s*(\d+)\b")
+RUNTIME_CLAIM_RE = re.compile(r"(chạy thật|runtime|real\s+run)", re.I)
+FAIL_WORD_RE = re.compile(r"\b(FAIL(?:ED)?|đỏ|red|deny|chặn)\b", re.I)
+CLAIM_EXEMPT_HEAD_RE = re.compile(r"^#+.*(chưa kiểm|giới hạn|còn mở|not verified|limitation)", re.I)
+CLAIM_DOCS = re.compile(r"/workspaces/[^/]+/(06_validation|11_report|audit_report)_[^/]*\.md$")
+
+
+def _claim_lines(text: str) -> List[str]:
+    out: List[str] = []
+    exempt = False
+    fence = False
+    for line in text.splitlines():
+        if line.strip().startswith("```"):
+            fence = not fence
+            continue
+        if fence:
+            continue
+        if line.lstrip().startswith("#"):
+            exempt = bool(CLAIM_EXEMPT_HEAD_RE.match(line.strip()))
+            continue
+        if not exempt and CLAIM_RE.search(line):
+            out.append(line)
+    return out
+
+
+def claim_issues(text: str, ws_dir: Path, st: List[Dict[str, Any]], fingerprint: Optional[str]) -> List[str]:
+    """H4c: mỗi dòng khẳng định kết quả phải trích biên lai EV- thật, còn mới, khớp số liệu và loại bằng chứng."""
+    issues: List[str] = []
+    ran = [str(a.get("CommandLine") or "") for _, n, a in calls(st) if n == "run_command"]
+    forged = any(
+        n in ("write_to_file", "replace_file_content") and "06_evidence/" in tgt(a).replace("\\", "/")
+        for _, n, a in calls(st)
+    )
+    for line in _claim_lines(text):
+        short = line.strip()[:90]
+        evs = EV_RE.findall(line)
+        if not evs:
+            issues.append(f"claim không có biên lai EV-: «{short}»")
+            continue
+        recs: List[Dict[str, Any]] = []
+        for ev in evs:
+            try:
+                rec = json.loads((ws_dir / "06_evidence" / f"{ev}.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                issues.append(f"{ev} không tồn tại trong 06_evidence/")
+                continue
+            if forged:
+                issues.append(f"{ev}: phiên có tool ghi tay vào 06_evidence/ (biên lai không đáng tin)")
+            if not any("evidence_run.py" in c and f"--kind {rec.get('kind')}" in c for c in ran):
+                issues.append(f"{ev}: không thấy run_command evidence_run.py --kind {rec.get('kind')} trong phiên")
+            if fingerprint and rec.get("src_fingerprint") != fingerprint:
+                issues.append(f"{ev}: code đã thay đổi sau khi chạy (bằng chứng cũ)")
+            recs.append(rec)
+        if not recs:
+            continue
+        if not FAIL_WORD_RE.search(line) and any(int(r.get("exit", 1)) != 0 for r in recs):
+            issues.append(f"claim PASS nhưng biên lai exit≠0: «{short}»")
+        blob = "\n".join(str(r.get("stdout_tail", "")) for r in recs)
+        for a, b in RATIO_RE.findall(line):
+            if not (re.search(rf"\b{a}\b", blob) and re.search(rf"\b{b}\b", blob)):
+                issues.append(f"số {a}/{b} không có trong output biên lai: «{short}»")
+        if RUNTIME_CLAIM_RE.search(line) and not any(r.get("kind") in ("runtime", "integration") for r in recs):
+            issues.append(f"claim runtime nhưng biên lai chỉ là unit test: «{short}»")
+    return issues
+
+
+def current_fingerprint(st: List[Dict[str, Any]]) -> Optional[str]:
+    """Fingerprint source hiện tại theo cwd của biên lai gần nhất (repo được kiểm)."""
+    try:
+        if str(AGENT / "tooling") not in sys.path:
+            sys.path.insert(0, str(AGENT / "tooling"))
+        from evidence_run import source_fingerprint  # type: ignore
+    except ImportError:
+        return None
+    cwds = [str(a.get("Cwd")) for _, n, a in calls(st) if n == "run_command" and a.get("Cwd")]
+    return source_fingerprint(Path(cwds[-1])) if cwds else None
+
+
 def mutation_gate_status(
     ws: Optional[str], ws_root: Optional[Path] = None, suffix: Optional[str] = None
 ) -> Optional[str]:
@@ -718,6 +798,23 @@ def handle_pre_write(
                 "decision": "deny",
                 "reason": "Lesson Tripwire (G-08): chưa làm tiền điều kiện bắt buộc trước khi ghi kết luận:\n"
                 + "\n".join(f"- [{t['id']}] {t['check']}" for t in viol),
+            }
+
+    # H4c: Claim ↔ Evidence Linter (anti_fake_evidence) — chỉ lint dòng MỚI ghi.
+    claim_doc = re.search(r"/workspaces/([^/]+)/", f.replace("\\", "/")) if CLAIM_DOCS.search(f.replace("\\", "/")) else None
+    if claim_doc and is_mem_path(f, mem_root):
+        old_lines = set(str(args.get("TargetContent") or "").splitlines())
+        new_text = "\n".join(
+            ln for ln in (str(args.get("CodeContent") or "") + "\n" + str(args.get("ReplacementContent") or "")).splitlines()
+            if ln not in old_lines
+        )
+        st_c = steps(payload)
+        c_issues = claim_issues(new_text, (ws_root or WS_ROOT) / claim_doc.group(1), st_c, current_fingerprint(st_c))
+        if c_issues:
+            return {
+                "decision": "deny",
+                "reason": "Anti-Fake-Evidence (H4c): khẳng định kết quả phải trích biên lai thật từ "
+                "`tooling/evidence_run.py` (EV-…):\n- " + "\n- ".join(c_issues[:8]),
             }
 
     # H4a: S1 Intake Gate before S3 Solution (Rule #4, #9, #16)
