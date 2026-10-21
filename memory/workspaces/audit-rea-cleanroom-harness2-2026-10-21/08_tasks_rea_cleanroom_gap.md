@@ -12,5 +12,7 @@
 - [ ] T10 (G-03): Spec `R<n>: ... — REF:` bắt buộc trong H4 + `verify_governance.py` cho clean-room.
 - [ ] T11 (G-05): `run-recursion` bỏ proposer/scorer giả viết cứng; bắt buộc `--proposer-cmd`/`--rollout-cmd` thật, thiếu → exit 2.
 - [ ] T12: unittest hooks + tooling PASS; `mutation_gate.py` ≥3 mutant KILLED; DG3; audit_report; verify_governance S6.
+- [ ] T13 (AF-1): tripwire evidence chỉ từ tool đọc/lệnh, không tính tool ghi.
+- [ ] T14 (AF-2): G-04 resolve path cấm tương đối theo Cwd của run_command.
 
 DoD: Mọi finding có `file:line` hoặc output runtime; DG3 PASS/UNVALIDATED được ghi rõ.

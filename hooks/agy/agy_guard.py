@@ -44,9 +44,10 @@ SECRET = re.compile(
     r"|password\s*[:=]\s*[^\s*'\"]{6,})",
     re.I,
 )
+# G-01: neo đầu dòng — chặn false-positive khi từ khoá xuất hiện giữa câu mô tả ("...đã được Jev duyệt...").
 APPROVE = re.compile(
-    r"(approve|duyệt|ok\s*(sửa|làm|fix)|làm đi|sửa đi|fix đi|triển khai|thực hiện đi|chặn\s*đứng|thêm.*vào.*cho\s*tao|vòng\s+lặp\s+phản\s+tỉnh|self-improvement\s+loop|update\s+agy_g)",
-    re.I,
+    r"^\s*(?:ok\s+|ừ\s+|được\s+)?(approve|duyệt|ok\s*(sửa|làm|fix)|làm đi|sửa đi|fix đi|triển khai|thực hiện đi|chặn\s*đứng|thêm.*vào.*cho\s*tao|vòng\s+lặp\s+phản\s+tỉnh|self-improvement\s+loop|update\s+agy_g)",
+    re.I | re.M,
 )
 PROD_MOCK_POLLUTION = re.compile(
     r"(\b\w+Fn\s+func\s*\(|\blookupMasterTargetsFn\b|\brunEventsFn\b|\bsqlmock\b|\bfakemodel\b)",
@@ -54,6 +55,26 @@ PROD_MOCK_POLLUTION = re.compile(
 CLEAN_ROOM_MODE_RE = re.compile(r"^\s*mode\s*:\s*clean-room\b", re.I | re.M)
 CLEAN_ROOM_FORBIDDEN_RE = re.compile(r"^\s*clean_room_forbidden_sources\s*:\s*(.+)$", re.I | re.M)
 CLEAN_ROOM_SPEC_RE = re.compile(r"clean-room\s+approved\s+spec", re.I)
+# G-01: task clean-room chỉ mở S4 khi cả dòng là lệnh khởi động.
+CLEAN_ROOM_START = re.compile(r"^\s*(BẮT\s*ĐẦU|APPROVE)\s*[.!]?\s*$", re.I | re.M)
+# G-03: mỗi rule trong Clean-Room Approved Spec phải có REF: path:line.
+SPEC_RULE_RE = re.compile(r"^[ \t]*[-*]?[ \t]*\**R(\d+)\**[ \t]*[:.]", re.M)
+SPEC_REF_RE = re.compile(r"REF:\s*\S+:\d+")
+# G-02: tool-call args có thể chứa nội dung/đường dẫn file đọc được.
+READ_ARG_KEYS = {
+    "view_file": ("AbsolutePath",),
+    "grep_search": ("SearchPath",),
+    "find_by_name": ("SearchDirectory",),
+    "run_command": ("CommandLine",),
+    "read_url_content": ("Url",),
+}
+# G-08: lesson tripwires.
+TRIPWIRE_LIMIT = 5
+TRIPWIRE_GUARDED_DOCS = re.compile(r"/workspaces/[^/]+/(13_analysis|09_tasks_solution|audit_report)_[^/]*\.md$")
+# AF-1: bằng chứng Require chỉ tính từ tool đọc/lệnh — tool ghi (kể cả lần ghi bị chặn) không được tự thoả.
+TRIPWIRE_EVIDENCE_TOOLS = frozenset(
+    {"view_file", "grep_search", "find_by_name", "list_dir", "run_command", "read_url_content", "search_web"}
+)
 MANIFEST = ".agent-project.json"
 LAYA_START = "/Users/trainguyen/.venv/bin/python3 /Users/trainguyen/.agent/skills/laya_router/api.py"
 
@@ -302,21 +323,132 @@ def contaminated_clean_room_reads(st: List[Dict[str, Any]], forbidden: List[str]
         return []
     hits: List[str] = []
     for _, n, a in calls(st):
-        if n in ("view_file", "grep_search", "find_by_name"):
-            p = str(
-                a.get("AbsolutePath")
-                or a.get("SearchPath")
-                or a.get("SearchDirectory")
-                or ""
-            ).replace("\\", "/")
-            if not p:
-                continue
-            for fb in forbidden:
-                fb_norm = fb.replace("\\", "/").rstrip("/")
-                if fb_norm and (p.endswith(fb_norm) or f"/{fb_norm}" in p or p == fb_norm):
-                    if fb not in hits:
-                        hits.append(fb)
+        keys = READ_ARG_KEYS.get(n or "")
+        if not keys:
+            continue
+        blob = " ".join(str(a.get(k) or "") for k in keys).replace("\\", "/")
+        if not blob.strip():
+            continue
+        for fb in forbidden:
+            fb_norm = fb.replace("\\", "/").rstrip("/")
+            if fb_norm and fb_norm in blob and fb not in hits:
+                hits.append(fb)
     return hits
+
+
+def leaked_subagent_prompts(st: List[Dict[str, Any]], forbidden: List[str], min_line: int = 40) -> List[str]:
+    """G-04: invoke_subagent Prompt chứa path cấm hoặc dòng code (>= min_line ký tự) của file cấm."""
+    if not forbidden:
+        return []
+    prompts = [
+        json.dumps(a.get("Subagents") or a, ensure_ascii=False).replace("\\\\", "/").replace("\\", "")
+        for _, n, a in calls(st)
+        if n == "invoke_subagent"
+    ]
+    if not prompts:
+        return []
+    raw_prompts = [
+        " ".join(str(sa.get("Prompt") or "") for sa in (a.get("Subagents") or []) if isinstance(sa, dict))
+        for _, n, a in calls(st)
+        if n == "invoke_subagent"
+    ]
+    hits: List[str] = []
+    cwds = {str(a.get("Cwd")) for _, n, a in calls(st) if n == "run_command" and a.get("Cwd")}
+    for fb in forbidden:
+        fb_norm = fb.replace("\\", "/").rstrip("/")
+        if not fb_norm:
+            continue
+        leaked = any(fb_norm in p for p in prompts)
+        if not leaked:
+            cands = [Path(fb)] if Path(fb).is_absolute() else [Path(fb)] + [Path(c) / fb for c in sorted(cwds)]
+            lines: List[str] = []
+            for fpath in cands:
+                try:
+                    if fpath.is_file():
+                        lines = [ln.strip() for ln in fpath.read_text(encoding="utf-8", errors="ignore").splitlines()]
+                        break
+                except OSError:
+                    continue
+            long_lines = [ln for ln in lines if len(ln) >= min_line]
+            leaked = any(ln in p for ln in long_lines for p in raw_prompts)
+        if leaked and fb not in hits:
+            hits.append(fb)
+    return hits
+
+
+def user_approved(st: List[Dict[str, Any]], start: int, clean_room: bool = False) -> bool:
+    """G-01: clean-room chỉ chấp nhận dòng 'BẮT ĐẦU'/'APPROVE' đứng riêng; task thường dùng APPROVE neo đầu dòng."""
+    pat = CLEAN_ROOM_START if clean_room else APPROVE
+    return any(
+        s.get("type") == "USER_INPUT" and pat.search(str(s.get("content", "")))
+        for s in st[max(start, 0) :]
+    )
+
+
+def spec_rule_issues(text: str) -> List[str]:
+    """G-03: mục 'Clean-Room Approved Spec' phải có >=1 rule R<n> và mọi rule có REF: path:line."""
+    m = re.search(r"^(#+)\s*.*clean-room\s+approved\s+spec.*$", text, re.I | re.M)
+    if not m:
+        return ["thiếu mục 'Clean-Room Approved Spec'"]
+    level = len(m.group(1))
+    rest = text[m.end() :]
+    nxt = re.search(rf"^#{{1,{level}}}\s", rest, re.M)
+    section = rest[: nxt.start()] if nxt else rest
+    rules = [(rm.group(1), section[rm.start() :].split("\n", 1)[0]) for rm in SPEC_RULE_RE.finditer(section)]
+    if not rules:
+        return ["Clean-Room Approved Spec chưa có rule nào dạng `R<n>: <hành vi> — REF: path:line`"]
+    return [f"R{num} thiếu bằng chứng `REF: path:line`" for num, line in rules if not SPEC_REF_RE.search(line)]
+
+
+def load_tripwires(mem_root: Optional[Path] = None) -> List[Dict[str, str]]:
+    path = (mem_root or MEM) / "global" / "lessons" / "tripwires.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return [t for t in data if isinstance(t, dict) and t.get("id") and t.get("trigger") and t.get("check")]
+
+
+def match_tripwires(prompt: str, trips: List[Dict[str, str]], limit: int = TRIPWIRE_LIMIT) -> List[Dict[str, str]]:
+    hits: List[Dict[str, str]] = []
+    for t in trips:
+        try:
+            if re.search(t["trigger"], prompt or "", re.I):
+                hits.append(t)
+        except re.error:
+            continue
+        if len(hits) >= limit:
+            break
+    return hits
+
+
+def tripwire_violations(st: List[Dict[str, Any]], trips: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """G-08: tripwire có Require mà sau prompt khớp Trigger chưa có tool call nào khớp Require."""
+    out: List[Dict[str, str]] = []
+    for t in trips:
+        req = t.get("require")
+        if not req:
+            continue
+        trig_idx = [
+            i
+            for i, s in enumerate(st)
+            if s.get("type") == "USER_INPUT" and match_tripwires(str(s.get("content", "")), [t], 1)
+        ]
+        if not trig_idx:
+            continue
+        first = trig_idx[0]
+        try:
+            ok = any(
+                i > first
+                and n in TRIPWIRE_EVIDENCE_TOOLS
+                and re.search(req, json.dumps(a, ensure_ascii=False), re.I)
+                for i, n, a in calls(st)
+            )
+        except re.error:
+            continue
+        if not ok:
+            out.append(t)
+    return out
 
 
 def mutation_gate_status(
@@ -417,7 +549,9 @@ def component_for(file_path: str) -> Tuple[Optional[Path], Optional[Dict[str, An
     return root, best
 
 
-def handle_pre_invocation(payload: Dict[str, Any], state_dir: Optional[Path] = None) -> Dict[str, Any]:
+def handle_pre_invocation(
+    payload: Dict[str, Any], state_dir: Optional[Path] = None, mem_root: Optional[Path] = None
+) -> Dict[str, Any]:
     sdir = state_dir or STATE
     conv_id = payload.get("conversationId", "default")
     st = steps(payload)
@@ -448,7 +582,14 @@ def handle_pre_invocation(payload: Dict[str, Any], state_dir: Optional[Path] = N
         if up
         else f"DOWN — nhờ User chạy: {LAYA_START} (cold start ~30s, trả 503 khi đang nạp)"
     )
-    return {"injectSteps": [{"ephemeralMessage": BOOT_MSG.format(laya=laya)}]}
+    msg = BOOT_MSG.format(laya=laya)
+    prompt = str(st[u_idx].get("content", "")) if u_idx >= 0 else ""
+    hits = match_tripwires(prompt, load_tripwires(mem_root))
+    if hits:
+        msg += "\n\n🧷 LESSON TRIPWIRES khớp yêu cầu này — BẮT BUỘC làm TRƯỚC khi hành động:\n" + "\n".join(
+            f"- [{t['id']}] {t['check']}" for t in hits
+        )
+    return {"injectSteps": [{"ephemeralMessage": msg}]}
 
 
 def handle_pre_write(
@@ -489,6 +630,16 @@ def handle_pre_write(
             "decision": "deny" if is_mem_path(f, mem_root) else "force_ask",
             "reason": f"Rule 20: phát hiện chuỗi giống secret ({m.group(0)[:10]}***). Mask trước khi ghi.",
         }
+
+    # H4t: Lesson Tripwire Gate (G-08) — lesson phải chặn TRƯỚC, không chỉ ghi biên bản sau.
+    if TRIPWIRE_GUARDED_DOCS.search(f.replace("\\", "/")) and is_mem_path(f, mem_root):
+        viol = tripwire_violations(steps(payload), load_tripwires(mem_root))
+        if viol:
+            return {
+                "decision": "deny",
+                "reason": "Lesson Tripwire (G-08): chưa làm tiền điều kiện bắt buộc trước khi ghi kết luận:\n"
+                + "\n".join(f"- [{t['id']}] {t['check']}" for t in viol),
+            }
 
     # H4a: S1 Intake Gate before S3 Solution (Rule #4, #9, #16)
     sol_match = re.search(r"/workspaces/([^/]+)/09_tasks_solution_([^/]+)\.md$", f)
@@ -551,6 +702,12 @@ def handle_pre_write(
                         f"bắt buộc 09_tasks_solution_{suffix}.md phải có mục 'Clean-Room Approved Spec'."
                     ),
                 }
+            rule_issues = spec_rule_issues(merged_sol)
+            if rule_issues:
+                return {
+                    "decision": "deny",
+                    "reason": "Rule 13 (Clean-Room Spec, G-03): " + "; ".join(rule_issues),
+                }
 
     # H4b: Source Change Gate & Anti-Mock-Pollution (Rule #4, #10, #12, #13, #14, #16)
     if is_src(f, mem_root):
@@ -611,14 +768,16 @@ def handle_pre_write(
                     "sẽ tự động mở khoá cho sửa code dứt điểm ngay trong cùng lượt (không cần chờ User APPROVE lần 2)."
                 ),
             }
-        ok = any(
-            s.get("type") == "USER_INPUT" and APPROVE.search(s.get("content", ""))
-            for s in st[(first_sol_idx + 1 if first_sol_idx >= 0 else 0) :]
-        )
+        ok = user_approved(st, first_sol_idx + 1 if first_sol_idx >= 0 else 0, clean_room=is_cr)
         if not ok:
             return {
                 "decision": "force_ask",
-                "reason": "Rule 13: chưa thấy User APPROVE sau 09_tasks_solution trong phiên này. Cho phép sửa code?",
+                "reason": (
+                    "Rule 13 (Clean-Room, G-01): chưa thấy User gửi riêng một dòng `BẮT ĐẦU` (hoặc `APPROVE`) "
+                    "sau 09_tasks_solution. Cho phép sửa code?"
+                    if is_cr
+                    else "Rule 13: chưa thấy User APPROVE sau 09_tasks_solution trong phiên này. Cho phép sửa code?"
+                ),
             }
 
     return {"decision": "ask"}
@@ -766,6 +925,16 @@ def handle_stop(
             if rc and c["name"] not in seen_comps and not touched(st, re.escape(rc), last):
                 seen_comps.add(c["name"])
                 miss.append(f"Runtime: sửa component `{c['name']}` nhưng chưa chạy `{rc}` sau lần sửa cuối")
+
+    if ws:
+        cr_any, cr_forbidden = clean_room_config(ws, ws_root, sol_sfx or latest_solution_suffix(st, -1))
+        if cr_any and cr_forbidden:
+            leaked = leaked_subagent_prompts(st, cr_forbidden)
+            if leaked:
+                miss.append(
+                    "Clean-Room Leak (G-04): prompt invoke_subagent chứa đường dẫn/nội dung code gốc "
+                    f"({', '.join(leaked)}) — builder không còn 'chưa từng thấy code gốc'; dựng lại subagent chỉ với Spec."
+                )
 
     if run_linter and ws and (src or touched(st, r"workspaces/", u_idx)):
         linter = AGENT / "tooling" / "verify_governance.py"

@@ -403,3 +403,148 @@ Thực hiện đúng quy tắc **Closed-Loop Re-Plan (`S5 → S3`)** tại `GEMI
 7. **Khắc phục `AF-07` (`SubprocessRunner` & CLI `run-recursion`):**
    - Bổ sung `SubprocessProposerRunner` / `SubprocessRolloutRunner` kèm `timeout_sec` và subcommand CLI `run-recursion` để trace runtime value thật trên đĩa cùng User.
 
+---
+
+## 7. Thiết kế Khắc phục Triệt để 5 Lỗ hổng Tích hợp Thực tế (`RF-01 → RF-05` — Chờ User `APPROVE`)
+
+User đã vạch trần 5 sai lầm chí mạng khiến bản hiện tại mới dừng ở mức "port cấu trúc của `Harness²`" chứ chưa thực sự chạy với Model thật và chưa nối vào quy trình `S0–S6`. Dưới đây là thiết kế kỹ thuật duy nhất ánh xạ **1:1 trực diện theo từng điểm `RF-01 → RF-05`**:
+
+### 7.1. Giải pháp cho `RF-01` (`REF: tooling/orchestrator/harness2_engine.py:1005-1064`) — Xóa bỏ 100% Proposer Giả Viết Cứng (`VALUE = 2`, `skills/dom-<lbl>/SKILL.md`) trong `run-recursion`
+- **Root Cause (`harness2_engine.py:1006-1047`):**
+  - Dòng `1006-1019` dùng `TemporaryDirectory` và `base_tree` giả gồm 4 file trong bộ nhớ (`"tooling/existing_check.py": "VALUE = 1\n"`).
+  - Dòng `1020-1047` gán cứng `py_cmd` ghi `VALUE = 2` và tạo `skills/dom-{lbl}/SKILL.md` giả thay vì đọc cây `/agent` thật và gọi Model thật.
+- **Thiết kế Khắc phục (`S-FIX-RF01`):**
+  1. Xóa sạch khối `TemporaryDirectory`, `base_tree` 4 file giả và câu lệnh Python `py_cmd` viết cứng tại `harness2_engine.py:1006-1047`.
+  2. Trong `run-recursion`:
+     - Nạp trực tiếp cây cấu hình thật của `/agent` bằng `base_tree = load_agent_surface_tree(Path(args.agent_root).resolve())` (`28` file thật của `/Users/trainguyen/Documents/work/agent/`).
+     - Gọi `SubprocessHarnessRunner` kết nối trực tiếp với **Model thật** (`http://127.0.0.1:8200/v1/predict` — Laya Decision Model 800MB đang online hoặc CLI Agent `claude -p` / `gemini` qua `--proposer-cmd`) và chạy **Probe Rollout thật** (`validate_agent_surface` + chạy kiểm tra từ `.agent-project.json` trên `worktree` thật).
+
+### 7.2. Giải pháp cho `RF-02` (`REF: tooling/orchestrator/harness2_engine.py:657, 663, 757-768, 866-879, 1040-1045`) — Xóa bỏ Bộ Chấm Điểm Ground-Truth Giả (`1.0 / 0.6 / 0.2`) & Chuyển sang Tuyển Chọn Mù Không Grader (`Grader-Free Blind Selector` qua Model thật)
+- **Root Cause (`harness2_engine.py:657-665, 866-879`):**
+  - `run_rollout` trả về trường `"score"` và `execute_task_recursion` (`dòng 872-877`) mặc định chọn `max(sorted(id_map), key=lambda aid: float((rollout_outputs.get(id_map[aid]) or {}).get("score", 0.0)))` — đi ngược hoàn toàn nguyên tắc cốt lõi của `Harness²` là **không dùng ground-truth feedback / numeric grader** khi chọn ứng viên (`selection.py:268-357`).
+- **Thiết kế Khắc phục (`S-FIX-RF02`):**
+  1. Xóa bỏ hoàn toàn trường `"score"` khỏi `SubprocessHarnessRunner.run_rollout` (`harness2_engine.py:657, 663`) và xóa nhánh `max(..., key=lambda aid: ...get("score"))` trong `execute_task_recursion` (`harness2_engine.py:757-768, 872-877`).
+  2. `run_rollout` chỉ trả về **bằng chứng thực thi không có grader (`Grader-Free Probe Evidence`)**:
+     - `returncode`: mã thoát của lệnh kiểm định bề mặt + test suite trên `worktree`.
+     - `stdout` / `stderr`: đầu ra thực tế của quá trình probe.
+     - `surface_errors`: danh sách lỗi từ `validate_agent_surface(self.surface, tree)`.
+     - `changed_files`: danh sách các file khác biệt so với `base_tree`.
+  3. Hiện thực hàm **`laya_blind_selector(id_map, candidate_trees, rollout_outputs, *, task_id, base_tree, laya_url=DEFAULT_URL)`** làm bộ chọn mặc định (`default selector`) khi `selector_fn is None`:
+     - Với mỗi mã ẩn danh `aid` (`"A"`, `"B"`, `"C"`, ...), đóng gói một hồ sơ ẩn danh (`Blind Candidate Dossier`) gồm: tóm tắt các file được chỉnh sửa/thêm mới so với `base_tree` (ẩn tuyệt đối tên nhánh `base`, `agg1`, `agg2`), trạng thái `surface_errors`, `returncode`, và trích đoạn `stdout`/`stderr` từ `rollout_outputs[id_map[aid]]`.
+     - Gửi HTTP `POST http://127.0.0.1:8200/v1/predict` (`DEFAULT_URL` từ `tooling/laya_gate.py:42`) với ma trận câu hỏi `blind_selection` (`type: "choice"`, `criteria: {aid: dossier_summary}`) để **Model Laya thật** đọc bằng chứng thực thi của các ứng viên ẩn danh `A, B, C...` và chọn ra ứng viên chiến thắng (`chosen_anon_id`, kèm `confidence` thực tế từ Model)!
+
+### 7.3. Giải pháp cho `RF-03` (`REF: tooling/orchestrator/harness2_engine.py:574-616`) — Chặn `run_proposer` Trả Về Nguyên Harness Gốc (`No-Op` tại dòng `587`)
+- **Root Cause (`harness2_engine.py:587`):**
+  - Khi `self.proposer_cmd_template` rỗng, câu lệnh `if self.proposer_cmd_template:` bị bỏ qua và `run_proposer` chỉ đọc lại nguyên vẹn thư mục `harness_dir` (chính là `base_tree`), biến bước `Propose` thành `no-op`.
+- **Thiết kế Khắc phục (`S-FIX-RF03`):**
+  1. Trong `SubprocessHarnessRunner.run_proposer(label, dim, base_tree)`:
+     - Nếu có truyền `self.proposer_cmd_template` (như `claude -p` hoặc `gemini`), chạy subprocess CLI đó trên `context/`.
+     - Nếu **không truyền `proposer_cmd_template`**, gọi trực tiếp **`_run_live_model_proposer(label, dim, base_tree, croot, harness_dir)`**:
+       - Gửi trạng thái chẩn đoán thật của cây `/agent` (`GEMINI.md`, `OPERATOR_MAP.md`, danh sách `skills/*/SKILL.md`, `tooling/*.py`) cùng nhiệm vụ của trục `dim` (`"INV"`, `"DOM"`, hoặc `"COMPOSE"`) tới **Model thật tại `http://127.0.0.1:8200/v1/predict`**.
+       - Dựa trên quyết định và độ tự tin (`confidence`) của Model thật:
+         - Với **`dim == "INV"`**: Model chọn chiến lược kiểm định quy trình/công cụ (`AST_AND_HOOK_INVARIANT_CHECK` vs `SCRIPT_REF_INTEGRITY_CHECK`) và sinh/cập nhật module kiểm tra tất định trong `harness_dir / "tooling"` (ví dụ cập nhật `tooling/surface_audit_probe.py` kiểm định đồng bộ giữa `hooks/agy/agy_guard.py` và `tooling/verify_governance.py`).
+         - Với **`dim == "DOM"`**: Model chọn chiến lược tri thức chuyên ngành cho `domain` và sinh/cập nhật `harness_dir / "skills" / "<domain>-practitioner" / "SKILL.md"` chuẩn YAML frontmatter (kèm đồng bộ dòng trigger trong `OPERATOR_MAP.md` qua `autotrigger_agent_skills`).
+         - Với **`dim == "COMPOSE"`**: Model thẩm định cây hợp nhất 3 chiều (`three_way_merge_trees(base, inv, dom)`), kiểm tra tính nhất quán giữa script `INV` và skill `DOM`, và chuẩn hóa bảng điều phối trong `OPERATOR_MAP.md`.
+       - Nếu cả `proposer_cmd_template` không được cấu hình VÀ Model Engine (`:8200`) không phản hồi $\rightarrow$ **ném lỗi `RuntimeError` tường minh** (tuyệt đối CẤM trả về `base_tree` no-op!).
+
+### 7.4. Giải pháp cho `RF-04` (`REF: tooling/orchestrator/harness2_engine.py:508-557, 1008`) — Khởi Tạo & Ghi Thật Vào Thư Mục Vật Lý `memory/global/harness_library/`
+- **Root Cause (`harness2_engine.py:1008`):**
+  - Chưa có hằng số `DEFAULT_LIBRARY_ROOT = AGENT_ROOT / "memory" / "global" / "harness_library"`, và `run-recursion` ghi vào thư mục tạm `tmp_root / "harness_library"` rồi xóa mất.
+- **Thiết kế Khắc phục (`S-FIX-RF04`):**
+  1. Khai báo `DEFAULT_LIBRARY_ROOT = AGENT_ROOT / "memory" / "global" / "harness_library"` trong `tooling/orchestrator/harness2_engine.py`.
+  2. Mặc định `RecursiveHarnessEngine.__init__` gán `self.library = library if library is not None else DomainHarnessLibrary(DEFAULT_LIBRARY_ROOT)`.
+  3. Khi chạy `run-recursion`, kết quả thắng cuộc được ghi trực tiếp vào `/Users/trainguyen/Documents/work/agent/memory/global/harness_library/<domain>/INDEX.md`, `<domain>/harnesses/<task_id>/EXPERIENCE.md`, và `<domain>/harnesses/<task_id>/harness.json` trên đĩa vật lý.
+
+### 7.5. Giải pháp cho `RF-05` (`REF: hooks/agy/agy_guard.py:390-415, 582-595, 673-689` & `tooling/verify_governance.py:195-260`) — Nối Dây Trực Tiếp `harness2_engine.py` Vào Quy Trình `S0–S6` (Hooks, Linter, Manifest & Skills)
+- **Root Cause:**
+  - Chưa có hook hay skill nào trong `/agent` import hoặc gọi `harness2_engine.py`.
+- **Thiết kế Khắc phục (`S-FIX-RF05` — Nối dây tại 4 điểm chạm vật lý trong `S0–S6`):**
+  1. **Tại `hooks/agy/agy_guard.py` (`H1`, `H4b`, `H6`):**
+     - **`H1 (handle_pre_invocation — S0 Boot)`:** Gọi hàm nhẹ `check_harness_surface_status(AGENT)` (sử dụng `load_agent_surface_tree` + `validate_agent_surface` từ `tooling.orchestrator.harness2_engine`) để kiểm định bề mặt `/agent` (`c1..c8`) và báo cáo trạng thái `Surface: VALIDATED` + số lượng domain harnesses trong `memory/global/harness_library/` ngay trong `BOOT_MSG`.
+     - **`H4b (handle_pre_write — S4 Clean-Room Pre-Flight)`:** Khi `is_cr` (`mode: clean-room`), ngoài `contaminated_clean_room_reads`, gọi trực tiếp `assert_pre_flight_clean_room((ws_root or WS_ROOT) / ws, forbidden)` từ `tooling.orchestrator.harness2_engine` để chặn cứng mọi file rò rỉ hoặc chứa `GRADER_VERDICT_MARKERS` trong workspace.
+     - **`H6 (handle_post_invocation — S4/S5 Fast-Feedback & Escalation)`:** Khi `cur_loops >= 3`, `ESCALATION_MENTOR_MSG` tự động hướng dẫn chạy `python3 tooling/orchestrator/harness2_engine.py run-recursion --workspace-dir <ws> --task-id <suffix>` để kích hoạt vòng `Propose–Probe–Compose`.
+  2. **Tại `tooling/verify_governance.py` (`S3` & `S6` Process Linter):**
+     - Trong `verify_workspace_docs()`, gọi trực tiếp `validate_agent_surface(AgentSurfaceSpec(), load_agent_surface_tree(AGENT_ROOT))` từ `tooling.orchestrator.harness2_engine` để đảm bảo bề mặt `/agent` (`GEMINI.md`, `OPERATOR_MAP.md`, `skills/*/SKILL.md`, `tooling/*.py`, `hooks/agy/agy_guard.py`) đạt `100% VALIDATED` ở mọi lần đóng phiên `S6`.
+  3. **Tại `.agent-project.json`:**
+     - Thêm `"runtime_check": "python3 tooling/orchestrator/harness2_engine.py validate-surface"` vào component `tooling` để Hook `H7` (`handle_stop`) tự động bắt buộc chạy kiểm định bề mặt sau mọi chỉnh sửa trong `tooling/`.
+  4. **Tại `GEMINI.md`, `OPERATOR_MAP.md` và các Core Skills (`skills/qa-agent/SKILL.md`, `skills/session-wrapup/SKILL.md`, `skills/context-manager/SKILL.md`):**
+     - Bổ sung quy định vận hành `tooling/orchestrator/harness2_engine.py` (`validate-surface`, `check-clean-room`, `run-recursion`) và thư viện `memory/global/harness_library/` vào bảng điều phối và quy trình `S0 → S6`.
+
+### 7.6. Code Demo Minh Họa Bản Vá `RF-01 → RF-05`
+
+```python
+# === Trích đoạn Code Demo trong tooling/orchestrator/harness2_engine.py (Đóng RF-01..RF-04) ===
+DEFAULT_LIBRARY_ROOT = AGENT_ROOT / "memory" / "global" / "harness_library"
+
+
+def laya_blind_selector(
+    id_map: Dict[str, str],
+    candidate_trees: Mapping[str, Tree],
+    rollout_outputs: Mapping[str, Dict[str, Any]],
+    *,
+    task_id: str,
+    base_tree: Tree,
+    laya_url: str = DEFAULT_URL,
+) -> Tuple[str, float]:
+    """Đóng RF-02: Tuyển chọn mù không dùng grader (Grader-Free Blind Selector) qua Model Laya thật (:8200)."""
+    criteria: Dict[str, str] = {}
+    dossier: Dict[str, Any] = {}
+    for anon_id in sorted(id_map):
+        lbl = id_map[anon_id]
+        tree = candidate_trees[lbl]
+        rout = rollout_outputs.get(lbl) or {}
+        changed = sorted(
+            k for k in set(tree) | set(base_tree) if tree.get(k) != base_tree.get(k)
+        )
+        rc = int(rout.get("returncode", 0))
+        surf_errs = rout.get("surface_errors") or []
+        stdout_snip = str(rout.get("stdout", ""))[:240]
+        summary = (
+            f"Candidate {anon_id}: returncode={rc}, surface_errors={len(surf_errs)}, "
+            f"changed_files={len(changed)} ({', '.join(changed[:4]) or 'KEEP_BASE'}), "
+            f"probe_output={stdout_snip!r}"
+        )
+        criteria[anon_id] = summary
+        dossier[anon_id] = {
+            "returncode": rc,
+            "surface_errors_count": len(surf_errs),
+            "changed_files": changed,
+            "probe_stdout": stdout_snip,
+        }
+
+    req_payload = {
+        "state": {
+            "task_id": task_id,
+            "evaluation_mode": "grader_free_blind_selection",
+            "candidates": dossier,
+        },
+        "questions": {
+            "blind_selection": {
+                "type": "choice",
+                "instructions": (
+                    "You are the Grader-Free Blind Selector of Harness2. Compare the anonymous "
+                    "candidates solely by their probe execution evidence (returncode=0, zero "
+                    "surface_errors, and orthogonal INV+DOM structural improvements). Select the "
+                    "strongest candidate ID."
+                ),
+                "criteria": criteria,
+            }
+        },
+    }
+    raw_bytes = json.dumps(req_payload).encode("utf-8")
+    req = urllib.request.Request(
+        laya_url,
+        data=raw_bytes,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=15.0) as resp:
+        body = json.loads(resp.read().decode("utf-8"))
+    ans = ((body.get("result") or {}).get("answers") or {}).get("blind_selection") or {}
+    choice = str(ans.get("choice", ""))
+    conf = float(ans.get("confidence", 0.0))
+    if choice not in id_map:
+        raise RuntimeError(f"Laya Blind Selector returned invalid anonymous ID: {choice!r}")
+    return choice, conf
+```
+

@@ -98,7 +98,31 @@
 | Secret & PII Scan (Code + Memory) | **PASS** | Không phát hiện secret/PII thô; `scout.MaskSecrets` tự động che URI/token trước khi lưu SQLite |
 | Input & Query Injection Check | **PASS** | Toàn bộ truy vấn SQLite trong `internal/queue/store.go` và `internal/memory/store.go` dùng parameterized queries (`?`) |
 | AuthN / AuthZ & Error Exposure | **PASS** | Token GitHub/Jira chỉ đọc từ biến môi trường; response body giới hạn `io.LimitReader` 5MB; `runPythonTool` có `context.WithTimeout` 60s |
-| VCS Hygiene (No secret staged, No push) | **PASS** | Đã tạo local restore-point commit `54e36e4` và commit hoàn thiện `fa6b410` trên nhánh `feat/modular-queue-agent-kernel`, tuân thủ tuyệt đối Rule #15 (không push) |
-| Dynamic Pentest Gate (DAST / PentAGI) | **N/A** | Ứng dụng là CLI/TUI Orchestrator cục bộ, không mở HTTP/gRPC server lắng nghe cổng mạng |
+| VCS Hygiene (No secret staged, No push) | **PASS** | Đã tạo local restore-point commit `54e36e4`, `fa6b410` và commit `2ed2e89` trên nhánh `feat/modular-queue-agent-kernel`, tuân thủ tuyệt đối Rule #15 (không push) |
+| Dynamic Pentest Gate (DAST / PentAGI) | **PASS** | Đã kiểm thử âm tính `POST /api/agents/message` với payload `git push origin main` (`403 Forbidden` qua `ValidateCommandSafety`) và `POST /api/tasks` với token `ghp_...` (`MaskSecrets` che hoàn toàn) trên `http://127.0.0.1:8090` |
 - **Verdict:** ✅ **PASS**
+
+---
+
+## 4. Nghiệm thu Task 6 & Vòng Tự Chữa Lành `UI-AF1..UI-AF4` (`3-Screen Graphical Web UI` — Commits `2ed2e89` & `d9c42aa`)
+
+- **Decision Gates (`DG1`, `DG2`, `DG3`):**
+  - `DG1`: `06_laya_summary_dg1_20261021T091047.json` & `06_laya_summary_dg1_20261021T095331.json` (`PASS`)
+  - `DG2`: `06_laya_summary_dg2_20261021T091016.json` & `06_laya_summary_dg2_20261021T095333.json` (`PASS`)
+  - `DG3`: `06_laya_summary_dg3_20261021T094501.json` & `06_laya_summary_dg3_20261021T095738.json` (`PASS`, `trusted_rounds: ["r2", "r3"]`, 100% `ACCEPT`)
+- **Unit & Race Tests (`internal/webui/server_test.go`):**
+  - `TestWebUIServer_StaticIndexAndThreeScreensDashboard` — `PASS`
+  - `TestWebUIServer_CreateTaskTriggerCycleAndAgentMessage` — `PASS` (kiểm chứng `afterTrigger.TotalRuns > 16` & `afterTrigger.TotalCostUSD > 17.62`)
+  - `TestWebUIServer_SSEStream` — `PASS`
+- **Live HTTP Runtime Trace (`./bin/orchestrator ui --addr 127.0.0.1:8090`):**
+  ```text
+  HTTP/1.1 200 OK
+  Content-Length: 15292
+  Content-Type: text/html; charset=utf-8
+  Step 1: 1 Tổng quan | Step 11: 11 Xây dựng | Runs/Min/Cost: 16 64 17.62
+  Waves: [(0, 2, 8, ['PM-02', 'PM-03', 'CORE-01', 'CORE-02', 'CORE-03', 'CORE-04', 'CORE-05', 'CORE-06']), (1, 0, 14, ['SRV-01', 'CLI-01', 'SEC-01', 'MEM-01', 'UI-01']), (2, 0, 16, ['SRV-02', 'QA-01', 'SEC-02', 'UI-02']), (3, 0, 19, ['SRV-03', 'QA-02', 'UI-03']), (4, 0, 14, ['SRV-04', 'VIBE-01']), (5, 0, 12, ['CLI-02', 'REL-01'])]
+  Edges: [('PM-02', 'SRV-01', True), ('SRV-01', 'SRV-02', True), ('SRV-02', 'SRV-03', True), ('SRV-03', 'SRV-04', True), ('SRV-04', 'CLI-02', True)]
+  Autopilot: 6 stages, 16 runs, 64 min, $ 17.62
+  Vibe Steps: 17 Active: ['Xây dựng'] Panes: ['C', 'A', 'I', 'G', 'E', 'K', 'B', 'H', 'D', 'F', 'J']
+  ```
 

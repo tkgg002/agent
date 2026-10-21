@@ -1,0 +1,44 @@
+[
+  {
+    "id": "D-BEHAV-BLIND",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "In 09_tasks_solution_harness2_recursive_integration.md Section 7.6, laya_blind_selector builds a grader-free dossier for each anonymous candidate and sends an HTTP POST to laya_url (DEFAULT_URL).",
+    "claim": "Hàm demo laya_blind_selector xây dựng criteria và dossier chỉ từ returncode, surface_errors, changed_files và probe_output (không dùng score) rồi gửi HTTP POST tới laya_url.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:42-46\nDEFAULT_URL = \"http://127.0.0.1:8200/v1/predict\"\n\nDECISIVE_CONF = 0.5\nBLOCK_CONF = 0.8\nDEBATE_APPROVE_CONF = 0.95\nDEMO: laya_blind_selector\ndef laya_blind_selector(\n    id_map: Dict[str, str],\n    candidate_trees: Mapping[str, Tree],\n    rollout_outputs: Mapping[str, Dict[str, Any]],\n    *,\n    task_id: str,\n    base_tree: Tree,\n    laya_url: str = DEFAULT_URL,\n) -> Tuple[str, float]:\n    criteria: Dict[str, str] = {}\n    dossier: Dict[str, Any] = {}\n    for anon_id in sorted(id_map):\n        lbl = id_map[anon_id]\n        tree = candidate_trees[lbl]\n        rout = rollout_outputs.get(lbl) or {}\n        changed = sorted(\n            k for k in set(tree) | set(base_tree) if tree.get(k) != base_tree.get(k)\n        )\n        rc = int(rout.get(\"returncode\", 0))\n        surf_errs = rout.get(\"surface_errors\") or []\n        stdout_snip = str(rout.get(\"stdout\", \"\"))[:240]\n        summary = (\n            f\"Candidate {anon_id}: returncode={rc}, surface_errors={len(surf_errs)}, \"\n            f\"changed_files={len(changed)} ({', '.join(changed[:4]) or 'KEEP_BASE'}), \"\n            f\"probe_output={stdout_snip!r}\"\n        )\n        criteria[anon_id] = summary"
+  },
+  {
+    "id": "D-EDGE-CHOICE",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "In laya_blind_selector demo, if the returned choice is not in id_map, it raises a RuntimeError.",
+    "claim": "Trong laya_blind_selector, nếu choice trả về từ Laya không nằm trong id_map thì hàm ném ra RuntimeError.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:42-46\nDEFAULT_URL = \"http://127.0.0.1:8200/v1/predict\"\n\nDECISIVE_CONF = 0.5\nBLOCK_CONF = 0.8\nDEBATE_APPROVE_CONF = 0.95\nDEMO: laya_blind_selector_check\n    ans = ((body.get(\"result\") or {}).get(\"answers\") or {}).get(\"blind_selection\") or {}\n    choice = str(ans.get(\"choice\", \"\"))\n    conf = float(ans.get(\"confidence\", 0.0))\n    if choice not in id_map:\n        raise RuntimeError(f\"Laya Blind Selector returned invalid anonymous ID: {choice!r}\")\n    return choice, conf"
+  },
+  {
+    "id": "D-API-HOOKS",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "In hooks/agy/agy_guard.py:33-38, AGENT, MEM, WS_ROOT are defined as Path objects pointing to agent root and memory/workspaces.",
+    "claim": "File hooks/agy/agy_guard.py định nghĩa AGENT, MEM = AGENT / 'memory', và WS_ROOT = MEM / 'workspaces'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:33-37\nAGENT = Path(os.environ.get(\"AGY_AGENT_ROOT\", str(Path(__file__).resolve().parents[2])))\nMEM = AGENT / \"memory\"\nWS_ROOT = MEM / \"workspaces\"\nFALLBACK_WS_ROOT = AGENT / \".agents\" / \"state\" / \"workspaces\"\nSTATE = Path(os.environ.get(\"AGY_STATE_DIR\", \"/tmp/agy\"))"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Trong hooks/agy/agy_guard.py, MEM được gán bằng AGENT / 'storage' và WS_ROOT = MEM / 'tasks'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:33-37\nAGENT = Path(os.environ.get(\"AGY_AGENT_ROOT\", str(Path(__file__).resolve().parents[2])))\nMEM = AGENT / \"memory\"\nWS_ROOT = MEM / \"workspaces\"\nFALLBACK_WS_ROOT = AGENT / \".agents\" / \"state\" / \"workspaces\"\nSTATE = Path(os.environ.get(\"AGY_STATE_DIR\", \"/tmp/agy\"))"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Trong hooks/agy/agy_guard.py, biến STATE được gán cứng bằng Path('/var/log/agy') và không dùng os.environ.get.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:33-37\nAGENT = Path(os.environ.get(\"AGY_AGENT_ROOT\", str(Path(__file__).resolve().parents[2])))\nMEM = AGENT / \"memory\"\nWS_ROOT = MEM / \"workspaces\"\nFALLBACK_WS_ROOT = AGENT / \".agents\" / \"state\" / \"workspaces\"\nSTATE = Path(os.environ.get(\"AGY_STATE_DIR\", \"/tmp/agy\"))"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Trong hooks/agy/agy_guard.py, WS_ROOT được gán bằng MEM / 'workspaces'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:34-35\nMEM = AGENT / \"memory\"\nWS_ROOT = MEM / \"workspaces\""
+  }
+]

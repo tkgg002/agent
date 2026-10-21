@@ -967,6 +967,14 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Workspace directory to verify real S3 docs",
     )
     p_rec.add_argument("--sync-lessons", action="store_true", help="Sync global lessons INDEX.md")
+    # G-05: không còn proposer/scorer giả viết cứng — caller bắt buộc truyền lệnh CLI agent thật (JSON list token).
+    p_rec.add_argument("--agent-root", default=str(AGENT_ROOT), help="Harness gốc (base tree) — mặc định /agent thật")
+    p_rec.add_argument(
+        "--proposer-cmd",
+        default="",
+        help='JSON list token, hỗ trợ {context_root} {harness_dir} {label} {dim}. Vd: ["opencode","run",...]',
+    )
+    p_rec.add_argument("--rollout-cmd", default="", help="JSON list token, hỗ trợ {worktree} {label}")
 
     return ap.parse_args(argv)
 
@@ -1003,6 +1011,29 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
 
     if args.cmd == "run-recursion":
+        try:
+            proposer_cmd = json.loads(args.proposer_cmd) if args.proposer_cmd else []
+            rollout_cmd = json.loads(args.rollout_cmd) if args.rollout_cmd else []
+        except ValueError as exc:
+            print(json.dumps({"status": "INVALID_INPUT", "error": f"--proposer-cmd/--rollout-cmd không phải JSON: {exc}"}, ensure_ascii=False))
+            return 2
+        if not (isinstance(proposer_cmd, list) and proposer_cmd and isinstance(rollout_cmd, list) and rollout_cmd):
+            print(
+                json.dumps(
+                    {
+                        "status": "INVALID_INPUT",
+                        "error": "run-recursion cần --proposer-cmd và --rollout-cmd (JSON list) trỏ tới CLI agent/evaluator thật; "
+                        "không còn proposer/scorer giả mặc định (G-05).",
+                    },
+                    ensure_ascii=False,
+                )
+            )
+            return 2
+        root = Path(args.agent_root).resolve()
+        base_tree = load_agent_surface_tree(root)
+        if not base_tree:
+            print(json.dumps({"status": "INVALID_INPUT", "error": f"Không đọc được harness tại {root}"}, ensure_ascii=False))
+            return 2
         with tempfile.TemporaryDirectory(prefix="harness2-live-trace-") as tmpdir:
             tmp_root = Path(tmpdir)
             lib = DomainHarnessLibrary(tmp_root / "harness_library")
@@ -1011,39 +1042,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 library=lib,
                 cache_dir=tmp_root / "cache",
             )
-            base_tree: Tree = {
-                "GEMINI.md": "# Core Rules\nRun `python3 tooling/existing_check.py`\n- `core-skill`\n",
-                "OPERATOR_MAP.md": "# Operator Map\n| `core-skill` | Trigger | `S1` | Core |\n",
-                "skills/core-skill/SKILL.md": "---\nname: core-skill\ndescription: Core workflow skill\n---\n# Body\n",
-                "tooling/existing_check.py": "VALUE = 1\n",
-            }
-            py_cmd = (
-                "import pathlib, sys; "
-                "h = pathlib.Path(sys.argv[1]); lbl = sys.argv[2]; dim = sys.argv[3]; "
-                "p = h / 'tooling/existing_check.py'; "
-                "(p.write_text('VALUE = 2\\n#' + lbl + '\\n', encoding='utf-8') if dim == 'INV' else None); "
-                "s = h / f'skills/dom-{lbl}/SKILL.md'; "
-                "(s.parent.mkdir(parents=True, exist_ok=True), s.write_text(f'---\\nname: dom-{lbl}\\ndescription: Skill {lbl}\\n---\\n# Body\\n', encoding='utf-8')) if dim == 'DOM' else None"
-            )
             runner = SubprocessHarnessRunner(
-                proposer_cmd_template=[
-                    sys.executable,
-                    "-c",
-                    py_cmd,
-                    "{harness_dir}",
-                    "{label}",
-                    "{dim}",
-                ],
-                rollout_cmd_template=[
-                    sys.executable,
-                    "-c",
-                    "import json, pathlib, sys; w = pathlib.Path(sys.argv[1]); "
-                    "txt = (w / 'tooling/existing_check.py').read_text(encoding='utf-8'); "
-                    "has_inv = 'VALUE = 2' in txt; "
-                    "has_dom = any(p.name == 'SKILL.md' and 'dom-' in str(p) for p in (w / 'skills').rglob('SKILL.md')); "
-                    "print(json.dumps({'score': 1.0 if (has_inv and has_dom) else (0.6 if (has_inv or has_dom) else 0.2)}))",
-                    "{worktree}",
-                ],
+                proposer_cmd_template=[str(t) for t in proposer_cmd],
+                rollout_cmd_template=[str(t) for t in rollout_cmd],
             )
             res = engine.execute_task_recursion(
                 task_id=args.task_id,
@@ -1057,7 +1058,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 sync_lessons_index=bool(args.sync_lessons),
             )
             winning = res.pop("winning_tree", {})
-            res["winning_existing_check_py"] = winning.get("tooling/existing_check.py", "").strip()
             res["winning_files"] = sorted(winning.keys())
             print(json.dumps(res, ensure_ascii=False, indent=2))
             return 0

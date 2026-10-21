@@ -616,5 +616,18 @@ func (s *Server) Handler() http.Handler {
 }
 ```
 
+### 7.4. Đặc tả Tự Chữa Lành Khép Kín (`S5 -> S3 -> S4 -> S5` cho 4 Điểm Lệch `UI-AF1..UI-AF4` Phát Hiện Tại `H7 Pass #1`)
+Trong quá trình rà soát phản biện từng dòng diff của commit `2ed2e89`, chúng ta phát hiện 4 điểm lệch giữa Backend DTO và Frontend Template cần sửa dứt điểm ngay trong lượt:
+1. **`UI-AF1` (Nhân đôi tiền tố số thứ tự trong Cột 2 `Quy trình · Mới` — `REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/seed_data.go:88-107` & `static/app.js:433`):**
+   - `defaultVibeWorkflowSteps()` đặt `Title: "1. Tổng quan"`, trong khi `app.js:433` render `${s.num}. ${escapeHtml(s.title)}` dẫn đến hiển thị `"1. 1. Tổng quan"`.
+   - **Fix:** Chuẩn hóa `defaultVibeWorkflowSteps()` trong `seed_data.go` chỉ giữ tên bước không kèm số (`Title: "Tổng quan"`, ..., `Title: "Xây dựng"`, ..., `Title: "Vận hành & cải tiến"`), để `${s.num}. ${escapeHtml(s.title)}` hiển thị chuẩn `"1. Tổng quan"` .. `"11. Xây dựng"`.
+2. **`UI-AF2` (Nút chuyển `Items | Epics` và dropdown `filter-assignee` trên Màn hình 1 — `REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/app.js:49-54, 146-188` & `static/index.html:51-58`):**
+   - `setWaveMode('epics')` đổi biến `waveViewMode` nhưng `renderWaveBoard()` chưa gom nhóm các thẻ theo `Epic` khi `waveViewMode === 'epics'`, và `<select id="filter-assignee">` dùng nhãn khác với `Assignee` trong `seed_data.go`.
+   - **Fix:** Đồng bộ giá trị `<select id="filter-assignee">` (`Planner`, `Coder`, `Reviewer`, `Tester`, `Security`) khớp 100% với `seed_data.go`, và bổ sung nhánh `waveViewMode === "epics"` trong `renderWaveBoard()` để gom các task cùng `Epic` trong mỗi cột Wave thành thẻ tổng hợp Epic (`[EPIC] <epic> · <done>/<total> items`) kèm vẽ đường cong Bezier giữa các thẻ.
+3. **`UI-AF3` (Tính động 100% các con số trên 6 chặng `AutopilotStages` và `TotalRuns/TotalMinutes/TotalCostUSD` từ SQLite `autopilot_rounds` — `REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:869-1000`):**
+   - Loại bỏ kẹp sàn tĩnh và cập nhật `Meta` của thẻ `Implement` / `TotalRuns` / `TotalMinutes` / `TotalCostUSD` cộng dồn trực tiếp từ các vòng lặp trong SQLite `autopilot_rounds` (khởi tạo chuẩn `16 runs · 64 min · $17.62` từ dữ liệu seed, và tự động tăng thực tế mỗi khi người dùng bấm `▶ Chạy Wave Kế Tiếp` hoặc `☼ Giao việc`).
+4. **`UI-AF4` (Lắng nghe sự kiện `scroll` trên `#wave-scroll-area` để vẽ lại `<svg>` Cubic Bezier mượt mà — `REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/app.js:296-299`):**
+   - Gắn thêm listener `scroll` trên `#wave-scroll-area` gọi `requestAnimationFrame(() => drawWaveBezierEdges())`.
+
 
 

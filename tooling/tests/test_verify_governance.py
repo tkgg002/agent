@@ -206,8 +206,20 @@ class TestVerifyGovernance(unittest.TestCase):
             )
         )
 
-        # Add Clean-Room Approved Spec -> S3 passes
-        sol.write_text("# Solution\n## Clean-Room Approved Spec\n- CR-01\n", encoding="utf-8")
+        # G-03: Spec heading present but rule without REF -> S3 fails
+        sol.write_text("# Solution\n## Clean-Room Approved Spec\n- R1: hành vi không bằng chứng\n", encoding="utf-8")
+        self.assertFalse(
+            verify_governance.verify_workspace_docs(
+                "clean-room-ws",
+                workspaces_dir=self.ws_root,
+                today_override=self.today,
+                suffix="cr",
+                stage="S3",
+            )
+        )
+
+        # Add Clean-Room Approved Spec with REF-backed rule -> S3 passes
+        sol.write_text("# Solution\n## Clean-Room Approved Spec\n- R1: CR-01 — REF: legacy/pay.py:1-2\n", encoding="utf-8")
         self.assertTrue(
             verify_governance.verify_workspace_docs(
                 "clean-room-ws",

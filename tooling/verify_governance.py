@@ -22,6 +22,9 @@ DEFAULT_WORKSPACES_DIR = AGENT_ROOT / "memory" / "workspaces"
 TIER_RE = re.compile(r"^\s*tier\s*:\s*(T[0-3])\b", re.I | re.M)
 CLEAN_ROOM_MODE_RE = re.compile(r"^\s*mode\s*:\s*clean-room\b", re.I | re.M)
 CLEAN_ROOM_SPEC_RE = re.compile(r"clean-room\s+approved\s+spec", re.I)
+# G-03: đồng bộ với hooks/agy/agy_guard.py SPEC_RULE_RE / SPEC_REF_RE.
+SPEC_RULE_RE = re.compile(r"^[ \t]*[-*]?[ \t]*\**R(\d+)\**[ \t]*[:.]", re.M)
+SPEC_REF_RE = re.compile(r"REF:\s*\S+:\d+")
 LOG_LINE_RE = re.compile(r"^-\s*\[\d{4}-\d{2}-\d{2}[^\]]*\]\s*\[Agent:[a-zA-Z0-9.\-_]+\]\s+.+")
 
 # Mỗi phần tử là (nhãn mô tả, tuple các glob pattern chấp nhận 1 trong số đó)
@@ -75,6 +78,21 @@ def log_info(msg: str) -> None:
 
 def log_error(msg: str) -> None:
     print(f"🔴 [GOVERNANCE] ERROR: {msg}", file=sys.stderr)
+
+
+def spec_rule_issues(text: str) -> List[str]:
+    """G-03: mục 'Clean-Room Approved Spec' phải có >=1 rule R<n> và mọi rule có REF: path:line."""
+    m = re.search(r"^(#+)\s*.*clean-room\s+approved\s+spec.*$", text, re.I | re.M)
+    if not m:
+        return ["thiếu mục 'Clean-Room Approved Spec'"]
+    level = len(m.group(1))
+    rest = text[m.end() :]
+    nxt = re.search(rf"^#{{1,{level}}}\s", rest, re.M)
+    section = rest[: nxt.start()] if nxt else rest
+    rules = [(rm.group(1), section[rm.start() :].split("\n", 1)[0]) for rm in SPEC_RULE_RE.finditer(section)]
+    if not rules:
+        return ["Clean-Room Approved Spec chưa có rule nào dạng `R<n>: <hành vi> — REF: path:line`"]
+    return [f"R{num} thiếu bằng chứng `REF: path:line`" for num, line in rules if not SPEC_REF_RE.search(line)]
 
 
 def match_any(ws_path: Path, patterns: Sequence[str]) -> List[Path]:
@@ -222,6 +240,12 @@ def verify_workspace_docs(
             )
             return False
         log_info(f"✓ [Clean-Room Mode] Đã có Clean-Room Approved Spec trong {sol_file.name}.")
+        rule_issues = spec_rule_issues(sol_file.read_text(encoding="utf-8", errors="ignore"))
+        if rule_issues:
+            for issue in rule_issues:
+                log_error(f"[Clean-Room Mode] {sol_file.name}: {issue}")
+            return False
+        log_info(f"✓ [Clean-Room Mode] Mọi rule trong Spec đều có REF: path:line.")
 
         if stage_norm == "S6":
             mut_patterns = (

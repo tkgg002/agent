@@ -56,3 +56,23 @@ suffix: shadow_master_update_drop
 ## 4. Kết quả Phản Biện Cuối Workflow & Đóng Vòng Lặp `AF-01..AF-05` (`06_laya_summary_dg3_20261020T164916.json`)
 
 Toàn bộ 5 phát hiện phản biện (`AF-01..AF-05`) từ đợt Audit trước đã được khắc phục triệt để trong commit `08c05a8`, vượt qua toàn bộ unit/integration tests trên PostgreSQL thật và đạt `gate: "PASS"` tại cổng `/laya_router` **DG3** (`06_laya_summary_dg3_20261020T164916.json`, `trusted_rounds: ["r2", "r3"]`).
+
+---
+
+## 5. Kết quả Triển khai & Kiểm định Round 3 (`F6, F7, F8` — Commits `43e5da7`, `069c456`, `2b2fa59`)
+
+1. **Giải pháp cho Sơ hở F6 (`centralized-data-service` — Commit `43e5da7`, `4 files changed, 200 insertions(+), 36 deletions(-)`):**
+   - Bổ sung `deleted int64` vào `batchOutcome` và `Deleted int64` (`json:"deleted"`) vào `TransmuteResult` (`internal/service/master/transmuter.go:106-127`).
+   - Khi xóa dòng trên Master trong `Run` (`L429, 451`), `RunEvents` (`L726`), `processBatch` (`L1411`) và `syncUpdatedShadowRowsBeforeCursor` (`L1547`), tăng `res.Deleted` / `out.deleted` độc lập với `res.Updated` (không còn cộng nhầm `2 Delete` vào `6 Update` thành `8 Updated`).
+   - Ghi `"deleted": res.Deleted` và `rows_affected = res.Inserted + res.Updated + res.Deleted` vào `cdc_activity_log.details`, `cdc.evt.transmute.completed` và `StatsJSON` (`internal/handler/master/transmute_handler.go:395, 408-412, 439, 659-678, 885-888` & `internal/service/master/transmuter_state.go:21`).
+2. **Giải pháp cho Sơ hở F7 & F8 (`cdc-cms-service` — Commit `069c456`, `3 files changed, 198 insertions(+), 14 deletions(-)`):**
+   - Bổ sung `Deleted int64` (`json:"deleted"`) vào `DailyFlowMasterMetrics` và `MasterDeleted int64` (`json:"masterDeleted"`) vào `DailyFlowTotals` (`internal/app/queries/system/daily_flow.go:41, 81`).
+   - Mở rộng `enrichmentFromClause`, `ClearActivity` và `GetDailyFlow` (`internal/infra/persistence/system/activity_log_read_repo_gorm.go:62, 347-348, 421`) bao gồm `'transmute_poison_pill'` để không bỏ sót lỗi Poison Pill ở tầng Master (`DLQ` của ngày `2026-10-20` trên `export_jobs` hiện đúng `5` và `Status: DRIFT` thay vì `0 / BALANCED`).
+   - Tổng hợp `master_deleted` từ `COALESCE((e.details->>'deleted')::bigint, 0)` (`L449-450`), bọc `COALESCE(..., false)` cho kiểm tra `snapshot` (`L427-444`), và đặt `Status = "WARNING"` khi `isMasterIncomplete` (`rec.Shadow.Total > rec.Master.Total`, `L547-553`).
+3. **Giải pháp cho Sơ hở F7 trên Frontend UI (`cdc-cms-web` — Commit `2b2fa59`, `2 files changed, 5 insertions(+), 3 deletions(-)`):**
+   - Bổ sung `deleted: number` và `masterDeleted: number` trong `src/hooks/useReconStatus.ts:634, 654`.
+   - Hiển thị `Del: ...` trên Card tổng hợp Master (`src/components/ReconPipelineGrid.tsx:842`) và bổ sung cột `Delete(d)` (`dataIndex: ['master', 'deleted']`, màu `#ff4d4f` đồng bộ với Kafka & Shadow) tại khối **4. GHI VÀO DB MASTER** (`L1359`).
+4. **Kết quả `/laya_router` DG3 Final Gate:**
+   - Mode A: `06_laya_summary_dg3_20261021T094856.json` (`gate: "PASS"`).
+   - Mode B: `06_laya_summary_dg3review_20261021T094858.json` & `06_laya_summary_dg3review_20261021T094930.json` (`gate: "PASS"`).
+

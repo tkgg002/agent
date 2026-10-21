@@ -9,11 +9,12 @@ Guarantees:
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 AGENT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = AGENT_ROOT / "memory" / "global" / "lessons.md"
@@ -88,6 +89,41 @@ class LessonEntry:
     topic_code: str
     topic_file: str
     short_label: str
+
+
+# G-08: lesson tripwire fields (máy đọc được) — ID ổn định, Trigger regex, Check tiền điều kiện, Require bằng chứng tuỳ chọn.
+TRIP_FIELD_RE = re.compile(r"^- \*\*(ID|Trigger|Check|Require):\*\*\s*(.+?)\s*$", re.M)
+TRIP_REQUIRED = ("id", "trigger", "check")
+
+
+def parse_tripwire(entry: "LessonEntry") -> Optional[Dict[str, str]]:
+    fields = {k.lower(): v for k, v in TRIP_FIELD_RE.findall(entry.raw_block)}
+    if not fields:
+        return None
+    missing = [k for k in TRIP_REQUIRED if not fields.get(k)]
+    if missing:
+        raise RuntimeError(f"Tripwire thiếu {missing} tại lessons.md:L{entry.line_no}")
+    for key in ("trigger", "require"):
+        if fields.get(key):
+            try:
+                re.compile(fields[key])
+            except re.error as exc:
+                raise RuntimeError(f"Tripwire {key} regex lỗi tại lessons.md:L{entry.line_no}: {exc}") from exc
+    return {k: fields[k] for k in ("id", "trigger", "check", "require") if fields.get(k)}
+
+
+def build_tripwires(entries: List["LessonEntry"]) -> List[Dict[str, str]]:
+    trips: List[Dict[str, str]] = []
+    seen: Dict[str, int] = {}
+    for e in entries:
+        t = parse_tripwire(e)
+        if not t:
+            continue
+        if t["id"] in seen:
+            raise RuntimeError(f"Tripwire ID trùng {t['id']} tại lessons.md:L{seen[t['id']]} và L{e.line_no}")
+        seen[t["id"]] = e.line_no
+        trips.append(t)
+    return trips
 
 
 def concise_label(title: str, max_chars: int = 38) -> str:
@@ -217,12 +253,17 @@ def render_outputs(entries: List[LessonEntry]) -> Tuple[str, Dict[str, str]]:
     return index_md, topic_files
 
 
-def _write_bundle(target_dir: Path, index_md: str, topic_files: Dict[str, str]) -> None:
+def _write_bundle(
+    target_dir: Path, index_md: str, topic_files: Dict[str, str], tripwires: Optional[List[Dict[str, str]]] = None
+) -> None:
     topics_dir = target_dir / "topics"
     topics_dir.mkdir(parents=True, exist_ok=True)
     (target_dir / "INDEX.md").write_text(index_md, encoding="utf-8")
     for fname, content in topic_files.items():
         (topics_dir / fname).write_text(content, encoding="utf-8")
+    (target_dir / "tripwires.json").write_text(
+        json.dumps(tripwires or [], ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def build_index(source_path: Path = DEFAULT_SOURCE, out_dir: Path = DEFAULT_OUT_DIR) -> Dict[str, int]:
@@ -231,12 +272,13 @@ def build_index(source_path: Path = DEFAULT_SOURCE, out_dir: Path = DEFAULT_OUT_
 
     entries = parse_lessons(before_text)
     index_md, topic_files = render_outputs(entries)
+    tripwires = build_tripwires(entries)
 
     try:
-        _write_bundle(out_dir, index_md, topic_files)
+        _write_bundle(out_dir, index_md, topic_files, tripwires)
     except PermissionError:
         fallback_dir = AGENT_ROOT / ".agents" / "lessons_index"
-        _write_bundle(fallback_dir, index_md, topic_files)
+        _write_bundle(fallback_dir, index_md, topic_files, tripwires)
 
     after_text = source_path.read_text(encoding="utf-8")
     after_lines = len(after_text.splitlines())
@@ -265,6 +307,8 @@ def build_index(source_path: Path = DEFAULT_SOURCE, out_dir: Path = DEFAULT_OUT_
         "index_entries": index_entry_count,
         "topic_entries": topic_entry_count,
         "index_bytes": index_bytes,
+        "tripwires": len(tripwires),
+        "lessons_without_tripwire": len(entries) - len(tripwires),
     }
 
 

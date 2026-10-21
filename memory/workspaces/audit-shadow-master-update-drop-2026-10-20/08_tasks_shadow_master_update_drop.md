@@ -83,25 +83,26 @@
 
 ---
 
-## Chặng Round 3 (Propose-Only — Chờ User `APPROVE`): Tách Bạch `Deleted` Ở Tầng Master & Khắc Phục Tàng Hình `transmute_poison_pill` (`F6`, `F7`, `F8`)
+## Chặng Round 3 (Đã Thực thi & Hoàn tất sau lệnh `APPROVE` của User — Commits `43e5da7`, `069c456`, `2b2fa59`): Tách Bạch `Deleted` Ở Tầng Master & Khắc Phục Tàng Hình `transmute_poison_pill` (`F6`, `F7`, `F8`)
 
-- [ ] **Task 14 (Khắc phục Sơ hở F6 — Tách riêng trường `Deleted` trong `TransmuterModule`, `TransmuteHandler` & `SyncRuntimeState` của `centralized-data-service`):**
+- [x] **Task 14 (Khắc phục Sơ hở F6 — Tách riêng trường `Deleted` trong `TransmuterModule`, `TransmuteHandler` & `SyncRuntimeState` của `centralized-data-service`):**
   - **Mô tả:**
-    1. Tại `/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go` (`L106-126`, `L425-455`, `L565-584`, `L708-726`, `L1400-1414`, `L1541-1548`): Bổ sung `deleted int64` vào `batchOutcome` và `Deleted int64` (`json:"deleted"`) vào `TransmuteResult`; tăng `res.Deleted` / `out.deleted` khi xóa thành công trên Master thay vì cộng gộp vào `res.Updated` / `out.updated`.
+    1. Tại `/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go` (`L106-126`, `L425-455`, `L565-584`, `L708-726`, `L1400-1414`, `L1541-1548`, `L1638-1681`): Bổ sung `deleted int64` vào `batchOutcome` và `Deleted int64` (`json:"deleted"`) vào `TransmuteResult`; tăng `res.Deleted` / `out.deleted` khi xóa thành công trên Master thay vì cộng gộp vào `res.Updated` / `out.updated`; bổ sung fallback `_source_id` trong `deleteFromMasterBySourceAndGpayIDs` khi `conflictTarget == "_gpay_id"` và bảng Master có map cột `_source_id`.
     2. Tại `/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go` (`L392-421`, `L445-453`, `L655-678`, `L879-898`) và `/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_state.go` (`L15-26`): Ghi `"deleted": res.Deleted` vào `cdc_activity_log.details`, `cdc.evt.transmute.completed` và `StatsJSON`; truyền `res.Inserted + res.Updated + res.Deleted` vào `rows_affected`.
-  - **Logs/Test:** `go test -v -count=1 ./internal/service/master/... ./internal/handler/master/...`
+  - **Logs/Test:** `go test -v -count=1 ./internal/service/master/... ./internal/handler/master/...` (`PASS`: `TestTransmuter_OrphanMasterSoftDelete`, `TestTransmuter_FullSyncHardDeleteWhenShadowMarkedDeleted`, `TestTransmuter_RunEvents_TracksDeletedSeparatelyFromUpdated`, `TestLiveBindings_46_47_48_TransmuteAndVerifyZeroDrift`).
   - **Definition of Done:** Khi `Run` hoặc `RunEvents` xóa dòng trên Master, `TransmuteResult.Deleted` và `cdc_activity_log.details->>'deleted'` phản ánh đúng số lượng xóa, không cộng lẫn vào `Updated`.
 
-- [ ] **Task 15 (Khắc phục Sơ hở F7 & F8 ở Backend CMS — Tổng hợp `master_deleted` và `transmute_poison_pill` trong `cdc-cms-service`):**
+- [x] **Task 15 (Khắc phục Sơ hở F7 & F8 ở Backend CMS — Tổng hợp `master_deleted` và `transmute_poison_pill` trong `cdc-cms-service`):**
   - **Mô tả:**
-    1. Tại `/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/system/daily_flow.go` (`L36-42`, `L64-83`): Bổ sung `Deleted int64` (`json:"deleted"`) vào `DailyFlowMasterMetrics` và `MasterDeleted int64` (`json:"masterDeleted"`) vào `DailyFlowTotals`.
-    2. Tại `/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go` (`L365-575`): Mở rộng CTE `enriched` lấy cả `transmute_poison_pill` (`L420`); tổng hợp `master_deleted` từ `e.details->>'deleted'` (`L444-450`); cộng `row.MasterDeleted` vào `rec.Master.Total` và `rec.Master.Written`; cảnh báo `WARNING` khi `rec.Shadow.Total > rec.Master.Total`.
-  - **Logs/Test:** `go test -v -count=1 ./internal/infra/persistence/system/... ./internal/app/queries/system/...`
-  - **Definition of Done:** API `/api/reconciliation/daily-flow` trả về chính xác `master.deleted`, `totals.masterDeleted`, đếm đúng `dlq` khi có `transmute_poison_pill` và báo `WARNING` khi `Shadow.Total > Master.Total`.
+    1. Tại `/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/system/daily_flow.go` (`L36-43`, `L64-85`): Bổ sung `Deleted int64` (`json:"deleted"`) vào `DailyFlowMasterMetrics` và `MasterDeleted int64` (`json:"masterDeleted"`) vào `DailyFlowTotals`.
+    2. Tại `/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go` (`L62`, `L347-348`, `L377`, `L421`, `L427-454`, `L533-576`): Mở rộng CTE `enriched` và `enrichmentFromClause` lấy cả `transmute_poison_pill`; bọc `COALESCE(..., false)` cho kiểm tra `snapshot` chống SQL 3-valued NULL; tổng hợp `master_deleted` từ `e.details->>'deleted'`; cộng `row.MasterDeleted` vào `rec.Master.Total` và `rec.Master.Written`; cảnh báo `WARNING` khi `rec.Shadow.Total > rec.Master.Total` (`isMasterIncomplete`).
+  - **Logs/Test:** `go test -v -count=1 ./internal/infra/persistence/system/... ./internal/app/queries/system/...` (`PASS`: `TestGetDailyFlow_RealPostgres_ExportJobsPoisonPillAndMasterDeleted` trên PostgreSQL thật `cdc_dw`).
+  - **Definition of Done:** API `/api/reconciliation/daily-flow` trả về chính xác `master.deleted`, `totals.masterDeleted`, đếm đúng `dlq` khi có `transmute_poison_pill` (`DLQ: 5, Status: DRIFT` cho ngày `2026-10-20` của `export_jobs`) và báo `WARNING` khi `Shadow.Total > Master.Total`.
 
-- [ ] **Task 16 (Khắc phục Sơ hở F7 ở Frontend UI — Hiển thị cột `Delete(d)` ở khối Master trên `cdc-cms-web`):**
+- [x] **Task 16 (Khắc phục Sơ hở F7 ở Frontend UI — Hiển thị cột `Delete(d)` ở khối Master trên `cdc-cms-web`):**
   - **Mô tả:**
-    1. Tại `/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/hooks/useReconStatus.ts` (`L634-658`): Bổ sung `deleted: number` vào `DailyFlowRecord['master']` và `masterDeleted: number` vào `DailyFlowTotals`.
-    2. Tại `/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx` (`L506`, `L841-843`, `L1342-1361`): Hiển thị `Del: ...` trên Card tổng hợp Master và bổ sung cột `Delete(d)` (màu đỏ `#ff4d4f` đồng bộ với Kafka & Shadow) vào khối `4. GHI VÀO DB MASTER`.
-  - **Logs/Test:** `npm run build` / `tsc --noEmit` tại `/Users/trainguyen/Documents/work/data-hub/cdc-cms-web`.
+    1. Tại `/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/hooks/useReconStatus.ts` (`L634`, `L654`): Bổ sung `deleted: number` vào `DailyFlowRecord['master']` và `masterDeleted: number` vào `DailyFlowTotals`.
+    2. Tại `/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx` (`L506`, `L841-843`, `L1357-1361`): Hiển thị `Del: ...` trên Card tổng hợp Master và bổ sung cột `Delete(d)` (màu đỏ `#ff4d4f` đồng bộ với Kafka & Shadow) vào khối `4. GHI VÀO DB MASTER`.
+  - **Logs/Test:** `npx tsc --noEmit --skipLibCheck` tại `/Users/trainguyen/Documents/work/data-hub/cdc-cms-web` (`ZERO_TS_ERRORS_IN_MODIFIED_FILES`).
   - **Definition of Done:** Bảng Daily Flow và Card tổng hợp hiển thị rõ cột `Delete(d)` của Master đối xứng 1:1 với Kafka & Shadow.
+

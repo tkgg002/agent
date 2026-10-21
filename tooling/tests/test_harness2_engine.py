@@ -471,7 +471,29 @@ class Harness2EngineTest(unittest.TestCase):
         self.assertEqual(res_sel["lessons_index_stats"]["index_entries"], 1)
         self.assertTrue((lessons_out / "INDEX.md").is_file())
 
-        # 4. AF-07: Real CLI Subprocess execution via main(["run-recursion", ...])
+        # 4. G-05: run-recursion KHÔNG còn proposer/scorer giả viết cứng -> thiếu lệnh thật phải exit 2
+        rc_missing = h2.main(["run-recursion", "--k", "1", "--workspace-dir", str(valid_ws)])
+        self.assertEqual(rc_missing, 2)
+
+        # 5. AF-07/G-05: chạy subprocess thật với lệnh do caller truyền vào (stub chỉ tồn tại trong test)
+        agent_root = self.tmp / "agent_root_cli"
+        for rel, content in {
+            "GEMINI.md": "# Core Rules\nRun `python3 tooling/existing_check.py`\n- `core-skill`\n",
+            "OPERATOR_MAP.md": "# Operator Map\n| `core-skill` | Trigger | `S1` | Core |\n",
+            "skills/core-skill/SKILL.md": "---\nname: core-skill\ndescription: Core workflow skill\n---\n# Body\n",
+            "tooling/existing_check.py": "VALUE = 1\n",
+        }.items():
+            (agent_root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (agent_root / rel).write_text(content, encoding="utf-8")
+        prop_py = (
+            "import pathlib, sys; h = pathlib.Path(sys.argv[1]); lbl = sys.argv[2]; dim = sys.argv[3]; "
+            "p = h / 'tooling/existing_check.py'; "
+            "(p.write_text('VALUE = 2\\n#' + lbl + '\\n', encoding='utf-8') if dim == 'INV' else None)"
+        )
+        roll_py = (
+            "import json, pathlib, sys; w = pathlib.Path(sys.argv[1]); "
+            "print(json.dumps({'score': 1.0 if 'VALUE = 2' in (w / 'tooling/existing_check.py').read_text() else 0.2}))"
+        )
         rc = h2.main(
             [
                 "run-recursion",
@@ -485,6 +507,12 @@ class Harness2EngineTest(unittest.TestCase):
                 "1",
                 "--workspace-dir",
                 str(valid_ws),
+                "--agent-root",
+                str(agent_root),
+                "--proposer-cmd",
+                json.dumps([sys.executable, "-c", prop_py, "{harness_dir}", "{label}", "{dim}"]),
+                "--rollout-cmd",
+                json.dumps([sys.executable, "-c", roll_py, "{worktree}"]),
             ]
         )
         self.assertEqual(rc, 0)

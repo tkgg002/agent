@@ -121,9 +121,10 @@
     - `GET /api/stream` (SSE): Đẩy sự kiện thời gian thực xuống trình duyệt mỗi khi trạng thái hàng đợi, Wave DAG hoặc Agent thay đổi.
 - **[Context & Bằng chứng `file:line`]:**
   - Kết nối trực tiếp với [`internal/queue/store.go:83-379`](file:///Users/trainguyen/Documents/work/ai-orchestrator/internal/queue/store.go#L83-L379), [`internal/agent/pm.go:1103-1171`](file:///Users/trainguyen/Documents/work/ai-orchestrator/internal/agent/pm.go#L1103-L1171) (`ComputeSubTaskWaves`), [`internal/agentgate/gate.go:175-231`](file:///Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/gate.go#L175-L231) (`EvaluateLiveGateBadges`), và [`cmd/orchestrator/main.go:40-87`](file:///Users/trainguyen/Documents/work/ai-orchestrator/cmd/orchestrator/main.go#L40-L87).
+  - Bao gồm 4 hạng mục tự chữa lành `UI-AF1..UI-AF4` phát hiện qua `S5 Line-by-Line Diff Critique`: chuẩn hóa `Title` của 17 bước quy trình không lặp số thứ tự (`UI-AF1`), hỗ trợ chế độ gom nhóm `Epics` + đồng bộ dropdown `filter-assignee` (`UI-AF2`), cộng dồn động 100% số lượt chạy/phút/chi phí `$ USD` trên sơ đồ `AUTOPILOT` khi chạy thêm vòng mới (`UI-AF3`), và gắn listener `scroll` vẽ lại đường cong `<svg>` Bezier (`UI-AF4`).
 - **[Definition of Done (DoD)]:**
-  - [x] `go vet ./...` và `go test -race ./...` (bao gồm `internal/webui/server_test.go` kiểm tra toàn bộ REST/SSE endpoints và cấu trúc DOM/SVG của 3 màn hình) PASS 100%.
-  - [x] Khởi chạy server thật `./bin/orchestrator ui --addr 127.0.0.1:8090`, kiểm chứng bằng HTTP request thật tới `/`, `/api/dashboard`, `/api/tasks`, `/api/pipeline/trigger`, `/api/agents/message` và cập nhật `README_START.md` (`commit 2ed2e89`).
+  - [x] `go vet ./...` và `go test -race ./...` (bao gồm `internal/webui/server_test.go` kiểm tra toàn bộ REST/SSE endpoints, kiểm chứng không lặp số bước `1. 1.`, và kiểm chứng chi phí `$ USD` tăng động sau khi trigger pipeline) PASS 100%.
+  - [x] Khởi chạy server thật `./bin/orchestrator ui --addr 127.0.0.1:8090`, kiểm chứng bằng HTTP request thật tới `/`, `/api/dashboard`, `/api/tasks`, `/api/pipeline/trigger`, `/api/agents/message` và cập nhật `README_START.md`.
 
 
 

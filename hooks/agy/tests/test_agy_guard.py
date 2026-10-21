@@ -715,7 +715,7 @@ class TestAgyGuard(unittest.TestCase):
         self.assertIn("Clean-Room Approved Spec", res_deny.get("reason", ""))
 
         # With Clean-Room Approved Spec -> ask
-        sol_content = "# Solution\n## Clean-Room Approved Spec\n- CR-01\n## Footer\nOld footer\n"
+        sol_content = "# Solution\n## Clean-Room Approved Spec\n- R1: CR-01 — REF: legacy/pay.py:1-2\n## Footer\nOld footer\n"
         res_ok = agy_guard.handle_pre_write(
             {
                 "transcriptPath": tr,

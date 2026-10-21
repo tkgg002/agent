@@ -65,6 +65,27 @@ Sau khi nhận lệnh `APPROVE` của User cho kế hoạch khắc phục `S5 ->
 4. **`AF-4` (`internal/orchestrator/task_runner.go:518-576, 838-845`, `internal/agentgate/gate.go:240-265`):** Nối trực tiếp `LoadCoreConstitutionPrompt`, `RunLayaGate`, `RunMutationGate`, `RunGovernanceLinter` vào luồng chạy của `TaskRunner` kèm `context.WithTimeout` 60s trong `runPythonTool`.
 5. **`AF-5` (`internal/bus/types.go:38-45`, `internal/agent/base.go:52-60`, `internal/orchestrator/helpers.go:226-238`, `internal/orchestrator/task_runner.go:1762-1815`):** Gắn `Model` thực tế vào `TokenUpdatePayload`, tính giá riêng cho từng model (`opus` `$15/$75` vs `sonnet` `$3/$15`) trong `emitTokenStats`, và ghi nhận `AutopilotRound` vào bảng SQLite `autopilot_rounds` qua `recordAutopilotRound`.
 6. **`AF-6` (`internal/tui/model.go:179-180, 713-714, 945-947, 1613-1635`):** Tích hợp phím tắt `Ctrl+W` và hàm `renderLiveWaveDashboard()` để hiển thị trực tiếp `RenderWaveDAGDashboard` ngay trong giao diện TUI chính.
-7. **Tài liệu Hướng dẫn Khởi động (`README_START.md`):** Đã biên soạn hướng dẫn cài đặt, cấu hình định tuyến model động (`opus`/`sonnet`) và vận hành 4 chế độ (`daemon`, `TUI`, `task`, `memory`) tại `/Users/trainguyen/Documents/work/ai-orchestrator/README_START.md` kèm binary `./bin/orchestrator`.
+7. **Tài liệu Hướng dẫn Khởi động (`README_START.md`):** Đã biên soạn hướng dẫn cài đặt, cấu hình định tuyến model động (`opus`/`sonnet`) và vận hành 5 chế độ (`ui`, `daemon`, `TUI`, `task`, `memory`) tại `/Users/trainguyen/Documents/work/ai-orchestrator/README_START.md` kèm binary `./bin/orchestrator`.
+
+---
+
+## 4. Kết quả Thực thi Task 6 & Tự Chữa Lành `UI-AF1..UI-AF4` (`3-Screen Graphical Web UI` — Commits `2ed2e89` & `d9c42aa`)
+
+- **Commits:**
+  - `2ed2e89` (`feat(webui): add 3-screen graphical web studio matching wave dag, autopilot ledger, and vibe studio screenshots` — `10 files changed, 3918 insertions(+), 28 deletions(-)`)
+  - `d9c42aa` (`fix(webui): resolve UI-AF1..UI-AF4 step title prefix, epics toggle, and dynamic autopilot totals` — `5 files changed, 84 insertions(+), 36 deletions(-)`)
+
+| File | Loại thay đổi | Số dòng (`+/-`) | Mô tả |
+| :--- | :---: | :---: | :--- |
+| `internal/webui/server.go` | New | `+999` | HTTP/SSE Server phục vụ `/`, `/api/dashboard`, `/api/tasks`, `/api/pipeline/trigger`, `/api/agents/message`, `/api/stream` |
+| `internal/webui/seed_data.go` | New | `+288` | Dữ liệu đồ thị phụ thuộc `Wave 0..5` (`PM-02 -> SRV-01 -> SRV-02 -> SRV-03 -> SRV-04 -> CLI-02`), 9 vòng lặp Autopilot và 11 cửa sổ Vibe Studio `A..K` |
+| `internal/webui/static/index.html` | New | `+315` | Giao diện HTML5 của cả 3 màn hình đồ họa + modal `☼ Giao việc` |
+| `internal/webui/static/app.css` | New | `+1244` | Hệ thống CSS Dark Cyber (`#0d121b`), thẻ xanh lá Autopilot, và bố cục 3 cột Vibe System Agent |
+| `internal/webui/static/app.js` | New | `+600` | Bộ vẽ đường cong `<svg>` Cubic Bezier động (`drawWaveBezierEdges`), lọc chuỗi phụ thuộc, đồng bộ SSE thời gian thực |
+| `internal/webui/server_test.go` | New | `+282` | Bộ test tự động kiểm chứng cả 3 màn hình, tạo task mới, kích hoạt Wave kế tiếp, chặn `git push` (`H5`) và luồng SSE |
+| `internal/queue/store.go` | Modified | `+45` | Bổ sung `UpdateWaveAndStage` và `ListAll` |
+| `cmd/orchestrator/daemon_cmd.go` | Modified | `+142 / -26` | Bổ sung lệnh `uiCmd` (`orchestrator ui --addr :8090`), cờ `--web :8090` cho `daemonCmd`, và đồng bộ `DependsOn` từ nhãn `depends:` |
+| `cmd/orchestrator/main.go` | Modified | `+5 / -1` | Đăng ký lệnh `orchestrator ui` / `orchestrator web` |
+| `README_START.md` | Modified | `+26 / -1` | Bổ sung hướng dẫn khởi chạy Chế độ 0 (`./bin/orchestrator ui --addr 127.0.0.1:8090`) |
 
 

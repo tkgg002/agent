@@ -55,8 +55,16 @@ DG1/DG2: xem `05_progress_rea_cleanroom_gap.md`.
 1. Mỗi lesson thêm 3 dòng máy đọc được: `- **ID:** LS-<YYYYMMDD>-<slug>` (ổn định, không theo vị trí), `- **Trigger:** <regex trên prompt User / tool action>`, `- **Check:** <1 câu tiền điều kiện phải làm TRƯỚC>`.
 2. `build_lessons_index.py` sinh thêm `lessons/tripwires.json` = `[{id, trigger, check}]` (nhỏ, không bị cắt).
 3. H1 (PreInvocation): match prompt User với `trigger` → tiêm nguyên văn `check` của các lesson khớp (tối đa 5) vào context **trước khi làm**. Không còn "đọc INDEX" chung chung.
-4. Với tripwire có `enforce: hook` (vd. URL repo tham chiếu → phải có `git clone`/`view_file` source trước khi ghi `13_analysis`), H4/H7 chặn cứng nếu chưa thấy hành động `check` trong transcript.
+4. Với tripwire có `- **Require:** <regex>` (bằng chứng hành động trong tool-call args): H4 pre-write chặn ghi `13_analysis_*`/`09_tasks_solution_*`/`audit_report_*` nếu prompt User trong phiên khớp `Trigger` mà chưa có tool call nào sau đó khớp `Require`.
+   - **G-04 (vị trí thực thi):** dispatcher không có pre-hook cho `invoke_subagent` (`agy_guard.py:818-828`) ⇒ kiểm `invoke_subagent` Prompt chứa path cấm hoặc dòng ≥40 ký tự của file cấm tại H7 Done-gate cho task clean-room; `contaminated_clean_room_reads` (H4b) xét thêm `run_command.CommandLine`, `read_url_content.Url`.
 5. Backfill: lesson cũ chưa có Trigger/Check → script liệt kê để bổ sung dần, ưu tiên các lesson tái phạm.
+6. **Sửa đổi append-only (bổ sung S4 09:55):** `lessons.md` cấm sửa dòng cũ ⇒ trường tripwire lặp lại trong cùng lesson thì **dòng sau thắng** (amendment). Áp dụng siết `Require` của `LS-20261021-prior-workspace-lookup` sau khi replay transcript thật cho thấy `grep -v memory/workspaces` làm thoả giả.
+
+## 8. S5 → S3 Re-Plan (2026-10-21T09:57)
+- **AF-1 [P0][VERIFIED]:** `tripwire_violations` tính cả tool ghi (`write_to_file`/`replace_file_content`) làm bằng chứng ⇒ lần ghi `13_analysis` bị chặn tự thoả `Require` khi thử lại (repro: before=['LS-20261021-prior-workspace-lookup'], after=[]). **Fix:** chỉ tính tool đọc/lệnh (`TRIPWIRE_EVIDENCE_TOOLS` = view_file, grep_search, find_by_name, list_dir, run_command, read_url_content, search_web); test hồi quy.
+- **AF-2 [P1][VERIFIED]:** `leaked_subagent_prompts` chỉ đọc được nội dung file cấm khi path tuyệt đối. **Fix:** path tương đối thử resolve theo các `Cwd` của `run_command` trong transcript; test hồi quy.
+- **AF-3 [P1][VERIFIED] (G-06):** `skills/reverse-engineer-anything` (symlink → `~/.gemini/config/skills/`, tạo 09:56:58 bởi `rea-agents setup`, ngoài phiên này) làm `validate_agent_surface` báo dead-weight → `test_01_f3` fail, baseline mutation FAIL. **Fix:** đăng ký trigger trong `OPERATOR_MAP.md` (mục 1), giới hạn đúng phạm vi theo chính description của REA: chỉ dùng cho binary/APK/Electron/firmware/không có source; repo có source thì dùng `view_file`/`grep`.
+- **Giới hạn đã biết (không sửa trong scope):** bằng chứng `Require` không gắn với đúng repo của Trigger (clone repo A thoả cho repo B trong cùng phiên); `run_command` có path cấm trong `grep -v` vẫn tính là đọc (thiên về an toàn).
 
 **Code demo:**
 ```python

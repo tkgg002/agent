@@ -84,3 +84,31 @@
 - **[Definition of Done]:**
   - Thực thi sau khi User `APPROVE`; bổ sung unit/integration test phá hủy cho từng lỗi `AF-01..AF-07`, chạy lại `mutation_gate.py` (`>= 3` mutants `KILLED`), chạy trace CLI thật và vượt qua `DG3` post-edit.
 
+---
+
+## [ ] Task 8 (`S1 → S3 Re-Plan` — Xử lý Triệt để 5 Lỗ hổng Tích hợp Thực tế `RF-01 → RF-05` do User Vạch trần)
+- **[Mô tả]:**
+  - **`RF-01` (Xóa bỏ 100% Proposer giả viết cứng `VALUE = 2` & `skills/dom-<lbl>/SKILL.md` trong `run-recursion`):**
+    - Tại `tooling/orchestrator/harness2_engine.py:1005-1064`, xóa toàn bộ khối `TemporaryDirectory`, `base_tree` 4 file giả và câu lệnh Python `py_cmd` viết cứng (`VALUE = 2`).
+    - Mặc định `run-recursion` phải đọc trực tiếp cây cấu hình thật của `/agent` (`load_agent_surface_tree(Path(args.agent_root).resolve())`) và gọi Model thật (qua Laya Decision Engine `http://127.0.0.1:8200/v1/predict` hoặc CLI Agent `claude -p` / `gemini`) để phân tích trace và tạo đề xuất `INV` / `DOM` / `COMPOSE` thật.
+  - **`RF-02` (Xóa bỏ Bộ chấm điểm Ground-Truth giả `1.0 / 0.6 / 0.2` & Cưỡng chế Grader-Free Blind Selector):**
+    - Tại `tooling/orchestrator/harness2_engine.py:657, 663, 757-768, 866-879, 1040-1045`, xóa hoàn toàn việc sinh và đọc trường `"score"` trong `run_rollout` và `execute_task_recursion` (vì chọn theo điểm số đi ngược nguyên lý "không dùng ground-truth feedback" của `Harness²`).
+    - Hiện thực hàm `laya_blind_selector(id_map, candidate_trees, rollout_outputs, *, task_id, base_tree, laya_url)` làm bộ chọn mặc định: đóng gói hồ sơ ẩn danh `A, B, C...` (chỉ chứa diff cấu hình + `stdout`/`stderr`/`returncode`/`surface_errors` từ probe thật, tuyệt đối không có `score` hay tên nhánh thật) và gọi HTTP `POST http://127.0.0.1:8200/v1/predict` (hoặc CLI Agent) để Model chọn ứng viên chiến thắng.
+  - **`RF-03` (Chặn `run_proposer` Trả về Nguyên Harness Gốc `No-Op` tại `harness2_engine.py:587`):**
+    - Tại `SubprocessHarnessRunner.run_proposer` (`harness2_engine.py:574-616`), khi không truyền `proposer_cmd_template`, bắt buộc gọi `_run_live_model_proposer(label, dim, base_tree, croot, harness_dir)` truy vấn trực tiếp Model thật (`:8200` / CLI Agent) để sinh thay đổi thực tế trên `harness_dir` theo đúng trục `INV` (nâng cấp script kiểm tra trong `tooling/`) hoặc `DOM` (tinh chỉnh `skills/<domain_skill>/SKILL.md`), và nếu Model offline thì ném `RuntimeError` thay vì âm thầm trả về `base_tree`.
+  - **`RF-04` (Khởi tạo & Ghi Thật vào Thư mục Vật lý `memory/global/harness_library/`):**
+    - Khai báo `DEFAULT_LIBRARY_ROOT = AGENT_ROOT / "memory" / "global" / "harness_library"` trong `harness2_engine.py`.
+    - Khi chạy `run-recursion`, ghi trực tiếp snapshot cấu hình thắng cuộc (`<domain>/harnesses/<task_id>/harness.json`), `EXPERIENCE.md`, và `<domain>/INDEX.md` vào `/Users/trainguyen/Documents/work/agent/memory/global/harness_library/` trên đĩa vật lý.
+  - **`RF-05` (Nối Dây Trực Tiếp `harness2_engine.py` vào Quy trình `S0–S6` qua Hooks, Linter, Project Manifest & Skills):**
+    1. `hooks/agy/agy_guard.py`:
+       - `H1 (handle_pre_invocation)`: Gọi `validate_agent_surface` kiểm tra bề mặt `/agent` (`c1..c8`) và hiển thị trạng thái `Surface` + `HarnessLibrary` trong `BOOT_MSG`.
+       - `H4b (handle_pre_write)`: Gọi `assert_pre_flight_clean_room(ws_dir, forbidden)` khi task có `mode: clean-room`.
+       - `H6 (handle_post_invocation)`: Kiểm tra bề mặt `/agent` khi sửa file trong `agent/` và đính kèm lệnh `run-recursion` trong `ESCALATION_MENTOR_MSG`.
+    2. `tooling/verify_governance.py`: Gọi `validate_agent_surface` trong `verify_workspace_docs` để cưỡng chế bề mặt `/agent` hợp lệ ở cả `S3` và `S6`.
+    3. `.agent-project.json`: Bổ sung `"runtime_check": "python3 tooling/orchestrator/harness2_engine.py validate-surface"` cho component `tooling`.
+    4. Cập nhật `GEMINI.md`, `OPERATOR_MAP.md`, `skills/qa-agent/SKILL.md`, `skills/session-wrapup/SKILL.md`, và `skills/context-manager/SKILL.md` nối quy trình `Harness²` vào `S0–S6`.
+- **[Context & Logs]:**
+  - Phản hồi trực diện của User chỉ ra 5 điểm: `harness2_engine.py:1020-1047` (proposer/scorer giả), `harness2_engine.py:587` (`run_proposer` no-op), thiếu `memory/global/harness_library/`, và chưa có skill/hook nào gọi `harness2_engine.py`.
+- **[Definition of Done]:**
+  - Chỉ thực thi sau khi có lệnh `APPROVE` của User; chạy thật `run-recursion` với Model thật (`:8200` / CLI Agent) sinh ra thư mục vật lý `memory/global/harness_library/agent_governance/INDEX.md` + `harnesses/<task_id>/EXPERIENCE.md` + `harness.json`; kiểm chứng `grep` xác nhận `agy_guard.py`, `verify_governance.py`, `.agent-project.json`, `GEMINI.md`, `OPERATOR_MAP.md`, và các `SKILL.md` đều gọi `harness2_engine.py`; vượt qua toàn bộ unit/integration tests, `mutation_gate.py` (`>= 3` mutants `KILLED`), và `/laya_router` `DG3`.
+

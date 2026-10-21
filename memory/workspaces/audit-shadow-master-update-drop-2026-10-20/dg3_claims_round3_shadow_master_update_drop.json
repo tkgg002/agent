@@ -1,0 +1,58 @@
+[
+  {
+    "id": "DG3-R3-F6-TRANSMUTER",
+    "kind": "claim",
+    "claim": "When ev.IsDelete or ev.Op is d and deleteFromMasterBySourceAndGpayIDs succeeds without error, RunEvents increments res.Deleted.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:710-728\n\t\tif ev.IsDelete || ev.Op == \"d\" {\n\t\t\tvar extraGIDs []int64\n\t\t\tif shadowGID, ok := shadowGpayMap[ev.SourceID]; ok && shadowGID > 0 {\n\t\t\t\textraGIDs = append(extraGIDs, shadowGID)\n\t\t\t}\n\t\t\t_, delErr := t.deleteFromMasterBySourceAndGpayIDs(ctx, masterRow, colTypes, []string{ev.SourceID}, extraGIDs)\n\t\t\tif delErr != nil {\n\t\t\t\tt.logger.Error(\"transmuter: event delete master failed\",\n\t\t\t\t\tzap.String(\"master\", masterRow.MasterTable),\n\t\t\t\t\tzap.String(\"source_id\", ev.SourceID),\n\t\t\t\t\tzap.Error(delErr))\n\t\t\t\tres.Skipped++\n\t\t\t\tif lastEventErr == nil {\n\t\t\t\t\tlastEventErr = delErr\n\t\t\t\t}\n\t\t\t} else {\n\t\t\t\tres.Deleted++\n\t\t\t}\n\t\t\tcontinue",
+    "flow": "RunEvents -> ev.IsDelete || ev.Op == d -> deleteFromMasterBySourceAndGpayIDs -> res.Deleted++"
+  },
+  {
+    "id": "DG3-R3-F6-HANDLER",
+    "kind": "claim",
+    "claim": "When err is nil and logEntry is not nil, runDebouncedGroup calls h.activity.Complete with res.Inserted+res.Updated+res.Deleted and includes deleted: res.Deleted in the details map.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:658-672\n\t\tif logEntry != nil {\n\t\t\th.activity.Complete(logEntry, res.Inserted+res.Updated+res.Deleted, map[string]interface{}{\n\t\t\t\t\"scanned\":           res.Scanned,\n\t\t\t\t\"inserted\":          res.Inserted,\n\t\t\t\t\"updated\":           res.Updated,\n\t\t\t\t\"deleted\":           res.Deleted,\n\t\t\t\t\"skipped\":           res.Skipped,\n\t\t\t\t\"rule_misses\":       res.RuleMisses,\n\t\t\t\t\"type_errors\":       res.TypeErrors,\n\t\t\t\t\"active_gate\":       res.ActiveGate,\n\t\t\t\t\"duration_ms\":       res.DurationMs,\n\t\t\t\t\"trace_id\":          traceID,\n\t\t\t\t\"master_binding_id\": masterBindingID,\n\t\t\t})\n\t\t}",
+    "flow": "runDebouncedGroup -> h.activity.Complete -> rows_affected = res.Inserted+res.Updated+res.Deleted, details[deleted] = res.Deleted"
+  },
+  {
+    "id": "DG3-R3-F7-DAILYFLOW-DTO",
+    "kind": "claim",
+    "claim": "DailyFlowMasterMetrics struct contains Total, Written, Inserted, Updated, Deleted, and Skipped fields of type int64.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/system/daily_flow.go:36-43\ntype DailyFlowMasterMetrics struct {\n\tTotal    int64 `json:\"total\"`\n\tWritten  int64 `json:\"written\"`\n\tInserted int64 `json:\"inserted\"`\n\tUpdated  int64 `json:\"updated\"`\n\tDeleted  int64 `json:\"deleted\"`\n\tSkipped  int64 `json:\"skipped\"`\n}",
+    "flow": "DailyFlowMasterMetrics -> Deleted int64 json:deleted"
+  },
+  {
+    "id": "DG3-R3-F7-F8-SQL",
+    "kind": "claim",
+    "claim": "GetDailyFlow includes transmute_poison_pill in the enriched CTE, aggregates master_deleted from e.details->>'deleted', sets rec.Master.Deleted = row.MasterDeleted, and sets rec.Status = WARNING when isMasterIncomplete is true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:533-556\n\t\trec.Master.Total = row.MasterInserted + row.MasterUpdated + row.MasterDeleted + row.MasterSkipped\n\t\trec.Master.Written = row.MasterInserted + row.MasterUpdated + row.MasterDeleted\n\t\trec.Master.Inserted = row.MasterInserted\n\t\trec.Master.Updated = row.MasterUpdated\n\t\trec.Master.Deleted = row.MasterDeleted\n\t\trec.Master.Skipped = row.MasterSkipped\n\n\t\trec.Recon.TotalRuns = row.ReconRuns\n\t\trec.Recon.DLQ = row.DLQ\n\t\trec.Recon.Missing = row.Missing\n\t\trec.Recon.Stale = row.Stale\n\t\trec.Recon.Healed = row.Healed\n\n\t\tisMasterStalled := (p.MasterTable != \"\") && (rec.Shadow.Written > 0) && (rec.Master.Total == 0)\n\t\tisMasterIncomplete := (p.MasterTable != \"\") && (rec.Shadow.Total > rec.Master.Total)\n\t\tisIngestOk := (rec.Kafka.Total == rec.Shadow.Total)\n\n\t\tif rec.Recon.DLQ > 0 || rec.Recon.Missing > 0 {\n\t\t\trec.Status = \"DRIFT\"\n\t\t} else if rec.Recon.Stale > 0 || !isIngestOk || isMasterStalled || isMasterIncomplete {\n\t\t\trec.Status = \"WARNING\"\n\t\t} else {\n\t\t\trec.Status = \"BALANCED\"\n\t\t}",
+    "flow": "GetDailyFlow -> row.MasterDeleted -> rec.Master.Deleted -> isMasterIncomplete -> Status = WARNING"
+  },
+  {
+    "id": "DG3-R3-F7-UI",
+    "kind": "claim",
+    "claim": "ReconPipelineGrid.tsx renders a Delete(d) column with dataIndex ['master', 'deleted'] alongside Inserted, Updated, and Skipped under 4. GHI VÀO DB MASTER.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:1357-1361\n              { title: 'Inserted', dataIndex: ['master', 'inserted'], width: 80, align: 'right', render: (v: number) => !pipeline?.masterName ? <Text type=\"secondary\">—</Text> : <span style={{ color: '#52c41a' }}>{fmtNum(v)}</span> },\n              { title: 'Updated', dataIndex: ['master', 'updated'], width: 80, align: 'right', render: (v: number) => !pipeline?.masterName ? <Text type=\"secondary\">—</Text> : <span style={{ color: '#faad14' }}>{fmtNum(v)}</span> },\n              { title: 'Delete(d)', dataIndex: ['master', 'deleted'], width: 75, align: 'right', render: (v: number) => !pipeline?.masterName ? <Text type=\"secondary\">—</Text> : <span style={{ color: '#ff4d4f' }}>{fmtNum(v || 0)}</span> },\n              { title: 'Skipped', dataIndex: ['master', 'skipped'], width: 75, align: 'right', render: (v: number) => !pipeline?.masterName ? <Text type=\"secondary\">—</Text> : <Text type=\"secondary\">{fmtNum(v)}</Text> },",
+    "flow": "ReconPipelineGrid -> Master columns -> Inserted, Updated, Delete(d), Skipped"
+  },
+  {
+    "id": "DG3-R3-CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "TransmuteResult struct in transmuter.go defines Deleted int64 with json tag deleted.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:114-127\ntype TransmuteResult struct {\n\tMaster     string `json:\"master\"`\n\tSource     string `json:\"source\"`\n\tScanned    int64  `json:\"scanned\"`\n\tInserted   int64  `json:\"inserted\"`\n\tUpdated    int64  `json:\"updated\"`\n\tDeleted    int64  `json:\"deleted\"`\n\tSkipped    int64  `json:\"skipped\"`\n\tOccSkipped int64  `json:\"occ_skipped\"`\n\tRuleMisses int64  `json:\"rule_misses\"`\n\tTypeErrors int64  `json:\"type_errors\"`\n\tDurationMs int64  `json:\"duration_ms\"`\n\tActiveGate string `json:\"active_gate,omitempty\"`\n}",
+    "flow": "TransmuteResult -> Deleted int64"
+  },
+  {
+    "id": "DG3-R3-CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "When ev.IsDelete or ev.Op is d and deleteFromMasterBySourceAndGpayIDs succeeds without error, RunEvents increments res.Inserted instead of res.Deleted.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:710-728\n\t\tif ev.IsDelete || ev.Op == \"d\" {\n\t\t\tvar extraGIDs []int64\n\t\t\tif shadowGID, ok := shadowGpayMap[ev.SourceID]; ok && shadowGID > 0 {\n\t\t\t\textraGIDs = append(extraGIDs, shadowGID)\n\t\t\t}\n\t\t\t_, delErr := t.deleteFromMasterBySourceAndGpayIDs(ctx, masterRow, colTypes, []string{ev.SourceID}, extraGIDs)\n\t\t\tif delErr != nil {\n\t\t\t\tt.logger.Error(\"transmuter: event delete master failed\",\n\t\t\t\t\tzap.String(\"master\", masterRow.MasterTable),\n\t\t\t\t\tzap.String(\"source_id\", ev.SourceID),\n\t\t\t\t\tzap.Error(delErr))\n\t\t\t\tres.Skipped++\n\t\t\t\tif lastEventErr == nil {\n\t\t\t\t\tlastEventErr = delErr\n\t\t\t\t}\n\t\t\t} else {\n\t\t\t\tres.Deleted++\n\t\t\t}\n\t\t\tcontinue",
+    "flow": "false control claim contradicting res.Deleted++"
+  },
+  {
+    "id": "DG3-R3-CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "DailyFlowMasterMetrics struct in daily_flow.go only has Inserted and Skipped fields and omits both Updated and Deleted fields.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/system/daily_flow.go:36-43\ntype DailyFlowMasterMetrics struct {\n\tTotal    int64 `json:\"total\"`\n\tWritten  int64 `json:\"written\"`\n\tInserted int64 `json:\"inserted\"`\n\tUpdated  int64 `json:\"updated\"`\n\tDeleted  int64 `json:\"deleted\"`\n\tSkipped  int64 `json:\"skipped\"`\n}",
+    "flow": "false control claim contradicting DailyFlowMasterMetrics fields"
+  }
+]
