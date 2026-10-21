@@ -1,0 +1,50 @@
+[
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "agy_guard APPROVE",
+    "claim": "The APPROVE regex starts with ^ and is compiled with re.M so it only matches approval keywords at the start of a line.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:48-51\nAPPROVE = re.compile(\n    r\"^\\s*(?:ok\\s+|ừ\\s+|được\\s+)?(approve|duyệt|ok\\s*(sửa|làm|fix)|làm đi|sửa đi|fix đi|triển khai|thực hiện đi|chặn\\s*đứng|thêm.*vào.*cho\\s*tao|vòng\\s+lặp\\s+phản\\s+tỉnh|self-improvement\\s+loop|update\\s+agy_g)\",\n    re.I | re.M,\n)"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "harness2_engine run-recursion",
+    "claim": "run-recursion returns 2 when proposer_cmd or rollout_cmd is empty or not a list.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py:1020-1031\n        if not (isinstance(proposer_cmd, list) and proposer_cmd and isinstance(rollout_cmd, list) and rollout_cmd):\n            print(\n                json.dumps(\n                    {\n                        \"status\": \"INVALID_INPUT\",\n                        \"error\": \"run-recursion cần --proposer-cmd và --rollout-cmd (JSON list) trỏ tới CLI agent/evaluator thật; \"\n                        \"không còn proposer/scorer giả mặc định (G-05).\",\n                    },\n                    ensure_ascii=False,\n                )\n            )\n            return 2"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "agy_guard user_approved",
+    "claim": "user_approved uses CLEAN_ROOM_START when clean_room is true and APPROVE otherwise.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:379-385\ndef user_approved(st: List[Dict[str, Any]], start: int, clean_room: bool = False) -> bool:\n    \"\"\"G-01: clean-room chỉ chấp nhận dòng 'BẮT ĐẦU'/'APPROVE' đứng riêng; task thường dùng APPROVE neo đầu dòng.\"\"\"\n    pat = CLEAN_ROOM_START if clean_room else APPROVE\n    return any(\n        s.get(\"type\") == \"USER_INPUT\" and pat.search(str(s.get(\"content\", \"\")))\n        for s in st[max(start, 0) :]\n    )"
+  },
+  {
+    "id": "D-K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "agy_guard user_approved",
+    "claim": "user_approved always uses APPROVE regardless of clean_room.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:379-385\ndef user_approved(st: List[Dict[str, Any]], start: int, clean_room: bool = False) -> bool:\n    \"\"\"G-01: clean-room chỉ chấp nhận dòng 'BẮT ĐẦU'/'APPROVE' đứng riêng; task thường dùng APPROVE neo đầu dòng.\"\"\"\n    pat = CLEAN_ROOM_START if clean_room else APPROVE\n    return any(\n        s.get(\"type\") == \"USER_INPUT\" and pat.search(str(s.get(\"content\", \"\")))\n        for s in st[max(start, 0) :]\n    )"
+  },
+  {
+    "id": "D-K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "harness2_engine run-recursion",
+    "claim": "run-recursion falls back to a built-in default proposer command when proposer_cmd is empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py:1020-1031\n        if not (isinstance(proposer_cmd, list) and proposer_cmd and isinstance(rollout_cmd, list) and rollout_cmd):\n            print(\n                json.dumps(\n                    {\n                        \"status\": \"INVALID_INPUT\",\n                        \"error\": \"run-recursion cần --proposer-cmd và --rollout-cmd (JSON list) trỏ tới CLI agent/evaluator thật; \"\n                        \"không còn proposer/scorer giả mặc định (G-05).\",\n                    },\n                    ensure_ascii=False,\n                )\n            )\n            return 2"
+  },
+  {
+    "id": "D-K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "agy_guard contaminated reads",
+    "claim": "contaminated_clean_room_reads looks up argument keys for each tool name in READ_ARG_KEYS.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:321-329\ndef contaminated_clean_room_reads(st: List[Dict[str, Any]], forbidden: List[str]) -> List[str]:\n    if not forbidden:\n        return []\n    hits: List[str] = []\n    for _, n, a in calls(st):\n        keys = READ_ARG_KEYS.get(n or \"\")\n        if not keys:\n            continue\n        blob = \" \".join(str(a.get(k) or \"\") for k in keys).replace(\"\\\\\", \"/\")"
+  }
+]

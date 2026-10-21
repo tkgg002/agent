@@ -1,0 +1,58 @@
+[
+  {
+    "id": "A-RC",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "agy_guard TRIPWIRE_EVIDENCE_TOOLS",
+    "claim": "TRIPWIRE_EVIDENCE_TOOLS contains read and command tools such as view_file and run_command and does not contain write_to_file or replace_file_content.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:75-77\nTRIPWIRE_EVIDENCE_TOOLS = frozenset(\n    {\"view_file\", \"grep_search\", \"find_by_name\", \"list_dir\", \"run_command\", \"read_url_content\", \"search_web\"}\n)"
+  },
+  {
+    "id": "A-FIX",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "agy_guard tripwire_violations",
+    "claim": "tripwire_violations only accepts a tool call as Require evidence when its index is after the trigger prompt and its tool name is in TRIPWIRE_EVIDENCE_TOOLS.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:441-445\n            ok = any(\n                i > first\n                and n in TRIPWIRE_EVIDENCE_TOOLS\n                and re.search(req, json.dumps(a, ensure_ascii=False), re.I)\n                for i, n, a in calls(st)"
+  },
+  {
+    "id": "A-IMPACT",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "agy_guard leaked_subagent_prompts",
+    "claim": "leaked_subagent_prompts collects the Cwd arguments of run_command calls to resolve relative forbidden paths.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:356-356\n    cwds = {str(a.get(\"Cwd\")) for _, n, a in calls(st) if n == \"run_command\" and a.get(\"Cwd\")}"
+  },
+  {
+    "id": "A-PATTERN",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "build_lessons_index build_index",
+    "claim": "build_index computes tripwires with build_tripwires(entries).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/build_lessons_index.py:275-275\n    tripwires = build_tripwires(entries)"
+  },
+  {
+    "id": "A-K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "agy_guard TRIPWIRE_EVIDENCE_TOOLS",
+    "claim": "TRIPWIRE_EVIDENCE_TOOLS includes write_to_file.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:75-77\nTRIPWIRE_EVIDENCE_TOOLS = frozenset(\n    {\"view_file\", \"grep_search\", \"find_by_name\", \"list_dir\", \"run_command\", \"read_url_content\", \"search_web\"}\n)"
+  },
+  {
+    "id": "A-K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "build_lessons_index build_index",
+    "claim": "build_index sets tripwires to an empty list without parsing entries.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/build_lessons_index.py:275-275\n    tripwires = build_tripwires(entries)"
+  },
+  {
+    "id": "A-K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "verify_governance spec check",
+    "claim": "verify_workspace_docs calls spec_rule_issues on the solution file text.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/verify_governance.py:243-243\n        rule_issues = spec_rule_issues(sol_file.read_text(encoding=\"utf-8\", errors=\"ignore\"))"
+  }
+]
