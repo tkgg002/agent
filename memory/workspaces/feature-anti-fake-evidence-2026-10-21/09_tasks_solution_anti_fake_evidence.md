@@ -25,3 +25,10 @@ def claim_issues(text, ws_dir, st, fingerprint):
 
 ## S5 → S3 (10:40)
 6. `current_fingerprint` dùng Cwd của run_command cuối phiên ⇒ sai repo thì báo "bằng chứng cũ" giả. Fix: khi H4c không truyền fingerprint, tính `source_fingerprint(rec["cwd"])` cho từng biên lai (cache theo cwd).
+
+## Mở rộng theo yêu cầu User (11:11 — Tối ưu Quy trình & Tiết kiệm Token A–D)
+7. **(A) Zero-Boilerplate Skill Loading (`GEMINI.md`):** Bỏ yêu cầu gọi `view_file` đọc lại các `SKILL.md` quy trình ở từng chặng S1–S6 vì luật đã tích hợp trong `GEMINI.md` và `agy_guard.py`.
+8. **(B) Gộp `DG1 + DG2` trong 1 lần gọi (`tooling/laya_gate.py`, `hooks/agy/agy_guard.py`):** Cho phép `--stage dg12` hoặc `--stage dg1` có kèm claim `D-*`/`kind=demo` tự ghi cả summary `dg1` và `dg2` trong 1 batch HTTP duy nhất; `handle_stop` chỉ bắt buộc `dg1 == PASS` (và chặn nếu `dg2` tồn tại nhưng khác `PASS`).
+9. **(C) Tắt H6 auto-checks lặp & chống bơm lặp prompt (`hooks/agy/agy_guard.py`, `.agent-project.json`):** Thêm cờ `h6_auto_checks` (mặc định `false` trong `.agent-project.json` để tránh chạy test ngầm lặp lại và tránh race với `mutation_gate.py`); chỉ bơm `FINAL_AUDIT_MSG` đầy đủ ở lần sửa đầu tiên trong lượt user; ở `handle_stop` chỉ chặn `n == 0` khi `miss` khác rỗng.
+10. **(D) Gộp báo cáo Tier T2 vào `audit_report_<suffix>.md` (`tooling/verify_governance.py`, `hooks/agy/agy_guard.py`, `GEMINI.md`):** Với Tier T2, `audit_report_<suffix>.md` gộp luôn kết quả validation (biên lai `EV-...`) + report + 6 mục phản biện; không bắt tạo rời `06_validation_*` và `11_report_*`.
+

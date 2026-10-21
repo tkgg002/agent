@@ -40,9 +40,7 @@ TIER_RULES: dict[str, List[Tuple[str, Tuple[str, ...]]]] = {
         ("05_progress_*.md", ("05_progress*.md",)),
         ("08_tasks_*.md", ("08_tasks*.md",)),
         ("09_tasks_solution_*.md", ("09_tasks_solution*.md",)),
-        ("06_validation_*.md / 06_test_cases_*.md", ("06_validation*.md", "06_test_cases*.md")),
-        ("11_report_*.md", ("11_report*.md",)),
-        ("audit_report_*.md", ("audit_report*.md",)),
+        ("audit_report_*.md (gộp validation + report + audit)", ("audit_report*.md",)),
     ],
     "T3": [
         ("00_context_*.md", ("00_context*.md",)),

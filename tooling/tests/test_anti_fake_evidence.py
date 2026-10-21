@@ -120,5 +120,57 @@ class TestCrashNotKill(unittest.TestCase):
             self.assertEqual(summary["gate"], "FAIL")
 
 
+class TestWorkflowOpt(unittest.TestCase):
+    def test_t2_consolidated_audit_report_without_06_or_11(self) -> None:
+        import verify_governance
+
+        with tempfile.TemporaryDirectory() as d:
+            ws_root = Path(d)
+            ws = ws_root / "t2-merged"
+            ws.mkdir()
+            today = "2026-10-21"
+            (ws / "01_requirements_m.md").write_text("tier: T2\n", encoding="utf-8")
+            (ws / "05_progress_m.md").write_text(f"- [{today}T10:00:00+07:00] [Agent:Opus] START\n", encoding="utf-8")
+            (ws / "08_tasks_m.md").write_text("- [x] T1\n", encoding="utf-8")
+            (ws / "09_tasks_solution_m.md").write_text("# Sol\n", encoding="utf-8")
+            self.assertFalse(verify_governance.verify_workspace_docs("t2-merged", workspaces_dir=ws_root, today_override=today))
+            self.assertTrue(any("gộp validation + report + audit" in lbl for lbl, _ in verify_governance.TIER_RULES["T2"]))
+            (ws / "audit_report_m.md").write_text(
+                "# Audit\n1. git diff\n2. runtime trace\n3. concurrency timeout watermark\n4. không suy diễn\n5. lessons\n6. dg3\n",
+                encoding="utf-8",
+            )
+            self.assertTrue(verify_governance.verify_workspace_docs("t2-merged", workspaces_dir=ws_root, today_override=today))
+
+    def test_laya_gate_dg1_with_demo_claim_writes_dg2_summary(self) -> None:
+        from unittest import mock
+        import laya_gate
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            src = root / "s.py"
+            src.write_text("X = 1\n", encoding="utf-8")
+            claims = [
+                {"id": "S-RC", "kind": "claim", "basis": "code", "claim": "X is 1", "evidence": f"REF: {src}:1-1\nX = 1", "flow": "f"},
+                {"id": "D-BEHAV", "kind": "demo", "basis": "code", "claim": "demo ok", "evidence": "DEMO: X = 1", "flow": "f"},
+                {"id": "CF-1", "kind": "control_false", "claim": "false 1", "evidence": "x", "flow": "f"},
+                {"id": "CF-2", "kind": "control_false", "claim": "false 2", "evidence": "x", "flow": "f"},
+                {"id": "CT-1", "kind": "control_true", "claim": "true 1", "evidence": "x", "flow": "f"},
+            ]
+            cf = root / "claims.json"
+            cf.write_text(json.dumps(claims), encoding="utf-8")
+
+            def fake_ask(_url, rnd, c, _obj, **_kw):
+                is_neg = c["kind"] == "control_false"
+                ch = laya_gate.NEG_CHOICE[rnd] if is_neg else laya_gate.POS_CHOICE[rnd]
+                return {"choice": ch, "confidence": 0.9, "raw": {}, "request": {}}
+
+            with mock.patch.object(laya_gate, "ask_round_mode_a", side_effect=fake_ask):
+                rc = laya_gate.main(["run", "--stage", "dg1", "--workspace", "w", "--claims", str(cf), "--ws-root", str(root / "ws")])
+            self.assertEqual(rc, 0)
+            self.assertEqual(len(list((root / "ws" / "w").glob("06_laya_summary_dg1_*.json"))), 1)
+            self.assertEqual(len(list((root / "ws" / "w").glob("06_laya_summary_dg2_*.json"))), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
+

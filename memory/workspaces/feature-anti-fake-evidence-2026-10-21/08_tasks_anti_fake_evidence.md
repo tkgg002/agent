@@ -9,3 +9,7 @@
 
 DoD: replay báo cáo cũ (audit harness2 AF-07, audit_report rea_cleanroom_gap) → linter chỉ ra đúng các claim không có EV; claim có EV hợp lệ qua.
 - [x] T7: fingerprint theo cwd của từng biên lai.
+- [x] T8 (A): Cập nhật `GEMINI.md` bỏ đọc `SKILL.md` cưỡng bức ở từng bước S1–S6 và gộp báo cáo T2.
+- [x] T9 (B): Gộp `DG1 + DG2` trong `tooling/laya_gate.py` và `hooks/agy/agy_guard.py`.
+- [x] T10 (C): Tắt H6 auto-checks lặp trong `.agent-project.json` + rút gọn thông điệp H6 lần >=2 + không chặn H7 `n==0` khi `miss` rỗng.
+- [x] T11 (D): Gộp `06_validation` + `11_report` + `audit_report` cho Tier T2 trong `tooling/verify_governance.py` và `hooks/agy/agy_guard.py`.

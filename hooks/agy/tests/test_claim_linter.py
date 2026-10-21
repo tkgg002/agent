@@ -80,6 +80,32 @@ class TestClaimLinter(unittest.TestCase):
         text = "## Chưa kiểm được\n- runtime thật chưa chạy 0/1\n## Khác\n```\nPASS\n```\n"
         self.assertEqual(agy_guard.claim_issues(text, self.ws, self.st, "fp1"), [])
 
+    def test_h6_dedupes_audit_msg_and_respects_h6_auto_checks_false(self) -> None:
+        root = Path(self._t.name)
+        proj = root / "p"
+        proj.mkdir()
+        (proj / ".agent-project.json").write_text(
+            json.dumps({"components": [{"name": "c", "path": ".", "h6_auto_checks": False, "checks": ["exit 1"]}]}),
+            encoding="utf-8",
+        )
+        src = proj / "m.py"
+        src.write_text("x = 1\n", encoding="utf-8")
+        tr = root / "tr.jsonl"
+        sdir = root / "state"
+        tr.write_text(
+            json.dumps({"type": "USER_INPUT", "content": "APPROVE"}) + "\n"
+            + json.dumps({"tool_calls": [{"name": "replace_file_content", "args": {"TargetFile": str(src)}}]}) + "\n",
+            encoding="utf-8",
+        )
+        r1 = agy_guard.handle_post_invocation({"conversationId": "c1", "transcriptPath": str(tr)}, mem_root=root / "mem", state_dir=sdir)
+        self.assertIn("MANDATORY FINAL ADVERSARIAL AUDIT", r1["injectSteps"][0]["ephemeralMessage"])
+        with tr.open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"tool_calls": [{"name": "replace_file_content", "args": {"TargetFile": str(src)}}]}) + "\n")
+        r2 = agy_guard.handle_post_invocation({"conversationId": "c1", "transcriptPath": str(tr)}, mem_root=root / "mem", state_dir=sdir)
+        self.assertIn("🔍 H6 (m.py):", r2["injectSteps"][0]["ephemeralMessage"])
+        self.assertNotIn("MANDATORY FINAL ADVERSARIAL AUDIT", r2["injectSteps"][0]["ephemeralMessage"])
+
 
 if __name__ == "__main__":
     unittest.main()
+

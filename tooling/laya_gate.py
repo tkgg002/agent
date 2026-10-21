@@ -324,11 +324,12 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     ts = time.strftime("%Y%m%dT%H%M%S")
     ws_root = Path(args.ws_root)
-    raw_file = write_workspace_json(ws_root, args.workspace, f"06_laya_raw_{args.stage}_{ts}.json", rows)
+    stage_norm = "dg1" if args.stage == "dg12" else args.stage
+    raw_file = write_workspace_json(ws_root, args.workspace, f"06_laya_raw_{stage_norm}_{ts}.json", rows)
 
     summary: Dict[str, Any] = {
         "mode": "claim",
-        "stage": args.stage,
+        "stage": stage_norm,
         "workspace": args.workspace,
         "ts": ts,
         "trusted_rounds": trusted_rounds,
@@ -352,8 +353,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         ],
     }
     summary["gate"] = compute_gate(summary)
-    sum_file = write_workspace_json(ws_root, args.workspace, f"06_laya_summary_{args.stage}_{ts}.json", summary)
+    sum_file = write_workspace_json(ws_root, args.workspace, f"06_laya_summary_{stage_norm}_{ts}.json", summary)
     summary["summary_file"] = str(sum_file)
+    has_demo = any(c.get("kind") == "demo" or str(c.get("id", "")).startswith("D-") for c in claims)
+    if args.stage == "dg12" or (args.stage == "dg1" and has_demo):
+        dg2_summary = {**summary, "stage": "dg2"}
+        dg2_file = write_workspace_json(ws_root, args.workspace, f"06_laya_summary_dg2_{ts}.json", dg2_summary)
+        summary["dg2_summary_file"] = str(dg2_file)
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0 if summary["gate"] == "PASS" else 2
 
@@ -625,8 +631,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Laya Decision Gate CLI (Mode A Claim & Mode B Debate Review)")
     sub = p.add_subparsers(dest="subcommand", required=True)
 
-    p_run = sub.add_parser("run", help="Run Mode A Calibrated Claim Gate (dg1, dg2, dg3)")
-    p_run.add_argument("--stage", required=True, choices=["dg1", "dg2", "dg3"])
+    p_run = sub.add_parser("run", help="Run Mode A Calibrated Claim Gate (dg1, dg2, dg12, dg3)")
+    p_run.add_argument("--stage", required=True, choices=["dg1", "dg2", "dg12", "dg3"])
     p_run.add_argument("--workspace", required=True)
     p_run.add_argument("--claims", required=True)
     p_run.add_argument("--objective", default="Kiểm định kỹ thuật theo chuẩn Master Workflow")

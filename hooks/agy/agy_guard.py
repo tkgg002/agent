@@ -1040,6 +1040,8 @@ def handle_post_invocation(
 
     errs: List[str] = []
     for (_, name), (cwd, c) in sorted(comps.items()):
+        if not c.get("h6_auto_checks", True):
+            continue
         for cmd in c.get("checks", []):
             try:
                 r = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True, timeout=40)
@@ -1051,6 +1053,8 @@ def handle_post_invocation(
     u_idx = last_user_idx(st)
     loop_key = f"{conv_id}.{u_idx}.loop" if u_idx >= 0 else f"{conv_id}.loop"
     loop_file = sdir / loop_key
+    inj_key = f"{conv_id}.{u_idx}.audit_inj" if u_idx >= 0 else f"{conv_id}.audit_inj"
+    inj_file = sdir / inj_key
 
     edited_names = ", ".join(sorted({Path(f).name for _, f in new_edits}))
     audit_prompt = FINAL_AUDIT_MSG.format(files=edited_names)
@@ -1062,7 +1066,11 @@ def handle_post_invocation(
         msg = escalation + "⚠️ H6 fast-feedback:\n" + "\n".join(errs) + "\n\n" + audit_prompt
     else:
         loop_file.write_text("0", encoding="utf-8")
-        msg = audit_prompt
+        if not inj_file.exists():
+            inj_file.write_text("1", encoding="utf-8")
+            msg = audit_prompt
+        else:
+            msg = f"🔍 H6 ({edited_names}): nhớ chạy git diff + evidence_run.py + DG3 + cập nhật audit_report trước khi kết thúc."
     return {"injectSteps": [{"ephemeralMessage": msg}]}
 
 
@@ -1095,9 +1103,11 @@ def handle_stop(
 
     sol_touched = touched(st, r"09_tasks_solution", u_idx)
     if sol_touched:
-        for g in ("dg1", "dg2"):
-            if laya_gate_status(ws, g, ws_root) != "PASS":
-                miss.append(f"{g.upper()}: laya_gate chưa PASS cho giải pháp/code demo")
+        if laya_gate_status(ws, "dg1", ws_root) != "PASS":
+            miss.append("DG1: laya_gate chưa PASS cho giải pháp/code demo")
+        dg2_st = laya_gate_status(ws, "dg2", ws_root)
+        if dg2_st is not None and dg2_st != "PASS":
+            miss.append("DG2: laya_gate chưa PASS cho code demo")
         if not touched(st, r"05_progress", u_idx):
             miss.append("05_progress: chưa append tiến độ trong lượt lập 09_tasks_solution")
 
@@ -1120,7 +1130,7 @@ def handle_stop(
             miss.append("Line-by-Line Diff: chưa chạy `git diff` hoặc `git show` thật sau lần sửa code cuối")
         if not touched(st, r"05_progress", last):
             miss.append("05_progress: chưa append kết quả sau lần sửa code cuối")
-        if not touched(st, r"06_validation", last):
+        if not touched(st, r"(audit_report_|06_validation)", last):
             miss.append("06_validation: chưa ghi bằng chứng test/runtime sau lần sửa code cuối")
         if not touched(st, r"audit_report_", last):
             miss.append("audit_report: chưa tạo/cập nhật audit_report_<suffix>.md sau lần sửa code cuối")
@@ -1174,7 +1184,7 @@ def handle_stop(
             if r.returncode != 0:
                 miss.append("verify_governance.py FAILED:\n" + (r.stdout + r.stderr)[-600:])
 
-    if run_linter and src and n == 0:
+    if run_linter and src and n == 0 and miss:
         sdir.mkdir(parents=True, exist_ok=True)
         cnt_file.write_text("1", encoding="utf-8")
         extra_miss = ("\n\n⚠️ Các mục Done-gate còn thiếu:\n- " + "\n- ".join(miss)) if miss else ""
@@ -1186,7 +1196,7 @@ def handle_stop(
                 + "\n\n👉 BẮT BUỘC: Thực hiện rà soát phản biện thực sự từng dòng `git diff` vừa sửa. "
                 "Nếu phát hiện bất kỳ bug, lỗ hổng hay thiếu sót nào: CẤM báo cáo đẩy trách nhiệm cho User và CẤM bắt User APPROVE lại! "
                 "Hãy cập nhật ngay `09_tasks_solution_<suffix>.md` + `08_tasks_<suffix>.md` + chạy `DG1/DG2`, "
-                "tự sửa dứt điểm source code, chạy lại test + `DG3` + cập nhật `audit_report_<suffix>.md` + `06_validation_<suffix>.md` + `05_progress` "
+                "tự sửa dứt điểm source code, chạy lại test + `DG3` + cập nhật `audit_report_<suffix>.md` + `05_progress` "
                 "rồi mới kết thúc lượt!"
                 + extra_miss
             ),

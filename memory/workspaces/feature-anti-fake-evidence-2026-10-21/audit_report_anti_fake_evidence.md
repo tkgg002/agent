@@ -25,3 +25,15 @@ Xem `05_progress_anti_fake_evidence.md`. Vòng 2: `06_laya_summary_dg3_20261021T
 - Diff critique tìm ra: `current_fingerprint` lấy Cwd của run_command cuối phiên ⇒ chạy lệnh ở repo khác là mọi biên lai bị báo "cũ" giả. Sửa: `_fp_for(rec["cwd"])` theo từng biên lai; test hồi quy trên repo git thật trong tmp; mutant M8 thay M2.
 - Diff-anchor tự bắt lỗi của chính em: chạy `--base HEAD` sau khi đã commit thì mutant cũ không chạm dòng đổi → INVALID_INPUT (EV-20261021T103942-2f79, exit 3). Base đúng là commit trước task: 74840c8.
 - Số liệu sau sửa: xem 06_validation mục Vòng 2; DG3 chốt: `06_laya_summary_dg3_20261021T104512.json`.
+
+## Vòng 3 — Tối ưu Quy trình & Tiết kiệm Token A–D (11:18)
+- (A) `GEMINI.md`: bỏ đọc `SKILL.md` cưỡng bức ở từng chặng S1–S6, giữ đủ trigger token cho `validate-surface`.
+- (B) `tooling/laya_gate.py` + `hooks/agy/agy_guard.py`: `--stage dg1` có claim `D-*`/`demo` (hoặc `--stage dg12`) ghi luôn cả `06_laya_summary_dg1_*.json` và `06_laya_summary_dg2_*.json`.
+- (C) `.agent-project.json` + `hooks/agy/agy_guard.py`: tắt `h6_auto_checks` ngầm tránh chạy test lặp và tránh race với `mutation_gate.py`; chỉ bơm `FINAL_AUDIT_MSG` ở lần sửa đầu tiên trong lượt; H7 `n == 0` chỉ chặn khi `miss` khác rỗng.
+- (D) `tooling/verify_governance.py` + `hooks/agy/agy_guard.py`: gộp báo cáo Tier T2 vào `audit_report_<suffix>.md`.
+- Hook unit tests: Ran 62 tests, OK (EV-20261021T111821-6aa2).
+- Tooling unit tests: Ran 49 tests, OK (EV-20261021T111821-88b8).
+- Runtime validate-surface: VALIDATED, OK (EV-20261021T111826-d20e).
+- Mutation gate `--base 74840c8`: gate=PASS killed=9/9 (EV-20261021T111826-f68b).
+- DG3 chốt: `06_laya_summary_dg3_20261021T111838.json`.
+
