@@ -11,7 +11,7 @@
 - [x] T9 (G-02/G-04): `contaminated_clean_room_reads` xét `run_command`, `read_url_content`, `invoke_subagent`.
 - [x] T10 (G-03): Spec `R<n>: ... — REF:` bắt buộc trong H4 + `verify_governance.py` cho clean-room.
 - [x] T11 (G-05): `run-recursion` bỏ proposer/scorer giả viết cứng; bắt buộc `--proposer-cmd`/`--rollout-cmd` thật, thiếu → exit 2.
-- [ ] T12: unittest hooks + tooling PASS; `mutation_gate.py` ≥3 mutant KILLED; DG3; audit_report; verify_governance S6.
+- [x] T12: unittest hooks + tooling PASS; `mutation_gate.py` ≥3 mutant KILLED; DG3; audit_report; verify_governance S6.
 - [x] T13 (AF-1): tripwire evidence chỉ từ tool đọc/lệnh, không tính tool ghi.
 - [x] T14 (AF-2): G-04 resolve path cấm tương đối theo Cwd của run_command.
 
