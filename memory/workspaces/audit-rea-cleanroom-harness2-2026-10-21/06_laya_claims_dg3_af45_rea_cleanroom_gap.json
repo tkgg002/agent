@@ -1,0 +1,58 @@
+[
+  {
+    "id": "A-RC",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "tripwire _proves",
+    "claim": "_proves skips a Require match when the matched text contains '$' or contains the target workspace segment '/<exclude_ws>/'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:446-447\n            if \"$\" in hit or (exclude_ws and f\"/{exclude_ws}/\" in hit):\n                continue"
+  },
+  {
+    "id": "A-FIX",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "tripwire _proves",
+    "claim": "_proves skips an absolute path token that does not exist on disk by checking Path(tok).exists().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:449-453\n            # AF-5: đường dẫn tuyệt đối chỉ là bằng chứng nếu tồn tại thật (chuỗi trong script repro thì không).\n            if tok.startswith(\"/\") and not tok.startswith(\"//\"):\n                try:\n                    if not Path(tok).exists():\n                        continue"
+  },
+  {
+    "id": "A-IMPACT",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "H4t gate",
+    "claim": "H4t extracts the target workspace name from the written file path with re.search on '/workspaces/([^/]+)/'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:669-669\n        tgt_ws = re.search(r\"/workspaces/([^/]+)/\", f.replace(\"\\\\\", \"/\"))"
+  },
+  {
+    "id": "A-PATTERN",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "agy_guard constants",
+    "claim": "TRIPWIRE_TOKEN_BOUNDARY is declared as a module-level frozenset constant.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:79-79\nTRIPWIRE_TOKEN_BOUNDARY = frozenset(\" \\t\\n\\\"'`;|<>()\\\\=\")"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "tripwire _proves",
+    "claim": "_proves accepts every match regardless of '$' or the target workspace.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:446-447\n            if \"$\" in hit or (exclude_ws and f\"/{exclude_ws}/\" in hit):\n                continue"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "agy_guard constants",
+    "claim": "TRIPWIRE_TOKEN_BOUNDARY is declared as a list.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:79-79\nTRIPWIRE_TOKEN_BOUNDARY = frozenset(\" \\t\\n\\\"'`;|<>()\\\\=\")"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "agy_guard evidence tools",
+    "claim": "TRIPWIRE_EVIDENCE_TOOLS is a frozenset that includes view_file.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:75-77\nTRIPWIRE_EVIDENCE_TOOLS = frozenset(\n    {\"view_file\", \"grep_search\", \"find_by_name\", \"list_dir\", \"run_command\", \"read_url_content\", \"search_web\"}\n)"
+  }
+]

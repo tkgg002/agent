@@ -12,7 +12,7 @@
 | G-06 | REA chưa đăng ký | Dòng `reverse-engineer-anything` trong `OPERATOR_MAP.md` (REA do `rea-agents setup` cài lúc 09:56) | validate-surface VALIDATED |
 
 ## Kết quả
-hooks 47/47, tooling 37/37, mutation 8/8 KILLED + SHA restore, DG1/DG2/DG3 PASS (có UNVALIDATED/FLAG đã resolve).
+hooks 49/49, tooling 37/37, mutation 10/10 KILLED + SHA restore, DG1/DG2/DG3 PASS (FLAG đã resolve bằng REF + mutant). Vòng H7 stop-audit tìm thêm AF-4 (bằng chứng trỏ vào chính workspace/`$VAR`) và AF-5 (chuỗi đường dẫn giả được tính là bằng chứng) — đã sửa.
 
 ## Còn mở
 1. 260/262 lesson cũ chưa có tripwire — cần backfill dần (ưu tiên lesson tái phạm).

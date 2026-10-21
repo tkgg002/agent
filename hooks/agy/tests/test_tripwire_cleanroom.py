@@ -191,16 +191,50 @@ class TestTripwireAndCleanRoom(unittest.TestCase):
         self.assertEqual(agy_guard.leaked_subagent_prompts(clean, fb), [])
 
 
+    def _real_doc(self, ws: str, name: str) -> str:
+        p = self.mem_root / "workspaces" / ws / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("# doc\n", encoding="utf-8")
+        return str(p)
+
     # ---------- AF-1: denied write must not self-satisfy Require ----------
     def test_af1_write_tools_are_not_evidence(self) -> None:
         trip = dict(README_TRIP, require=r"/memory/workspaces/[^\"\s]+/13_analysis_[^\"\s]*\.md")
+        own = self._real_doc("w", "13_analysis_s.md")
         st = [
             {"type": "USER_INPUT", "content": "xem github.com/a/b"},
-            {"tool_calls": [{"name": "write_to_file", "args": {"TargetFile": "/x/memory/workspaces/w/13_analysis_s.md"}}]},
+            {"tool_calls": [{"name": "write_to_file", "args": {"TargetFile": own}}]},
         ]
         self.assertEqual([t["id"] for t in agy_guard.tripwire_violations(st, [trip])], [trip["id"]])
-        st.append({"tool_calls": [{"name": "view_file", "args": {"AbsolutePath": "/x/memory/workspaces/old/13_analysis_o.md"}}]})
+        old = self._real_doc("old", "13_analysis_o.md")
+        st.append({"tool_calls": [{"name": "view_file", "args": {"AbsolutePath": old}}]})
         self.assertEqual(agy_guard.tripwire_violations(st, [trip]), [])
+
+    # ---------- AF-4: evidence pointing at target workspace or unexpanded $VAR does not count ----------
+    def test_af4_target_workspace_and_shell_var_not_evidence(self) -> None:
+        trip = dict(README_TRIP, require=r"/memory/workspaces/[^\"\s]+/09_tasks_solution_[^\"\s]*\.md")
+        base = [{"type": "USER_INPUT", "content": "xem github.com/a/b"}]
+        cur = self._real_doc("cur-ws", "09_tasks_solution_s.md")
+        own = base + [{"tool_calls": [{"name": "run_command", "args": {"CommandLine": f"cat {cur}"}}]}]
+        self.assertEqual(len(agy_guard.tripwire_violations(own, [trip], exclude_ws="cur-ws")), 1)
+        var = base + [{"tool_calls": [{"name": "run_command", "args": {"CommandLine": "cat /x/memory/workspaces/$WS/09_tasks_solution_s.md"}}]}]
+        self.assertEqual(len(agy_guard.tripwire_violations(var, [trip], exclude_ws="cur-ws")), 1)
+        old = self._real_doc("old-ws", "09_tasks_solution_o.md")
+        prior = own + [{"tool_calls": [{"name": "view_file", "args": {"AbsolutePath": old}}]}]
+        self.assertEqual(agy_guard.tripwire_violations(prior, [trip], exclude_ws="cur-ws"), [])
+
+    # ---------- AF-5: absolute path token that does not exist on disk is not evidence ----------
+    def test_af5_nonexistent_path_string_not_evidence(self) -> None:
+        trip = dict(README_TRIP, require=r"/memory/workspaces/[^\"\s]+/13_analysis_[^\"\s]*\.md")
+        base = [{"type": "USER_INPUT", "content": "xem github.com/a/b"}]
+        fake = base + [{"tool_calls": [{"name": "run_command", "args": {"CommandLine": "python3 -c \"x='/nope/memory/workspaces/w/13_analysis_s.md'\""}}]}]
+        self.assertEqual(len(agy_guard.tripwire_violations(fake, [trip])), 1)
+        real = self._real_doc("w2", "13_analysis_r.md")
+        ok = base + [{"tool_calls": [{"name": "run_command", "args": {"CommandLine": f"head -50 {real}; echo done"}}]}]
+        self.assertEqual(agy_guard.tripwire_violations(ok, [trip]), [])
+        # Non-path evidence (git clone) vẫn được chấp nhận
+        clone = base + [{"tool_calls": [{"name": "run_command", "args": {"CommandLine": "git clone --depth 1 https://github.com/a/b /tmp/b"}}]}]
+        self.assertEqual(agy_guard.tripwire_violations(clone, [README_TRIP]), [])
 
     # ---------- AF-2: relative forbidden path resolved via run_command Cwd ----------
     def test_af2_relative_forbidden_content_leak_detected(self) -> None:

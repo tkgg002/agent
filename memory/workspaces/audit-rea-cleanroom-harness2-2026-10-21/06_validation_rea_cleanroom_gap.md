@@ -27,3 +27,9 @@ Lần chạy trước đó FAIL baseline do `skills/reverse-engineer-anything` x
 - H4t/H7 G-04 chạy trong IDE thật khi gặp clean-room task thật (chưa có task clean-room thật nào trong phiên).
 - Hook có chạy trong trajectory của subagent không (G-04 HYPOTHESIS cũ) — chưa trace.
 - `run-recursion` với CLI agent thật (opencode/codex/claude) — chưa chạy; hiện chỉ đảm bảo không còn stub và thiếu lệnh → exit 2.
+
+## 6. Vòng 2 (H7 stop-audit, 10:02–10:07)
+- Replay hợp lệ: `transcript_full.jsonl` 300 step, `calls()` parse 150 tool call.
+- AF-4/AF-5 repro trên transcript thật (step 102, step 244) → fix → hooks `Ran 49 OK`, tooling `Ran 37 OK`.
+- `mutation_gate.py` → `PASS 10/10 KILLED`, `all_restored_sha256=True` (`06_mutation_summary_rea_cleanroom_gap_20261021T100546.json`).
+- Replay sau fix: turn1 `['LS-20261021-prior-workspace-lookup','LS-20261020-readme-only']`; toàn phiên trước khi đọc tài liệu cũ `['LS-20261021-prior-workspace-lookup']` (đúng sự thật) → sau `view_file` audit_report workspace harness2 cũ → thoả.

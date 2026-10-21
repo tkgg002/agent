@@ -46,7 +46,7 @@ SECRET = re.compile(
 )
 # G-01: neo đầu dòng — chặn false-positive khi từ khoá xuất hiện giữa câu mô tả ("...đã được Jev duyệt...").
 APPROVE = re.compile(
-    r"^\s*(?:ok\s+|ừ\s+|được\s+)?(approve|duyệt|ok\s*(sửa|làm|fix)|làm đi|sửa đi|fix đi|triển khai|thực hiện đi|chặn\s*đứng|thêm.*vào.*cho\s*tao|vòng\s+lặp\s+phản\s+tỉnh|self-improvement\s+loop|update\s+agy_g)",
+    r"^\s*(?:ok\s+|ừ\s+|được\s+)?(approve|duyệt|bắt\s*đầu|ok\s*(sửa|làm|fix)|làm đi|sửa đi|fix đi|triển khai|thực hiện đi|chặn\s*đứng|thêm.*vào.*cho\s*tao|vòng\s+lặp\s+phản\s+tỉnh|self-improvement\s+loop|update\s+agy_g)",
     re.I | re.M,
 )
 PROD_MOCK_POLLUTION = re.compile(
@@ -58,14 +58,17 @@ CLEAN_ROOM_SPEC_RE = re.compile(r"clean-room\s+approved\s+spec", re.I)
 # G-01: task clean-room chỉ mở S4 khi cả dòng là lệnh khởi động.
 CLEAN_ROOM_START = re.compile(r"^\s*(BẮT\s*ĐẦU|APPROVE)\s*[.!]?\s*$", re.I | re.M)
 # G-03: mỗi rule trong Clean-Room Approved Spec phải có REF: path:line.
-SPEC_RULE_RE = re.compile(r"^[ \t]*[-*]?[ \t]*\**R(\d+)\**[ \t]*[:.]", re.M)
-SPEC_REF_RE = re.compile(r"REF:\s*\S+:\d+")
+SPEC_RULE_RE = re.compile(r"^[ \t]*(?:[-*][ \t]*|\|[ \t]*)?\**(C?R-?\d+)\b[^:\n|]*\**[ \t]*[:.|]", re.I | re.M)
+SPEC_REF_RE = re.compile(r"REF:\s*`?\S+:\d+")
+SPEC_REJECT_RE = re.compile(r"(\[(?:REJECTED|NO_EVIDENCE|UNVERIFIED|BLOCKED)\]|trạng\s+thái\s*:\s*(?:REJECTED|BLOCK|NO_EVIDENCE))", re.I)
 # G-02: tool-call args có thể chứa nội dung/đường dẫn file đọc được.
 READ_ARG_KEYS = {
     "view_file": ("AbsolutePath",),
+    "view_file_outline": ("AbsolutePath", "File"),
+    "view_code_item": ("AbsolutePath", "File"),
     "grep_search": ("SearchPath",),
     "find_by_name": ("SearchDirectory",),
-    "run_command": ("CommandLine",),
+    "run_command": ("CommandLine", "Cwd"),
     "read_url_content": ("Url",),
 }
 # G-08: lesson tripwires.
@@ -75,6 +78,8 @@ TRIPWIRE_GUARDED_DOCS = re.compile(r"/workspaces/[^/]+/(13_analysis|09_tasks_sol
 TRIPWIRE_EVIDENCE_TOOLS = frozenset(
     {"view_file", "grep_search", "find_by_name", "list_dir", "run_command", "read_url_content", "search_web"}
 )
+# AF-5: ranh giới token trong args JSON (khoảng trắng, quote, toán tử shell, backslash escape, '=').
+TRIPWIRE_TOKEN_BOUNDARY = frozenset(" \t\n\"'`;|<>()\\=")
 MANIFEST = ".agent-project.json"
 LAYA_START = "/Users/trainguyen/.venv/bin/python3 /Users/trainguyen/.agent/skills/laya_router/api.py"
 
@@ -337,20 +342,24 @@ def contaminated_clean_room_reads(st: List[Dict[str, Any]], forbidden: List[str]
 
 
 def leaked_subagent_prompts(st: List[Dict[str, Any]], forbidden: List[str], min_line: int = 40) -> List[str]:
-    """G-04: invoke_subagent Prompt chứa path cấm hoặc dòng code (>= min_line ký tự) của file cấm."""
+    """G-04: invoke_subagent/send_message chứa path cấm hoặc dòng code (>= min_line ký tự) của file cấm."""
     if not forbidden:
         return []
     prompts = [
-        json.dumps(a.get("Subagents") or a, ensure_ascii=False).replace("\\\\", "/").replace("\\", "")
+        json.dumps(a.get("Subagents") or a.get("Message") or a, ensure_ascii=False).replace("\\\\", "/").replace("\\", "")
         for _, n, a in calls(st)
-        if n == "invoke_subagent"
+        if n in ("invoke_subagent", "send_message")
     ]
     if not prompts:
         return []
     raw_prompts = [
-        " ".join(str(sa.get("Prompt") or "") for sa in (a.get("Subagents") or []) if isinstance(sa, dict))
+        (
+            " ".join(str(sa.get("Prompt") or "") for sa in (a.get("Subagents") or []) if isinstance(sa, dict))
+            if n == "invoke_subagent"
+            else str(a.get("Message") or "")
+        )
         for _, n, a in calls(st)
-        if n == "invoke_subagent"
+        if n in ("invoke_subagent", "send_message")
     ]
     hits: List[str] = []
     cwds = {str(a.get("Cwd")) for _, n, a in calls(st) if n == "run_command" and a.get("Cwd")}
@@ -386,7 +395,7 @@ def user_approved(st: List[Dict[str, Any]], start: int, clean_room: bool = False
 
 
 def spec_rule_issues(text: str) -> List[str]:
-    """G-03: mục 'Clean-Room Approved Spec' phải có >=1 rule R<n> và mọi rule có REF: path:line."""
+    """G-03: mục 'Clean-Room Approved Spec' phải có >=1 rule R<n>/CR-<n> và mọi rule/bullet có REF: path:line."""
     m = re.search(r"^(#+)\s*.*clean-room\s+approved\s+spec.*$", text, re.I | re.M)
     if not m:
         return ["thiếu mục 'Clean-Room Approved Spec'"]
@@ -394,10 +403,21 @@ def spec_rule_issues(text: str) -> List[str]:
     rest = text[m.end() :]
     nxt = re.search(rf"^#{{1,{level}}}\s", rest, re.M)
     section = rest[: nxt.start()] if nxt else rest
-    rules = [(rm.group(1), section[rm.start() :].split("\n", 1)[0]) for rm in SPEC_RULE_RE.finditer(section)]
+    rules = [(rm.group(1).upper(), section[rm.start() :].split("\n", 1)[0]) for rm in SPEC_RULE_RE.finditer(section)]
     if not rules:
         return ["Clean-Room Approved Spec chưa có rule nào dạng `R<n>: <hành vi> — REF: path:line`"]
-    return [f"R{num} thiếu bằng chứng `REF: path:line`" for num, line in rules if not SPEC_REF_RE.search(line)]
+    issues: List[str] = []
+    for rid, line in rules:
+        if not SPEC_REF_RE.search(line):
+            issues.append(f"{rid} thiếu bằng chứng `REF: path:line`")
+        rej = SPEC_REJECT_RE.search(line)
+        if rej:
+            issues.append(f"{rid} đang ở trạng thái chưa duyệt ({rej.group(0)})")
+    for raw_ln in section.splitlines():
+        if re.match(r"^[ \t]*[-*][ \t]+\S", raw_ln) and not SPEC_RULE_RE.match(raw_ln):
+            if not SPEC_REF_RE.search(raw_ln):
+                issues.append(f"Dòng bullet '{raw_ln.strip()[:40]}' thiếu mã R<n> hoặc thiếu bằng chứng `REF: path:line`")
+    return issues
 
 
 def load_tripwires(mem_root: Optional[Path] = None) -> List[Dict[str, str]]:
@@ -422,8 +442,38 @@ def match_tripwires(prompt: str, trips: List[Dict[str, str]], limit: int = TRIPW
     return hits
 
 
-def tripwire_violations(st: List[Dict[str, Any]], trips: List[Dict[str, str]]) -> List[Dict[str, str]]:
-    """G-08: tripwire có Require mà sau prompt khớp Trigger chưa có tool call nào khớp Require."""
+def tripwire_violations(
+    st: List[Dict[str, Any]], trips: List[Dict[str, str]], exclude_ws: Optional[str] = None
+) -> List[Dict[str, str]]:
+    """G-08: tripwire có Require mà sau prompt khớp Trigger chưa có tool call nào khớp Require.
+
+    AF-1: chỉ tool đọc/lệnh mới là bằng chứng. AF-4: match trỏ vào workspace đích (exclude_ws)
+    hoặc chứa biến shell chưa expand (`$`) không chứng minh được việc đã làm → bỏ qua.
+    """
+
+    def _token(blob: str, s: int, e: int) -> str:
+        while s > 0 and blob[s - 1] not in TRIPWIRE_TOKEN_BOUNDARY:
+            s -= 1
+        while e < len(blob) and blob[e] not in TRIPWIRE_TOKEN_BOUNDARY:
+            e += 1
+        return blob[s:e].rstrip(",.")
+
+    def _proves(req: str, blob: str) -> bool:
+        for m in re.finditer(req, blob, re.I):
+            hit = m.group(0)
+            if "$" in hit or (exclude_ws and f"/{exclude_ws}/" in hit):
+                continue
+            tok = _token(blob, m.start(), m.end())
+            # AF-5: đường dẫn tuyệt đối chỉ là bằng chứng nếu tồn tại thật (chuỗi trong script repro thì không).
+            if tok.startswith("/") and not tok.startswith("//"):
+                try:
+                    if not Path(tok).exists():
+                        continue
+                except OSError:
+                    continue
+            return True
+        return False
+
     out: List[Dict[str, str]] = []
     for t in trips:
         req = t.get("require")
@@ -441,7 +491,7 @@ def tripwire_violations(st: List[Dict[str, Any]], trips: List[Dict[str, str]]) -
             ok = any(
                 i > first
                 and n in TRIPWIRE_EVIDENCE_TOOLS
-                and re.search(req, json.dumps(a, ensure_ascii=False), re.I)
+                and _proves(req, json.dumps(a, ensure_ascii=False))
                 for i, n, a in calls(st)
             )
         except re.error:
@@ -632,8 +682,12 @@ def handle_pre_write(
         }
 
     # H4t: Lesson Tripwire Gate (G-08) — lesson phải chặn TRƯỚC, không chỉ ghi biên bản sau.
-    if TRIPWIRE_GUARDED_DOCS.search(f.replace("\\", "/")) and is_mem_path(f, mem_root):
-        viol = tripwire_violations(steps(payload), load_tripwires(mem_root))
+    tw_match = TRIPWIRE_GUARDED_DOCS.search(f.replace("\\", "/"))
+    if tw_match and is_mem_path(f, mem_root):
+        tgt_ws = re.search(r"/workspaces/([^/]+)/", f.replace("\\", "/"))
+        viol = tripwire_violations(
+            steps(payload), load_tripwires(mem_root), exclude_ws=tgt_ws.group(1) if tgt_ws else None
+        )
         if viol:
             return {
                 "decision": "deny",

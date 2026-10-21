@@ -14,5 +14,7 @@
 - [x] T12: unittest hooks + tooling PASS; `mutation_gate.py` ≥3 mutant KILLED; DG3; audit_report; verify_governance S6.
 - [x] T13 (AF-1): tripwire evidence chỉ từ tool đọc/lệnh, không tính tool ghi.
 - [x] T14 (AF-2): G-04 resolve path cấm tương đối theo Cwd của run_command.
+- [x] T15 (AF-4): bằng chứng Require không được trỏ vào workspace đích hoặc chứa biến shell `$`.
+- [x] T16 (AF-5): token đường dẫn tuyệt đối làm bằng chứng phải tồn tại trên đĩa.
 
 DoD: Mọi finding có `file:line` hoặc output runtime; DG3 PASS/UNVALIDATED được ghi rõ.
