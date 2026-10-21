@@ -544,4 +544,77 @@ func (g *GitClient) SeedWorktreeFromRoot(worktreePath string) error {
 - **Thiết kế sửa đổi:**
   - Tích hợp `RenderWaveDAGDashboard` vào `internal/tui/model.go` (chuyển đổi qua phím tắt `w` / tab Wave DAG) và truyền danh sách `Workers` đang chạy thực tế từ `TaskRunner` / `daemon_cmd.go`.
 
+---
+
+## 7. Đặc tả Kỹ thuật & Code Demo Task 6: Xây dựng Giao diện Đồ họa Web UI/UX (`internal/webui` + `orchestrator ui` / `daemon --web`) Tái hiện Chuẩn 1:1 Ba Tấm Hình của User
+
+### 7.1. Nguyên nhân Gốc rễ (Root Cause — `REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/tui/wave_dag_view.go:44-155`)
+- Ở các bước trước, chúng ta mới chỉ viết hàm `RenderWaveDAGDashboard(snap DashboardSnapshot) string` trong [`internal/tui/wave_dag_view.go:44-155`](file:///Users/trainguyen/Documents/work/ai-orchestrator/internal/tui/wave_dag_view.go#L44-L155) kết xuất **văn bản ASCII trong Terminal** (`══ 1. WAVE EXECUTION DAG ══`, `══ 2. MULTI-WORKER GRID ══`, `══ 3. AUTOPILOT COST ($) LEDGER ══`).
+- Trong khi đó, 3 tấm hình tham chiếu của User đòi hỏi một **Giao diện Đồ họa Thực thụ (Graphical Pixel/SVG UI)** gồm:
+  1. **Hình 1 (`Wave 0..5 Dependency Graph Board`):** Các cột ngang `Wave 0` $\rightarrow$ `Wave 5` có thẻ bo góc, bộ lọc `Items | Epics / Anyone / Any milestone / Any epic / Find...`, bộ đếm trạng thái `needs you / running / in review / under way / ready / blocked / done`, nút `Show | Collapse | Hide`, chỉ báo `— critical`, và **đường cong Cubic Bezier bằng `<svg>`** nối các thẻ phụ thuộc xuyên qua các cột Wave (`PM-02 -> SRV-01 -> SRV-02 -> SRV-03 -> SRV-04 -> CLI-02`).
+  2. **Hình 2 (`AUTOPILOT Pipeline & Cycle/Round Cost ($) Ledger`):** Sơ đồ ngang 6 chặng thẻ xanh bo góc có mũi tên (`Start -> [Plan / Plan review] -> You -> [Implement / Code review] -> [Local QA / Fix] -> Draft PR`) kèm bảng chi tiết từng chu kỳ `Cycle 1 · first plan` và `Build · after your approval` (`blocking · advisory · turns · min · $cost`) và dòng tổng `Total so far: 16 claude runs · 64 min · $17.62`.
+  3. **Hình 3 (`Vibe System Agent Studio` 3 Cột):** Cột 1 (`Dự án & Agents A..G`), Cột 2 (`Quy trình · Mới` 17 bước từ `1. Tổng quan` đến `17. Vận hành & cải tiến`, đang sáng ở `11. Xây dựng` + 4 mục công cụ dưới đáy), và Cột 3 (`Xây dựng` gồm thanh lọc `Terminal / Claude / Codex / Gemini / OpenCode / Cursor`, nút hồng `☼ Giao việc`, lưới đa cửa sổ Agent/Terminal `C, A, I, G, E, K, B, H, D, F, J` có ô nhập lệnh `Nhắn cho agent...` + `/voice` + nút `Gửi`, và thông báo Git góc dưới phải).
+
+### 7.2. Thiết kế Giải pháp Kỹ thuật Duy nhất (`internal/webui` + `cmd/orchestrator/ui_cmd.go`)
+1. **Tạo package `internal/webui` (`server.go`, `static/index.html`, `static/app.css`, `static/app.js`, `server_test.go`) dùng `embed.FS` của Go:**
+   - Toàn bộ giao diện đồ họa được nhúng trực tiếp vào binary `orchestrator` qua `//go:embed static/*`, khởi chạy tức thì bằng `./bin/orchestrator ui --addr :8090` hoặc `./bin/orchestrator daemon --web :8090` mà không cần cài đặt Node.js hay bundler ngoài.
+2. **Kết nối Dữ liệu Thật Thời Gian Thực (Zero-Mockup Backend Wiring):**
+   - `webui.Server` kết nối trực tiếp tới:
+     - `qStore *queue.Store` (`.orchestrator/queue.db` — đọc/ghi bảng `task_queue` và `autopilot_rounds`).
+     - `memStore *memory.Store` (`.orchestrator/memory.db` — truy vấn FTS5 BM25 & số lượng bài học `/agent` đã index).
+     - `gk *agentgate.Gatekeeper` (`EvaluateLiveGateBadges` — trả về trạng thái thật của `S0-Constitution`, `DG1+DG2`, `H4b-ZeroMock`, `H5-NoGitPush`, `FTS5-BM25`).
+     - `agent.ComputeSubTaskWaves` (`internal/agent/pm.go:1103-1171` — tính toán phân tầng `Wave 0..N` và các cạnh phụ thuộc `Edges` để `<svg>` vẽ đường cong Bezier).
+     - `scout.Worker` & `sorter.Worker` — khi người dùng bấm nút hồng `☼ Giao việc` hoặc nút `Chạy Chu Trình Scout -> Sorter -> Execute Next`, server thực thi trực tiếp trên `queue.db` và phát sự kiện SSE (`GET /api/stream`) cập nhật cả 3 màn hình ngay lập tức.
+3. **Code Demo (`internal/webui/server.go`):**
+```go
+package webui
+
+import (
+	"context"
+	"embed"
+	"encoding/json"
+	"io/fs"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/Open-Makers/ai-coding-agents-orchestrator/internal/agent"
+	"github.com/Open-Makers/ai-coding-agents-orchestrator/internal/agentgate"
+	"github.com/Open-Makers/ai-coding-agents-orchestrator/internal/config"
+	"github.com/Open-Makers/ai-coding-agents-orchestrator/internal/memory"
+	"github.com/Open-Makers/ai-coding-agents-orchestrator/internal/queue"
+	"github.com/Open-Makers/ai-coding-agents-orchestrator/internal/scout"
+	"github.com/Open-Makers/ai-coding-agents-orchestrator/internal/sorter"
+)
+
+//go:embed static/*
+var staticFS embed.FS
+
+type Server struct {
+	Root           string
+	WorkspaceName  string
+	Cfg            config.Config
+	QueueStore     *queue.Store
+	MemStore       *memory.Store
+	Gatekeeper     *agentgate.Gatekeeper
+	IndexedLessons int
+
+	mu          sync.Mutex
+	subscribers map[chan string]struct{}
+}
+
+func (s *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+	sub, _ := fs.Sub(staticFS, "static")
+	mux.Handle("/", http.FileServer(http.FS(sub)))
+	mux.HandleFunc("/api/dashboard", s.handleDashboard)
+	mux.HandleFunc("/api/tasks", s.handleCreateTask)
+	mux.HandleFunc("/api/pipeline/trigger", s.handleTriggerCycle)
+	mux.HandleFunc("/api/agents/message", s.handleAgentMessage)
+	mux.HandleFunc("/api/stream", s.handleSSEStream)
+	return mux
+}
+```
+
+
 

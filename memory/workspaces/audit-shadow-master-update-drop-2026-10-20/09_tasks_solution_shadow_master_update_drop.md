@@ -393,3 +393,149 @@ Tại [`transmuter.go`](file:///Users/trainguyen/Documents/work/data-hub/central
   - Khử trùng lặp `return uniqueStrings(out)` ở cuối hàm `resolveSourceIDsForSegmentB` để không bắn trùng `sourceIDs` khi vừa khớp một phần trên Shadow vừa fallback lên Master.
 - **Tại `internal/handler/shadow/batch_buffer_utils.go:90-136` (`dedupByConflictKey`):**
   - Khi hai bản ghi trong cùng `sc.Records` có cùng `PrimaryKeyValue`, so sánh `r.SourceTsMs >= records[prevIdx].SourceTsMs` trước khi cập nhật `lastIdx[pk]` và chỉ cho phép giá trị cột của bản ghi có `SourceTsMs` mới hơn (hoặc đứng sau khi `SourceTsMs` bằng nhau) ghi đè lên `mergedData[pk]`.
+
+---
+
+## 7. Giải Pháp Khắc Phục Round 3 (S3 — Propose-Only): Tách Bạch `Deleted` Ở Tầng Master & Khắc Phục Tàng Hình `transmute_poison_pill` (`F6`, `F7`, `F8`)
+
+### 7.1. Giải pháp cho Sơ hở F6 (`centralized-data-service`): Tách riêng trường `Deleted` trong `TransmuteResult`, `TransmuterModule` và `TransmuteHandler`
+- **Vị trí sửa đổi:**
+  1. [transmuter.go](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go#L106-L126): Bổ sung trường `deleted int64` vào `batchOutcome` và `Deleted int64` (`json:"deleted"`) vào `TransmuteResult`.
+  2. [transmuter.go](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go#L425-L455), [L565-L584](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go#L565-L584), [L708-L726](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go#L708-L726), [L1400-L1414](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go#L1400-L1414), [L1541-L1548](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go#L1541-L1548):
+     - Tại `RunEvents` (`L724`): khi xóa thành công sự kiện `ev.IsDelete || ev.Op == "d"`, tăng **`res.Deleted++`** thay vì `res.Updated++`.
+     - Tại `processBatch` (`L1409`): khi xóa dòng `_deleted = true`, cộng **`out.deleted += deletedCount`** thay vì `out.updated += deletedCount`.
+     - Tại `Run` (`L427`, `L449`, `L1544`): cộng `res.Deleted += batchRes.deleted` và khi xóa orphan Master (`L449`) cộng **`res.Deleted += deletedCnt`** thay vì `res.Updated += deletedCnt`.
+     - Tại `Run` (`L464`, `L565`, `L573`): tính `totalRowsAffected := res.Inserted + res.Updated + res.Deleted` và kiểm tra degraded khi `res.Scanned > 0 && res.Inserted == 0 && res.Updated == 0 && res.Deleted == 0`.
+  3. [transmute_handler.go](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go#L392-L421), [L445-L453](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go#L445-L453), [L655-L678](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go#L655-L678), [L879-L898](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go#L879-L898) và [transmuter_state.go](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_state.go#L15-L26):
+     - Ghi `"deleted": res.Deleted` vào `details` của `cdc_activity_log`, `stats` của NATS event `cdc.evt.transmute.completed`, và `StatsJSON` của `SyncRuntimeState`.
+     - Truyền `res.Inserted + res.Updated + res.Deleted` làm `rows_affected` khi gọi `h.activity.Complete(...)`.
+     - Ghi metric `metrics.TransmuteOpsTotal.WithLabelValues(masterTable, "deleted", triggerType).Add(float64(res.Deleted))`.
+
+- **Code Demo (`internal/service/master/transmuter.go` & `internal/handler/master/transmute_handler.go`):**
+  ```go
+  type TransmuteResult struct {
+      Master     string `json:"master"`
+      Source     string `json:"source"`
+      Scanned    int64  `json:"scanned"`
+      Inserted   int64  `json:"inserted"`
+      Updated    int64  `json:"updated"`
+      Deleted    int64  `json:"deleted"`
+      Skipped    int64  `json:"skipped"`
+      OccSkipped int64  `json:"occ_skipped"`
+      RuleMisses int64  `json:"rule_misses"`
+      TypeErrors int64  `json:"type_errors"`
+      DurationMs int64  `json:"duration_ms"`
+      ActiveGate string `json:"active_gate,omitempty"`
+  }
+
+  // Trong RunEvents (transmuter.go:708-727):
+  if ev.IsDelete || ev.Op == "d" {
+      var extraGIDs []int64
+      if shadowGID, ok := shadowGpayMap[ev.SourceID]; ok && shadowGID > 0 {
+          extraGIDs = append(extraGIDs, shadowGID)
+      }
+      _, delErr := t.deleteFromMasterBySourceAndGpayIDs(ctx, masterRow, colTypes, []string{ev.SourceID}, extraGIDs)
+      if delErr != nil {
+          t.logger.Error("transmuter: event delete master failed",
+              zap.String("master", masterRow.MasterTable),
+              zap.String("source_id", ev.SourceID),
+              zap.Error(delErr))
+          res.Skipped++
+          if lastEventErr == nil {
+              lastEventErr = delErr
+          }
+      } else {
+          res.Deleted++
+      }
+      continue
+  }
+
+  // Trong runDebouncedGroup (transmute_handler.go:655-667):
+  if logEntry != nil {
+      h.activity.Complete(logEntry, res.Inserted+res.Updated+res.Deleted, map[string]interface{}{
+          "scanned":           res.Scanned,
+          "inserted":          res.Inserted,
+          "updated":           res.Updated,
+          "deleted":           res.Deleted,
+          "skipped":           res.Skipped,
+          "rule_misses":       res.RuleMisses,
+          "type_errors":       res.TypeErrors,
+          "active_gate":       res.ActiveGate,
+          "duration_ms":       res.DurationMs,
+          "trace_id":          traceID,
+          "master_binding_id": masterBindingID,
+      })
+  }
+  ```
+
+---
+
+### 7.2. Giải pháp cho Sơ hở F7 & F8 (`cdc-cms-service` & `cdc-cms-web`): Tổng hợp `master_deleted` + `transmute_poison_pill` và hiển thị cột `Delete(d)` ở khối Master trên UI
+- **Vị trí sửa đổi tại `cdc-cms-service`:**
+  1. [daily_flow.go](file:///Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/system/daily_flow.go#L36-L42) & [L64-L83](file:///Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/system/daily_flow.go#L64-L83):
+     - Thêm `Deleted int64` (`json:"deleted"`) vào `DailyFlowMasterMetrics`.
+     - Thêm `MasterDeleted int64` (`json:"masterDeleted"`) vào `DailyFlowTotals`.
+  2. [activity_log_read_repo_gorm.go](file:///Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go#L365-L575):
+     - Thêm `MasterDeleted int64` (`gorm:"column:master_deleted"`) vào `sqlDailyFlowRow`.
+     - Tại CTE `enriched` (`L420`): mở rộng `al.operation IN ('transmute', 'transmute_sub', 'transmute_poison_pill')` để thu thập đầy đủ các bản ghi lỗi Poison Pill vào `dlq_count` (`F8`).
+     - Tại CTE `act_daily` (`L444-L450`): tổng hợp `master_deleted` từ `COALESCE((e.details->>'deleted')::bigint, 0)`.
+     - Tại vòng lặp tổng hợp `GetDailyFlow` (`L529-L570`):
+       - `rec.Master.Total = row.MasterInserted + row.MasterUpdated + row.MasterDeleted + row.MasterSkipped`
+       - `rec.Master.Written = row.MasterInserted + row.MasterUpdated + row.MasterDeleted`
+       - `rec.Master.Deleted = row.MasterDeleted`
+       - `result.Totals.MasterDeleted += rec.Master.Deleted`
+       - Bổ sung kiểm tra `isMasterLagging := (p.MasterTable != "") && (rec.Shadow.Total > rec.Master.Total)` vào nhánh `WARNING` để khi Master xử lý thiếu sự kiện so với Shadow (`10 Ops < 11 Ops`) thì hiển thị trạng thái `WARNING` thay vì `BALANCED`.
+
+- **Code Demo (`cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go`):**
+  ```go
+  // Trong CTE enriched (L420):
+  OR (al.operation IN ('transmute', 'transmute_sub', 'transmute_poison_pill') AND (?::text = '' OR COALESCE(tm.master_table, mb.master_table) = ?))
+
+  // Trong CTE act_daily (L444-L450):
+  SUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'
+           THEN COALESCE((e.details->>'inserted')::bigint, 0) ELSE 0 END) AS master_inserted,
+  SUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'
+           THEN COALESCE((e.details->>'updated')::bigint, 0) ELSE 0 END) AS master_updated,
+  SUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'
+           THEN COALESCE((e.details->>'deleted')::bigint, 0) ELSE 0 END) AS master_deleted,
+  SUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'
+           THEN COALESCE((e.details->>'skipped')::bigint, 0) ELSE 0 END) AS master_skipped,
+
+  // Mapping sang DailyFlowRecord (L529-L550):
+  rec.Master.Total = row.MasterInserted + row.MasterUpdated + row.MasterDeleted + row.MasterSkipped
+  rec.Master.Written = row.MasterInserted + row.MasterUpdated + row.MasterDeleted
+  rec.Master.Inserted = row.MasterInserted
+  rec.Master.Updated = row.MasterUpdated
+  rec.Master.Deleted = row.MasterDeleted
+  rec.Master.Skipped = row.MasterSkipped
+
+  isMasterStalled := (p.MasterTable != "") && (rec.Shadow.Written > 0) && (rec.Master.Total == 0)
+  isMasterIncomplete := (p.MasterTable != "") && (rec.Shadow.Total > rec.Master.Total)
+  isIngestOk := (rec.Kafka.Total == rec.Shadow.Total)
+
+  if rec.Recon.DLQ > 0 || rec.Recon.Missing > 0 {
+      rec.Status = "DRIFT"
+  } else if rec.Recon.Stale > 0 || !isIngestOk || isMasterStalled || isMasterIncomplete {
+      rec.Status = "WARNING"
+  } else {
+      rec.Status = "BALANCED"
+  }
+  ```
+
+- **Vị trí sửa đổi & Code Demo tại `cdc-cms-web`:**
+  1. [useReconStatus.ts](file:///Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/hooks/useReconStatus.ts#L634-L658): Bổ sung `deleted: number` vào `DailyFlowRecord['master']` và `masterDeleted: number` vào `DailyFlowTotals`.
+  2. [ReconPipelineGrid.tsx](file:///Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx#L841-L843) & [L1342-L1361](file:///Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx#L1342-L1361):
+     - Trên Card **3. GHI VÀO DB MASTER (TRANSMUTE)**: hiển thị `Ins: ... • Upd: ... • Del: ... • Skip: ...`.
+     - Trong bảng **Phân tích đối soát & DLQ theo ngày** (khối **4. GHI VÀO DB MASTER**): bổ sung cột `Delete(d)` (`dataIndex: ['master', 'deleted']`, màu `#ff4d4f` đồng bộ với Kafka & Shadow).
+  ```tsx
+  // ReconPipelineGrid.tsx (L841-843):
+  {pipeline.masterName 
+    ? `Ins: ${fmtNum(totals.masterInserted)} • Upd: ${fmtNum(totals.masterUpdated)} • Del: ${fmtNum(totals.masterDeleted || 0)} • Skip: ${fmtNum(totals.masterSkipped)}`
+    : 'Chưa cấu hình'}
+
+  // ReconPipelineGrid.tsx (L1357-1361):
+  { title: 'Inserted', dataIndex: ['master', 'inserted'], width: 80, align: 'right', render: (v: number) => !pipeline?.masterName ? <Text type="secondary">—</Text> : <span style={{ color: '#52c41a' }}>{fmtNum(v)}</span> },
+  { title: 'Updated', dataIndex: ['master', 'updated'], width: 80, align: 'right', render: (v: number) => !pipeline?.masterName ? <Text type="secondary">—</Text> : <span style={{ color: '#faad14' }}>{fmtNum(v)}</span> },
+  { title: 'Delete(d)', dataIndex: ['master', 'deleted'], width: 75, align: 'right', render: (v: number) => !pipeline?.masterName ? <Text type="secondary">—</Text> : <span style={{ color: '#ff4d4f' }}>{fmtNum(v || 0)}</span> },
+  { title: 'Skipped', dataIndex: ['master', 'skipped'], width: 75, align: 'right', render: (v: number) => !pipeline?.masterName ? <Text type="secondary">—</Text> : <Text type="secondary">{fmtNum(v)}</Text> },
+  ```

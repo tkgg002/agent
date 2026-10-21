@@ -123,3 +123,31 @@
   3. `DG3-AF3-DAEMON-STATIC-BADGES` (`target`): **`FLAG -> RESOLVED`** (`r1: CORRECT 0.3202`, `r2: CORRECT 0.1539`, `r3: YES 0.3713` — cả 3 vòng đều xác nhận `CORRECT/YES`, đã giải trình kèm `REF: /Users/trainguyen/Documents/work/ai-orchestrator/cmd/orchestrator/daemon_cmd.go:133-153` vào `04_decisions_feature-modular-agent-orchestrator-2026-10-20.md`) — Xác nhận `daemon_cmd.go` gán tĩnh mảng `GateStatusBadge` và dừng trước khi gọi `PopNextPrioritized` / `TaskRunner`.
   4. `DG3-AF4-HELPERS-SONNET-COST` (`target`): **`ACCEPT`** (`r1: CORRECT 0.8390`, `r2: CORRECT 0.5174`, `r3: YES 0.9105`) — Xác nhận `helpers.go:226-231` gán cứng `modelTier := "sonnet"` cho mọi role khác `bus.RolePM`, làm lệch giá khi `bus.RoleCoder` chạy `opus`.
   5. **Controls Calibration:** `DG3-CTRL-TRUE-1` (`control_true`), `DG3-CTRL-FALSE-1` (`control_false`), `DG3-CTRL-FALSE-2` (`control_false`) đạt chuẩn phân biệt đúng/sai tại `r3`.
+
+---
+
+## 7. Kiểm chứng Sau Khắc phục (Post-Remediation Line-by-Line Diff Critique & Final `DG3` Audit — Commit `fa6b410`)
+
+Sau khi nhận lệnh `APPROVE` của User cho **Task 5**, chúng tôi đã thực thi khắc phục toàn bộ 6 sơ hở `AF-1` $\rightarrow$ `AF-6` tại commit `fa6b410` (`15 files changed, 980 insertions(+), 62 deletions(-)`) và rà soát phản biện lại từng dòng diff (`git diff HEAD~1..HEAD`):
+
+1. **Khắc phục `AF-1` (`internal/runner/claude.go:38-78` & `internal/runner/claude_test.go:92-150`):**
+   - `ClaudeRunner.Complete` truyền `req.Model` xuống `r.startStreamingProcess(ctx, prompt, req.SystemPrompt, req.Model)`.
+   - `startStreamingProcess` ưu tiên `strings.TrimSpace(reqModel)` trước `strings.TrimSpace(r.Model)` khi nối `--model <model>` vào `args` của tiến trình OS `claude`.
+   - Kiểm chứng bằng `TestClaudeRunner_Complete_ForwardsReqModelOverrideToProcessArgs` và `TestExecuteSubTasksInOrder_RealCoderAgentAndClaudeRunnerProcessArgsAndCrossWaveSeed`: 4 lệnh gọi `CoderAgent.Run -> ClaudeRunner.Complete` sinh ra đúng 4 tiến trình OS thật với `T1:--model opus`, `T2:--model sonnet`, `T3:--model sonnet`, `T4:--model opus`.
+2. **Khắc phục `AF-2` (`internal/gitclient/gitclient.go:126-260`, `internal/orchestrator/task_runner.go:1059-1343`, `internal/agent/coder.go:193-210`):**
+   - `WorktreeAdd` gọi `g.SeedWorktreeFromRoot(worktreePath)` (`gitclient.go:140`) để copy toàn bộ file uncommitted/untracked từ `g.Root` (bao gồm TDD test files và file từ các Wave trước) vào worktree mới tạo.
+   - `SyncWorktreeFilesWithMerge` (`gitclient.go:205-260`) theo dõi `waveOwners map[string]string` trong cùng Wave; nếu 2 sub-task cùng Wave chạm vào cùng 1 file thì thực hiện 3-way merge qua `git merge-file -p` so với bản gốc `HEAD:rel`, trả lỗi tường minh nếu xung đột dòng (`TestSyncWorktreeFilesWithMerge_NonOverlappingAndConflict` PASS).
+   - `CoderAgent.Run` tách riêng `coder_output_<SubTaskID>.md` và `changes_<SubTaskID>.md` có khóa `coderArtifactMu`.
+   - Đồng thời phát hiện và sửa thêm lỗi vòng lặp vô tận trong `globalBuildFix` (`task_runner.go:1374-1389`) khi `hasQA == false`.
+3. **Khắc phục `AF-3` (`internal/agentgate/gate.go:175-231` & `cmd/orchestrator/daemon_cmd.go:89-156`):**
+   - Xóa bỏ hoàn toàn mảng `GateStatusBadge` tĩnh trong `daemon_cmd.go`, thay bằng `gk.EvaluateLiveGateBadges(root, *workspaceName, indexedLessons)` đọc trực tiếp trạng thái `GEMINI.md`/`INDEX.md`, file `06_laya_summary_dg1/dg2_*.json`, quét `ScanProductionFiles` trên toàn bộ `.go` files (đã tinh chỉnh tránh false-positive trên `var reviseFn` và `apiKey: mc.EmbedderAPIKey`), và kiểm tra `ValidateCommandSafety`.
+   - Bổ sung cờ `--execute-next` gọi `qStore.PopNextPrioritized(ctx) -> qStore.UpdateStage -> qStore.RecordRound` và sửa `qStore.ListRounds(ctx, "")` (`internal/queue/store.go:341-346`) trả về toàn bộ các round khi `taskKey == ""`.
+4. **Khắc phục `AF-4` (`internal/orchestrator/task_runner.go:518-576, 838-845`):**
+   - Nối `LoadCoreConstitutionPrompt`, `RunLayaGate("dg1"/"dg3")`, `RunMutationGate`, và `RunGovernanceLinter` vào `TaskRunner` với timeout 60s trong `runPythonTool`.
+5. **Khắc phục `AF-5` (`internal/bus/types.go:38-45`, `internal/agent/base.go:52-60`, `internal/orchestrator/helpers.go:226-238`, `internal/orchestrator/task_runner.go:1762-1815`):**
+   - `AgentUsage` mang theo `Model` và `CostUSD` thực tế; `startUsageAccumulator` và `recordAutopilotRound` cộng dồn chính xác đơn giá Opus (`$15/$75`) vs Sonnet (`$3/$15`), được kiểm chứng trong `TestExecuteSubTasksInOrder_RealCoderAgentAndClaudeRunnerProcessArgsAndCrossWaveSeed` (`2 opus + 2 sonnet = $0.7200`, khớp 100%).
+6. **Khắc phục `AF-6` (`internal/tui/model.go:179-180, 713-714, 945-947, 1613-1635`):**
+   - Gắn `renderLiveWaveDashboard()` (`Ctrl+W`) vào Bubble Tea `Model` đọc dữ liệu thời gian thực từ `tr.SnapshotWaveProgress()`.
+7. **Kết quả `/laya_router` (`DG3`) sau Commit cuối `fa6b410`:**
+   - **Summary file:** `06_laya_summary_dg3_20261020T224237.json` | **Raw file:** `06_laya_raw_dg3_20261020T224237.json`
+   - **Gate Verdict:** `PASS` (`trusted_rounds: ["r3"]`, `DG3-POSTFIX-AF1-MODEL-ROUTING`: `ACCEPT` `0.8408`; `DG3-POSTFIX-AF2-WORKTREE-SEED` & `DG3-POSTFIX-AF3-LIVE-BADGES`: `FLAG -> RESOLVED` kèm `REF:` trong `04_decisions_feature-modular-agent-orchestrator-2026-10-20.md`).

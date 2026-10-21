@@ -1,0 +1,58 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "agy_guard APPROVE",
+    "claim": "The current APPROVE regex has no ^ or $ anchors and contains the bare alternative 'duyệt', so any message containing that word matches.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:47-50\nAPPROVE = re.compile(\n    r\"(approve|duyệt|ok\\s*(sửa|làm|fix)|làm đi|sửa đi|fix đi|triển khai|thực hiện đi|chặn\\s*đứng|thêm.*vào.*cho\\s*tao|vòng\\s+lặp\\s+phản\\s+tỉnh|self-improvement\\s+loop|update\\s+agy_g)\",\n    re.I,\n)"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "agy_guard contaminated reads",
+    "claim": "The current contaminated_clean_room_reads skips any tool call whose name is not view_file, grep_search or find_by_name, so extending the name set to run_command fixes the run_command bypass.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:300-319\ndef contaminated_clean_room_reads(st: List[Dict[str, Any]], forbidden: List[str]) -> List[str]:\n    if not forbidden:\n        return []\n    hits: List[str] = []\n    for _, n, a in calls(st):\n        if n in (\"view_file\", \"grep_search\", \"find_by_name\"):\n            p = str(\n                a.get(\"AbsolutePath\")\n                or a.get(\"SearchPath\")\n                or a.get(\"SearchDirectory\")\n                or \"\"\n            ).replace(\"\\\\\", \"/\")\n            if not p:\n                continue\n            for fb in forbidden:\n                fb_norm = fb.replace(\"\\\\\", \"/\").rstrip(\"/\")\n                if fb_norm and (p.endswith(fb_norm) or f\"/{fb_norm}\" in p or p == fb_norm):\n                    if fb not in hits:\n                        hits.append(fb)\n    return hits"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "agy_guard H4b",
+    "claim": "H4b denies source edits when contaminated_clean_room_reads returns a non-empty list for a clean-room task with forbidden sources, so changing that function changes the enforcement.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:583-594\n        is_cr, forbidden = clean_room_config(ws, ws_root, sfx)\n        if is_cr and forbidden:\n            tainted = contaminated_clean_room_reads(st, forbidden)\n            if tainted:\n                return {\n                    \"decision\": \"deny\",\n                    \"reason\": (\n                        f\"Rule 13 (Clean-Room Isolation): Phiên hiện tại đã đọc code gốc ({', '.join(tainted)}) \"\n                        \"nên CẤM trực tiếp viết code mới. Hãy dùng invoke_subagent uỷ quyền cho Sub-agent \"\n                        \"mới tinh chỉ nhận Clean-Room Approved Spec!\"\n                    ),\n                }"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "agy_guard regex constants",
+    "claim": "agy_guard.py declares clean-room regexes as module-level re.compile constants.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:54-56\nCLEAN_ROOM_MODE_RE = re.compile(r\"^\\s*mode\\s*:\\s*clean-room\\b\", re.I | re.M)\nCLEAN_ROOM_FORBIDDEN_RE = re.compile(r\"^\\s*clean_room_forbidden_sources\\s*:\\s*(.+)$\", re.I | re.M)\nCLEAN_ROOM_SPEC_RE = re.compile(r\"clean-room\\s+approved\\s+spec\", re.I)"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "agy_guard APPROVE",
+    "claim": "The APPROVE regex includes the phrase 'BẮT ĐẦU'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:47-50\nAPPROVE = re.compile(\n    r\"(approve|duyệt|ok\\s*(sửa|làm|fix)|làm đi|sửa đi|fix đi|triển khai|thực hiện đi|chặn\\s*đứng|thêm.*vào.*cho\\s*tao|vòng\\s+lặp\\s+phản\\s+tỉnh|self-improvement\\s+loop|update\\s+agy_g)\",\n    re.I,\n)"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "agy_guard contaminated reads",
+    "claim": "contaminated_clean_room_reads already inspects read_url_content Url arguments.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:300-319\ndef contaminated_clean_room_reads(st: List[Dict[str, Any]], forbidden: List[str]) -> List[str]:\n    if not forbidden:\n        return []\n    hits: List[str] = []\n    for _, n, a in calls(st):\n        if n in (\"view_file\", \"grep_search\", \"find_by_name\"):\n            p = str(\n                a.get(\"AbsolutePath\")\n                or a.get(\"SearchPath\")\n                or a.get(\"SearchDirectory\")\n                or \"\"\n            ).replace(\"\\\\\", \"/\")\n            if not p:\n                continue\n            for fb in forbidden:\n                fb_norm = fb.replace(\"\\\\\", \"/\").rstrip(\"/\")\n                if fb_norm and (p.endswith(fb_norm) or f\"/{fb_norm}\" in p or p == fb_norm):\n                    if fb not in hits:\n                        hits.append(fb)\n    return hits"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "agy_guard mutation status",
+    "claim": "mutation_gate_status requires killed_count of at least 3 for PASS.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:341-350\n    latest = candidates[-1]\n    try:\n        data = json.loads(latest.read_text(encoding=\"utf-8\"))\n        if (\n            data.get(\"gate\") == \"PASS\"\n            and int(data.get(\"killed_count\", 0)) >= 3\n            and bool(data.get(\"all_restored_sha256\", False))\n        ):\n            return \"PASS\"\n        return str(data.get(\"gate\") or \"FAIL\")"
+  }
+]

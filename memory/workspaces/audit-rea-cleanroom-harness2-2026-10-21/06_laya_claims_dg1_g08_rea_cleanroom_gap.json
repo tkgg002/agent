@@ -1,0 +1,58 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "build_lessons_index concise_label",
+    "claim": "concise_label truncates the lesson label to max_chars characters and appends an ellipsis when the label is longer.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/build_lessons_index.py:93-101\ndef concise_label(title: str, max_chars: int = 38) -> str:\n    \"\"\"Extract concise ASCII/UTF-8 label (prefer English summary in parens if present).\"\"\"\n    m = PAREN_EN_RE.search(title.strip())\n    candidate = m.group(1).strip() if m else title.strip()\n    candidate = candidate.replace(\"`\", \"\").replace(\"|\", \"/\")\n    candidate = re.sub(r\"\\s+\", \" \", candidate)\n    if len(candidate) > max_chars:\n        candidate = candidate[: max_chars - 1].rstrip() + \"…\"\n    return candidate"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "agy_guard BOOT_MSG",
+    "claim": "The H1 BOOT_MSG only instructs the agent to read GEMINI.md and lessons/INDEX.md and does not inject task-matched lesson content.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:71-74\nBOOT_MSG = (\n    \"BOOT S0: (1) Đọc agent/GEMINI.md + memory/global/lessons/INDEX.md. \"\n    \"(2) Phân loại T0/Audit/T1-T3 (kiểm tra lỗi/phân tích/thiết kế/sửa code >= T2, CẤM trả lời chay trên chat). \"\n    \"(3) S1 Intake (T1+): tạo 01_requirements_<suffix>.md + 08_tasks_<suffix>.md + append 05_progress START TRƯỚC khi lập 09_tasks_solution hoặc sửa code. \""
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "build_lessons_index MAX_INDEX_BYTES",
+    "claim": "build_lessons_index.py caps INDEX.md at MAX_INDEX_BYTES = 15000.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/build_lessons_index.py:21-21\nMAX_INDEX_BYTES = 15000"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "agy_guard regex constants",
+    "claim": "agy_guard.py declares detection rules as module-level re.compile constants.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:54-56\nCLEAN_ROOM_MODE_RE = re.compile(r\"^\\s*mode\\s*:\\s*clean-room\\b\", re.I | re.M)\nCLEAN_ROOM_FORBIDDEN_RE = re.compile(r\"^\\s*clean_room_forbidden_sources\\s*:\\s*(.+)$\", re.I | re.M)\nCLEAN_ROOM_SPEC_RE = re.compile(r\"clean-room\\s+approved\\s+spec\", re.I)"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "build_lessons_index concise_label",
+    "claim": "concise_label never truncates the label and always returns the full title.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/build_lessons_index.py:93-101\ndef concise_label(title: str, max_chars: int = 38) -> str:\n    \"\"\"Extract concise ASCII/UTF-8 label (prefer English summary in parens if present).\"\"\"\n    m = PAREN_EN_RE.search(title.strip())\n    candidate = m.group(1).strip() if m else title.strip()\n    candidate = candidate.replace(\"`\", \"\").replace(\"|\", \"/\")\n    candidate = re.sub(r\"\\s+\", \" \", candidate)\n    if len(candidate) > max_chars:\n        candidate = candidate[: max_chars - 1].rstrip() + \"…\"\n    return candidate"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "build_lessons_index MAX_INDEX_BYTES",
+    "claim": "build_lessons_index.py caps INDEX.md at 50000 bytes.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/build_lessons_index.py:21-21\nMAX_INDEX_BYTES = 15000"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "agy_guard mutation status",
+    "claim": "mutation_gate_status requires killed_count of at least 3 for PASS.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:341-350\n    latest = candidates[-1]\n    try:\n        data = json.loads(latest.read_text(encoding=\"utf-8\"))\n        if (\n            data.get(\"gate\") == \"PASS\"\n            and int(data.get(\"killed_count\", 0)) >= 3\n            and bool(data.get(\"all_restored_sha256\", False))\n        ):\n            return \"PASS\"\n        return str(data.get(\"gate\") or \"FAIL\")"
+  }
+]

@@ -175,7 +175,69 @@ Truy vấn trực tiếp trên `gpay-postgres-cdc` (`cdc_system.master_binding` 
 
 ---
 
-## 4. Kết luận Audit & Ma trận Truy vết
+## 4. Kết luận Audit & Ma trận Truy vết (Round 1 & Round 2)
 Toàn bộ 5 sơ hở trên giải thích **trọn vẹn 100%** hiện tượng Vận hành báo cáo (rớt 3–4 bản ghi `UPDATE`/ngày ở chặng Shadow $\rightarrow$ Master trên tổng ~15,000 bản ghi/ngày) cũng như toàn bộ số liệu lệch đang tồn tại trên DB Runtime (`14` dòng rớt `UPDATE` và `2` dòng rớt `DELETE` trên `payment_bills`, `344` dòng rớt `UPDATE` trên `payment_bills_1`, và `1,482` dòng lệch `_gpay_id`).
 
 Giải pháp khắc phục toàn diện (1 phương án tối ưu duy nhất kèm Code Demo) được trình bày chi tiết tại [09_tasks_solution_shadow_master_update_drop.md](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/audit-shadow-master-update-drop-2026-10-20/09_tasks_solution_shadow_master_update_drop.md).
+
+---
+
+## 5. Điều Tra Thực Chứng Round 3 (S2): Giải Mã Dòng Thống Kê Ngày `2026-10-20` (`Kafka: 11 [2/6/3]` | `Shadow: 11 Ops (9 dòng DB) [2/6/3]` | `Master: 10 Ops (10 dòng DB) [2/8/0]`)
+
+### 5.1. Truy vết Dữ liệu Thực Tế trên `cdc_system.cdc_activity_log` (`VERIFIED`)
+Truy vấn trực tiếp bảng `cdc_system.cdc_activity_log` trên PostgreSQL `cdc_dw` (`localhost:5433`) trong ngày `2026-10-20` xác định dòng thống kê mà User gửi chính là luồng **`shadow_traitestces.export_jobs` $\rightarrow$ `master_centrallized_export_service.export_jobs`** (cùng 2 bảng anh em `export_jobs_1`, `export_jobs_2`):
+
+| Thời điểm (GMT+7) | Log ID (`kafka-consumer`) | Kafka/Shadow Ops (`c / u / d`) | Shadow `written` | Log ID (`transmute`) | Master Status | Master Log Details (`inserted / updated / skipped`) | Ghi chú thực tế trên Runtime |
+|---|---|---|---|---|---|---|---|
+| `10:28:55` | `120754` | `0 / 1 / 0` | `1` | `120755` | `success` | `0 / 1 / 0` | 1 sự kiện `UPDATE` |
+| `10:32:16` | `120766` | `0 / 1 / 0` | `1` | `120768` | `success` | `0 / 1 / 0` | 1 sự kiện `UPDATE` |
+| `14:23:06` | `121569` | `0 / 0 / 1` | `1` | `121570..121598` | `error` | *(rơi vào `transmute_poison_pill`)* | **Lệnh `DELETE` thứ 1** (`source_id=693f8ed5190816bcb7188bc7`) chạy lúc `14:23` (trước khi vá F3) nên bị lỗi `column "_source_id" does not exist` (đã được heal vật lý trên DB lúc `16:40`, nhưng không có dòng `transmute` `success` trong `cdc_activity_log`). |
+| `14:52:36` | `121705` | `1 / 1 / 0` | `1` | `121706` | `success` | `1 / 1 / 0` | 1 document vừa `INSERT (c=1)` vừa `UPDATE (u=1)` trong cùng cửa sổ flush 2s $\rightarrow$ Shadow gộp thành `written=1 dòng DB`, còn Master `RunEvents` chạy tuần tự 2 events nên đếm `inserted=1, updated=1` (`2 Ops`). |
+| `14:52:44` | `121710` | `0 / 1 / 0` | `1` | `121712` | `success` | `0 / 1 / 0` | 1 sự kiện `UPDATE` |
+| `14:55:54` | `121722` | `1 / 1 / 0` | `1` | `121726` | `success` | `1 / 1 / 0` | 1 document vừa `INSERT (c=1)` vừa `UPDATE (u=1)` trong cùng cửa sổ flush 2s $\rightarrow$ Shadow gộp thành `written=1 dòng DB`, Master đếm `inserted=1, updated=1` (`2 Ops`). |
+| `14:56:02` | `121728` | `0 / 1 / 0` | `1` | `121730` | `success` | `0 / 1 / 0` | 1 sự kiện `UPDATE` |
+| `17:11:37` | `122143` | `0 / 0 / 1` | `1` | `122145` | `success` | `0 / 1 / 0` ⚠️ | **Lệnh `DELETE` thứ 2** (chạy sau khi đã vá F3): Xóa cứng thành công trên Master nhưng code lại cộng vào **`updated: 1`**! |
+| `17:11:55` | `122148` | `0 / 0 / 1` | `1` | `122149` | `success` | `0 / 1 / 0` ⚠️ | **Lệnh `DELETE` thứ 3** (chạy sau khi đã vá F3): Xóa cứng thành công trên Master nhưng code lại cộng vào **`updated: 1`**! |
+| **TỔNG CỘNG** | **9 đợt** | **`11 Ops` (`c=2, u=6, d=3`)** | **`9 dòng DB`** | **8 đợt `success`** | — | **`10 Ops` (`Ins=2, Upd=8, Skip=0`)** | **2 lệnh `DELETE` lúc `17:11` bị cộng dồn vào `Updated` (`6 + 2 = 8`), và 1 lệnh `DELETE` lúc `14:23` rơi vào `transmute_poison_pill`!** |
+
+---
+
+### 5.2. Ba Lỗ Hổng Gốc Rễ (`F6`, `F7`, `F8`) Giải Thích Toàn Bộ Câu Hỏi Của User
+
+#### 🔴 Sơ hổng F6 (HIGH): `TransmuterModule` cộng dồn lệnh `DELETE` thành công vào `res.Updated` và thiếu trường `Deleted` trong `TransmuteResult` / `cdc_activity_log` (`VERIFIED`)
+- **Bằng chứng `file:line`:**
+  1. Tại [transmuter.go](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go#L106-L126), hai struct `batchOutcome` và `TransmuteResult` chỉ khai báo `Inserted`, `Updated`, `Skipped` — **không có trường `Deleted int64` (`json:"deleted"`)**.
+  2. Tại [transmuter.go](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go#L708-L726) (trong `RunEvents` — luồng CDC realtime xử lý 2 lệnh xóa `id=122145` và `id=122149` lúc `17:11`), khi xóa dòng trên Master thành công (`ev.IsDelete || ev.Op == "d"`), code lại tăng **`res.Updated++`**:
+     ```go
+     _, delErr := t.deleteFromMasterBySourceAndGpayIDs(ctx, masterRow, colTypes, []string{ev.SourceID}, extraGIDs)
+     if delErr != nil {
+         ...
+     } else {
+         res.Updated++
+     }
+     ```
+  3. Tương tự, tại [transmuter.go](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go#L449) (`Run` xóa orphan: `res.Updated += deletedCnt`) và [transmuter.go](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go#L1409) (`processBatch` xóa `_deleted=true`: `out.updated += deletedCount`), toàn bộ số dòng xóa trên Master đều bị cộng gộp vào `Updated`.
+  4. Tại [transmute_handler.go](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go#L392-L403), [L445-L453](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go#L445-L453), [L655-L666](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go#L655-L666), [L879-L886](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go#L879-L886) và [transmuter_state.go](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_state.go#L15-L26), `details` của `cdc_activity_log` chỉ lưu `"inserted"`, `"updated"`, `"skipped"` mà không có `"deleted"`.
+- **Tác động:** Hai lệnh `DELETE` lúc `17:11:37` và `17:11:55` đã xóa thật dữ liệu trên bảng Master nhưng lại bị ghi nhận thành `updated = 2` (cộng với `6` lệnh `UPDATE` thật thành **`8 Updated`**), khiến trên bảng đối soát không thấy `2` lệnh `Deleted` đâu!
+
+#### 🟠 Sơ hở F7 (HIGH): Khối `"4. GHI VÀO DB MASTER"` trên `cdc-cms-service` và `cdc-cms-web` không có cột/trường `Delete(d)` đối xứng với Kafka & Shadow (`VERIFIED`)
+- **Bằng chứng `file:line`:**
+  1. Tại [daily_flow.go](file:///Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/system/daily_flow.go#L36-L42) và [L64-L83](file:///Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/system/daily_flow.go#L64-L83): `DailyFlowMasterMetrics` và `DailyFlowTotals` chỉ có `Inserted`, `Updated`, `Skipped`, thiếu `Deleted` (`json:"deleted"`) và `MasterDeleted` (`json:"masterDeleted"`).
+  2. Tại [activity_log_read_repo_gorm.go](file:///Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go#L444-L449) và [L529-L534](file:///Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go#L529-L534): Câu SQL `GetDailyFlow` không tổng hợp `master_deleted` từ `e.details->>'deleted'`.
+  3. Tại [ReconPipelineGrid.tsx](file:///Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx#L1309-L1361) và [L840-L844](file:///Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx#L840-L844):
+     - Khối **2. KAFKA CDC BẮN VỀ** và **3. GHI VÀO DB SHADOW** có 3 cột con là `Insert(c) | Update(u) | Delete(d)`.
+     - Nhưng khối **4. GHI VÀO DB MASTER** lại chỉ có 3 cột con là `Inserted | Updated | Skipped` (cột thứ 3 là `Skipped = 0` chứ không phải `Delete(d)`!). Khi đặt cạnh nhau trên bảng, người vận hành nhìn vào dãy số `2 | 6 | 3` (Shadow) đối chiếu với `2 | 8 | 0` (Master) sẽ thấy cột thứ 3 của Master bằng `0` và không có chỗ hiển thị số lượng `Deleted` của Master.
+
+#### 🟠 Sơ hở F8 (HIGH): Câu SQL `GetDailyFlow` trong `cdc-cms-service` bỏ sót `operation = 'transmute_poison_pill'` làm lỗi Transmute DLQ bị tàng hình (`dlq = 0`, `Status = BALANCED`) khi Master hụt `1 Op` (`11 Ops -> 10 Ops`) (`VERIFIED`)
+- **Bằng chứng `file:line`:**
+  1. Lệnh `DELETE` thứ nhất lúc `14:23:06` (`id=121569`, trước khi vá F3) bị lỗi `ERROR: column "_source_id" does not exist (SQLSTATE 42703)`. Khi `TransmuteHandler.runDebouncedGroup` ([transmute_handler.go](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go#L643-L652)) phát hiện lỗi, nó ghi dòng `operation = 'transmute'` với `"split_retry": true`, rồi gọi `binarySearchSplit` ([transmute_handler.go](file:///Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go#L710-L717)) để ghi lỗi cuối cùng vào dòng có **`operation = 'transmute_poison_pill'`** (`id=121575, 121580, 121586, 121593, 121598`).
+  2. Tuy nhiên, trong [activity_log_read_repo_gorm.go](file:///Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go#L420), CTE `enriched` chỉ lọc:
+     ```sql
+     OR (al.operation IN ('transmute', 'transmute_sub') AND (?::text = '' OR COALESCE(tm.master_table, mb.master_table) = ?))
+     ```
+     và ở dòng [L450](file:///Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go#L450):
+     ```sql
+     SUM(CASE WHEN e.status = 'error' AND (e.details->>'split_retry')::boolean IS NOT TRUE THEN 1 ELSE 0 END) AS dlq_count
+     ```
+  3. **Hệ quả:** Các dòng `transmute` lỗi thì bị loại bởi `(e.details->>'split_retry')::boolean IS NOT TRUE`, còn các dòng `transmute_poison_pill` (không có `split_retry`) thì bị loại ngay từ `WHERE al.operation IN ('transmute', 'transmute_sub')`! Do đó `dlq_count` luôn bằng `0` dù có bản ghi rơi vào Poison Pill!
+  4. Đồng thời tại [activity_log_read_repo_gorm.go](file:///Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go#L541-L550), logic đánh giá `rec.Status` chỉ kiểm tra `isIngestOk := (rec.Kafka.Total == rec.Shadow.Total)` và `isMasterStalled := (p.MasterTable != "") && (rec.Shadow.Written > 0) && (rec.Master.Total == 0)`, nên khi `Shadow.Total = 11` mà `Master.Total = 10` (hụt 1 op ở Master), trạng thái ngày vẫn báo `BALANCED` thay vì `WARNING`.

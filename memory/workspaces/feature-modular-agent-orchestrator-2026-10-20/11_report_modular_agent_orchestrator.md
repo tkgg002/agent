@@ -55,6 +55,16 @@
 
 ---
 
-## 3. Kết quả Adversarial Re-Audit (`AF-1` $\rightarrow$ `AF-6`) & Vòng lặp Khép kín `S5 -> S3 Re-Plan`
+## 3. Kết quả Thực thi Task 5 (`AF-1` $\rightarrow$ `AF-6` Remediation — Commit `fa6b410`)
 
-Qua quá trình rà soát phản biện từng dòng diff (`commit 54e36e4`) và kiểm định lại với hội đồng `/laya_router` (`06_laya_summary_dg3_20261020T163241.json`, `06_laya_summary_dg1_20261020T163901.json`, `06_laya_summary_dg2_20261020T163925.json`), chúng tôi đã phát hiện và lập đặc tả khắc phục 1:1 cho **6 sơ hở (`AF-1` đến `AF-6`)** trong `audit_report_modular_agent_orchestrator.md` và `09_tasks_solution_modular_agent_orchestrator.md` (Mục 6), hiện giữ nguyên trạng mã nguồn (`Propose-Only` theo Rule #9.7d / Hook `H4b`) chờ lệnh `APPROVE` của User để thực thi `Task 5`.
+Sau khi nhận lệnh `APPROVE` của User cho kế hoạch khắc phục `S5 -> S3 Re-Plan`, toàn bộ **6 phát hiện phản biện (`AF-1` đến `AF-6`)** đã được sửa triệt để trong mã nguồn Go (commit `fa6b410`, `16 files changed, 796 insertions(+), 56 deletions(-)`), kiểm thử Red-to-Green không dùng mockup Agent và vượt qua hội đồng `/laya_router` (`DG3 PASS` tại `06_laya_summary_dg3_20261020T224237.json`):
+
+1. **`AF-1` (`internal/runner/claude.go:38-78`, `claude_test.go:92-150`, `wave_parallel_test.go:192-360`):** Truyền `req.Model` xuống `startStreamingProcess` và ưu tiên `reqModel` trước `r.Model` khi nạp cờ `--model <effectiveModel>` cho tiến trình `claude`. Kiểm chứng bằng `agent.NewCoder` + `runner.NewClaude` thật ghi lại `os.Args` thực tế.
+2. **`AF-2` (`internal/gitclient/gitclient.go:126-260`, `internal/agent/coder.go:193-210`, `internal/orchestrator/task_runner.go:1185-1197, 1374-1389`):** Bổ sung `SeedWorktreeFromRoot` (tự động chép các file mới/đang sửa từ `r.root` sang worktree của Wave kế tiếp), `SyncWorktreeFilesWithMerge` (hợp nhất 3 chiều bằng `git merge-file -p` và báo lỗi khi trùng dòng thay vì ghi đè âm thầm), cô lập `coder_output_<SubTaskID>.md` / `changes_<SubTaskID>.md` bằng `coderArtifactMu`, và sửa vòng lặp vô hạn trong `globalBuildFix` khi `hasQA == false`.
+3. **`AF-3` (`internal/agentgate/gate.go:175-231`, `cmd/orchestrator/daemon_cmd.go:89-156`, `internal/queue/store.go:335-360`):** Thay thế mảng tĩnh `GateBadges` bằng `gk.EvaluateLiveGateBadges(workspaceName, indexedCount)` kiểm tra trực tiếp file vật lý & `ScanProductionFiles`, đồng thời bổ sung cờ `--execute-next` rút tự động task ưu tiên cao nhất từ `task_queue`.
+4. **`AF-4` (`internal/orchestrator/task_runner.go:518-576, 838-845`, `internal/agentgate/gate.go:240-265`):** Nối trực tiếp `LoadCoreConstitutionPrompt`, `RunLayaGate`, `RunMutationGate`, `RunGovernanceLinter` vào luồng chạy của `TaskRunner` kèm `context.WithTimeout` 60s trong `runPythonTool`.
+5. **`AF-5` (`internal/bus/types.go:38-45`, `internal/agent/base.go:52-60`, `internal/orchestrator/helpers.go:226-238`, `internal/orchestrator/task_runner.go:1762-1815`):** Gắn `Model` thực tế vào `TokenUpdatePayload`, tính giá riêng cho từng model (`opus` `$15/$75` vs `sonnet` `$3/$15`) trong `emitTokenStats`, và ghi nhận `AutopilotRound` vào bảng SQLite `autopilot_rounds` qua `recordAutopilotRound`.
+6. **`AF-6` (`internal/tui/model.go:179-180, 713-714, 945-947, 1613-1635`):** Tích hợp phím tắt `Ctrl+W` và hàm `renderLiveWaveDashboard()` để hiển thị trực tiếp `RenderWaveDAGDashboard` ngay trong giao diện TUI chính.
+7. **Tài liệu Hướng dẫn Khởi động (`README_START.md`):** Đã biên soạn hướng dẫn cài đặt, cấu hình định tuyến model động (`opus`/`sonnet`) và vận hành 4 chế độ (`daemon`, `TUI`, `task`, `memory`) tại `/Users/trainguyen/Documents/work/ai-orchestrator/README_START.md` kèm binary `./bin/orchestrator`.
+
+

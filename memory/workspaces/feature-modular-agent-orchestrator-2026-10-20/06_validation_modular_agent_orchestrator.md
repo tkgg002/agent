@@ -80,18 +80,25 @@
 
 ## 3. Kết quả Decision Gate (`DG1`, `DG2`, `DG3`), Security Gate & Final Audit (Gate G7)
 
-### 3.1. Decision Gate `/laya_router` & Adversarial Re-Audit (`S5 -> S3 Re-Plan`)
+### 3.1. Decision Gate `/laya_router` & Adversarial Re-Audit (`S5 -> S3 Re-Plan -> S4 Execute Task 5 -> S5 Final Audit`)
 - **DG1 (Solution Gate — Re-Plan `AF-1..AF-6`):** `06_laya_summary_dg1_20261020T163901.json` | Gate: `PASS`
 - **DG2 (Demo Code Gate — Re-Plan `AF-1..AF-6`):** `06_laya_summary_dg2_20261020T163925.json` | Gate: `PASS`
-- **DG3 (Adversarial Re-Audit Gate):** `06_laya_summary_dg3_20261020T163241.json` | Gate: `PASS` (đã xác thực 6 phát hiện phản biện `AF-1..AF-6` trên commit `54e36e4`)
-- **Final Adversarial Audit Report:** `audit_report_modular_agent_orchestrator.md` (chuyển trạng thái sang `S5 -> S3 Re-Plan` chờ User `APPROVE` để thực thi `Task 5` khắc phục `AF-1..AF-6`).
+- **DG3 (Pre-Fix Adversarial Re-Audit Gate):** `06_laya_summary_dg3_20261020T163241.json` | Gate: `PASS` (đã xác thực 6 phát hiện phản biện `AF-1..AF-6` trên commit `54e36e4`)
+- **DG3 (Post-Fix Final Adversarial Audit Gate — Commit `fa6b410`):** `06_laya_summary_dg3_20261020T224237.json` | Gate: `PASS` (`trusted_rounds: ["r2", "r3"]`, 3/3 controls `PASS`, giải trình `A-F1..A-F3` vào `04_decisions_feature-modular-agent-orchestrator-2026-10-20.md`).
+- **Kiểm thử Red-to-Green sau khi sửa `AF-1..AF-6` (Commit `fa6b410`):**
+  - `TestClaudeRunner_Complete_ForwardsReqModelOverrideToProcessArgs` (`internal/runner/claude_test.go:92-150`) — `PASS`
+  - `TestExecuteSubTasksInOrder_RealCoderAgentAndClaudeRunnerProcessArgsAndCrossWaveSeed` (`internal/orchestrator/wave_parallel_test.go:192-360`) — `PASS` (dùng `agent.NewCoder` + `runner.NewClaude` thật, kiểm chứng argv `--model opus` / `--model sonnet` và kế thừa file giữa `Wave 0 -> Wave 1`)
+  - `TestWorktreeAdd_SeedsDirtyRootFiles` & `TestSyncWorktreeFilesWithMerge_NonOverlappingAndConflict` (`internal/gitclient/gitclient_test.go:142-252`) — `PASS`
+  - Runtime trace `go run ./cmd/orchestrator daemon --once --backlog /tmp/sample_backlog.json --workspace feature-modular-agent-orchestrator-2026-10-20 --execute-next` — `PASS` (`Gates: [S0-Constitution: PASS] [DG1+DG2: PASS] [H4b-ZeroMock: PASS] [H5-NoGitPush: PASS] [FTS5-BM25: PASS(5 new)]`, `Round #1 | task=GH-201 | stage=Priority Queue -> Planning (opus)`).
+- **Final Adversarial Audit Report:** `audit_report_modular_agent_orchestrator.md` (Mục 7 xác nhận đóng kín 100% `AF-1..AF-6` tại commit `fa6b410`).
 
 ### 3.2. Security Gate Report (`/security-agent`)
 | Hạng mục | Kết quả | Chi tiết |
 | :--- | :---: | :--- |
 | Secret & PII Scan (Code + Memory) | **PASS** | Không phát hiện secret/PII thô; `scout.MaskSecrets` tự động che URI/token trước khi lưu SQLite |
 | Input & Query Injection Check | **PASS** | Toàn bộ truy vấn SQLite trong `internal/queue/store.go` và `internal/memory/store.go` dùng parameterized queries (`?`) |
-| AuthN / AuthZ & Error Exposure | **PASS** | Token GitHub/Jira chỉ đọc từ biến môi trường; response body giới hạn `io.LimitReader` 5MB |
-| VCS Hygiene (No secret staged, No push) | **PASS** | Đã tạo local restore-point commit `54e36e4` trên nhánh `feat/modular-queue-agent-kernel`, tuân thủ tuyệt đối Rule #15 (không push) |
+| AuthN / AuthZ & Error Exposure | **PASS** | Token GitHub/Jira chỉ đọc từ biến môi trường; response body giới hạn `io.LimitReader` 5MB; `runPythonTool` có `context.WithTimeout` 60s |
+| VCS Hygiene (No secret staged, No push) | **PASS** | Đã tạo local restore-point commit `54e36e4` và commit hoàn thiện `fa6b410` trên nhánh `feat/modular-queue-agent-kernel`, tuân thủ tuyệt đối Rule #15 (không push) |
 | Dynamic Pentest Gate (DAST / PentAGI) | **N/A** | Ứng dụng là CLI/TUI Orchestrator cục bộ, không mở HTTP/gRPC server lắng nghe cổng mạng |
 - **Verdict:** ✅ **PASS**
+
