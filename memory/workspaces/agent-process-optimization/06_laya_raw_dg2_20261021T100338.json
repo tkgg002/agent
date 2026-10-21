@@ -1,0 +1,911 @@
+[
+  {
+    "id": "D-BEHAV",
+    "kind": "real",
+    "claim": "Hàm leaked_subagent_prompts tại dòng 335-371 của hooks/agy/agy_guard.py kiểm tra xem prompt của invoke_subagent có chứa đường dẫn cấm hoặc dòng code dài từ min_line ký tự trở lên của file forbidden hay không.",
+    "evidence": "REF: hooks/agy/agy_guard.py:335-371\n                hits.append(fb)\n    return hits\n\n\ndef leaked_subagent_prompts(st: List[Dict[str, Any]], forbidden: List[str], min_line: int = 40) -> List[str]:\n    \"\"\"G-04: invoke_subagent Prompt chứa path cấm hoặc dòng code (>= min_line ký tự) của file cấm.\"\"\"\n    if not forbidden:\n        return []\n    prompts = [\n        json.dumps(a.get(\"Subagents\") or a, ensure_ascii=False).replace(\"\\\\\\\\\", \"/\").replace(\"\\\\\", \"\")\n        for _, n, a in calls(st)\n        if n == \"invoke_subagent\"\n    ]\n    if not prompts:\n        return []\n    raw_prompts = [\n        \" \".join(str(sa.get(\"Prompt\") or \"\") for sa in (a.get(\"Subagents\") or []) if isinstance(sa, dict))\n        for _, n, a in calls(st)\n        if n == \"invoke_subagent\"\n    ]\n    hits: List[str] = []\n    cwds = {str(a.get(\"Cwd\")) for _, n, a in calls(st) if n == \"run_command\" and a.get(\"Cwd\")}\n    for fb in forbidden:\n        fb_norm = fb.replace(\"\\\\\", \"/\").rstrip(\"/\")\n        if not fb_norm:\n            continue\n        leaked = any(fb_norm in p for p in prompts)\n        if not leaked:\n            cands = [Path(fb)] if Path(fb).is_absolute() else [Path(fb)] + [Path(c) / fb for c in sorted(cwds)]\n            lines: List[str] = []\n            for fpath in cands:\n                try:\n                    if fpath.is_file():\n                        lines = [ln.strip() for ln in fpath.read_text(encoding=\"utf-8\", errors=\"ignore\").splitlines()]\n                        break\n                except OSError:\n                    continue",
+    "flow": "leaked_subagent_prompts(st, cr_forbidden) -> hits",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7434,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9354,
+                "INCORRECT": 0.0406,
+                "UNSUPPORTED": 0.0239
+              },
+              "confidence": 0.7434,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 985,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Hàm leaked_subagent_prompts tại dòng 335-371 của hooks/agy/agy_guard.py kiểm tra xem prompt của invoke_subagent có chứa đường dẫn cấm hoặc dòng code dài từ min_line ký tự trở lên của file forbidden hay không.",
+          "evidence": "REF: hooks/agy/agy_guard.py:335-371\n                hits.append(fb)\n    return hits\n\n\ndef leaked_subagent_prompts(st: List[Dict[str, Any]], forbidden: List[str], min_line: int = 40) -> List[str]:\n    \"\"\"G-04: invoke_subagent Prompt chứa path cấm hoặc dòng code (>= min_line ký tự) của file cấm.\"\"\"\n    if not forbidden:\n        return []\n    prompts = [\n        json.dumps(a.get(\"Subagents\") or a, ensure_ascii=False).replace(\"\\\\\\\\\", \"/\").replace(\"\\\\\", \"\")\n        for _, n, a in calls(st)\n        if n == \"invoke_subagent\"\n    ]\n    if not prompts:\n        return []\n    raw_prompts = [\n        \" \".join(str(sa.get(\"Prompt\") or \"\") for sa in (a.get(\"Subagents\") or []) if isinstance(sa, dict))\n        for _, n, a in calls(st)\n        if n == \"invoke_subagent\"\n    ]\n    hits: List[str] = []\n    cwds = {str(a.get(\"Cwd\")) for _, n, a in calls(st) if n == \"run_command\" and a.get(\"Cwd\")}\n    for fb in forbidden:\n        fb_norm = fb.replace(\"\\\\\", \"/\").rstrip(\"/\")\n        if not fb_norm:\n            continue\n        leaked = any(fb_norm in p for p in prompts)\n        if not leaked:\n            cands = [Path(fb)] if Path(fb).is_absolute() else [Path(fb)] + [Path(c) / fb for c in sorted(cwds)]\n            lines: List[str] = []\n            for fpath in cands:\n                try:\n                    if fpath.is_file():\n                        lines = [ln.strip() for ln in fpath.read_text(encoding=\"utf-8\", errors=\"ignore\").splitlines()]\n                        break\n                except OSError:\n                    continue",
+          "flow": "leaked_subagent_prompts(st, cr_forbidden) -> hits"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3802,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7772,
+                "INCORRECT": 0.1323,
+                "UNSUPPORTED": 0.0905
+              },
+              "confidence": 0.3802,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 991,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "leaked_subagent_prompts(st, cr_forbidden) -> hits",
+          "diff_lines": "REF: hooks/agy/agy_guard.py:335-371\n                hits.append(fb)\n    return hits\n\n\ndef leaked_subagent_prompts(st: List[Dict[str, Any]], forbidden: List[str], min_line: int = 40) -> List[str]:\n    \"\"\"G-04: invoke_subagent Prompt chứa path cấm hoặc dòng code (>= min_line ký tự) của file cấm.\"\"\"\n    if not forbidden:\n        return []\n    prompts = [\n        json.dumps(a.get(\"Subagents\") or a, ensure_ascii=False).replace(\"\\\\\\\\\", \"/\").replace(\"\\\\\", \"\")\n        for _, n, a in calls(st)\n        if n == \"invoke_subagent\"\n    ]\n    if not prompts:\n        return []\n    raw_prompts = [\n        \" \".join(str(sa.get(\"Prompt\") or \"\") for sa in (a.get(\"Subagents\") or []) if isinstance(sa, dict))\n        for _, n, a in calls(st)\n        if n == \"invoke_subagent\"\n    ]\n    hits: List[str] = []\n    cwds = {str(a.get(\"Cwd\")) for _, n, a in calls(st) if n == \"run_command\" and a.get(\"Cwd\")}\n    for fb in forbidden:\n        fb_norm = fb.replace(\"\\\\\", \"/\").rstrip(\"/\")\n        if not fb_norm:\n            continue\n        leaked = any(fb_norm in p for p in prompts)\n        if not leaked:\n            cands = [Path(fb)] if Path(fb).is_absolute() else [Path(fb)] + [Path(c) / fb for c in sorted(cwds)]\n            lines: List[str] = []\n            for fpath in cands:\n                try:\n                    if fpath.is_file():\n                        lines = [ln.strip() for ln in fpath.read_text(encoding=\"utf-8\", errors=\"ignore\").splitlines()]\n                        break\n                except OSError:\n                    continue",
+          "claim": "Hàm leaked_subagent_prompts tại dòng 335-371 của hooks/agy/agy_guard.py kiểm tra xem prompt của invoke_subagent có chứa đường dẫn cấm hoặc dòng code dài từ min_line ký tự trở lên của file forbidden hay không."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7808,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9649,
+                "NO": 0.0351
+              },
+              "confidence": 0.7808,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 906,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: hooks/agy/agy_guard.py:335-371\n                hits.append(fb)\n    return hits\n\n\ndef leaked_subagent_prompts(st: List[Dict[str, Any]], forbidden: List[str], min_line: int = 40) -> List[str]:\n    \"\"\"G-04: invoke_subagent Prompt chứa path cấm hoặc dòng code (>= min_line ký tự) của file cấm.\"\"\"\n    if not forbidden:\n        return []\n    prompts = [\n        json.dumps(a.get(\"Subagents\") or a, ensure_ascii=False).replace(\"\\\\\\\\\", \"/\").replace(\"\\\\\", \"\")\n        for _, n, a in calls(st)\n        if n == \"invoke_subagent\"\n    ]\n    if not prompts:\n        return []\n    raw_prompts = [\n        \" \".join(str(sa.get(\"Prompt\") or \"\") for sa in (a.get(\"Subagents\") or []) if isinstance(sa, dict))\n        for _, n, a in calls(st)\n        if n == \"invoke_subagent\"\n    ]\n    hits: List[str] = []\n    cwds = {str(a.get(\"Cwd\")) for _, n, a in calls(st) if n == \"run_command\" and a.get(\"Cwd\")}\n    for fb in forbidden:\n        fb_norm = fb.replace(\"\\\\\", \"/\").rstrip(\"/\")\n        if not fb_norm:\n            continue\n        leaked = any(fb_norm in p for p in prompts)\n        if not leaked:\n            cands = [Path(fb)] if Path(fb).is_absolute() else [Path(fb)] + [Path(c) / fb for c in sorted(cwds)]\n            lines: List[str] = []\n            for fpath in cands:\n                try:\n                    if fpath.is_file():\n                        lines = [ln.strip() for ln in fpath.read_text(encoding=\"utf-8\", errors=\"ignore\").splitlines()]\n                        break\n                except OSError:\n                    continue",
+          "claim": "Hàm leaked_subagent_prompts tại dòng 335-371 của hooks/agy/agy_guard.py kiểm tra xem prompt của invoke_subagent có chứa đường dẫn cấm hoặc dòng code dài từ min_line ký tự trở lên của file forbidden hay không."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "real",
+    "claim": "Hàm user_approved tại dòng 374-380 của hooks/agy/agy_guard.py chọn biểu thức chính quy CLEAN_ROOM_START khi clean_room=True và chọn APPROVE khi clean_room=False.",
+    "evidence": "REF: hooks/agy/agy_guard.py:374-380\n        if leaked and fb not in hits:\n            hits.append(fb)\n    return hits\n\n\ndef user_approved(st: List[Dict[str, Any]], start: int, clean_room: bool = False) -> bool:\n    \"\"\"G-01: clean-room chỉ chấp nhận dòng 'BẮT ĐẦU'/'APPROVE' đứng riêng; task thường dùng APPROVE neo đầu dòng.\"\"\"",
+    "flow": "user_approved(st, start, clean_room=is_cr) -> bool",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7467,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9331,
+                "INCORRECT": 0.054,
+                "UNSUPPORTED": 0.0129
+              },
+              "confidence": 0.7467,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 334,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Hàm user_approved tại dòng 374-380 của hooks/agy/agy_guard.py chọn biểu thức chính quy CLEAN_ROOM_START khi clean_room=True và chọn APPROVE khi clean_room=False.",
+          "evidence": "REF: hooks/agy/agy_guard.py:374-380\n        if leaked and fb not in hits:\n            hits.append(fb)\n    return hits\n\n\ndef user_approved(st: List[Dict[str, Any]], start: int, clean_room: bool = False) -> bool:\n    \"\"\"G-01: clean-room chỉ chấp nhận dòng 'BẮT ĐẦU'/'APPROVE' đứng riêng; task thường dùng APPROVE neo đầu dòng.\"\"\"",
+          "flow": "user_approved(st, start, clean_room=is_cr) -> bool"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3957,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7321,
+                "INCORRECT": 0.243,
+                "UNSUPPORTED": 0.0249
+              },
+              "confidence": 0.3957,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 340,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "user_approved(st, start, clean_room=is_cr) -> bool",
+          "diff_lines": "REF: hooks/agy/agy_guard.py:374-380\n        if leaked and fb not in hits:\n            hits.append(fb)\n    return hits\n\n\ndef user_approved(st: List[Dict[str, Any]], start: int, clean_room: bool = False) -> bool:\n    \"\"\"G-01: clean-room chỉ chấp nhận dòng 'BẮT ĐẦU'/'APPROVE' đứng riêng; task thường dùng APPROVE neo đầu dòng.\"\"\"",
+          "claim": "Hàm user_approved tại dòng 374-380 của hooks/agy/agy_guard.py chọn biểu thức chính quy CLEAN_ROOM_START khi clean_room=True và chọn APPROVE khi clean_room=False."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.4646,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.1221,
+                "NO": 0.8779
+              },
+              "confidence": 0.4646,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 254,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: hooks/agy/agy_guard.py:374-380\n        if leaked and fb not in hits:\n            hits.append(fb)\n    return hits\n\n\ndef user_approved(st: List[Dict[str, Any]], start: int, clean_room: bool = False) -> bool:\n    \"\"\"G-01: clean-room chỉ chấp nhận dòng 'BẮT ĐẦU'/'APPROVE' đứng riêng; task thường dùng APPROVE neo đầu dòng.\"\"\"",
+          "claim": "Hàm user_approved tại dòng 374-380 của hooks/agy/agy_guard.py chọn biểu thức chính quy CLEAN_ROOM_START khi clean_room=True và chọn APPROVE khi clean_room=False."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "D-API",
+    "kind": "real",
+    "claim": "Hàm dispatch tại dòng 980-991 của hooks/agy/agy_guard.py ánh xạ event_name sang các hàm xử lý tương ứng nhận đối số payload.",
+    "evidence": "REF: hooks/agy/agy_guard.py:980-991\n    cnt_file.write_text(str(n + 1), encoding=\"utf-8\")\n    reason_msg = \"⛔ Done-gate (H7) chưa đạt:\\n- \" + \"\\n- \".join(miss)\n    if src:\n        reason_msg += \"\\n\\n🔍 MỆNH LỆNH AUDIT BẮT BUỘC CỦA USER:\\n\" + VERBATIM_USER_AUDIT_PROMPT\n    return {\"decision\": \"continue\", \"reason\": reason_msg}\n\n\ndef dispatch(event_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:\n    handlers = {\n        \"pre-invocation\": handle_pre_invocation,\n        \"pre-write\": handle_pre_write,\n        \"pre-command\": handle_pre_command,",
+    "flow": "dispatch(event_name, payload) -> Dict[str, Any]",
+    "evidence_ok": false,
+    "evidence_error": "trích dẫn không khớp hooks/agy/agy_guard.py:980-991: cnt_file.write_text(str(n + 1), encoding=\"utf-8\")",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.8359,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9613,
+                "INCORRECT": 0.0327,
+                "UNSUPPORTED": 0.0059
+              },
+              "confidence": 0.8359,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 428,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Hàm dispatch tại dòng 980-991 của hooks/agy/agy_guard.py ánh xạ event_name sang các hàm xử lý tương ứng nhận đối số payload.",
+          "evidence": "REF: hooks/agy/agy_guard.py:980-991\n    cnt_file.write_text(str(n + 1), encoding=\"utf-8\")\n    reason_msg = \"⛔ Done-gate (H7) chưa đạt:\\n- \" + \"\\n- \".join(miss)\n    if src:\n        reason_msg += \"\\n\\n🔍 MỆNH LỆNH AUDIT BẮT BUỘC CỦA USER:\\n\" + VERBATIM_USER_AUDIT_PROMPT\n    return {\"decision\": \"continue\", \"reason\": reason_msg}\n\n\ndef dispatch(event_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:\n    handlers = {\n        \"pre-invocation\": handle_pre_invocation,\n        \"pre-write\": handle_pre_write,\n        \"pre-command\": handle_pre_command,",
+          "flow": "dispatch(event_name, payload) -> Dict[str, Any]"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5424,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8573,
+                "INCORRECT": 0.0919,
+                "UNSUPPORTED": 0.0508
+              },
+              "confidence": 0.5424,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 433,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "dispatch(event_name, payload) -> Dict[str, Any]",
+          "diff_lines": "REF: hooks/agy/agy_guard.py:980-991\n    cnt_file.write_text(str(n + 1), encoding=\"utf-8\")\n    reason_msg = \"⛔ Done-gate (H7) chưa đạt:\\n- \" + \"\\n- \".join(miss)\n    if src:\n        reason_msg += \"\\n\\n🔍 MỆNH LỆNH AUDIT BẮT BUỘC CỦA USER:\\n\" + VERBATIM_USER_AUDIT_PROMPT\n    return {\"decision\": \"continue\", \"reason\": reason_msg}\n\n\ndef dispatch(event_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:\n    handlers = {\n        \"pre-invocation\": handle_pre_invocation,\n        \"pre-write\": handle_pre_write,\n        \"pre-command\": handle_pre_command,",
+          "claim": "Hàm dispatch tại dòng 980-991 của hooks/agy/agy_guard.py ánh xạ event_name sang các hàm xử lý tương ứng nhận đối số payload."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.9583,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9955,
+                "NO": 0.0045
+              },
+              "confidence": 0.9583,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 351,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: hooks/agy/agy_guard.py:980-991\n    cnt_file.write_text(str(n + 1), encoding=\"utf-8\")\n    reason_msg = \"⛔ Done-gate (H7) chưa đạt:\\n- \" + \"\\n- \".join(miss)\n    if src:\n        reason_msg += \"\\n\\n🔍 MỆNH LỆNH AUDIT BẮT BUỘC CỦA USER:\\n\" + VERBATIM_USER_AUDIT_PROMPT\n    return {\"decision\": \"continue\", \"reason\": reason_msg}\n\n\ndef dispatch(event_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:\n    handlers = {\n        \"pre-invocation\": handle_pre_invocation,\n        \"pre-write\": handle_pre_write,\n        \"pre-command\": handle_pre_command,",
+          "claim": "Hàm dispatch tại dòng 980-991 của hooks/agy/agy_guard.py ánh xạ event_name sang các hàm xử lý tương ứng nhận đối số payload."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "BLOCK"
+  },
+  {
+    "id": "CF1",
+    "kind": "control_false",
+    "claim": "Hàm dispatch tại dòng 980-991 của hooks/agy/agy_guard.py luôn trả về số nguyên 404 thay vì kiểu từ điển Dict.",
+    "evidence": "REF: hooks/agy/agy_guard.py:980-991\n    cnt_file.write_text(str(n + 1), encoding=\"utf-8\")\n    reason_msg = \"⛔ Done-gate (H7) chưa đạt:\\n- \" + \"\\n- \".join(miss)\n    if src:\n        reason_msg += \"\\n\\n🔍 MỆNH LỆNH AUDIT BẮT BUỘC CỦA USER:\\n\" + VERBATIM_USER_AUDIT_PROMPT\n    return {\"decision\": \"continue\", \"reason\": reason_msg}\n\n\ndef dispatch(event_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:\n    handlers = {\n        \"pre-invocation\": handle_pre_invocation,\n        \"pre-write\": handle_pre_write,\n        \"pre-command\": handle_pre_command,",
+    "flow": "dispatch -> return {}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5153,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8271,
+                "INCORRECT": 0.1477,
+                "UNSUPPORTED": 0.0253
+              },
+              "confidence": 0.5153,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 415,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Hàm dispatch tại dòng 980-991 của hooks/agy/agy_guard.py luôn trả về số nguyên 404 thay vì kiểu từ điển Dict.",
+          "evidence": "REF: hooks/agy/agy_guard.py:980-991\n    cnt_file.write_text(str(n + 1), encoding=\"utf-8\")\n    reason_msg = \"⛔ Done-gate (H7) chưa đạt:\\n- \" + \"\\n- \".join(miss)\n    if src:\n        reason_msg += \"\\n\\n🔍 MỆNH LỆNH AUDIT BẮT BUỘC CỦA USER:\\n\" + VERBATIM_USER_AUDIT_PROMPT\n    return {\"decision\": \"continue\", \"reason\": reason_msg}\n\n\ndef dispatch(event_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:\n    handlers = {\n        \"pre-invocation\": handle_pre_invocation,\n        \"pre-write\": handle_pre_write,\n        \"pre-command\": handle_pre_command,",
+          "flow": "dispatch -> return {}"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.1034,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3314,
+                "INCORRECT": 0.5234,
+                "UNSUPPORTED": 0.1451
+              },
+              "confidence": 0.1034,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 420,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "dispatch -> return {}",
+          "diff_lines": "REF: hooks/agy/agy_guard.py:980-991\n    cnt_file.write_text(str(n + 1), encoding=\"utf-8\")\n    reason_msg = \"⛔ Done-gate (H7) chưa đạt:\\n- \" + \"\\n- \".join(miss)\n    if src:\n        reason_msg += \"\\n\\n🔍 MỆNH LỆNH AUDIT BẮT BUỘC CỦA USER:\\n\" + VERBATIM_USER_AUDIT_PROMPT\n    return {\"decision\": \"continue\", \"reason\": reason_msg}\n\n\ndef dispatch(event_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:\n    handlers = {\n        \"pre-invocation\": handle_pre_invocation,\n        \"pre-write\": handle_pre_write,\n        \"pre-command\": handle_pre_command,",
+          "claim": "Hàm dispatch tại dòng 980-991 của hooks/agy/agy_guard.py luôn trả về số nguyên 404 thay vì kiểu từ điển Dict."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6587,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9365,
+                "NO": 0.0635
+              },
+              "confidence": 0.6587,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 349,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: hooks/agy/agy_guard.py:980-991\n    cnt_file.write_text(str(n + 1), encoding=\"utf-8\")\n    reason_msg = \"⛔ Done-gate (H7) chưa đạt:\\n- \" + \"\\n- \".join(miss)\n    if src:\n        reason_msg += \"\\n\\n🔍 MỆNH LỆNH AUDIT BẮT BUỘC CỦA USER:\\n\" + VERBATIM_USER_AUDIT_PROMPT\n    return {\"decision\": \"continue\", \"reason\": reason_msg}\n\n\ndef dispatch(event_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:\n    handlers = {\n        \"pre-invocation\": handle_pre_invocation,\n        \"pre-write\": handle_pre_write,\n        \"pre-command\": handle_pre_command,",
+          "claim": "Hàm dispatch tại dòng 980-991 của hooks/agy/agy_guard.py luôn trả về số nguyên 404 thay vì kiểu từ điển Dict."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CF2",
+    "kind": "control_false",
+    "claim": "Hàm user_approved tại dòng 374-380 của hooks/agy/agy_guard.py ghi đè nội dung file transcript.jsonl trên đĩa.",
+    "evidence": "REF: hooks/agy/agy_guard.py:374-380\n        if leaked and fb not in hits:\n            hits.append(fb)\n    return hits\n\n\ndef user_approved(st: List[Dict[str, Any]], start: int, clean_room: bool = False) -> bool:\n    \"\"\"G-01: clean-room chỉ chấp nhận dòng 'BẮT ĐẦU'/'APPROVE' đứng riêng; task thường dùng APPROVE neo đầu dòng.\"\"\"",
+    "flow": "any(...) -> bool",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7606,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9416,
+                "INCORRECT": 0.0316,
+                "UNSUPPORTED": 0.0268
+              },
+              "confidence": 0.7606,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 306,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Hàm user_approved tại dòng 374-380 của hooks/agy/agy_guard.py ghi đè nội dung file transcript.jsonl trên đĩa.",
+          "evidence": "REF: hooks/agy/agy_guard.py:374-380\n        if leaked and fb not in hits:\n            hits.append(fb)\n    return hits\n\n\ndef user_approved(st: List[Dict[str, Any]], start: int, clean_room: bool = False) -> bool:\n    \"\"\"G-01: clean-room chỉ chấp nhận dòng 'BẮT ĐẦU'/'APPROVE' đứng riêng; task thường dùng APPROVE neo đầu dòng.\"\"\"",
+          "flow": "any(...) -> bool"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.3317,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.0237,
+                "INCORRECT": 0.6498,
+                "UNSUPPORTED": 0.3266
+              },
+              "confidence": 0.3317,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 312,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "any(...) -> bool",
+          "diff_lines": "REF: hooks/agy/agy_guard.py:374-380\n        if leaked and fb not in hits:\n            hits.append(fb)\n    return hits\n\n\ndef user_approved(st: List[Dict[str, Any]], start: int, clean_room: bool = False) -> bool:\n    \"\"\"G-01: clean-room chỉ chấp nhận dòng 'BẮT ĐẦU'/'APPROVE' đứng riêng; task thường dùng APPROVE neo đầu dòng.\"\"\"",
+          "claim": "Hàm user_approved tại dòng 374-380 của hooks/agy/agy_guard.py ghi đè nội dung file transcript.jsonl trên đĩa."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.9187,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0101,
+                "NO": 0.9899
+              },
+              "confidence": 0.9187,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 240,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: hooks/agy/agy_guard.py:374-380\n        if leaked and fb not in hits:\n            hits.append(fb)\n    return hits\n\n\ndef user_approved(st: List[Dict[str, Any]], start: int, clean_room: bool = False) -> bool:\n    \"\"\"G-01: clean-room chỉ chấp nhận dòng 'BẮT ĐẦU'/'APPROVE' đứng riêng; task thường dùng APPROVE neo đầu dòng.\"\"\"",
+          "claim": "Hàm user_approved tại dòng 374-380 của hooks/agy/agy_guard.py ghi đè nội dung file transcript.jsonl trên đĩa."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CT1",
+    "kind": "control_true",
+    "claim": "Bảng READ_ARG_KEYS tại dòng 64-70 của hooks/agy/agy_guard.py ánh xạ tên công cụ view_file, grep_search, find_by_name, run_command và read_url_content sang khóa đối số tương ứng.",
+    "evidence": "REF: hooks/agy/agy_guard.py:64-70\nREAD_ARG_KEYS = {\n    \"view_file\": (\"AbsolutePath\",),\n    \"grep_search\": (\"SearchPath\",),\n    \"find_by_name\": (\"SearchDirectory\",),\n    \"run_command\": (\"CommandLine\",),\n    \"read_url_content\": (\"Url\",),\n}",
+    "flow": "READ_ARG_KEYS.get(n)",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4322,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8072,
+                "INCORRECT": 0.0973,
+                "UNSUPPORTED": 0.0955
+              },
+              "confidence": 0.4322,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 298,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Bảng READ_ARG_KEYS tại dòng 64-70 của hooks/agy/agy_guard.py ánh xạ tên công cụ view_file, grep_search, find_by_name, run_command và read_url_content sang khóa đối số tương ứng.",
+          "evidence": "REF: hooks/agy/agy_guard.py:64-70\nREAD_ARG_KEYS = {\n    \"view_file\": (\"AbsolutePath\",),\n    \"grep_search\": (\"SearchPath\",),\n    \"find_by_name\": (\"SearchDirectory\",),\n    \"run_command\": (\"CommandLine\",),\n    \"read_url_content\": (\"Url\",),\n}",
+          "flow": "READ_ARG_KEYS.get(n)"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5915,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8797,
+                "INCORRECT": 0.0715,
+                "UNSUPPORTED": 0.0488
+              },
+              "confidence": 0.5915,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 303,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "READ_ARG_KEYS.get(n)",
+          "diff_lines": "REF: hooks/agy/agy_guard.py:64-70\nREAD_ARG_KEYS = {\n    \"view_file\": (\"AbsolutePath\",),\n    \"grep_search\": (\"SearchPath\",),\n    \"find_by_name\": (\"SearchDirectory\",),\n    \"run_command\": (\"CommandLine\",),\n    \"read_url_content\": (\"Url\",),\n}",
+          "claim": "Bảng READ_ARG_KEYS tại dòng 64-70 của hooks/agy/agy_guard.py ánh xạ tên công cụ view_file, grep_search, find_by_name, run_command và read_url_content sang khóa đối số tương ứng."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.9092,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9885,
+                "NO": 0.0115
+              },
+              "confidence": 0.9092,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 226,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: hooks/agy/agy_guard.py:64-70\nREAD_ARG_KEYS = {\n    \"view_file\": (\"AbsolutePath\",),\n    \"grep_search\": (\"SearchPath\",),\n    \"find_by_name\": (\"SearchDirectory\",),\n    \"run_command\": (\"CommandLine\",),\n    \"read_url_content\": (\"Url\",),\n}",
+          "claim": "Bảng READ_ARG_KEYS tại dòng 64-70 của hooks/agy/agy_guard.py ánh xạ tên công cụ view_file, grep_search, find_by_name, run_command và read_url_content sang khóa đối số tương ứng."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

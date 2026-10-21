@@ -118,6 +118,7 @@ Ghi đầy đủ vào `agent/memory/workspaces/<workspace_name>/06_validation_<s
 
 ## 3. Kết quả Decision Gate DG3, Security & Final Audit (G7)
 - Summary file: `06_laya_summary_dg3_<ts>.json` | Gate: `PASS`
+- Harness² Surface & Clean-Room Check: `python3 /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py validate-surface` (`VALIDATED`)
 - Final Adversarial Audit Report: `audit_report_<suffix>.md`
 ```
 

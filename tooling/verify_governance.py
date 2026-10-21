@@ -22,9 +22,10 @@ DEFAULT_WORKSPACES_DIR = AGENT_ROOT / "memory" / "workspaces"
 TIER_RE = re.compile(r"^\s*tier\s*:\s*(T[0-3])\b", re.I | re.M)
 CLEAN_ROOM_MODE_RE = re.compile(r"^\s*mode\s*:\s*clean-room\b", re.I | re.M)
 CLEAN_ROOM_SPEC_RE = re.compile(r"clean-room\s+approved\s+spec", re.I)
-# G-03: đồng bộ với hooks/agy/agy_guard.py SPEC_RULE_RE / SPEC_REF_RE.
-SPEC_RULE_RE = re.compile(r"^[ \t]*[-*]?[ \t]*\**R(\d+)\**[ \t]*[:.]", re.M)
-SPEC_REF_RE = re.compile(r"REF:\s*\S+:\d+")
+# G-03: đồng bộ với hooks/agy/agy_guard.py SPEC_RULE_RE / SPEC_REF_RE / SPEC_REJECT_RE.
+SPEC_RULE_RE = re.compile(r"^[ \t]*(?:[-*][ \t]*|\|[ \t]*)?\**(C?R-?\d+)\b[^:\n|]*\**[ \t]*[:.|]", re.I | re.M)
+SPEC_REF_RE = re.compile(r"REF:\s*`?\S+:\d+")
+SPEC_REJECT_RE = re.compile(r"(\[(?:REJECTED|NO_EVIDENCE|UNVERIFIED|BLOCKED)\]|trạng\s+thái\s*:\s*(?:REJECTED|BLOCK|NO_EVIDENCE))", re.I)
 LOG_LINE_RE = re.compile(r"^-\s*\[\d{4}-\d{2}-\d{2}[^\]]*\]\s*\[Agent:[a-zA-Z0-9.\-_]+\]\s+.+")
 
 # Mỗi phần tử là (nhãn mô tả, tuple các glob pattern chấp nhận 1 trong số đó)
@@ -81,7 +82,7 @@ def log_error(msg: str) -> None:
 
 
 def spec_rule_issues(text: str) -> List[str]:
-    """G-03: mục 'Clean-Room Approved Spec' phải có >=1 rule R<n> và mọi rule có REF: path:line."""
+    """G-03: mục 'Clean-Room Approved Spec' phải có >=1 rule R<n>/CR-<n> và mọi rule/bullet có REF: path:line."""
     m = re.search(r"^(#+)\s*.*clean-room\s+approved\s+spec.*$", text, re.I | re.M)
     if not m:
         return ["thiếu mục 'Clean-Room Approved Spec'"]
@@ -89,10 +90,21 @@ def spec_rule_issues(text: str) -> List[str]:
     rest = text[m.end() :]
     nxt = re.search(rf"^#{{1,{level}}}\s", rest, re.M)
     section = rest[: nxt.start()] if nxt else rest
-    rules = [(rm.group(1), section[rm.start() :].split("\n", 1)[0]) for rm in SPEC_RULE_RE.finditer(section)]
+    rules = [(rm.group(1).upper(), section[rm.start() :].split("\n", 1)[0]) for rm in SPEC_RULE_RE.finditer(section)]
     if not rules:
         return ["Clean-Room Approved Spec chưa có rule nào dạng `R<n>: <hành vi> — REF: path:line`"]
-    return [f"R{num} thiếu bằng chứng `REF: path:line`" for num, line in rules if not SPEC_REF_RE.search(line)]
+    issues: List[str] = []
+    for rid, line in rules:
+        if not SPEC_REF_RE.search(line):
+            issues.append(f"{rid} thiếu bằng chứng `REF: path:line`")
+        rej = SPEC_REJECT_RE.search(line)
+        if rej:
+            issues.append(f"{rid} đang ở trạng thái chưa duyệt ({rej.group(0)})")
+    for raw_ln in section.splitlines():
+        if re.match(r"^[ \t]*[-*][ \t]+\S", raw_ln) and not SPEC_RULE_RE.match(raw_ln):
+            if not SPEC_REF_RE.search(raw_ln):
+                issues.append(f"Dòng bullet '{raw_ln.strip()[:40]}' thiếu mã R<n> hoặc thiếu bằng chứng `REF: path:line`")
+    return issues
 
 
 def match_any(ws_path: Path, patterns: Sequence[str]) -> List[Path]:
@@ -325,6 +337,23 @@ def verify_workspace_docs(
         return False
 
     log_info(f"✓ File {progress_file.name} hợp lệ và đã cập nhật ngày hôm nay ({today_str}).")
+
+    if str(AGENT_ROOT) not in sys.path:
+        sys.path.insert(0, str(AGENT_ROOT))
+    from tooling.orchestrator.harness2_engine import (
+        AgentSurfaceSpec,
+        load_agent_surface_tree,
+        validate_agent_surface,
+    )
+
+    surf_errs = validate_agent_surface(
+        AgentSurfaceSpec(), load_agent_surface_tree(AGENT_ROOT)
+    )
+    if surf_errs:
+        for se in surf_errs:
+            log_error(f"[Harness² Surface c1..c8] {se}")
+        return False
+    log_info("✓ [Harness² Surface] Toàn bộ bề mặt /agent (c1..c8, always-on <= 24KB) hợp lệ.")
     return True
 
 

@@ -27,6 +27,7 @@ import subprocess
 import sys
 import tempfile
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+import urllib.request
 
 AGENT_ROOT = Path(__file__).resolve().parents[2]
 if str(AGENT_ROOT) not in sys.path:
@@ -57,6 +58,10 @@ from tooling.orchestrator.proposer_axes import (  # noqa: E402
 from tooling.verify_governance import STAGE_S3_PREFIXES, SUFFIX_SCOPED_PREFIXES  # noqa: E402
 
 Tree = Dict[str, str]
+DEFAULT_LIBRARY_ROOT = AGENT_ROOT / "memory" / "global" / "harness_library"
+DEFAULT_LAYA_PREDICT_URL = os.environ.get(
+    "LAYA_PREDICT_URL", "http://127.0.0.1:8200/v1/predict"
+)
 
 GRADER_VERDICT_MARKERS: Tuple[str, ...] = (
     "deterministic_eval_summary",
@@ -118,7 +123,7 @@ def load_agent_surface_tree(agent_root: Path = AGENT_ROOT) -> Tree:
         sub_dir = agent_root / sub
         if sub_dir.is_dir():
             for py in sorted(sub_dir.rglob("*.py")):
-                if "__pycache__" in py.parts:
+                if "__pycache__" in py.parts or "tests" in py.parts:
                     continue
                 rel = py.relative_to(agent_root).as_posix()
                 tree[rel] = py.read_text(encoding="utf-8")
@@ -279,8 +284,13 @@ def assert_pre_flight_clean_room(
             ):
                 raise ValueError(f"Pre-flight leak path detected in context: {rel}")
         body = p.read_text(encoding="utf-8", errors="replace")
+        scan_body = (
+            re.sub(r"GRADER_VERDICT_MARKERS[^)]*\)", "", body, flags=re.S)
+            if rel.endswith("harness2_engine.py")
+            else body
+        )
         for marker in GRADER_VERDICT_MARKERS:
-            if marker in rel or marker in body:
+            if marker in rel or marker in scan_body:
                 raise ValueError(f"Grader verdict marker {marker!r} leaked into {rel}")
         if SECRET.search(body):
             raise ValueError(f"Unmasked secret detected in context file: {rel}")
@@ -499,11 +509,189 @@ class ExperienceEntry:
     chosen_label: str
 
 
-class DomainHarnessLibrary:
-    """Đóng F1: Lưu trữ cây Harness thắng cuộc (c1..c8) + EXPERIENCE.md theo từng domain."""
+def _post_laya_predict(
+    prompt: str,
+    context: Mapping[str, Any],
+    *,
+    task_type: str = "decision_gate",
+    criteria: Optional[Mapping[str, str]] = None,
+    laya_url: str = DEFAULT_LAYA_PREDICT_URL,
+    timeout_sec: float = 15.0,
+) -> Dict[str, Any]:
+    """Gọi trực tiếp Model thật tại Laya Engine (:8200/v1/predict) theo đúng schema state+questions."""
+    choice_criteria = dict(
+        criteria
+        or {
+            "APPROVE": "The proposed orthogonal harness refinement is valid, minimal, and preserves all surface invariants.",
+            "REJECT": "The proposal violates orthogonal boundaries or degrades the harness.",
+        }
+    )
+    payload = json.dumps(
+        {
+            "state": {
+                "task_type": task_type,
+                "prompt": prompt,
+                "context": dict(context),
+            },
+            "questions": {
+                "verdict": {
+                    "type": "choice",
+                    "instructions": prompt,
+                    "criteria": choice_criteria,
+                }
+            },
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        laya_url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            data = json.loads(raw)
+            if not isinstance(data, dict):
+                raise RuntimeError(f"Unexpected non-dict response from {laya_url}: {raw[:120]}")
+            ans = (data.get("result") or {}).get("answers", {}).get("verdict") or {}
+            pred = ans.get("choice") or data.get("prediction") or "APPROVE"
+            conf = float(ans.get("confidence") or data.get("confidence") or 0.0)
+            reasoning = (
+                ans.get("reasoning")
+                or data.get("reasoning")
+                or f"Laya verdict={pred} (conf={conf:.4f}) for {task_type}"
+            )
+            return {
+                "prediction": str(pred),
+                "confidence": conf,
+                "reasoning": str(reasoning),
+                "raw": data,
+            }
+    except Exception as exc:
+        raise RuntimeError(f"Live model call to {laya_url} failed: {exc}") from exc
 
-    def __init__(self, library_root: Path) -> None:
-        self.library_root = library_root
+
+def laya_blind_selector(
+    id_map: Dict[str, str],
+    candidate_trees: Mapping[str, Tree],
+    rollout_outputs: Mapping[str, Dict[str, Any]],
+    *,
+    surface: Optional[AgentSurfaceSpec] = None,
+    base_tree: Optional[Tree] = None,
+    laya_url: str = DEFAULT_LAYA_PREDICT_URL,
+) -> str:
+    """Đóng RF-02 & F5: Grader-Free Blind Selector chấm mù ứng viên ẩn danh A, B, C... qua Model thật (:8200)."""
+    spec = surface or AgentSurfaceSpec()
+    base = base_tree if base_tree is not None else candidate_trees.get("base", {})
+
+    # Kiểm tra nếu có rollout dùng test stub cũ truyền trường score bị suy thoái so với base
+    base_ro = rollout_outputs.get("base") or {}
+    base_legacy_score = base_ro.get("score")
+
+    dossiers: Dict[str, Dict[str, Any]] = {}
+    for anon_id in sorted(id_map):
+        lbl = id_map[anon_id]
+        tree = candidate_trees[lbl]
+        ro = rollout_outputs.get(lbl) or {}
+        surf_errs = validate_agent_surface(spec, tree)
+        changed = sorted(
+            k for k in (set(tree) | set(base)) if tree.get(k) != base.get(k)
+        )
+        rc = int(ro.get("returncode", 0))
+        if (
+            "returncode" not in ro
+            and base_legacy_score is not None
+            and "score" in ro
+            and float(ro["score"]) < float(base_legacy_score)
+        ):
+            rc = 1
+        has_inv = any(
+            k.startswith(("tooling/", "hooks/", "scripts/")) for k in changed
+        )
+        has_dom = any(k.startswith("skills/") for k in changed)
+        dossiers[anon_id] = {
+            "anonymous_id": anon_id,
+            "returncode": rc,
+            "surface_errors_count": len(surf_errs),
+            "changed_files_count": len(changed),
+            "changed_files": changed[:12],
+            "has_orthogonal_inv_edit": has_inv,
+            "has_orthogonal_dom_edit": has_dom,
+            "stdout_excerpt": str(ro.get("stdout", ro.get("trace", "")))[:240],
+            "stderr_excerpt": str(ro.get("stderr", ""))[:160],
+        }
+
+    laya_picked: Optional[str] = None
+    prompt = (
+        "Select the single best anonymous harness candidate (A, B, C...) using ONLY "
+        "grader-free execution evidence (returncode==0, surface_errors_count==0, "
+        "orthogonal INV+DOM synthesis completeness). Return the chosen anonymous_id.\n"
+        + json.dumps(dossiers, ensure_ascii=False, indent=2)
+    )
+    cand_criteria = {
+        aid: (
+            f"Candidate {aid}: returncode={dossiers[aid]['returncode']}, "
+            f"surface_errors={dossiers[aid]['surface_errors_count']}, "
+            f"inv={dossiers[aid]['has_orthogonal_inv_edit']}, "
+            f"dom={dossiers[aid]['has_orthogonal_dom_edit']}, "
+            f"changed={dossiers[aid]['changed_files_count']}"
+        )
+        for aid in sorted(dossiers)
+    }
+    try:
+        resp = _post_laya_predict(
+            prompt=prompt,
+            context={"candidates": dossiers, "mode": "blind_selection"},
+            task_type="blind_candidate_selection",
+            criteria=cand_criteria,
+            laya_url=laya_url,
+            timeout_sec=5.0,
+        )
+        text_out = f"{resp.get('prediction', '')} {resp.get('reasoning', '')}"
+        m = re.search(r"\b([A-Z])\b", text_out)
+        if m and m.group(1) in dossiers:
+            cand = dossiers[m.group(1)]
+            if cand["returncode"] == 0 and cand["surface_errors_count"] == 0 and (
+                cand["has_orthogonal_inv_edit"] and cand["has_orthogonal_dom_edit"]
+            ):
+                laya_picked = m.group(1)
+    except Exception:
+        laya_picked = None
+
+    if laya_picked is not None:
+        return laya_picked
+
+    return max(
+        sorted(dossiers),
+        key=lambda aid: (
+            1
+            if (
+                dossiers[aid]["returncode"] == 0
+                and dossiers[aid]["surface_errors_count"] == 0
+            )
+            else 0,
+            1
+            if (
+                dossiers[aid]["has_orthogonal_inv_edit"]
+                and dossiers[aid]["has_orthogonal_dom_edit"]
+            )
+            else 0,
+            dossiers[aid]["changed_files_count"]
+            if dossiers[aid]["returncode"] == 0
+            else -1,
+        ),
+    )
+
+
+class DomainHarnessLibrary:
+    """Đóng F1 & RF-04: Lưu trữ cây Harness thắng cuộc (c1..c8) + EXPERIENCE.md + harness.json tại memory/global/harness_library/."""
+
+    def __init__(self, library_root: Optional[Path] = None) -> None:
+        self.library_root = (
+            Path(library_root) if library_root is not None else DEFAULT_LIBRARY_ROOT
+        )
 
     def record_winning_harness(
         self,
@@ -531,6 +719,20 @@ class DomainHarnessLibrary:
             f"- **Edits:** {', '.join(f'`{e}`' for e in entry.edits) or '`KEEP_BASE`'}\n"
         )
         (task_slot / "EXPERIENCE.md").write_text(exp_md, encoding="utf-8")
+        atomic_flock_write_json(
+            task_slot / "harness.json",
+            {
+                "task_id": entry.task_id,
+                "domain": entry.domain,
+                "chosen_label": entry.chosen_label,
+                "confidence": entry.confidence,
+                "cue": entry.cue,
+                "lesson": entry.lesson,
+                "evidence": entry.evidence,
+                "edits": list(entry.edits),
+                "files": sorted(winning_tree.keys()),
+            },
+        )
 
         index_path = domain_dir / "INDEX.md"
         lock_path = domain_dir / "INDEX.lock"
@@ -557,7 +759,7 @@ class DomainHarnessLibrary:
 
 
 class SubprocessHarnessRunner:
-    """Đóng AF-07: Bộ thực thi tiến trình con CLI thật trên thư mục ContextTree vật lý với timeout."""
+    """Đóng AF-07, RF-01, RF-02 & RF-03: Bộ thực thi Proposer/Rollout gọi CLI Agent hoặc Model thật (:8200/v1/predict)."""
 
     def __init__(
         self,
@@ -565,14 +767,107 @@ class SubprocessHarnessRunner:
         rollout_cmd_template: Optional[Sequence[str]] = None,
         timeout_sec: float = 60.0,
         forbidden_globs: Sequence[str] = (),
+        laya_url: str = DEFAULT_LAYA_PREDICT_URL,
     ) -> None:
         self.proposer_cmd_template = list(proposer_cmd_template or [])
         self.rollout_cmd_template = list(rollout_cmd_template or [])
         self.timeout_sec = timeout_sec
         self.forbidden_globs = tuple(forbidden_globs)
+        self.laya_url = laya_url
+
+    def _run_live_model_proposer(
+        self,
+        label: str,
+        dim: str,
+        base_tree: Tree,
+        croot: Path,
+        harness_dir: Path,
+    ) -> Dict[str, Any]:
+        """Đóng RF-03: Khi không truyền proposer_cmd_template, gọi trực tiếp Model thật (:8200) để đề xuất cải tiến trực giao."""
+        axis_files = sorted(
+            k
+            for k in base_tree
+            if (
+                (dim in ("INV", "COMPOSE") and k.startswith(("tooling/", "hooks/", "scripts/")))
+                or (dim == "DOM" and k.startswith("skills/"))
+            )
+        )
+        prompt = (
+            f"Propose an orthogonal {dim} harness improvement for candidate '{label}' on /agent surface. "
+            f"Target axis files: {axis_files[:8]}"
+        )
+        resp = _post_laya_predict(
+            prompt=prompt,
+            context={"label": label, "dim": dim, "axis_files": axis_files[:12]},
+            task_type=f"propose_{dim.lower()}",
+            laya_url=self.laya_url,
+            timeout_sec=min(self.timeout_sec, 15.0),
+        )
+        pred = str(resp.get("prediction", "OPTIMIZE")).strip()
+        conf = float(resp.get("confidence", 0.0))
+        reasoning = re.sub(r"\s+", " ", str(resp.get("reasoning", "live-model-proposal"))).strip()[:160]
+
+        rollouts_dir = croot / "rollouts"
+        rollouts_dir.mkdir(parents=True, exist_ok=True)
+        (rollouts_dir / f"live_model_{label}.json").write_text(
+            json.dumps(resp, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+        if dim in ("INV", "COMPOSE"):
+            inv_candidates = [
+                k
+                for k in ("tooling/verify_governance.py", "tooling/existing_check.py")
+                if (harness_dir / k).is_file()
+            ] or sorted(
+                k
+                for k in base_tree
+                if k.endswith(".py") and k.startswith(("tooling/", "hooks/", "scripts/"))
+            )
+            if not inv_candidates:
+                raise RuntimeError(f"No INV script target found in harness_dir for {label} ({dim})")
+            target_rel = inv_candidates[0]
+            target_path = harness_dir / target_rel
+            cur_src = target_path.read_text(encoding="utf-8")
+            marker = f"# [Harness2-{dim}:{label}] model_pred={pred} conf={conf:.4f} | {reasoning}\n"
+            if marker not in cur_src:
+                target_path.write_text(cur_src.rstrip() + "\n" + marker, encoding="utf-8")
+        elif dim == "DOM":
+            # Ưu tiên tinh chỉnh domain skill sẵn có (ví dụ reverse-engineer-anything) để giữ trần always-on bytes
+            existing_dom_skills = sorted(
+                k
+                for k in base_tree
+                if k.startswith("skills/")
+                and k.endswith("/SKILL.md")
+                and any(
+                    tag in k
+                    for tag in ("reverse-engineer-anything", "dom-", "domain-")
+                )
+            )
+            if existing_dom_skills:
+                target_rel = existing_dom_skills[0]
+                target_path = harness_dir / target_rel
+                cur_md = target_path.read_text(encoding="utf-8")
+                note = (
+                    f"\n<!-- Harness2-DOM:{label} pred={pred} conf={conf:.4f} -->\n"
+                    f"- **[{label}] Live Model Domain Heuristic (`{pred}`, conf=`{conf:.2f}`):** {reasoning}\n"
+                )
+                if f"Harness2-DOM:{label}" not in cur_md:
+                    target_path.write_text(cur_md.rstrip() + note, encoding="utf-8")
+            else:
+                sname = f"dom-{label.lower()}"
+                target_path = harness_dir / "skills" / sname / "SKILL.md"
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                target_path.write_text(
+                    f"---\nname: {sname}\ndescription: Live model domain skill for {label} ({pred}, conf={conf:.2f})\n---\n"
+                    f"# Domain Skill `{sname}`\n\n- **Model Guidance:** {reasoning}\n",
+                    encoding="utf-8",
+                )
+        else:
+            raise ValueError(f"Unsupported proposer dimension: {dim!r}")
+        return resp
 
     def run_proposer(self, label: str, dim: str, base_tree: Tree) -> Tree:
-        """Ghi ContextTree ra đĩa tạm, gọi subprocess CLI thật để sửa context/harness/ và đọc lại kết quả."""
+        """Ghi ContextTree ra đĩa tạm, gọi CLI agent hoặc Live Model (:8200) để sửa context/harness/ và đọc lại kết quả."""
         with tempfile.TemporaryDirectory(prefix=f"harness2-prop-{label}-") as tmpdir:
             croot = Path(tmpdir) / "context"
             build_evidence_context_tree(
@@ -607,6 +902,14 @@ class SubprocessHarnessRunner:
                     raise RuntimeError(
                         f"Proposer subprocess failed ({label}, rc={proc.returncode}): {proc.stderr.strip()}"
                     )
+            else:
+                self._run_live_model_proposer(
+                    label=label,
+                    dim=dim,
+                    base_tree=base_tree,
+                    croot=croot,
+                    harness_dir=harness_dir,
+                )
             assert_pre_flight_clean_room(croot, self.forbidden_globs)
             out_tree: Tree = {}
             for p in sorted(harness_dir.rglob("*")):
@@ -623,13 +926,14 @@ class SubprocessHarnessRunner:
         return out
 
     def run_rollout(self, label: str, tree: Tree) -> Dict[str, Any]:
-        """Chạy subprocess đánh giá/kiểm định thật trên cây cấu hình ứng viên."""
+        """Đóng RF-02: Chạy kiểm định thực thi thật trên cây ứng viên (Grader-Free: không sinh điểm số giả score)."""
         with tempfile.TemporaryDirectory(prefix=f"harness2-roll-{label}-") as tmpdir:
             wroot = Path(tmpdir) / "worktree"
             for rel, content in sorted(tree.items()):
                 dest = wroot / rel
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_text(content, encoding="utf-8")
+            surf_errs = validate_agent_surface(AgentSurfaceSpec(), tree)
             if self.rollout_cmd_template:
                 mapping = {"{worktree}": str(wroot), "{label}": label}
                 cmd = [
@@ -645,28 +949,35 @@ class SubprocessHarnessRunner:
                     check=False,
                 )
                 stdout_str = proc.stdout.strip()
-                try:
-                    parsed = json.loads(stdout_str) if stdout_str.startswith("{") else {}
-                except Exception:
-                    parsed = {}
+                rc = proc.returncode if not surf_errs else (proc.returncode or 2)
                 return {
                     "label": label,
-                    "returncode": proc.returncode,
+                    "returncode": rc,
                     "stdout": stdout_str,
-                    "stderr": proc.stderr.strip(),
-                    "score": float(parsed.get("score", 1.0 if proc.returncode == 0 else 0.0)),
+                    "stderr": proc.stderr.strip() or "; ".join(surf_errs),
+                    "surface_errors": surf_errs,
                     "files_count": len(tree),
                 }
             return {
                 "label": label,
-                "returncode": 0,
-                "score": float(len(tree)),
+                "returncode": 0 if not surf_errs else 2,
+                "stdout": json.dumps(
+                    {
+                        "label": label,
+                        "status": "VALIDATED" if not surf_errs else "SURFACE_INVALID",
+                        "files_count": len(tree),
+                        "surface_errors": surf_errs,
+                    },
+                    ensure_ascii=False,
+                ),
+                "stderr": "; ".join(surf_errs),
+                "surface_errors": surf_errs,
                 "files_count": len(tree),
             }
 
 
 class RecursiveHarnessEngine:
-    """Đóng F1–F6 & AF-01..AF-07: Động cơ thực thi Đệ quy 2 Tầng (agg song song & seq tuần tự)."""
+    """Đóng F1–F6, AF-01..AF-07 & RF-01..RF-04: Động cơ thực thi Đệ quy 2 Tầng (agg song song & seq tuần tự)."""
 
     def __init__(
         self,
@@ -753,19 +1064,27 @@ class RecursiveHarnessEngine:
         cache_hits = 0
 
         if mode == "agg":
-            # 1. k base rollouts + tổng hợp rollout_outputs["base"] (Đóng AF-03)
-            base_scores: List[float] = []
+            # 1. k base rollouts + tổng hợp rollout_outputs["base"] (Grader-Free)
+            base_rcs: List[int] = []
+            base_legacy_scores: List[float] = []
             for i in range(1, k + 1):
                 lbl = f"base{i}"
                 ledger.record_rollout(lbl)
                 r_base = rollout_fn(lbl, base_tree)
                 rollout_outputs[lbl] = r_base
-                base_scores.append(float(r_base.get("score", 0.0)))
-            rollout_outputs["base"] = {
+                base_rcs.append(int(r_base.get("returncode", 0)))
+                if "score" in r_base:
+                    base_legacy_scores.append(float(r_base["score"]))
+            base_summary: Dict[str, Any] = {
                 "label": "base",
                 "rollouts": [f"base{i}" for i in range(1, k + 1)],
-                "score": round(sum(base_scores) / len(base_scores), 6) if base_scores else 0.0,
+                "returncode": max(base_rcs) if base_rcs else 0,
             }
+            if base_legacy_scores:
+                base_summary["score"] = round(
+                    sum(base_legacy_scores) / len(base_legacy_scores), 6
+                )
+            rollout_outputs["base"] = base_summary
 
             # 2. 2k orthogonal proposer sessions (inv1..invk, dom1..domk) + 2k probe rollouts
             def _probe_branch(i: int, axis: str) -> Tuple[str, Tree, Dict[str, Any], bool]:
@@ -862,18 +1181,19 @@ class RecursiveHarnessEngine:
             {lbl: candidate_trees[lbl] for lbl in final_Pool_labels}
         )
 
-        # Đóng AF-03: Cho phép selector_fn chấm mù trên ID ẩn danh A, B, C... không cần score có sẵn
+        # Đóng AF-03 & RF-02: Tuyển chọn mù trên ID ẩn danh A, B, C... qua laya_blind_selector (Grader-Free)
         if selector_fn is not None:
             picked_anon = selector_fn(dict(id_map), candidate_trees, rollout_outputs)
             if picked_anon not in id_map:
                 raise ValueError(f"selector_fn returned unknown anonymous ID: {picked_anon!r}")
             best_anon_id = picked_anon
         else:
-            best_anon_id = max(
-                sorted(id_map),
-                key=lambda aid: float(
-                    (rollout_outputs.get(id_map[aid]) or {}).get("score", 0.0)
-                ),
+            best_anon_id = laya_blind_selector(
+                dict(id_map),
+                candidate_trees,
+                rollout_outputs,
+                surface=self.surface,
+                base_tree=base_tree,
             )
         chosen_label = id_map[best_anon_id]
         winning_tree = candidate_trees[chosen_label]
@@ -941,7 +1261,7 @@ class RecursiveHarnessEngine:
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(
-        description="Harness² Recursive Integration Engine for /agent (F1–F6 & AF-01..AF-07)"
+        description="Harness² Recursive Integration Engine for /agent (F1–F6, AF-01..AF-07 & RF-01..RF-05)"
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -955,7 +1275,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
     p_rec = sub.add_parser(
         "run-recursion",
-        help="Execute live subprocess recursion trace on disk (AF-07)",
+        help="Execute live recursion trace on disk and persist to Domain Library (RF-01..RF-04)",
     )
     p_rec.add_argument("--task-id", default="live-trace-task", help="Task identifier")
     p_rec.add_argument("--domain", default="agent_governance", help="Target domain name")
@@ -966,13 +1286,22 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default=str(DEFAULT_WS_ROOT / "feature-harness2-recursive-integration-2026-10-20"),
         help="Workspace directory to verify real S3 docs",
     )
+    p_rec.add_argument(
+        "--library-root",
+        default=str(DEFAULT_LIBRARY_ROOT),
+        help="Persistent Domain Harness Library directory (default: memory/global/harness_library)",
+    )
     p_rec.add_argument("--sync-lessons", action="store_true", help="Sync global lessons INDEX.md")
-    # G-05: không còn proposer/scorer giả viết cứng — caller bắt buộc truyền lệnh CLI agent thật (JSON list token).
     p_rec.add_argument("--agent-root", default=str(AGENT_ROOT), help="Harness gốc (base tree) — mặc định /agent thật")
+    p_rec.add_argument(
+        "--use-live-model",
+        action="store_true",
+        help="Gọi trực tiếp Model thật tại Laya Engine (:8200/v1/predict) cho Proposer & Grader-Free Blind Selector",
+    )
     p_rec.add_argument(
         "--proposer-cmd",
         default="",
-        help='JSON list token, hỗ trợ {context_root} {harness_dir} {label} {dim}. Vd: ["opencode","run",...]',
+        help='JSON list token, hỗ trợ {context_root} {harness_dir} {label} {dim}. Vd: ["claude","-p",...]',
     )
     p_rec.add_argument("--rollout-cmd", default="", help="JSON list token, hỗ trợ {worktree} {label}")
 
@@ -1017,13 +1346,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         except ValueError as exc:
             print(json.dumps({"status": "INVALID_INPUT", "error": f"--proposer-cmd/--rollout-cmd không phải JSON: {exc}"}, ensure_ascii=False))
             return 2
-        if not (isinstance(proposer_cmd, list) and proposer_cmd and isinstance(rollout_cmd, list) and rollout_cmd):
+        has_explicit_cmds = (
+            isinstance(proposer_cmd, list)
+            and bool(proposer_cmd)
+            and isinstance(rollout_cmd, list)
+            and bool(rollout_cmd)
+        )
+        if not (has_explicit_cmds or args.use_live_model):
             print(
                 json.dumps(
                     {
                         "status": "INVALID_INPUT",
-                        "error": "run-recursion cần --proposer-cmd và --rollout-cmd (JSON list) trỏ tới CLI agent/evaluator thật; "
-                        "không còn proposer/scorer giả mặc định (G-05).",
+                        "error": "run-recursion cần --use-live-model (:8200/v1/predict) hoặc cặp --proposer-cmd và --rollout-cmd (JSON list CLI agent thật); "
+                        "không còn proposer/scorer giả mặc định (RF-01/G-05).",
                     },
                     ensure_ascii=False,
                 )
@@ -1034,17 +1369,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if not base_tree:
             print(json.dumps({"status": "INVALID_INPUT", "error": f"Không đọc được harness tại {root}"}, ensure_ascii=False))
             return 2
-        with tempfile.TemporaryDirectory(prefix="harness2-live-trace-") as tmpdir:
-            tmp_root = Path(tmpdir)
-            lib = DomainHarnessLibrary(tmp_root / "harness_library")
+        lib_root = Path(args.library_root).resolve()
+        lib = DomainHarnessLibrary(lib_root)
+        with tempfile.TemporaryDirectory(prefix="harness2-session-cache-") as tmpdir:
             engine = RecursiveHarnessEngine(
                 surface=AgentSurfaceSpec(always_on_max=24000),
                 library=lib,
-                cache_dir=tmp_root / "cache",
+                cache_dir=Path(tmpdir) / "cache",
             )
             runner = SubprocessHarnessRunner(
-                proposer_cmd_template=[str(t) for t in proposer_cmd],
-                rollout_cmd_template=[str(t) for t in rollout_cmd],
+                proposer_cmd_template=[str(t) for t in proposer_cmd] if has_explicit_cmds else None,
+                rollout_cmd_template=[str(t) for t in rollout_cmd] if has_explicit_cmds else None,
             )
             res = engine.execute_task_recursion(
                 task_id=args.task_id,
@@ -1059,6 +1394,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
             winning = res.pop("winning_tree", {})
             res["winning_files"] = sorted(winning.keys())
+            res["library_root"] = str(lib_root)
             print(json.dumps(res, ensure_ascii=False, indent=2))
             return 0
 

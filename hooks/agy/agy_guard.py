@@ -138,7 +138,8 @@ ESCALATION_MENTOR_MSG = (
     "Đã thất bại liên tiếp {loops} lần khi chạy checks sau khi sửa code!\n"
     "BẮT BUỘC DỪNG NGAY việc sửa mò (blind-fixing):\n"
     "1. Quay lại đọc kỹ `09_tasks_solution_<suffix>.md` và log lỗi thực tế.\n"
-    "2. Nếu giải pháp hiện tại không khả thi, dừng sửa code và báo cáo rõ cho User để Re-plan (S3)."
+    "2. Chạy `python3 /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py run-recursion --use-live-model` để khám phá cải tiến trực giao INV/DOM hoặc tra cứu `memory/global/harness_library/`.\n"
+    "3. Nếu giải pháp hiện tại không khả thi, dừng sửa code và báo cáo rõ cho User để Re-plan (S3)."
 )
 AUDIT_REQUIRED_PATTERNS = [
     (r"(line-by-line|từng dòng|git diff)", "Mục 1: Phản biện từng dòng update / git diff & từng task"),
@@ -327,6 +328,13 @@ def contaminated_clean_room_reads(st: List[Dict[str, Any]], forbidden: List[str]
     if not forbidden:
         return []
     hits: List[str] = []
+    for s in st:
+        if s.get("type") == "SYSTEM_MESSAGE" and "sender=" in str(s.get("content", "")):
+            s_blob = str(s.get("content", "")).replace("\\", "/")
+            for fb in forbidden:
+                fb_norm = fb.replace("\\", "/").rstrip("/")
+                if fb_norm and fb_norm in s_blob and fb not in hits:
+                    hits.append(fb)
     for _, n, a in calls(st):
         keys = READ_ARG_KEYS.get(n or "")
         if not keys:
@@ -633,6 +641,23 @@ def handle_pre_invocation(
         else f"DOWN — nhờ User chạy: {LAYA_START} (cold start ~30s, trả 503 khi đang nạp)"
     )
     msg = BOOT_MSG.format(laya=laya)
+    try:
+        if str(AGENT) not in sys.path:
+            sys.path.insert(0, str(AGENT))
+        from tooling.orchestrator.harness2_engine import (
+            AgentSurfaceSpec,
+            DEFAULT_LIBRARY_ROOT,
+            load_agent_surface_tree,
+            validate_agent_surface,
+        )
+
+        surf_errs = validate_agent_surface(AgentSurfaceSpec(), load_agent_surface_tree(AGENT))
+        lib_dir = (mem_root or MEM) / "global" / "harness_library" if mem_root else DEFAULT_LIBRARY_ROOT
+        dom_indexes = sorted(p.parent.name for p in lib_dir.glob("*/INDEX.md")) if lib_dir.is_dir() else []
+        h2_status = "VALIDATED" if not surf_errs else f"ERRORS({len(surf_errs)})"
+        msg += f"\n[Harness² S0] Surface: {h2_status} | Domain Library: {dom_indexes or ['empty']}"
+    except Exception:
+        pass
     prompt = str(st[u_idx].get("content", "")) if u_idx >= 0 else ""
     hits = match_tripwires(prompt, load_tripwires(mem_root))
     if hits:
@@ -803,6 +828,19 @@ def handle_pre_write(
                         "mới tinh chỉ nhận Clean-Room Approved Spec!"
                     ),
                 }
+            try:
+                if str(AGENT) not in sys.path:
+                    sys.path.insert(0, str(AGENT))
+                from tooling.orchestrator.harness2_engine import assert_pre_flight_clean_room
+
+                cr_ctx = (ws_root or WS_ROOT) / ws / "clean_room_context"
+                if cr_ctx.is_dir():
+                    assert_pre_flight_clean_room(cr_ctx, forbidden)
+            except ValueError as exc:
+                return {
+                    "decision": "deny",
+                    "reason": f"Rule 13 (Harness² Pre-Flight Clean-Room Check): {exc}",
+                }
         sol = [i for i, _, x in calls(st) if "09_tasks_solution" in tgt(x)]
         aud = [
             i
@@ -846,6 +884,32 @@ def handle_pre_command(payload: Dict[str, Any]) -> Dict[str, Any]:
     for pat, why in ASK_CMD:
         if re.search(pat, cmd, re.I):
             return {"decision": "force_ask", "reason": why}
+    return {"decision": "ask"}
+
+
+def handle_pre_subagent(
+    payload: Dict[str, Any],
+    mem_root: Optional[Path] = None,
+    ws_root: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """G-04: PreToolUse chặn rò rỉ đường dẫn/code gốc vào invoke_subagent hoặc send_message."""
+    st = steps(payload)
+    ws = active_ws(st, ws_root)
+    if not ws:
+        return {"decision": "ask"}
+    sfx = latest_solution_suffix(st, -1)
+    is_cr, forbidden = clean_room_config(ws, ws_root, sfx)
+    if is_cr and forbidden:
+        tc = payload.get("toolCall") or {}
+        leaked = leaked_subagent_prompts(st + [{"tool_calls": [tc]}], forbidden)
+        if leaked:
+            return {
+                "decision": "deny",
+                "reason": (
+                    "Rule 13 (Clean-Room Leak Guard, G-04): CẤM truyền đường dẫn hoặc nội dung code gốc "
+                    f"({', '.join(leaked)}) vào prompt Sub-agent Builder! Chỉ được truyền Clean-Room Approved Spec."
+                ),
+            }
     return {"decision": "ask"}
 
 
@@ -1043,6 +1107,7 @@ def dispatch(event_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         "pre-invocation": handle_pre_invocation,
         "pre-write": handle_pre_write,
         "pre-command": handle_pre_command,
+        "pre-subagent": handle_pre_subagent,
         "post-invocation": handle_post_invocation,
         "stop": handle_stop,
     }

@@ -475,25 +475,28 @@ class Harness2EngineTest(unittest.TestCase):
         rc_missing = h2.main(["run-recursion", "--k", "1", "--workspace-dir", str(valid_ws)])
         self.assertEqual(rc_missing, 2)
 
-        # 5. AF-07/G-05: chạy subprocess thật với lệnh do caller truyền vào (stub chỉ tồn tại trong test)
+        # 5. AF-07/G-05: chạy subprocess thật với lệnh do caller truyền vào (grader-free, không dùng score giả)
         agent_root = self.tmp / "agent_root_cli"
         for rel, content in {
             "GEMINI.md": "# Core Rules\nRun `python3 tooling/existing_check.py`\n- `core-skill`\n",
             "OPERATOR_MAP.md": "# Operator Map\n| `core-skill` | Trigger | `S1` | Core |\n",
             "skills/core-skill/SKILL.md": "---\nname: core-skill\ndescription: Core workflow skill\n---\n# Body\n",
-            "tooling/existing_check.py": "VALUE = 1\n",
+            "tooling/existing_check.py": "def verify_inv() -> bool:\n    return True\n",
         }.items():
             (agent_root / rel).parent.mkdir(parents=True, exist_ok=True)
             (agent_root / rel).write_text(content, encoding="utf-8")
         prop_py = (
             "import pathlib, sys; h = pathlib.Path(sys.argv[1]); lbl = sys.argv[2]; dim = sys.argv[3]; "
             "p = h / 'tooling/existing_check.py'; "
-            "(p.write_text('VALUE = 2\\n#' + lbl + '\\n', encoding='utf-8') if dim == 'INV' else None)"
+            "(p.write_text(p.read_text() + '# inv:' + lbl + '\\n', encoding='utf-8') if dim == 'INV' else None)"
         )
         roll_py = (
             "import json, pathlib, sys; w = pathlib.Path(sys.argv[1]); "
-            "print(json.dumps({'score': 1.0 if 'VALUE = 2' in (w / 'tooling/existing_check.py').read_text() else 0.2}))"
+            "src = (w / 'tooling/existing_check.py').read_text(); "
+            "compile(src, 'existing_check.py', 'exec'); "
+            "print(json.dumps({'status': 'VALIDATED', 'has_inv': '# inv:' in src}))"
         )
+        cli_lib = self.tmp / "cli_lib"
         rc = h2.main(
             [
                 "run-recursion",
@@ -507,6 +510,8 @@ class Harness2EngineTest(unittest.TestCase):
                 "1",
                 "--workspace-dir",
                 str(valid_ws),
+                "--library-root",
+                str(cli_lib),
                 "--agent-root",
                 str(agent_root),
                 "--proposer-cmd",
@@ -516,6 +521,112 @@ class Harness2EngineTest(unittest.TestCase):
             ]
         )
         self.assertEqual(rc, 0)
+        self.assertTrue((cli_lib / "agent_gov" / "INDEX.md").is_file())
+        self.assertTrue(
+            (cli_lib / "agent_gov" / "harnesses" / "cli_subproc_test" / "harness.json").is_file()
+        )
+
+    # === Test Task 8 (RF-01..RF-05): Real Model Proposer, Grader-Free Blind Selector, Persistent Library & S0-S6 Wiring ===
+    def test_08_rf01_to_rf05_live_model_blind_selector_and_s0_s6_wiring(self) -> None:
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+        import threading
+        from hooks.agy import agy_guard
+
+        # Khởi tạo local HTTP model endpoint giả lập định dạng /v1/predict của Laya để test deterministic
+        class _PredictHandler(BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802
+                length = int(self.headers.get("Content-Length", "0"))
+                body = json.loads(self.rfile.read(length).decode("utf-8"))
+                ttype = body.get("task_type", "decision_gate")
+                resp = {
+                    "prediction": "APPROVE",
+                    "confidence": 0.94,
+                    "reasoning": f"Live model verified {ttype} orthogonal synthesis.",
+                }
+                raw = json.dumps(resp).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+
+            def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+                return
+
+        srv = HTTPServer(("127.0.0.1", 0), _PredictHandler)
+        port = srv.server_address[1]
+        th = threading.Thread(target=srv.serve_forever, daemon=True)
+        th.start()
+        live_url = f"http://127.0.0.1:{port}/v1/predict"
+
+        try:
+            # 1. RF-03: SubprocessHarnessRunner.run_proposer KHÔNG truyền proposer_cmd_template phải gọi _run_live_model_proposer
+            runner = h2.SubprocessHarnessRunner(laya_url=live_url)
+            inv_tree = runner.run_proposer("inv1", "INV", self.base_tree)
+            self.assertNotEqual(inv_tree, self.base_tree)
+            self.assertIn("[Harness2-INV:inv1]", inv_tree["tooling/verify_governance.py"])
+
+            dom_tree = runner.run_proposer("dom1", "DOM", self.base_tree)
+            self.assertNotEqual(dom_tree, self.base_tree)
+            self.assertTrue(any(k.startswith("skills/dom-dom1/") for k in dom_tree))
+
+            # Nếu model endpoint offline -> bắt buộc raise RuntimeError, tuyệt đối không trả về base_tree no-op
+            dead_runner = h2.SubprocessHarnessRunner(laya_url="http://127.0.0.1:1/v1/predict", timeout_sec=1.0)
+            with self.assertRaises(RuntimeError):
+                dead_runner.run_proposer("inv_dead", "INV", self.base_tree)
+
+            # 2. RF-02: Grader-Free Blind Selector (laya_blind_selector) chấm mù không cần trường 'score'
+            r_base = runner.run_rollout("base", self.base_tree)
+            self.assertNotIn("score", r_base)
+            self.assertEqual(r_base["returncode"], 0)
+
+            comp_tree = h2.three_way_merge_trees(
+                self.base_tree,
+                inv_tree,
+                 h2.autotrigger_agent_skills(h2.AgentSurfaceSpec(), dom_tree),
+            )
+            id_map = {"A": "base", "B": "agg1"}
+            picked = h2.laya_blind_selector(
+                id_map,
+                {"base": self.base_tree, "agg1": comp_tree},
+                {
+                    "base": {"returncode": 0, "stdout": "base ok"},
+                    "agg1": {"returncode": 0, "stdout": "agg1 ok"},
+                },
+                base_tree=self.base_tree,
+                laya_url=live_url,
+            )
+            self.assertEqual(picked, "B")
+
+            # Nếu agg1 có returncode != 0 -> laya_blind_selector bắt buộc chọn base ('A')
+            picked_fail = h2.laya_blind_selector(
+                id_map,
+                {"base": self.base_tree, "agg1": comp_tree},
+                {
+                    "base": {"returncode": 0, "stdout": "base ok"},
+                    "agg1": {"returncode": 2, "stderr": "runtime failure"},
+                },
+                base_tree=self.base_tree,
+                laya_url=live_url,
+            )
+            self.assertEqual(picked_fail, "A")
+
+            # 3. RF-04 & RF-05: DEFAULT_LIBRARY_ROOT trỏ tới memory/global/harness_library & H1/H6 wiring
+            self.assertEqual(
+                h2.DEFAULT_LIBRARY_ROOT,
+                h2.AGENT_ROOT / "memory" / "global" / "harness_library",
+            )
+            boot_out = agy_guard.handle_pre_invocation(
+                {"conversationId": "test-rf05-boot"},
+                state_dir=self.tmp / "state",
+                mem_root=self.tmp / "mem",
+            )
+            boot_msg = boot_out["injectSteps"][0]["ephemeralMessage"]
+            self.assertIn("[Harness² S0] Surface: VALIDATED", boot_msg)
+            self.assertIn("run-recursion --use-live-model", agy_guard.ESCALATION_MENTOR_MSG)
+        finally:
+            srv.shutdown()
+            srv.server_close()
 
 
 if __name__ == "__main__":

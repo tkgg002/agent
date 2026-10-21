@@ -21,6 +21,7 @@ description: >-
 - `agent/memory/global/lessons/INDEX.md`: Danh mục rút gọn (1 dòng/bài học, ≤ 20KB) dùng để đọc ở đầu mỗi phiên.
 - `agent/memory/global/lessons/topics/*.md`: Các file bài học tách theo từng nhóm chủ đề để tra cứu sâu mà không tốn context.
 - `agent/memory/global/project/<project_name>/`: Kiến trúc, tech stack, active plans của từng dự án.
+- `agent/memory/global/harness_library/<domain>/`: Thư viện Harness² liên nhiệm vụ (`INDEX.md`, `harnesses/<task_id>/EXPERIENCE.md`, `harnesses/<task_id>/harness.json`) được cập nhật bởi `python3 /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py run-recursion --use-live-model --sync-lessons`.
 - `agent/memory/workspaces/<workspace_name>/`: Hồ sơ tài liệu của từng task/feature (`01` → `14`).
 
 ## 2. Quy trình Ghi Bài học Mới vào `lessons.md` (Bắt buộc 5 bước)

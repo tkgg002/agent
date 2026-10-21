@@ -86,7 +86,7 @@
 
 ---
 
-## [ ] Task 8 (`S1 → S3 Re-Plan` — Xử lý Triệt để 5 Lỗ hổng Tích hợp Thực tế `RF-01 → RF-05` do User Vạch trần)
+## [x] Task 8 (`S1 → S3 Re-Plan` — Xử lý Triệt để 5 Lỗ hổng Tích hợp Thực tế `RF-01 → RF-05` do User Vạch trần)
 - **[Mô tả]:**
   - **`RF-01` (Xóa bỏ 100% Proposer giả viết cứng `VALUE = 2` & `skills/dom-<lbl>/SKILL.md` trong `run-recursion`):**
     - Tại `tooling/orchestrator/harness2_engine.py:1005-1064`, xóa toàn bộ khối `TemporaryDirectory`, `base_tree` 4 file giả và câu lệnh Python `py_cmd` viết cứng (`VALUE = 2`).

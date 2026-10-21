@@ -25,7 +25,8 @@ Bản đồ điều phối 10 Core Skills chuẩn hóa của hệ thống `/agen
 | **Lifecycle Hooks** | `hooks/agy/agy_guard.py` (`.agents/hooks.json`) | Thực thi 7 chốt chặn tự động `H1–H7` (`PreInvocation`, `PreToolUse`, `PostInvocation`, `Stop`). |
 | **Decision Gate CLI** | `tooling/laya_gate.py` | Chạy kiểm định `/laya_router` có đối chứng (`control_true` / `control_false` / `corrupted-diff`). |
 | **Lessons Indexer** | `tooling/build_lessons_index.py` | Sinh `memory/global/lessons/INDEX.md` (`<15KB`) và `topics/*.md` từ `lessons.md` (Read-Only). |
-| **Process Linter** | `tooling/verify_governance.py` | Kiểm định cấu trúc tài liệu Workspace theo Tier (`T0–T3`) và định dạng Audit Log `05_progress_*.md`. |
+| **Process Linter** | `tooling/verify_governance.py` | Kiểm định cấu trúc tài liệu Workspace theo Tier (`T0–T3`), bề mặt `/agent` (`c1..c8`), và Audit Log `05_progress_*.md`. |
+| **Harness² Engine** | `tooling/orchestrator/harness2_engine.py` | Kiểm định bề mặt (`validate-surface`), tiền kiểm phòng sạch (`check-clean-room`), và chạy đệ quy `Propose–Probe–Compose` với Model thật (`run-recursion --use-live-model`) lưu vào `memory/global/harness_library/`. |
 | **Project Manifest** | `<project-root>/.agent-project.json` | Khai báo `checks` và `runtime_check` đặc thù của từng dự án để giữ `/agent` 100% project-agnostic. |
 
 > [!NOTE]

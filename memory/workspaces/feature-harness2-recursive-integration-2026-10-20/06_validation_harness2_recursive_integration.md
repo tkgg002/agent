@@ -47,42 +47,49 @@
   - `winning_existing_check_py: "VALUE = 2\n#inv1"` (bảo toàn 100% thay đổi của `INV` trên file có sẵn đồng thời giữ skill `skills/dom-dom1/SKILL.md` của `DOM`).
   - `lessons_index_stats: {"source_lines": 1993, "source_entries": 256, "index_entries": 256, "topic_entries": 256, "index_bytes": 14281}`.
 
-### 2.2. Kết quả Bộ Unit & Integration Test + Regression Suite
+### 2.2. Kết quả Bộ Unit & Integration Test + Regression Suite (Sau `Task 8`: `RF-01 → RF-05`)
 - **Lệnh đã chạy:**
   ```bash
   python3 -m unittest discover -s tooling/tests -p "test_*.py" -v && python3 -m unittest discover -s hooks/agy/tests -p "test_*.py" -v
   ```
 - **Output thực tế:**
-  - `tooling/tests`: **Ran 32 tests in 1.914s — OK** (bao gồm 7 test toàn diện trong `test_harness2_engine.py`).
-  - `hooks/agy/tests`: **Ran 30 tests in 0.115s — OK** (0 regression).
+  - `tooling/tests`: **Ran 38 tests in 3.714s — OK** (bao gồm `test_08_rf01_to_rf05_live_model_blind_selector_and_s0_s6_wiring` trong `test_harness2_engine.py`).
+  - `hooks/agy/tests`: **Ran 51 tests in 0.283s — OK** (0 regression).
+- **Lệnh chạy thật `run-recursion --use-live-model` trên bề mặt `/agent` thật với Model thật (`:8200/v1/predict`):**
+  ```bash
+  python3 /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py run-recursion \
+    --use-live-model --task-id harness2_s0_s6_live_model_run --domain agent_governance --mode agg --k 1 --sync-lessons
+  ```
+  - **Output thực tế:** `rollouts_count: 4`, `sessions_count: 3`, `chosen_anonymous_id: "A"`, `chosen_label: "agg1"`, `library_slot: "/Users/trainguyen/Documents/work/agent/memory/global/harness_library/agent_governance/harnesses/harness2_s0_s6_live_model_run"`, `lessons_index_stats: {"source_entries": 262, "index_entries": 262, "index_bytes": 14571}`.
+  - **File vật lý trên đĩa:** `memory/global/harness_library/agent_governance/INDEX.md`, `harnesses/harness2_s0_s6_live_model_run/EXPERIENCE.md`, `harnesses/harness2_s0_s6_live_model_run/harness.json`, và 22 file trong `harnesses/harness2_s0_s6_live_model_run/harness/`.
 
-### 2.3. Kết quả Cổng Kiểm thử Đột biến 4 Bản Hỏng (`4-Mutant Gate` — `mutation_gate.py`)
+### 2.3. Kết quả Cổng Kiểm thử Đột biến 5 Bản Hỏng (`5-Mutant Gate` — `mutation_gate.py`)
 - **Lệnh đã chạy:**
   ```bash
   python3 /Users/trainguyen/Documents/work/agent/tooling/mutation_gate.py \
     --workspace feature-harness2-recursive-integration-2026-10-20 \
     --suffix harness2_recursive_integration \
-    --mutations /Users/trainguyen/Documents/work/agent/memory/workspaces/feature-harness2-recursive-integration-2026-10-20/06_mutations_harness2_recursive_integration.json
+    --mutations /Users/trainguyen/.gemini/antigravity/brain/223ce70e-eef2-4adc-9ea6-9daaf96c357d/scratch/mutants_task8.json
   ```
-- **Output thực tế (`06_mutation_summary_harness2_recursive_integration_20261020T163227.json`):**
+- **Output thực tế (`06_mutation_summary_harness2_recursive_integration_20261021T101736.json`):**
   - `gate`: **`PASS`**
-  - `killed_count`: **`4 / 4`** (`M1_bypass_always_on_budget`: `KILLED`, `M2_bypass_orthogonal_inv_axis_fence`: `KILLED`, `M3_corrupt_ledger_budget_identity`: `KILLED`, `M4_corrupt_three_way_merge_overwrite`: `KILLED`)
+  - `killed_count`: **`5 / 5`** (`M1_bypass_always_on_budget`: `KILLED`, `M2_bypass_orthogonal_inv_axis_fence`: `KILLED`, `M3_corrupt_ledger_budget_identity`: `KILLED`, `M4_corrupt_three_way_merge_overwrite`: `KILLED`, `M5_noop_proposer_without_template`: `KILLED`)
   - `survived_count`: `0`, `timeout_count`: `0`, `all_restored_sha256`: `true`.
 
 ---
 
 ## 3. Kết quả Decision Gate (`DG1`, `DG2`, `DG3`), Security Gate & Final Audit (Gate G7 & G8)
 
-- **DG1 Summary (`S5 → S3 Re-Plan`):** `06_laya_summary_dg1_20261020T161411.json` | Gate: **`PASS`** 🟢
-- **DG2 Summary (`S5 → S3 Re-Plan`):** `06_laya_summary_dg2_20261020T161437.json` | Gate: **`PASS`** 🟢
-- **DG3 Summary (Adversarial Recheck):** `06_laya_summary_dg3_20261020T160852.json` | Gate: **`PASS`** 🟢
-- **DG3 Summary (Post-Task-7 Final Implementation):** `06_laya_summary_dg3_20261020T163350.json` | Gate: **`PASS`** 🟢
+- **DG1 Summary (`Task 8 Re-Plan`):** `06_laya_summary_dg1_20261021T095032.json` | Gate: **`PASS`** 🟢
+- **DG2 Summary (`Task 8 Re-Plan`):** `06_laya_summary_dg2_20261021T095127.json` | Gate: **`PASS`** 🟢
+- **DG3 Summary (Post-Task-8 Final Implementation):** `06_laya_summary_dg3_20261021T101946.json` | Gate: **`PASS`** 🟢
+- **Harness² Surface & Clean-Room Check:** `python3 /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py validate-surface` (`VALIDATED`, `always_on_utf8_bytes: 21578 <= 24000`)
 - **Final Adversarial Audit Report:** [`audit_report_harness2_recursive_integration.md`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-harness2-recursive-integration-2026-10-20/audit_report_harness2_recursive_integration.md)
 
 ### Security Gate Report (`/security-agent`)
 | Hạng mục | Kết quả | Chi tiết |
 | :--- | :---: | :--- |
-| Secret & PII Scan (Code + Memory) | **PASS** | Quét regex trên toàn bộ `tooling/orchestrator/`, `test_harness2_engine.py`, và workspace: `CLEAN_ZERO_SECRETS`. |
+| Secret & PII Scan (Code + Memory) | **PASS** | Quét regex trên toàn bộ `tooling/orchestrator/`, `test_harness2_engine.py`, `memory/global/harness_library/`, và workspace: `CLEAN_ZERO_SECRETS`. |
 | Input & Query Injection Check | **PASS** | Không sử dụng `shell=True`; dùng danh sách token argv tường minh với `_expand_token()` và bọc dữ liệu bằng `EVIDENCE_BOUNDARY_HEADER`. |
 | AuthN / AuthZ & Error Exposure | **PASS** | Chốt chặn `assert_pre_flight_clean_room` ngăn rò rỉ file cấm, `GRADER_VERDICT_MARKERS` và `SECRET`. |
 | VCS Hygiene (No secret staged, No push) | **PASS** | Chỉ tạo local git restore-point commit, tuyệt đối không chạy `git push` (Rule #15). |

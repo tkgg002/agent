@@ -249,6 +249,84 @@ class TestTripwireAndCleanRoom(unittest.TestCase):
         ]
         self.assertEqual(agy_guard.leaked_subagent_prompts(st, ["legacy/pay.py"]), ["legacy/pay.py"])
 
+    def test_g03_cr_rules_rejected_status_and_unnumbered_bullets(self) -> None:
+        cr_ok = "## Clean-Room Approved Spec\n- **R1**: (CR-01) Hợp lệ — REF: `hooks/agy/agy_guard.py:48-60`\n"
+        self.assertEqual(agy_guard.spec_rule_issues(cr_ok), [])
+        cr_rej = "## Clean-Room Approved Spec\n- R1: [REJECTED] rule bị Jev trả về — REF: x.py:1-2\n"
+        self.assertTrue(any("REJECTED" in x for x in agy_guard.spec_rule_issues(cr_rej)))
+        cr_bullet = "## Clean-Room Approved Spec\n- R1: hợp lệ — REF: x.py:1-2\n- Dòng bullet lậu không có REF\n"
+        self.assertEqual(len(agy_guard.spec_rule_issues(cr_bullet)), 1)
+
+    def test_g04_pre_subagent_blocks_invoke_subagent_and_send_message_leaks(self) -> None:
+        ws = self.ws_root / "cr-sub"
+        ws.mkdir(parents=True, exist_ok=True)
+        legacy = self.tmp / "old_auth.py"
+        legacy.write_text(
+            "def verify_jwt_signature(token):\n    return hmac.compare_digest(token, SECRET_SIGNING_KEY_V1)\n",
+            encoding="utf-8",
+        )
+        (ws / "01_requirements_sub.md").write_text(
+            f"tier: T2\nmode: clean-room\nclean_room_forbidden_sources: {legacy}\n",
+            encoding="utf-8",
+        )
+        tr = self._tr(
+            [
+                {"tool_calls": [{"name": "write_to_file", "args": {"TargetFile": str(ws / "09_tasks_solution_sub.md")}}]},
+            ]
+        )
+        # 1. PreToolUse denies invoke_subagent leaking forbidden path
+        res_deny_inv = agy_guard.handle_pre_subagent(
+            {
+                "transcriptPath": tr,
+                "toolCall": {
+                    "name": "invoke_subagent",
+                    "args": {"Subagents": [{"Prompt": f"Hãy đọc {legacy} rồi viết lại"}]},
+                },
+            },
+            mem_root=self.mem_root,
+            ws_root=self.ws_root,
+        )
+        self.assertEqual(res_deny_inv.get("decision"), "deny")
+        self.assertIn("Clean-Room Leak Guard", res_deny_inv.get("reason", ""))
+
+        # 2. PreToolUse denies send_message leaking >=40-char code line from forbidden file
+        res_deny_msg = agy_guard.handle_pre_subagent(
+            {
+                "transcriptPath": tr,
+                "toolCall": {
+                    "name": "send_message",
+                    "args": {"Recipient": "sub-1", "Message": "return hmac.compare_digest(token, SECRET_SIGNING_KEY_V1)"},
+                },
+            },
+            mem_root=self.mem_root,
+            ws_root=self.ws_root,
+        )
+        self.assertEqual(res_deny_msg.get("decision"), "deny")
+
+        # 3. PreToolUse allows clean spec-only subagent prompt
+        res_ok = agy_guard.handle_pre_subagent(
+            {
+                "transcriptPath": tr,
+                "toolCall": {
+                    "name": "invoke_subagent",
+                    "args": {"Subagents": [{"Prompt": "Triển khai theo Clean-Room Approved Spec R1..R3"}]},
+                },
+            },
+            mem_root=self.mem_root,
+            ws_root=self.ws_root,
+        )
+        self.assertEqual(res_ok.get("decision"), "ask")
+
+        # 4. Inside subagent session (SYSTEM_MESSAGE with sender=<parent_uuid>), leaked path is caught by contaminated_clean_room_reads
+        sub_st = [
+            {
+                "source": "SYSTEM",
+                "type": "SYSTEM_MESSAGE",
+                "content": f"<SYSTEM_MESSAGE>\n[Message] sender=parent-uuid content=Hãy đọc {legacy} rồi code\n</SYSTEM_MESSAGE>",
+            }
+        ]
+        self.assertEqual(agy_guard.contaminated_clean_room_reads(sub_st, [str(legacy)]), [str(legacy)])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -45,11 +45,12 @@ description: >-
 3. Có vi phạm lesson nào trong suốt quá trình thực hiện phiên này không? (Nếu có, liệt kê trung thực cho User).
 4. Đã cập nhật trạng thái vào `active_plans.md` (nếu thay đổi lộ trình dự án) chưa?
 
-### Bước 5 — Chạy Linter Quy trình (`verify_governance.py` — Rule #22)
+### Bước 5 — Chạy Linter Quy trình (`verify_governance.py` & `harness2_engine.py` — Rule #22)
 ```bash
 python3 /Users/trainguyen/Documents/work/agent/tooling/verify_governance.py --workspace <workspace_name>
+python3 /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py validate-surface
 ```
-- Bắt buộc nhận kết quả `PASSED 🟢` trước khi kết thúc câu trả lời. Nếu `FAILED 🔴`, phải bổ sung ngay phần thiếu.
+- Bắt buộc nhận kết quả `PASSED 🟢` và `VALIDATED` trước khi kết thúc câu trả lời. Nếu có cải tiến cấu hình `/agent` (skills/tooling/hooks), chạy `python3 /Users/trainguyen/Documents/work/agent/tooling/orchestrator/harness2_engine.py run-recursion --use-live-model --workspace-dir <ws_path>` để lưu vào `memory/global/harness_library/`.
 
 ### Bước 6 — Cấu trúc Phản hồi Cuối cùng cho User (Rule #0)
 Cuối câu trả lời luôn có 2 mục bắt buộc:

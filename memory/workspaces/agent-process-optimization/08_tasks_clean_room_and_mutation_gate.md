@@ -68,3 +68,27 @@
 - **Tiêu chí Hoàn thành (`[Definition of Done]`):**
   - `verify_governance.py --workspace agent-process-optimization --suffix clean_room_and_mutation_gate` đạt `PASSED 🟢`.
 
+### [x] Task `T8.5`: Khắc phục triệt để 4 Lỗ hổng Phòng Sạch `G-01`, `G-02`, `G-03`, `G-04` trong `hooks/agy/agy_guard.py`, `.agents/hooks.json`, `tooling/verify_governance.py`
+- **Mô tả & Phạm vi (`[Mô tả]`):**
+  - **`G-01` (`hooks/agy/agy_guard.py:48-60, 374-380`):** Hỗ trợ tường minh `BẮT ĐẦU` trong cả `CLEAN_ROOM_START` (neo nguyên dòng cho task `mode: clean-room`) và `APPROVE` (neo đầu dòng cho task thường); chặn hoàn toàn false-positive khi từ `"duyệt"` hoặc `"BẮT ĐẦU"` nằm giữa câu mô tả.
+  - **`G-02` (`hooks/agy/agy_guard.py:64-72, 317-335`):** Mở rộng `READ_ARG_KEYS` và `contaminated_clean_room_reads` để phát hiện đọc code gốc qua `run_command` (`CommandLine`, `Cwd`), `read_url_content` (`Url`), `view_file_outline`, `view_code_item`.
+  - **`G-03` (`hooks/agy/agy_guard.py:60-63, 383-415` & `tooling/verify_governance.py:25-28, 83-112`):** Nâng cấp `spec_rule_issues(text)` hỗ trợ cả `R<n>` và `CR-<n>` (dạng bullet và dạng bảng Markdown), bắt buộc mọi rule có `REF: path:line`, chặn các rule có trạng thái `REJECTED|NO_EVIDENCE|UNVERIFIED|BLOCK`, và chặn mọi dòng bullet lậu trong mục `Clean-Room Approved Spec` không có `REF: path:line`.
+  - **`G-04` (`hooks/agy/agy_guard.py:335-375, 780-815, 980-992` & `.agents/hooks.json`):** Mở rộng `leaked_subagent_prompts` kiểm tra cả `invoke_subagent` và `send_message`; bổ sung `handle_pre_subagent` (`pre-subagent`) vào `agy_guard.py` và `.agents/hooks.json` (`data-hub/.agents/hooks.json`) để chặn rò rỉ đường dẫn/code gốc ngay tại `PreToolUse` trước khi subagent được khởi chạy, đồng thời giữ kiểm tra tại `H7` (`handle_stop`).
+- **Dữ liệu & Bằng chứng (`[Context & Logs]`):**
+  - `hooks/agy/agy_guard.py:48-72, 317-415, 760-815, 920-995`
+  - `tooling/verify_governance.py:25-28, 83-112`
+  - `.agents/hooks.json:1-53`
+- **Tiêu chí Hoàn thành (`[Definition of Done]`):**
+  - Toàn bộ unit tests trong `hooks/agy/tests/` (`test_agy_guard.py` + `test_tripwire_cleanroom.py`) và `tooling/tests/` đạt `PASS` 100%, và `3/3` mutants mới cho `G-01..G-04` bị `KILLED`.
+
+### [x] Task `T8.6`: Khắc phục `G-06` (Cài đặt & Cấu hình `rea-agents@6.7.0`) và Trace Runtime Thật Subagent Hook (`G-04`)
+- **Mô tả & Phạm vi (`[Mô tả]`):**
+  - **`G-06`:** Cài đặt `rea-agents@6.7.0` toàn cục vào `/Users/trainguyen/.nvm/versions/node/v22.18.0/bin/rea`, chạy `rea setup --client antigravity --client claude_code --yes`, liên kết skill `reverse-engineer-anything` vào `/Users/trainguyen/Documents/work/agent/skills/reverse-engineer-anything`, và kiểm chứng bằng `rea doctor --client antigravity --json` + `rea capabilities --json`.
+  - **`G-04` Runtime Trace:** Gọi thật `invoke_subagent` (`research`) và kiểm tra `/tmp/agy` trước/sau để xác minh thực nghiệm xem Antigravity có kích hoạt lifecycle hooks cho `conversationId` của subagent hay không, ghi bằng chứng vào `audit_report_clean_room_and_mutation_gate.md`.
+- **Dữ liệu & Bằng chứng (`[Context & Logs]`):**
+  - `/Users/trainguyen/.nvm/versions/node/v22.18.0/bin/rea` (`v6.7.0`)
+  - `/Users/trainguyen/.gemini/config/mcp_config.json` & `/Users/trainguyen/.claude.json`
+  - `/tmp/agy/*.boot`
+- **Tiêu chí Hoàn thành (`[Definition of Done]`):**
+  - `which rea`, `rea --version`, `rea doctor --client antigravity --json` đạt `aligned`, và hoàn tất vòng `S5 -> S6` (`DG3 PASS`, `verify_governance.py PASSED 🟢`).
+
