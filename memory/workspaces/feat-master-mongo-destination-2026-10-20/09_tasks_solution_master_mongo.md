@@ -315,4 +315,3 @@ if engineType == "mongodb" {
 | **`D-BEHAV`** | `demo` | `bulkUpsertMasterMongo` gọi `coll.BulkWrite` với `options.BulkWrite().SetOrdered(true)`. | `09_tasks_solution_master_mongo.md:243-250` | `CORRECT (0.8178)` | `YES (0.9400)` | **`ACCEPT`** 🟢 |
 | **`D-EDGE`** | `demo` | Khi `len(records) == 0`, `bulkUpsertMasterMongo` trả về ngay `0, 0, 0, nil` mà không gọi MongoDB. | `09_tasks_solution_master_mongo.md:182-185` | `CORRECT (0.5363)` | `NO (0.0385)` | **`ACCEPT`** 🟢 |
 | **`D-API`** | `demo` | Câu truy vấn GORM trong `ConnectionManager` tra cứu `cdc_system.connection_registry` với `status = 'active'`. | `connection_manager.go:93-96` | `CORRECT (0.7061)` | `YES (0.8420)` | **`ACCEPT`** 🟢 |
-

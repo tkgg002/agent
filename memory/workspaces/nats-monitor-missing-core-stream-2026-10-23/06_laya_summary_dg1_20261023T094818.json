@@ -1,0 +1,174 @@
+{
+  "mode": "claim",
+  "stage": "dg1",
+  "workspace": "nats-monitor-missing-core-stream-2026-10-23",
+  "ts": "20261023T094818",
+  "trusted_rounds": [
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/nats-monitor-missing-core-stream-2026-10-23/06_laya_raw_dg1_20261023T094818.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "When CDC_TRANSMUTE stream is missing on JetStream, publishTransmuteTrigger retries bb.js.PublishMsg up to 3 times and falls back to Core NATS on subject cdc.cmd.transmute-shadow.core-fallback, while EnsureStreams returns early if the first stream fails and ReconnectHandler does not re-run EnsureStreams.",
+      "decision": "FLAG",
+      "resolved": "Verified directly in code: publishTransmuteTrigger retries 3 times then publishes to cdc.cmd.transmute-shadow.core-fallback, EnsureStreams returns on first error, and ReconnectHandler only logs. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:105-125",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5826
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1613
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4371
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In cdc-cms-service, EnsureStreams currently defines only 3 streams (missing CDC_TRANSMUTE) and buildNATSGovernance appends MISSING_CORE_STREAM alerts when canonicalCoreStreamOrder streams are missing from seenCoreStreams.",
+      "decision": "FLAG",
+      "resolved": "Verified directly in code: cdc-cms-service EnsureStreams only defines 3 streams (missing CDC_TRANSMUTE) and buildNATSGovernance emits MISSING_CORE_STREAM when any stream in canonicalCoreStreamOrder is absent. REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/pkgs/natsconn/nats_client.go:71-80",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5033
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1409
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.0001
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "canonicalCoreStreams in nats_monitor_handler.go defines the expected retention policies, max bytes, and max age for CDC_EVENTS, CDC_TRANSMUTE (workqueue), SCHEMA_DRIFT, and SCHEMA_CONFIG.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3038
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1538
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7932
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "TransmuteConsumerPool in centralized-data-service uses a mutex and stopCh channel pattern and binds worker subscriptions to p.cfg.StreamName and p.cfg.ConsumerName.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0608
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.0752
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6484
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the demo solution, EnsureStreams iterates over all desiredStreams and collects per-stream errors via errors.Join instead of returning early on the first stream failure.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2444
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3937
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8244
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the demo solution, watchdogLoop exits cleanly when stopCh is closed and checks sub.IsValid() and ConsumerInfo under p.mu lock.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5007
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6459
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7567
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the demo solution, NATSMonitorHandler.Overview calls h.natsClient.EnsureStreams() when h.hasMissingCoreStreams(jsz) is true and then calls h.fetchJSON to refresh jsz.",
+      "decision": "FLAG",
+      "resolved": "Verified directly in code: NATSMonitorHandler.Overview queries /jsz and can invoke h.natsClient.EnsureStreams() before re-fetching /jsz without changing HTTP response contract. REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:154-175",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4447
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.2382
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4189
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

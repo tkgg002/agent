@@ -1,0 +1,764 @@
+[
+  {
+    "id": "A-FIX-1",
+    "kind": "audit",
+    "basis": "code",
+    "claim": "EnsureDefaultMasterConnection takes (ctx, db, logger) and runs an UPDATE that sets host, port and default_database to NULL on default_master when options_json has no dsn/url/username/user.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:18-53\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error\n\tif err != nil {\n\t\treturn fmt.Errorf(\"seed default_master connection: %w\", err)\n\t}\n\n\t// Dọn host/port/default_database đã bị ghi nhầm vào default_master khi dòng này\n\t// không có credentials/DSN trong options_json (chỉ là metadata của pool mặc định).\n\tres := db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.connection_registry\n\t\t   SET host = NULL,\n\t\t       port = NULL,\n\t\t       default_database = NULL,\n\t\t       updated_at = NOW()\n\t\t WHERE connection_code = 'default_master'\n\t\t   AND COALESCE(options_json->>'dsn', options_json->>'url', options_json->>'username', options_json->>'user', '') = ''\n\t\t   AND (host IS NOT NULL OR port IS NOT NULL OR default_database IS NOT NULL)\n\t`)\n\tif res.Error != nil {\n\t\treturn fmt.Errorf(\"cleanup default_master connection fields: %w\", res.Error)\n\t}\n\n\tlogger.Info(\"master connection seeded\",\n\t\tzap.String(\"connection_code\", \"default_master\"),\n\t\tzap.Int64(\"cleaned_rows\", res.RowsAffected))\n\treturn nil",
+    "flow": "Seed metadata-only row, then clean wrongly written connection fields.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6771,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9102,
+                "INCORRECT": 0.0651,
+                "UNSUPPORTED": 0.0247
+              },
+              "confidence": 0.6771,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 790,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "EnsureDefaultMasterConnection takes (ctx, db, logger) and runs an UPDATE that sets host, port and default_database to NULL on default_master when options_json has no dsn/url/username/user.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:18-53\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error\n\tif err != nil {\n\t\treturn fmt.Errorf(\"seed default_master connection: %w\", err)\n\t}\n\n\t// Dọn host/port/default_database đã bị ghi nhầm vào default_master khi dòng này\n\t// không có credentials/DSN trong options_json (chỉ là metadata của pool mặc định).\n\tres := db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.connection_registry\n\t\t   SET host = NULL,\n\t\t       port = NULL,\n\t\t       default_database = NULL,\n\t\t       updated_at = NOW()\n\t\t WHERE connection_code = 'default_master'\n\t\t   AND COALESCE(options_json->>'dsn', options_json->>'url', options_json->>'username', options_json->>'user', '') = ''\n\t\t   AND (host IS NOT NULL OR port IS NOT NULL OR default_database IS NOT NULL)\n\t`)\n\tif res.Error != nil {\n\t\treturn fmt.Errorf(\"cleanup default_master connection fields: %w\", res.Error)\n\t}\n\n\tlogger.Info(\"master connection seeded\",\n\t\tzap.String(\"connection_code\", \"default_master\"),\n\t\tzap.Int64(\"cleaned_rows\", res.RowsAffected))\n\treturn nil",
+          "flow": "Seed metadata-only row, then clean wrongly written connection fields."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4932,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8279,
+                "INCORRECT": 0.1284,
+                "UNSUPPORTED": 0.0437
+              },
+              "confidence": 0.4932,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 795,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "Seed metadata-only row, then clean wrongly written connection fields.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:18-53\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error\n\tif err != nil {\n\t\treturn fmt.Errorf(\"seed default_master connection: %w\", err)\n\t}\n\n\t// Dọn host/port/default_database đã bị ghi nhầm vào default_master khi dòng này\n\t// không có credentials/DSN trong options_json (chỉ là metadata của pool mặc định).\n\tres := db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.connection_registry\n\t\t   SET host = NULL,\n\t\t       port = NULL,\n\t\t       default_database = NULL,\n\t\t       updated_at = NOW()\n\t\t WHERE connection_code = 'default_master'\n\t\t   AND COALESCE(options_json->>'dsn', options_json->>'url', options_json->>'username', options_json->>'user', '') = ''\n\t\t   AND (host IS NOT NULL OR port IS NOT NULL OR default_database IS NOT NULL)\n\t`)\n\tif res.Error != nil {\n\t\treturn fmt.Errorf(\"cleanup default_master connection fields: %w\", res.Error)\n\t}\n\n\tlogger.Info(\"master connection seeded\",\n\t\tzap.String(\"connection_code\", \"default_master\"),\n\t\tzap.Int64(\"cleaned_rows\", res.RowsAffected))\n\treturn nil",
+          "claim": "EnsureDefaultMasterConnection takes (ctx, db, logger) and runs an UPDATE that sets host, port and default_database to NULL on default_master when options_json has no dsn/url/username/user."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5682,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9114,
+                "NO": 0.0886
+              },
+              "confidence": 0.5682,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 715,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:18-53\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error\n\tif err != nil {\n\t\treturn fmt.Errorf(\"seed default_master connection: %w\", err)\n\t}\n\n\t// Dọn host/port/default_database đã bị ghi nhầm vào default_master khi dòng này\n\t// không có credentials/DSN trong options_json (chỉ là metadata của pool mặc định).\n\tres := db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.connection_registry\n\t\t   SET host = NULL,\n\t\t       port = NULL,\n\t\t       default_database = NULL,\n\t\t       updated_at = NOW()\n\t\t WHERE connection_code = 'default_master'\n\t\t   AND COALESCE(options_json->>'dsn', options_json->>'url', options_json->>'username', options_json->>'user', '') = ''\n\t\t   AND (host IS NOT NULL OR port IS NOT NULL OR default_database IS NOT NULL)\n\t`)\n\tif res.Error != nil {\n\t\treturn fmt.Errorf(\"cleanup default_master connection fields: %w\", res.Error)\n\t}\n\n\tlogger.Info(\"master connection seeded\",\n\t\tzap.String(\"connection_code\", \"default_master\"),\n\t\tzap.Int64(\"cleaned_rows\", res.RowsAffected))\n\treturn nil",
+          "claim": "EnsureDefaultMasterConnection takes (ctx, db, logger) and runs an UPDATE that sets host, port and default_database to NULL on default_master when options_json has no dsn/url/username/user."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-FIX-5",
+    "kind": "audit",
+    "basis": "code",
+    "claim": "In MasterRegistry.tsx, the Edit button is enabled for all rows so users can open the modal to view transform_type and spec, while saving and editing are disabled when editRow.schema_status is approved.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1001-1016\n          <Tooltip title={r.schema_status === 'approved' ? 'Xem transform_type + spec (Reject trước nếu muốn sửa)' : 'Sửa transform_type + spec'}>\n            <Button\n              size=\"small\"\n              icon={<EditOutlined />}\n              onClick={() => {\n                setEditRow(r);\n                setEditForm({\n                  transform_type: r.transform_type,\n                  spec: JSON.stringify(r.spec ?? {}, null, 2),\n                });\n              }}\n              style={{ width: '100%' }}\n            >\n              Edit\n            </Button>\n          </Tooltip>\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1652-1707\n      {/* Edit Spec Modal — xem được mọi lúc, chỉ sửa được khi master CHƯA approved */}\n      <Modal\n        open={!!editRow}\n        title={`${editRow?.schema_status === 'approved' ? 'Xem Spec' : 'Edit Spec'}: ${editRow?.master_schema}.${editRow?.master_name}`}\n        okText=\"Lưu spec\"\n        cancelText={editRow?.schema_status === 'approved' ? 'Đóng' : 'Huỷ'}\n        okButtonProps={{ disabled: editRow?.schema_status === 'approved' }}\n        confirmLoading={editMut.isPending}\n        onCancel={() => { if (!editMut.isPending) setEditRow(null); }}\n        onOk={() => {\n          if (!editRow || editRow.schema_status === 'approved') return;\n          let parsedSpec: any;\n          try {\n            parsedSpec = JSON.parse(editForm.spec);\n          } catch {\n            message.error('Spec phải là JSON hợp lệ');\n            return;\n          }\n          if (!parsedSpec || typeof parsedSpec !== 'object' || Array.isArray(parsedSpec) || typeof parsedSpec.pk !== 'string' || !parsedSpec.pk.trim()) {\n            message.error('Spec (JSON) bắt buộc phải có trường \"pk\" không rỗng (ví dụ: {\"pk\":\"_id\"})');\n            return;\n          }\n          editMut.mutate({ row: editRow, transform_type: editForm.transform_type, spec: editForm.spec });\n        }}\n        width={640}\n      >\n        <Space orientation=\"vertical\" style={{ width: '100%' }} size={12}>\n          <Alert\n            type={editRow?.schema_status === 'approved' ? 'info' : 'warning'}\n            showIcon\n            title=\"Chỉ sửa được khi master chưa approved. Approved rồi phải Reject trước (DDL đã chạy).\"\n          />\n          <div>\n            <Text strong style={{ display: 'block', marginBottom: 4 }}>Transform Type</Text>\n            <Select\n              style={{ width: '100%' }}\n              value={editForm.transform_type}\n              disabled={editRow?.schema_status === 'approved'}\n              onChange={(v) => setEditForm({ ...editForm, transform_type: v })}\n              options={TRANSFORM_TYPES.map((t) => ({ label: t, value: t }))}\n            />\n          </div>\n          {editForm.transform_type === 'flatten' && (\n            <Text type=\"secondary\">\n              <InfoCircleOutlined /> Flatten yêu cầu spec có <Text code>explode_path</Text> (vd <Text code>items[*]</Text>).\n            </Text>\n          )}\n          <div>\n            <Text strong style={{ display: 'block', marginBottom: 4 }}>Spec (JSON)</Text>\n            <Input.TextArea\n              rows={8}\n              value={editForm.spec}\n              readOnly={editRow?.schema_status === 'approved'}\n              onChange={(e) => {\n                if (editRow?.schema_status === 'approved') return;\n                setEditForm({ ...editForm, spec: e.target.value });",
+    "flow": "Open modal on Edit click regardless of schema_status; disable okButtonProps, Select, and readOnly Input.TextArea when schema_status === 'approved'.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5923,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8727,
+                "INCORRECT": 0.0996,
+                "UNSUPPORTED": 0.0277
+              },
+              "confidence": 0.5923,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In MasterRegistry.tsx, the Edit button is enabled for all rows so users can open the modal to view transform_type and spec, while saving and editing are disabled when editRow.schema_status is approved.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1001-1016\n          <Tooltip title={r.schema_status === 'approved' ? 'Xem transform_type + spec (Reject trước nếu muốn sửa)' : 'Sửa transform_type + spec'}>\n            <Button\n              size=\"small\"\n              icon={<EditOutlined />}\n              onClick={() => {\n                setEditRow(r);\n                setEditForm({\n                  transform_type: r.transform_type,\n                  spec: JSON.stringify(r.spec ?? {}, null, 2),\n                });\n              }}\n              style={{ width: '100%' }}\n            >\n              Edit\n            </Button>\n          </Tooltip>\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1652-1707\n      {/* Edit Spec Modal — xem được mọi lúc, chỉ sửa được khi master CHƯA approved */}\n      <Modal\n        open={!!editRow}\n        title={`${editRow?.schema_status === 'approved' ? 'Xem Spec' : 'Edit Spec'}: ${editRow?.master_schema}.${editRow?.master_name}`}\n        okText=\"Lưu spec\"\n        cancelText={editRow?.schema_status === 'approved' ? 'Đóng' : 'Huỷ'}\n        okButtonProps={{ disabled: editRow?.schema_status === 'approved' }}\n        confirmLoading={editMut.isPending}\n        onCancel={() => { if (!editMut.isPending) setEditRow(null); }}\n        onOk={() => {\n          if (!editRow || editRow.schema_status === 'approved') return;\n          let parsedSpec: any;\n          try {\n            parsedSpec = JSON.parse(editForm.spec);\n          } catch {\n            message.error('Spec phải là JSON hợp lệ');\n            return;\n          }\n          if (!parsedSpec || typeof parsedSpec !== 'object' || Array.isArray(parsedSpec) || typeof parsedSpec.pk !== 'string' || !parsedSpec.pk.trim()) {\n            message.error('Spec (JSON) bắt buộc phải có trường \"pk\" không rỗng (ví dụ: {\"pk\":\"_id\"})');\n            return;\n          }\n          editMut.mutate({ row: editRow, transform_type: editForm.transform_type, spec: editForm.spec });\n        }}\n        width={640}\n      >\n        <Space orientation=\"vertical\" style={{ width: '100%' }} size={12}>\n          <Alert\n            type={editRow?.schema_status === 'approved' ? 'info' : 'warning'}\n            showIcon\n            title=\"Chỉ sửa được khi master chưa approved. Approved rồi phải Reject trước (DDL đã chạy).\"\n          />\n          <div>\n            <Text strong style={{ display: 'block', marginBottom: 4 }}>Transform Type</Text>\n            <Select\n              style={{ width: '100%' }}\n              value={editForm.transform_type}\n              disabled={editRow?.schema_status === 'approved'}\n              onChange={(v) => setEditForm({ ...editForm, transform_type: v })}\n              options={TRANSFORM_TYPES.map((t) => ({ label: t, value: t }))}\n            />\n          </div>\n          {editForm.transform_type === 'flatten' && (\n            <Text type=\"secondary\">\n              <InfoCircleOutlined /> Flatten yêu cầu spec có <Text code>explode_path</Text> (vd <Text code>items[*]</Text>).\n            </Text>\n          )}\n          <div>\n            <Text strong style={{ display: 'block', marginBottom: 4 }}>Spec (JSON)</Text>\n            <Input.TextArea\n              rows={8}\n              value={editForm.spec}\n              readOnly={editRow?.schema_status === 'approved'}\n              onChange={(e) => {\n                if (editRow?.schema_status === 'approved') return;\n                setEditForm({ ...editForm, spec: e.target.value });",
+          "flow": "Open modal on Edit click regardless of schema_status; disable okButtonProps, Select, and readOnly Input.TextArea when schema_status === 'approved'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3649,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7441,
+                "INCORRECT": 0.204,
+                "UNSUPPORTED": 0.0519
+              },
+              "confidence": 0.3649,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "Open modal on Edit click regardless of schema_status; disable okButtonProps, Select, and readOnly Input.TextArea when schema_status === 'approved'.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1001-1016\n          <Tooltip title={r.schema_status === 'approved' ? 'Xem transform_type + spec (Reject trước nếu muốn sửa)' : 'Sửa transform_type + spec'}>\n            <Button\n              size=\"small\"\n              icon={<EditOutlined />}\n              onClick={() => {\n                setEditRow(r);\n                setEditForm({\n                  transform_type: r.transform_type,\n                  spec: JSON.stringify(r.spec ?? {}, null, 2),\n                });\n              }}\n              style={{ width: '100%' }}\n            >\n              Edit\n            </Button>\n          </Tooltip>\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1652-1707\n      {/* Edit Spec Modal — xem được mọi lúc, chỉ sửa được khi master CHƯA approved */}\n      <Modal\n        open={!!editRow}\n        title={`${editRow?.schema_status === 'approved' ? 'Xem Spec' : 'Edit Spec'}: ${editRow?.master_schema}.${editRow?.master_name}`}\n        okText=\"Lưu spec\"\n        cancelText={editRow?.schema_status === 'approved' ? 'Đóng' : 'Huỷ'}\n        okButtonProps={{ disabled: editRow?.schema_status === 'approved' }}\n        confirmLoading={editMut.isPending}\n        onCancel={() => { if (!editMut.isPending) setEditRow(null); }}\n        onOk={() => {\n          if (!editRow || editRow.schema_status === 'approved') return;\n          let parsedSpec: any;\n          try {\n            parsedSpec = JSON.parse(editForm.spec);\n          } catch {\n            message.error('Spec phải là JSON hợp lệ');\n            return;\n          }\n          if (!parsedSpec || typeof parsedSpec !== 'object' || Array.isArray(parsedSpec) || typeof parsedSpec.pk !== 'string' || !parsedSpec.pk.trim()) {\n            message.error('Spec (JSON) bắt buộc phải có trường \"pk\" không rỗng (ví dụ: {\"pk\":\"_id\"})');\n            return;\n          }\n          editMut.mutate({ row: editRow, transform_type: editForm.transform_type, spec: editForm.spec });\n        }}\n        width={640}\n      >\n        <Space orientation=\"vertical\" style={{ width: '100%' }} size={12}>\n          <Alert\n            type={editRow?.schema_status === 'approved' ? 'info' : 'warning'}\n            showIcon\n            title=\"Chỉ sửa được khi master chưa approved. Approved rồi phải Reject trước (DDL đã chạy).\"\n          />\n          <div>\n            <Text strong style={{ display: 'block', marginBottom: 4 }}>Transform Type</Text>\n            <Select\n              style={{ width: '100%' }}\n              value={editForm.transform_type}\n              disabled={editRow?.schema_status === 'approved'}\n              onChange={(v) => setEditForm({ ...editForm, transform_type: v })}\n              options={TRANSFORM_TYPES.map((t) => ({ label: t, value: t }))}\n            />\n          </div>\n          {editForm.transform_type === 'flatten' && (\n            <Text type=\"secondary\">\n              <InfoCircleOutlined /> Flatten yêu cầu spec có <Text code>explode_path</Text> (vd <Text code>items[*]</Text>).\n            </Text>\n          )}\n          <div>\n            <Text strong style={{ display: 'block', marginBottom: 4 }}>Spec (JSON)</Text>\n            <Input.TextArea\n              rows={8}\n              value={editForm.spec}\n              readOnly={editRow?.schema_status === 'approved'}\n              onChange={(e) => {\n                if (editRow?.schema_status === 'approved') return;\n                setEditForm({ ...editForm, spec: e.target.value });",
+          "claim": "In MasterRegistry.tsx, the Edit button is enabled for all rows so users can open the modal to view transform_type and spec, while saving and editing are disabled when editRow.schema_status is approved."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.696,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9458,
+                "NO": 0.0542
+              },
+              "confidence": 0.696,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1001-1016\n          <Tooltip title={r.schema_status === 'approved' ? 'Xem transform_type + spec (Reject trước nếu muốn sửa)' : 'Sửa transform_type + spec'}>\n            <Button\n              size=\"small\"\n              icon={<EditOutlined />}\n              onClick={() => {\n                setEditRow(r);\n                setEditForm({\n                  transform_type: r.transform_type,\n                  spec: JSON.stringify(r.spec ?? {}, null, 2),\n                });\n              }}\n              style={{ width: '100%' }}\n            >\n              Edit\n            </Button>\n          </Tooltip>\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1652-1707\n      {/* Edit Spec Modal — xem được mọi lúc, chỉ sửa được khi master CHƯA approved */}\n      <Modal\n        open={!!editRow}\n        title={`${editRow?.schema_status === 'approved' ? 'Xem Spec' : 'Edit Spec'}: ${editRow?.master_schema}.${editRow?.master_name}`}\n        okText=\"Lưu spec\"\n        cancelText={editRow?.schema_status === 'approved' ? 'Đóng' : 'Huỷ'}\n        okButtonProps={{ disabled: editRow?.schema_status === 'approved' }}\n        confirmLoading={editMut.isPending}\n        onCancel={() => { if (!editMut.isPending) setEditRow(null); }}\n        onOk={() => {\n          if (!editRow || editRow.schema_status === 'approved') return;\n          let parsedSpec: any;\n          try {\n            parsedSpec = JSON.parse(editForm.spec);\n          } catch {\n            message.error('Spec phải là JSON hợp lệ');\n            return;\n          }\n          if (!parsedSpec || typeof parsedSpec !== 'object' || Array.isArray(parsedSpec) || typeof parsedSpec.pk !== 'string' || !parsedSpec.pk.trim()) {\n            message.error('Spec (JSON) bắt buộc phải có trường \"pk\" không rỗng (ví dụ: {\"pk\":\"_id\"})');\n            return;\n          }\n          editMut.mutate({ row: editRow, transform_type: editForm.transform_type, spec: editForm.spec });\n        }}\n        width={640}\n      >\n        <Space orientation=\"vertical\" style={{ width: '100%' }} size={12}>\n          <Alert\n            type={editRow?.schema_status === 'approved' ? 'info' : 'warning'}\n            showIcon\n            title=\"Chỉ sửa được khi master chưa approved. Approved rồi phải Reject trước (DDL đã chạy).\"\n          />\n          <div>\n            <Text strong style={{ display: 'block', marginBottom: 4 }}>Transform Type</Text>\n            <Select\n              style={{ width: '100%' }}\n              value={editForm.transform_type}\n              disabled={editRow?.schema_status === 'approved'}\n              onChange={(v) => setEditForm({ ...editForm, transform_type: v })}\n              options={TRANSFORM_TYPES.map((t) => ({ label: t, value: t }))}\n            />\n          </div>\n          {editForm.transform_type === 'flatten' && (\n            <Text type=\"secondary\">\n              <InfoCircleOutlined /> Flatten yêu cầu spec có <Text code>explode_path</Text> (vd <Text code>items[*]</Text>).\n            </Text>\n          )}\n          <div>\n            <Text strong style={{ display: 'block', marginBottom: 4 }}>Spec (JSON)</Text>\n            <Input.TextArea\n              rows={8}\n              value={editForm.spec}\n              readOnly={editRow?.schema_status === 'approved'}\n              onChange={(e) => {\n                if (editRow?.schema_status === 'approved') return;\n                setEditForm({ ...editForm, spec: e.target.value });",
+          "claim": "In MasterRegistry.tsx, the Edit button is enabled for all rows so users can open the modal to view transform_type and spec, while saving and editing are disabled when editRow.schema_status is approved."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "In MasterRegistry.tsx, the Edit button onClick calls setEditRow(r) and setEditForm with transform_type and JSON.stringify(r.spec ?? {}, null, 2).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1001-1016\n          <Tooltip title={r.schema_status === 'approved' ? 'Xem transform_type + spec (Reject trước nếu muốn sửa)' : 'Sửa transform_type + spec'}>\n            <Button\n              size=\"small\"\n              icon={<EditOutlined />}\n              onClick={() => {\n                setEditRow(r);\n                setEditForm({\n                  transform_type: r.transform_type,\n                  spec: JSON.stringify(r.spec ?? {}, null, 2),\n                });\n              }}\n              style={{ width: '100%' }}\n            >\n              Edit\n            </Button>\n          </Tooltip>",
+    "flow": "Populate modal state when Edit button is clicked.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.1475,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.381,
+                "INCORRECT": 0.0989,
+                "UNSUPPORTED": 0.52
+              },
+              "confidence": 0.1475,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 552,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In MasterRegistry.tsx, the Edit button onClick calls setEditRow(r) and setEditForm with transform_type and JSON.stringify(r.spec ?? {}, null, 2).",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1001-1016\n          <Tooltip title={r.schema_status === 'approved' ? 'Xem transform_type + spec (Reject trước nếu muốn sửa)' : 'Sửa transform_type + spec'}>\n            <Button\n              size=\"small\"\n              icon={<EditOutlined />}\n              onClick={() => {\n                setEditRow(r);\n                setEditForm({\n                  transform_type: r.transform_type,\n                  spec: JSON.stringify(r.spec ?? {}, null, 2),\n                });\n              }}\n              style={{ width: '100%' }}\n            >\n              Edit\n            </Button>\n          </Tooltip>",
+          "flow": "Populate modal state when Edit button is clicked."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4133,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7869,
+                "INCORRECT": 0.1531,
+                "UNSUPPORTED": 0.0599
+              },
+              "confidence": 0.4133,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 556,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "Populate modal state when Edit button is clicked.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1001-1016\n          <Tooltip title={r.schema_status === 'approved' ? 'Xem transform_type + spec (Reject trước nếu muốn sửa)' : 'Sửa transform_type + spec'}>\n            <Button\n              size=\"small\"\n              icon={<EditOutlined />}\n              onClick={() => {\n                setEditRow(r);\n                setEditForm({\n                  transform_type: r.transform_type,\n                  spec: JSON.stringify(r.spec ?? {}, null, 2),\n                });\n              }}\n              style={{ width: '100%' }}\n            >\n              Edit\n            </Button>\n          </Tooltip>",
+          "claim": "In MasterRegistry.tsx, the Edit button onClick calls setEditRow(r) and setEditForm with transform_type and JSON.stringify(r.spec ?? {}, null, 2)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.9331,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.992,
+                "NO": 0.008
+              },
+              "confidence": 0.9331,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 480,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1001-1016\n          <Tooltip title={r.schema_status === 'approved' ? 'Xem transform_type + spec (Reject trước nếu muốn sửa)' : 'Sửa transform_type + spec'}>\n            <Button\n              size=\"small\"\n              icon={<EditOutlined />}\n              onClick={() => {\n                setEditRow(r);\n                setEditForm({\n                  transform_type: r.transform_type,\n                  spec: JSON.stringify(r.spec ?? {}, null, 2),\n                });\n              }}\n              style={{ width: '100%' }}\n            >\n              Edit\n            </Button>\n          </Tooltip>",
+          "claim": "In MasterRegistry.tsx, the Edit button onClick calls setEditRow(r) and setEditForm with transform_type and JSON.stringify(r.spec ?? {}, null, 2)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In MasterRegistry.tsx, clicking the Edit button immediately deletes the master binding from PostgreSQL without opening any modal.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1001-1016\n          <Tooltip title={r.schema_status === 'approved' ? 'Xem transform_type + spec (Reject trước nếu muốn sửa)' : 'Sửa transform_type + spec'}>\n            <Button\n              size=\"small\"\n              icon={<EditOutlined />}\n              onClick={() => {\n                setEditRow(r);\n                setEditForm({\n                  transform_type: r.transform_type,\n                  spec: JSON.stringify(r.spec ?? {}, null, 2),\n                });\n              }}\n              style={{ width: '100%' }}\n            >\n              Edit\n            </Button>\n          </Tooltip>",
+    "flow": "Populate modal state when Edit button is clicked.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.0372,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4695,
+                "INCORRECT": 0.284,
+                "UNSUPPORTED": 0.2466
+              },
+              "confidence": 0.0372,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 534,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In MasterRegistry.tsx, clicking the Edit button immediately deletes the master binding from PostgreSQL without opening any modal.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1001-1016\n          <Tooltip title={r.schema_status === 'approved' ? 'Xem transform_type + spec (Reject trước nếu muốn sửa)' : 'Sửa transform_type + spec'}>\n            <Button\n              size=\"small\"\n              icon={<EditOutlined />}\n              onClick={() => {\n                setEditRow(r);\n                setEditForm({\n                  transform_type: r.transform_type,\n                  spec: JSON.stringify(r.spec ?? {}, null, 2),\n                });\n              }}\n              style={{ width: '100%' }}\n            >\n              Edit\n            </Button>\n          </Tooltip>",
+          "flow": "Populate modal state when Edit button is clicked."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4317,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7673,
+                "INCORRECT": 0.2065,
+                "UNSUPPORTED": 0.0262
+              },
+              "confidence": 0.4317,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 539,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "Populate modal state when Edit button is clicked.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1001-1016\n          <Tooltip title={r.schema_status === 'approved' ? 'Xem transform_type + spec (Reject trước nếu muốn sửa)' : 'Sửa transform_type + spec'}>\n            <Button\n              size=\"small\"\n              icon={<EditOutlined />}\n              onClick={() => {\n                setEditRow(r);\n                setEditForm({\n                  transform_type: r.transform_type,\n                  spec: JSON.stringify(r.spec ?? {}, null, 2),\n                });\n              }}\n              style={{ width: '100%' }}\n            >\n              Edit\n            </Button>\n          </Tooltip>",
+          "claim": "In MasterRegistry.tsx, clicking the Edit button immediately deletes the master binding from PostgreSQL without opening any modal."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8483,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9782,
+                "NO": 0.0218
+              },
+              "confidence": 0.8483,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 463,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1001-1016\n          <Tooltip title={r.schema_status === 'approved' ? 'Xem transform_type + spec (Reject trước nếu muốn sửa)' : 'Sửa transform_type + spec'}>\n            <Button\n              size=\"small\"\n              icon={<EditOutlined />}\n              onClick={() => {\n                setEditRow(r);\n                setEditForm({\n                  transform_type: r.transform_type,\n                  spec: JSON.stringify(r.spec ?? {}, null, 2),\n                });\n              }}\n              style={{ width: '100%' }}\n            >\n              Edit\n            </Button>\n          </Tooltip>",
+          "claim": "In MasterRegistry.tsx, clicking the Edit button immediately deletes the master binding from PostgreSQL without opening any modal."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "EnsureDefaultMasterConnection drops the entire cdc_system.connection_registry table on startup.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:18-53\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error\n\tif err != nil {\n\t\treturn fmt.Errorf(\"seed default_master connection: %w\", err)\n\t}\n\n\t// Dọn host/port/default_database đã bị ghi nhầm vào default_master khi dòng này\n\t// không có credentials/DSN trong options_json (chỉ là metadata của pool mặc định).\n\tres := db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.connection_registry\n\t\t   SET host = NULL,\n\t\t       port = NULL,\n\t\t       default_database = NULL,\n\t\t       updated_at = NOW()\n\t\t WHERE connection_code = 'default_master'\n\t\t   AND COALESCE(options_json->>'dsn', options_json->>'url', options_json->>'username', options_json->>'user', '') = ''\n\t\t   AND (host IS NOT NULL OR port IS NOT NULL OR default_database IS NOT NULL)\n\t`)\n\tif res.Error != nil {\n\t\treturn fmt.Errorf(\"cleanup default_master connection fields: %w\", res.Error)\n\t}\n\n\tlogger.Info(\"master connection seeded\",\n\t\tzap.String(\"connection_code\", \"default_master\"),\n\t\tzap.Int64(\"cleaned_rows\", res.RowsAffected))\n\treturn nil",
+    "flow": "Seed metadata-only row, then clean wrongly written connection fields.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.77,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9445,
+                "INCORRECT": 0.031,
+                "UNSUPPORTED": 0.0246
+              },
+              "confidence": 0.77,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 763,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "EnsureDefaultMasterConnection drops the entire cdc_system.connection_registry table on startup.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:18-53\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error\n\tif err != nil {\n\t\treturn fmt.Errorf(\"seed default_master connection: %w\", err)\n\t}\n\n\t// Dọn host/port/default_database đã bị ghi nhầm vào default_master khi dòng này\n\t// không có credentials/DSN trong options_json (chỉ là metadata của pool mặc định).\n\tres := db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.connection_registry\n\t\t   SET host = NULL,\n\t\t       port = NULL,\n\t\t       default_database = NULL,\n\t\t       updated_at = NOW()\n\t\t WHERE connection_code = 'default_master'\n\t\t   AND COALESCE(options_json->>'dsn', options_json->>'url', options_json->>'username', options_json->>'user', '') = ''\n\t\t   AND (host IS NOT NULL OR port IS NOT NULL OR default_database IS NOT NULL)\n\t`)\n\tif res.Error != nil {\n\t\treturn fmt.Errorf(\"cleanup default_master connection fields: %w\", res.Error)\n\t}\n\n\tlogger.Info(\"master connection seeded\",\n\t\tzap.String(\"connection_code\", \"default_master\"),\n\t\tzap.Int64(\"cleaned_rows\", res.RowsAffected))\n\treturn nil",
+          "flow": "Seed metadata-only row, then clean wrongly written connection fields."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.6053,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8832,
+                "INCORRECT": 0.0794,
+                "UNSUPPORTED": 0.0373
+              },
+              "confidence": 0.6053,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 768,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "Seed metadata-only row, then clean wrongly written connection fields.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:18-53\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error\n\tif err != nil {\n\t\treturn fmt.Errorf(\"seed default_master connection: %w\", err)\n\t}\n\n\t// Dọn host/port/default_database đã bị ghi nhầm vào default_master khi dòng này\n\t// không có credentials/DSN trong options_json (chỉ là metadata của pool mặc định).\n\tres := db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.connection_registry\n\t\t   SET host = NULL,\n\t\t       port = NULL,\n\t\t       default_database = NULL,\n\t\t       updated_at = NOW()\n\t\t WHERE connection_code = 'default_master'\n\t\t   AND COALESCE(options_json->>'dsn', options_json->>'url', options_json->>'username', options_json->>'user', '') = ''\n\t\t   AND (host IS NOT NULL OR port IS NOT NULL OR default_database IS NOT NULL)\n\t`)\n\tif res.Error != nil {\n\t\treturn fmt.Errorf(\"cleanup default_master connection fields: %w\", res.Error)\n\t}\n\n\tlogger.Info(\"master connection seeded\",\n\t\tzap.String(\"connection_code\", \"default_master\"),\n\t\tzap.Int64(\"cleaned_rows\", res.RowsAffected))\n\treturn nil",
+          "claim": "EnsureDefaultMasterConnection drops the entire cdc_system.connection_registry table on startup."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7491,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9581,
+                "NO": 0.0419
+              },
+              "confidence": 0.7491,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 688,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:18-53\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error\n\tif err != nil {\n\t\treturn fmt.Errorf(\"seed default_master connection: %w\", err)\n\t}\n\n\t// Dọn host/port/default_database đã bị ghi nhầm vào default_master khi dòng này\n\t// không có credentials/DSN trong options_json (chỉ là metadata của pool mặc định).\n\tres := db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.connection_registry\n\t\t   SET host = NULL,\n\t\t       port = NULL,\n\t\t       default_database = NULL,\n\t\t       updated_at = NOW()\n\t\t WHERE connection_code = 'default_master'\n\t\t   AND COALESCE(options_json->>'dsn', options_json->>'url', options_json->>'username', options_json->>'user', '') = ''\n\t\t   AND (host IS NOT NULL OR port IS NOT NULL OR default_database IS NOT NULL)\n\t`)\n\tif res.Error != nil {\n\t\treturn fmt.Errorf(\"cleanup default_master connection fields: %w\", res.Error)\n\t}\n\n\tlogger.Info(\"master connection seeded\",\n\t\tzap.String(\"connection_code\", \"default_master\"),\n\t\tzap.Int64(\"cleaned_rows\", res.RowsAffected))\n\treturn nil",
+          "claim": "EnsureDefaultMasterConnection drops the entire cdc_system.connection_registry table on startup."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

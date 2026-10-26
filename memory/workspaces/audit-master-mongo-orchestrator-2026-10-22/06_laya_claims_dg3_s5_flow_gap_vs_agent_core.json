@@ -1,0 +1,40 @@
+[
+  {
+    "id": "A-DIFF-01",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Kiểm tra hàm runAutonomousS4S5WithSelfHealing tại server.go dòng 1092-1103",
+    "claim": "Trong server.go dòng 1092-1103, hàm runAutonomousS4S5WithSelfHealing định nghĩa hằng số maxSelfHealLoops = 3 và chạy vòng lặp gọi s.runSingleStageWithDelay với tham số \"implement\" và \"qa\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1092-1103\nfunc (s *Server) runAutonomousS4S5WithSelfHealing(ctx context.Context, taskKey, activeRunner string, stepDelay time.Duration) error {\n\tconst maxSelfHealLoops = 3\n\tfor loop := 1; loop <= maxSelfHealLoops; loop++ {\n\t\tif err := s.runSingleStageWithDelay(ctx, taskKey, \"implement\", activeRunner, stepDelay); err != nil {\n\t\t\treturn err\n\t\t}\n\t\tif err := s.runSingleStageWithDelay(ctx, taskKey, \"qa\", activeRunner, stepDelay); err != nil {\n\t\t\treturn err\n\t\t}\n\t\tqt, err := s.findQueuedTask(ctx, taskKey)\n\t\tif err != nil || qt.Stage == queue.StageDone {\n\t\t\treturn err\n\t\t}"
+  },
+  {
+    "id": "A-APPEND-01",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Kiểm tra việc mở file append-only trong AppendImmutableProgressLog tại kernel_bridge.go dòng 350-355",
+    "claim": "Trong kernel_bridge.go dòng 350-355, hàm AppendImmutableProgressLog mở file bằng os.OpenFile với cờ os.O_APPEND|os.O_WRONLY và quyền 0o644 rồi ghi line + \"\\n\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:350-355\n\t\tf, err := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0o644)\n\t\tif err != nil {\n\t\t\treturn \"\", err\n\t\t}\n\t\t_, wErr := f.WriteString(line + \"\\n\")\n\t\t_ = f.Close()"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "flow": "Control false: khai báo sai giá trị maxSelfHealLoops trong server.go dòng 1092-1095",
+    "claim": "Trong server.go dòng 1092-1095, hằng số maxSelfHealLoops được gán giá trị bằng 99.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1092-1095\nfunc (s *Server) runAutonomousS4S5WithSelfHealing(ctx context.Context, taskKey, activeRunner string, stepDelay time.Duration) error {\n\tconst maxSelfHealLoops = 3\n\tfor loop := 1; loop <= maxSelfHealLoops; loop++ {\n\t\tif err := s.runSingleStageWithDelay(ctx, taskKey, \"implement\", activeRunner, stepDelay); err != nil {"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "flow": "Control false: khai báo sai cờ mở file trong kernel_bridge.go dòng 350-354",
+    "claim": "Trong kernel_bridge.go dòng 350-354, hàm mở file bằng cờ os.O_TRUNC để xóa toàn bộ dữ liệu cũ.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:350-354\n\t\tf, err := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0o644)\n\t\tif err != nil {\n\t\t\treturn \"\", err\n\t\t}\n\t\t_, wErr := f.WriteString(line + \"\\n\")"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "flow": "Control true: xác nhận đúng giá trị maxSelfHealLoops = 3 trong server.go dòng 1092-1095",
+    "claim": "Trong server.go dòng 1092-1095, hằng số maxSelfHealLoops được khai báo bằng 3.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1092-1095\nfunc (s *Server) runAutonomousS4S5WithSelfHealing(ctx context.Context, taskKey, activeRunner string, stepDelay time.Duration) error {\n\tconst maxSelfHealLoops = 3\n\tfor loop := 1; loop <= maxSelfHealLoops; loop++ {\n\t\tif err := s.runSingleStageWithDelay(ctx, taskKey, \"implement\", activeRunner, stepDelay); err != nil {"
+  }
+]
+

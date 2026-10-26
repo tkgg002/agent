@@ -1,0 +1,175 @@
+{
+  "mode": "claim",
+  "stage": "dg2",
+  "workspace": "audit-master-mongo-orchestrator-2026-10-22",
+  "ts": "20261022T104031",
+  "trusted_rounds": [
+    "r2"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/06_laya_raw_dg1_20261022T104031.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "Hàm BuildMongoOCCBulkModels hiện đặt điều kiện $or kiểm tra _source_ts trực tiếp vào trong filter của UpdateOneModel cùng với SetUpsert(true).",
+      "decision": "FLAG",
+      "resolved": "Đã xác minh trực tiếp tại dòng 129-147 của transmuter_mongo.go: filter gắn điều kiện kiểm tra _source_ts và model gọi SetUpsert(true). REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_mongo.go:129-147",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.1153
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1634
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.2805
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "Hàm bulkUpsertMongoMaster gọi coll.BulkWrite với SetOrdered(true) và khi gặp mongo.IsDuplicateKeyError(err) thì trả về ngay 0, 0, occSkip, nil.",
+      "decision": "FLAG",
+      "resolved": "Đã xác minh trực tiếp tại dòng 221-227 của transmuter_mongo.go: coll.BulkWrite gọi SetOrdered(true) và nhánh mongo.IsDuplicateKeyError(err) trả về 0, 0, occSkip, nil. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_mongo.go:221-227",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.8749
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2983
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0801
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "Hàm mongoCountInWindow gọi buildMongoWindowFilter với tham số extra bằng nil.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.1447
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6681
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.9103
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "Khi FindMatchingAgentWorkspace trả về ws09Path khác rỗng, handleTaskPlanningChat gọi os.WriteFile ghi nối revisionBlock vào ws09Path.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4511
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.8271
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.9079
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "Trong Code Demo, BuildMongoOCCBulkModels đặt filter chỉ gồm conflictTarget: keyVal và dùng updateDoc kiểu []bson.M{{\"$set\": setStage}} với $cond.",
+      "decision": "FLAG",
+      "resolved": "Đã xác minh trực tiếp trong Code Demo dòng 169-189 của 09_tasks_solution_audit_master_mongo_orchestrator.md: filter chỉ chứa conflictTarget và updateDoc dùng pipeline setStage. REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_audit_master_mongo_orchestrator.md:169-189",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4823
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.277
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7544
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "Trong Code Demo, khi conflictTarget bằng chuỗi rỗng thì hàm gán conflictTarget = \"_gpay_id\".",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2586
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6894
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8207
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "Trong Code Demo, hàm mongoCountInWindow truyền bson.M{\"_deleted\": bson.M{\"$ne\": true}} vào buildMongoWindowFilter.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.1986
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.8471
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8931
+        }
+      }
+    }
+  ],
+  "gate": "PASS",
+  "summary_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/06_laya_summary_dg1_20261022T104031.json"
+}

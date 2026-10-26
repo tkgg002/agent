@@ -1,0 +1,11 @@
+{
+  "id": "EV-20261026T142259-b8d1",
+  "cmd": "docker exec gpay-postgres-dest psql -U postgres -d cdc_dw -c \nBEGIN;\nDELETE FROM master_bidv_connector_service.bank_requests m\n USING (VALUES (123456789::bigint, 987654321::bigint)) AS v(old_gid, new_gid)\n WHERE m.\"_gpay_id\" = v.old_gid::bigint\n   AND EXISTS (SELECT 1 FROM master_bidv_connector_service.bank_requests m2 WHERE m2.\"_gpay_id\" = v.new_gid::bigint);\nUPDATE master_bidv_connector_service.bank_requests m\n   SET \"_gpay_id\" = v.new_gid::bigint\n  FROM (VALUES (123456789::bigint, 987654321::bigint)) AS v(old_gid, new_gid)\n WHERE m.\"_gpay_id\" = v.old_gid::bigint;\nSELECT COUNT(*) AS active_master_rows FROM master_bidv_connector_service.bank_requests WHERE NOT COALESCE(_deleted, false);\nROLLBACK;\n",
+  "cwd": "/Users/trainguyen/Documents/work/agent",
+  "kind": "runtime",
+  "exit": 2,
+  "started_at": "2026-10-26T14:22:59+07:00",
+  "stdout_tail": "psql: option requires an argument: c\npsql: hint: Try \"psql --help\" for more information.\n/bin/sh: line 1: BEGIN: command not found\n/bin/sh: line 2: DELETE: command not found\n/bin/sh: -c: line 3: syntax error near unexpected token `VALUES'\n/bin/sh: -c: line 3: ` USING (VALUES (123456789::bigint, 987654321::bigint)) AS v(old_gid, new_gid)'\n",
+  "stdout_sha256": "bd46c4740f138cabf7153f96558f160ab1f2a7bd04bdb06dbc563cf209a30022",
+  "src_fingerprint": "13082754e960b7d845ab7ee07439a2999464e8922750d59c7769fefcc5dac9b1"
+}

@@ -1,0 +1,172 @@
+{
+  "mode": "claim",
+  "stage": "dg1",
+  "workspace": "audit-recon-heal-delete-id-impact-2026-10-23",
+  "ts": "20261023T170134",
+  "trusted_rounds": [],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-recon-heal-delete-id-impact-2026-10-23/06_laya_raw_dg1_20261023T170134.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In MasterBindingRepo.ListMasterTargetsByShadowIdentity, the SQL query currently joins cdc_system.connection_registry scr ON scr.id = COALESCE(mb.shadow_connection_id, sb.shadow_connection_id), whereas cdc_system.master_binding does not have a shadow_connection_id column.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3144
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.3705
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.1688
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In BatchBuffer.resolvePostIngestSchedule and SinkWorker.resolvePostIngestSchedule, the SQL query joins cdc_system.connection_registry cr ON cr.id = COALESCE(mb.shadow_connection_id, sb.shadow_connection_id), causing PostgreSQL to return an error and trigger the fail-open branch.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6367
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2287
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.3556
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In transmuter_utils.go, resolveConflictTarget reads the primary key strictly from binding.TransformSpec via parsePKFromSpec and isMasterPKMappedFromSourcePK verifies TargetColumn == pkCol against mapping_rule_master.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5408
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.5181
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6785
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In ReconCore.ResolveShadowBindingIdentity, the query joins cdc_system.connection_registry cr ON cr.id = sb.shadow_connection_id directly on cdc_system.shadow_binding sb.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5703
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2596
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6198
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the updated Demo 2 for ListMasterTargetsByShadowIdentity, scr joins on scr.id = sb.shadow_connection_id without referencing mb.shadow_connection_id.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5615
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.5222
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8027
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In Demo 1, deleteFromMasterBySourceAndGpayIDs only deletes by pkCol when pkCol != '' && pkCol != '_gpay_id' && isMasterPKMappedFromSourcePK(binding, rules, pkCol).",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.0132
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6895
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.2607
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In Demo 3, UpdateMasterSpecCommand.Validate returns a validation error when parsed['pk'] is empty.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6801
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.2079
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0916
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

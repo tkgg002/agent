@@ -1,0 +1,82 @@
+[
+  {
+    "id": "S-RC-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "loadCLISettings in task_inspector.go sets default LayaGateModel and SecurityModel",
+    "claim": "loadCLISettings currently sets LayaGateModel to claude-sonnet-4-6 (antigravity) and SecurityModel to codex-5.3 (antigravity).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:683-694\n\tdef := CLISettingsDTO{\n\t\tDefaultRunner:      s.activeRunner,\n\t\tPlannerModel:       \"gemini-4-argon (antigravity)\",\n\t\tCoderHighModel:     \"gemini-4-argon (antigravity)\",\n\t\tCoderStdModel:      \"gemini-2.5-flash (antigravity)\",\n\t\tQAAuditorModel:     \"claude-opus-4-6 (antigravity)\",\n\t\tLayaGateModel:      \"claude-sonnet-4-6 (antigravity)\",\n\t\tSecurityModel:      \"codex-5.3 (antigravity)\",\n\t\tMaxSelfHealRetries: 3,\n\t\tAgentKernelRoot:    agentRoot,\n\t\tEnforceApproveGate: true,\n\t}"
+  },
+  {
+    "id": "S-FIX-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "lifespan in laya_router/api.py loads the real Laya engine",
+    "claim": "lifespan loads convaiinnovations/laya with subfolder multilingual via laya.load.",
+    "evidence": "REF: /Users/trainguyen/.agent/skills/laya_router/api.py:14-18\n    global router_agent\n    print(\"⏳ [STARTUP] Đang dựng ma trận và nạp Laya Weights (800MB)... Xin chờ ~30s.\")\n    # Nạp model 1 lần duy nhất khi khởi động API\n    router_agent = laya.load(\"convaiinnovations/laya\", subfolder=\"multilingual\")\n    print(\"✅ [READY] Laya Engine đã online! API định tuyến đã sẵn sàng xử lý siêu tốc.\")"
+  },
+  {
+    "id": "S-IMPACT-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "DiscoverAvailableModelRunners in antigravity.go lists real Antigravity models",
+    "claim": "DiscoverAvailableModelRunners lists gemini and claude models under antigravity and does not include codex-5.3.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:68-75\n\t\tModels: []string{\n\t\t\t\"antigravity/gemini-4-argon\",\n\t\t\t\"antigravity/gemini-4-argon-thinking\",\n\t\t\t\"antigravity/gemini-2.5-pro\",\n\t\t\t\"antigravity/gemini-2.5-flash\",\n\t\t\t\"antigravity/claude-opus-4-6\",\n\t\t\t\"antigravity/claude-sonnet-4-6\",\n\t\t},"
+  },
+  {
+    "id": "S-PATTERN-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "laya_gate.py connects to the local Laya prediction endpoint on port 8200",
+    "claim": "DEFAULT_URL in laya_gate.py points to http://127.0.0.1:8200/v1/predict.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:39-43\nAGENT_ROOT = Path(__file__).resolve().parents[1]\nDEFAULT_WS_ROOT = AGENT_ROOT / \"memory\" / \"workspaces\"\nFALLBACK_STATE_ROOT = AGENT_ROOT / \".agents\" / \"state\" / \"workspaces\"\nDEFAULT_URL = \"http://127.0.0.1:8200/v1/predict\""
+  },
+  {
+    "id": "D-BEHAV-01",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "renderAutopilot in app.js renders the model routing bar",
+    "claim": "renderAutopilot formats Planner, Coder, Cross-Model QA (Slot K), Laya Gate (Slot H), Security (Slot I), and Circuit Breaker into routingEl.innerHTML.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/app.js:1830-1834\n    const qaMdl = dashboardState.qa_auditor_model || dashboardState.cli_settings?.qa_auditor_model || \"claude-opus-4-6 (antigravity)\";\n    const layaMdl = dashboardState.laya_gate_model || dashboardState.cli_settings?.laya_gate_model || \"claude-sonnet-4-6 (antigravity)\";\n    const secMdl = dashboardState.security_model || dashboardState.cli_settings?.security_model || \"codex-5.3 (antigravity)\";\n    routingEl.innerHTML = `Planner: <b>${escapeHtml(dashboardState.planner_model || \"gemini-4-argon\")}</b> · Coder: <b>${escapeHtml(dashboardState.coder_high_model || \"gemini-4-argon\")}</b> · Cross-Model QA (Slot K): <b>${escapeHtml(qaMdl)}</b> · Laya Gate (Slot H): <b>${escapeHtml(layaMdl)}</b> · Security (Slot I): <b>${escapeHtml(secMdl)}</b> · Circuit Breaker: <b>Retry ${retryCnt}/${maxRetries}</b>`;\n  }"
+  },
+  {
+    "id": "D-EDGE-01",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "loadCLISettings in task_inspector.go upgrades legacy settings",
+    "claim": "loadCLISettings checks loaded.LayaGateModel and loaded.SecurityModel and evaluates cross-model diversity before returning loaded.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:726-740\n\tif loaded.LayaGateModel == \"\" || loaded.LayaGateModel == \"gemini-2.5-pro (antigravity)\" {\n\t\tloaded.LayaGateModel = def.LayaGateModel\n\t}\n\tif loaded.SecurityModel == \"\" || loaded.SecurityModel == \"gemini-2.5-pro (antigravity)\" ||\n\t\t(isLegacyPreCrossModel && loaded.SecurityModel == \"gemini-4-argon (antigravity)\") {\n\t\tloaded.SecurityModel = def.SecurityModel\n\t}\n\tif loaded.MaxSelfHealRetries <= 0 {\n\t\tloaded.MaxSelfHealRetries = def.MaxSelfHealRetries\n\t}\n\tif loaded.AgentKernelRoot == \"\" {\n\t\tloaded.AgentKernelRoot = def.AgentKernelRoot\n\t}\n\tEvaluateCrossModelDiversity(&loaded)\n\treturn loaded"
+  },
+  {
+    "id": "D-API-01",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "CLISettingsDTO fields in task_inspector.go",
+    "claim": "CLISettingsDTO defines QAAuditorModel, LayaGateModel, and SecurityModel JSON fields.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:38-41\n\tQAAuditorModel     string `json:\"qa_auditor_model\"`      // Slot K (Cross-Model QA): claude-opus-4-6 (antigravity)\n\tLayaGateModel      string `json:\"laya_gate_model\"`       // Slot H (Cross-Model DG1/DG2/DG3): claude-sonnet-4-6 (antigravity)\n\tSecurityModel      string `json:\"security_model\"`        // Slot I (Cross-Model Security): codex-5.3 (antigravity)\n\tAgentKernelRoot    string `json:\"agent_kernel_root\"`     // /Users/trainguyen/Documents/work/agent"
+  },
+  {
+    "id": "CTRL-F1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Control false 1",
+    "claim": "DEFAULT_URL in laya_gate.py points to http://127.0.0.1:9999/v1/chat.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:39-43\nAGENT_ROOT = Path(__file__).resolve().parents[1]\nDEFAULT_WS_ROOT = AGENT_ROOT / \"memory\" / \"workspaces\"\nFALLBACK_STATE_ROOT = AGENT_ROOT / \".agents\" / \"state\" / \"workspaces\"\nDEFAULT_URL = \"http://127.0.0.1:8200/v1/predict\""
+  },
+  {
+    "id": "CTRL-F2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Control false 2",
+    "claim": "loadCLISettings sets MaxSelfHealRetries to 99 by default.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:683-694\n\tdef := CLISettingsDTO{\n\t\tDefaultRunner:      s.activeRunner,\n\t\tPlannerModel:       \"gemini-4-argon (antigravity)\",\n\t\tCoderHighModel:     \"gemini-4-argon (antigravity)\",\n\t\tCoderStdModel:      \"gemini-2.5-flash (antigravity)\",\n\t\tQAAuditorModel:     \"claude-opus-4-6 (antigravity)\",\n\t\tLayaGateModel:      \"claude-sonnet-4-6 (antigravity)\",\n\t\tSecurityModel:      \"codex-5.3 (antigravity)\",\n\t\tMaxSelfHealRetries: 3,\n\t\tAgentKernelRoot:    agentRoot,\n\t\tEnforceApproveGate: true,\n\t}"
+  },
+  {
+    "id": "CTRL-T1",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "Control true 1",
+    "claim": "loadCLISettings sets EnforceApproveGate to true in def.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:683-694\n\tdef := CLISettingsDTO{\n\t\tDefaultRunner:      s.activeRunner,\n\t\tPlannerModel:       \"gemini-4-argon (antigravity)\",\n\t\tCoderHighModel:     \"gemini-4-argon (antigravity)\",\n\t\tCoderStdModel:      \"gemini-2.5-flash (antigravity)\",\n\t\tQAAuditorModel:     \"claude-opus-4-6 (antigravity)\",\n\t\tLayaGateModel:      \"claude-sonnet-4-6 (antigravity)\",\n\t\tSecurityModel:      \"codex-5.3 (antigravity)\",\n\t\tMaxSelfHealRetries: 3,\n\t\tAgentKernelRoot:    agentRoot,\n\t\tEnforceApproveGate: true,\n\t}"
+  }
+]

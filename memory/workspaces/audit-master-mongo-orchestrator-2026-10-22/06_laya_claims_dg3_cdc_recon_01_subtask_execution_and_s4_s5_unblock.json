@@ -1,0 +1,38 @@
+[
+  {
+    "id": "A-DIFF-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/server.go dòng 1586-1592, khi totalDiffLines > 0 và strings.Contains(builtDiff, \"diff --git \"), server gọi mergeUnifiedDiffPatches(string(existingDiff), builtDiff) rồi ghi kết quả merged vào isoMeta.DiffFile.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1586-1592\n\t\t// Merge fresh working-tree diff from affected repos with existing captured diff.patch so no Sub-Task hunk is overwritten.\n\t\tbuiltDiff := diffBuilder.String()\n\t\texistingDiff := s.readTaskOrSiblingDiffPatch(qt.ExternalID)\n\t\tif totalDiffLines > 0 && strings.Contains(builtDiff, \"diff --git \") {\n\t\t\tmerged := mergeUnifiedDiffPatches(string(existingDiff), builtDiff)\n\t\t\t_ = os.WriteFile(isoMeta.DiffFile, []byte(merged), 0o644)\n\t\t} else if len(existingDiff) > 200 && strings.Contains(string(existingDiff), \"diff --git \") {"
+  },
+  {
+    "id": "A-GATE-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/server.go dòng 3189-3195, buildTargetedRepoCheckCommand bỏ qua các đường dẫn bắt đầu bằng scratch/ hoặc docs/ khi thu thập package mục tiêu từ Sub-Task.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:3189-3195\n\t\trawRefs := st.ContextFileLine + \" \" + st.TargetFiles\n\t\tfor _, rel := range extractCandidateRelPaths(rawRefs, repoName) {\n\t\t\tcleanRel := strings.TrimPrefix(strings.TrimSuffix(rel, \"/\"), \"./\")\n\t\t\tif cleanRel == \"\" || strings.HasPrefix(cleanRel, \"scratch/\") || strings.HasPrefix(cleanRel, \"docs/\") {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tabsCandidate := filepath.Join(repoPath, cleanRel)"
+  },
+  {
+    "id": "A-RUNTIME-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/task_inspector.go dòng 1442-1458, VerifySubTaskCodeOnDisk chỉ nối subDiffRaw vào combinedPatch khi chứa \"diff --git \" và kiểm tra \" b/\"+cleanRel hoặc \"\\n+++ b/\"+cleanRel.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:1442-1458\n\ttaskPatchContent := string(s.readTaskOrSiblingDiffPatch(it.ParentKey))\n\tcombinedPatch := taskPatchContent\n\tif subDiffErr == nil && strings.Contains(string(subDiffRaw), \"diff --git \") {\n\t\tcombinedPatch = combinedPatch + \"\\n\" + string(subDiffRaw)\n\t}\n\tvar verifiedEvidences []string\n\n\t// Every candidate file/dir declared by the Sub-Task MUST be verified either in diff.patch or on disk\n\tfor _, rel := range candidates {\n\t\tcleanRel := strings.TrimPrefix(strings.TrimSuffix(rel, \"/\"), \"./\")\n\t\tcandidateOK := false\n\t\tif strings.TrimSpace(combinedPatch) != \"\" && cleanRel != \"\" {\n\t\t\tif !strings.HasSuffix(rel, \"/\") {\n\t\t\t\tif strings.Contains(combinedPatch, \" b/\"+cleanRel) || strings.Contains(combinedPatch, \"\\n+++ b/\"+cleanRel) || strings.Contains(combinedPatch, \" a/\"+cleanRel) {\n\t\t\t\t\tcandidateOK = true\n\t\t\t\t\tverifiedEvidences = append(verifiedEvidences, fmt.Sprintf(\"%s:%s (in diff.patch)\", filepath.Base(repoDir), rel))\n\t\t\t\t}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_true",
+    "claim": "Tại internal/webui/server.go dòng 1589-1591, khi totalDiffLines > 0 và builtDiff chứa \"diff --git \", server gọi mergeUnifiedDiffPatches(string(existingDiff), builtDiff).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1587-1592\n\t\tbuiltDiff := diffBuilder.String()\n\t\texistingDiff := s.readTaskOrSiblingDiffPatch(qt.ExternalID)\n\t\tif totalDiffLines > 0 && strings.Contains(builtDiff, \"diff --git \") {\n\t\t\tmerged := mergeUnifiedDiffPatches(string(existingDiff), builtDiff)\n\t\t\t_ = os.WriteFile(isoMeta.DiffFile, []byte(merged), 0o644)\n\t\t} else if len(existingDiff) > 200 && strings.Contains(string(existingDiff), \"diff --git \") {"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Tại internal/webui/server.go dòng 1587-1592, server xóa bỏ hoàn toàn isoMeta.DiffFile bằng os.Remove thay vì gọi mergeUnifiedDiffPatches.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1587-1592\n\t\tbuiltDiff := diffBuilder.String()\n\t\texistingDiff := s.readTaskOrSiblingDiffPatch(qt.ExternalID)\n\t\tif totalDiffLines > 0 && strings.Contains(builtDiff, \"diff --git \") {\n\t\t\tmerged := mergeUnifiedDiffPatches(string(existingDiff), builtDiff)\n\t\t\t_ = os.WriteFile(isoMeta.DiffFile, []byte(merged), 0o644)\n\t\t} else if len(existingDiff) > 200 && strings.Contains(string(existingDiff), \"diff --git \") {"
+  },
+  {
+    "id": "K3",
+    "kind": "control_false",
+    "claim": "Tại internal/webui/server.go dòng 3189-3195, buildTargetedRepoCheckCommand chỉ giữ lại các file trong thư mục scratch/ và bỏ qua mọi thư mục khác.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:3189-3195\n\t\trawRefs := st.ContextFileLine + \" \" + st.TargetFiles\n\t\tfor _, rel := range extractCandidateRelPaths(rawRefs, repoName) {\n\t\t\tcleanRel := strings.TrimPrefix(strings.TrimSuffix(rel, \"/\"), \"./\")\n\t\t\tif cleanRel == \"\" || strings.HasPrefix(cleanRel, \"scratch/\") || strings.HasPrefix(cleanRel, \"docs/\") {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tabsCandidate := filepath.Join(repoPath, cleanRel)"
+  }
+]

@@ -1,0 +1,39 @@
+[
+  {
+    "id": "C-REQ-01",
+    "kind": "target",
+    "claim": "Tại ensureTelegramApprovePoller trong telegram_bridge.go, trường Chat.ID được khai báo kiểu any và được chuyển sang chuỗi bằng fmt.Sprintf(\"%v\", upd.Message.Chat.ID) để so sánh với cfg.ChatID.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:728-776\n\t\t\t\t\t} else if upd.Message != nil && strings.TrimSpace(upd.Message.Text) != \"\" {\n\t\t\t\t\t\tcID := fmt.Sprintf(\"%v\", upd.Message.Chat.ID)\n\t\t\t\t\t\tif cfg.ChatID == \"\" || cfg.ChatID == cID {\n\t\t\t\t\t\t\t_, _ = s.processIncomingTelegramCommand(context.Background(), \"\", upd.Message.Text, cID, upd.Message.From.Username, 3*time.Second)\n\t\t\t\t\t\t}\n\t\t\t\t\t}"
+  },
+  {
+    "id": "C-REALITY-01",
+    "kind": "target",
+    "claim": "Hàm triggerS5ToS3RePlan trong telegram_bridge.go kiểm tra strings.HasPrefix(st.SubTaskID, \"TASK-A\") để đặt hasAuditSubTasks = true khi duyệt danh sách subTasks.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:978-988\n\thasAuditSubTasks := false\n\tfor _, st := range subTasks {\n\t\tif strings.HasPrefix(st.SubTaskID, \"TASK-A\") {\n\t\t\thasAuditSubTasks = true\n\t\t}\n\t\tif !strings.EqualFold(st.Status, \"done\") {\n\t\t\tmissingIDs = append(missingIDs, st.SubTaskID)\n\t\t\tmissingBullets = append(missingBullets, fmt.Sprintf(\"  - **`%s` (`%s` — `%s`):** %s\", st.SubTaskID, st.TargetRepoName, st.TargetFiles, st.Title))\n\t\t}\n\t}"
+  },
+  {
+    "id": "C-CONTRA-01",
+    "kind": "target",
+    "claim": "Hàm synthesizeIsolatedRemediationDiffIfApproved trong telegram_bridge.go kiểm tra sự tồn tại của cả hai file .user-approved và .audit-remediation-ready trong isoMeta.ArtifactDir.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:907-916\nfunc (s *Server) synthesizeIsolatedRemediationDiffIfApproved(ctx context.Context, qt queue.QueuedTask, isoMeta TaskIsolationDTO, subTasks []SubTaskDTO) bool {\n\tapprovedMarker := filepath.Join(isoMeta.ArtifactDir, \".user-approved\")\n\tif _, err := os.Stat(approvedMarker); err != nil {\n\t\treturn false\n\t}\n\tremediationMarker := filepath.Join(isoMeta.ArtifactDir, \".audit-remediation-ready\")\n\tif _, err := os.Stat(remediationMarker); err != nil {\n\t\treturn false\n\t}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Trong telegram_bridge.go hoàn toàn không có hàm synthesizeIsolatedRemediationDiffIfApproved và không bao giờ kiểm tra file .audit-remediation-ready.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:907-916\nfunc (s *Server) synthesizeIsolatedRemediationDiffIfApproved(ctx context.Context, qt queue.QueuedTask, isoMeta TaskIsolationDTO, subTasks []SubTaskDTO) bool {\n\tapprovedMarker := filepath.Join(isoMeta.ArtifactDir, \".user-approved\")\n\tif _, err := os.Stat(approvedMarker); err != nil {\n\t\treturn false\n\t}\n\tremediationMarker := filepath.Join(isoMeta.ArtifactDir, \".audit-remediation-ready\")\n\tif _, err := os.Stat(remediationMarker); err != nil {\n\t\treturn false\n\t}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Trong server_test.go, bước 4a yêu cầu TASK-ISO-A phải chuyển thẳng sang trạng thái DONE dù chưa có diff.patch.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server_test.go:484-487\n\tif afterBlocked.ActiveTaskStage != \"NEEDS_YOU\" {\n\t\tt.Fatalf(\"SA-01 violation: expected approve_and_run without diff/code on disk to HARD-BLOCK at NEEDS_YOU even when 09_tasks_solution.md exists, got %q\", afterBlocked.ActiveTaskStage)\n\t}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Hàm NewServer trong server.go khởi tạo Server, xây dựng panes ban đầu và gọi s.ensureTelegramApprovePoller().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:299-302\n\ts.panes = s.buildInitialRealPanes(ctx)\n\ts.ensureTelegramApprovePoller()\n\treturn s"
+  }
+]
+

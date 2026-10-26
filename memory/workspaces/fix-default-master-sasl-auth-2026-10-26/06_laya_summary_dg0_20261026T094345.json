@@ -1,0 +1,82 @@
+{
+  "mode": "claim",
+  "stage": "dg0",
+  "workspace": "fix-default-master-sasl-auth-2026-10-26",
+  "ts": "20261026T094345",
+  "trusted_rounds": [
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-default-master-sasl-auth-2026-10-26/06_laya_raw_dg0_20261026T094345.json",
+  "claims": [
+    {
+      "id": "C-REQ",
+      "kind": "critique",
+      "basis": "code",
+      "claim": "In connection_manager.go, GetMasterDB only short-circuits to RoleDestination when key is empty or 'default', and for 'default_master' it queries cdc_system.connection_registry and calls buildDSNFromFieldsPatched(&conn) when dsn is empty.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "INCORRECT",
+          "confidence": 0.2471
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.174
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7548
+        }
+      }
+    },
+    {
+      "id": "C-REALITY",
+      "kind": "critique",
+      "basis": "code",
+      "claim": "In master_connection.go, EnsureDefaultMasterConnection falls back to cfg.Host, cfg.Port, and cfg.Database (CMS control-plane DB cdc_cms_database) and updates connection_code='default_master' in cdc_system.connection_registry without setting options_json credentials.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:21-55 — host falls back to cfg.Host (L22), port to cfg.Port (L24), database to cfg.Database (L39), and ON CONFLICT (connection_code) DO UPDATE updates host, port, default_database for 'default_master' without setting options_json.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.7226
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3114
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4613
+        }
+      }
+    },
+    {
+      "id": "C-CONTRA",
+      "kind": "critique",
+      "basis": "code",
+      "claim": "In metadata_registry_service.go, buildDSNFromFieldsPatched constructs a postgres:// URL with empty userInfo when conn.Host, conn.Port, and conn.DefaultDatabase are non-empty even if OptionsJSON has no username or password.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/metadata_registry_service.go:561-583 — when username is empty, userInfo remains empty string and fmt.Sprintf('postgres://%s%s:%d/%s?sslmode=%s%s', userInfo, host, port, db, sslmode, searchPath) returns a credential-less DSN.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4469
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3284
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.3037
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

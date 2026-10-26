@@ -39,6 +39,11 @@ description: >-
   - `HYPOTHESIS`: Giả thuyết chưa có log/runtime chứng minh.
 - Kiểm tra toàn bộ caller/consumer của hàm/schema/contract dự kiến thay đổi (`Blast Radius`).
 
+### Bước 2.5 — S2.5: Wave Phản Biện Trước Khi Lên Plan (`Pre-Plan Adversarial Critique & Reality Check — DG0`)
+- Trước khi đặt bút viết `09_tasks_solution_<suffix>.md`, **BẮT BUỘC** phản biện ngược toàn bộ giả định/ví dụ/model/CLI trong prompt đối chiếu với `file:line` và binary/model thực tế trên máy:
+  - Nếu prompt nêu ví dụ hoặc yêu cầu chứa tên model/công cụ không tồn tại trên máy hoặc trái bản chất kiến trúc thật (ví dụ gán LLM cho `Laya Gate :8200` hay gán `codex-5.3` khi `which codex` không tồn tại) → **BẮT BUỘC "la làng lên"** (bác bỏ ngay bằng bằng chứng vật lý, tuyệt đối cấm cắm đầu làm theo).
+  - Chạy `/laya_router` local (`laya_gate.py run --stage dg0`, `:8200`, **0 LLM token**) để kiểm định các claim thực tế (`C-REQ`, `C-REALITY`, `C-CONTRA`) trước khi lên Plan `S3`.
+
 ### Bước 3 — S3: Thiết kế Giải pháp Duy nhất & Code Demo (`09_tasks_solution_*.md`)
 - Trình bày **ĐÚNG MỘT PHƯƠNG ÁN TỐI ƯU NHẤT** (Rule #9 — cấm liệt kê Option 1, Option 2, Option 3 bắt User chọn).
 - Cấu trúc bắt buộc của `09_tasks_solution_<suffix>.md`:

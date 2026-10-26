@@ -16,10 +16,11 @@ description: >-
 > `/Users/trainguyen/.venv/bin/python3 /Users/trainguyen/.agent/skills/laya_router/api.py`
 > *(Lưu ý: Cold start nạp model ~800MB mất ~30s; trong lúc nạp server trả HTTP 503 — `laya_gate.py` tự động chờ/retry).*
 
-## 1. Ba Cổng Quyết Định Bắt Buộc Trong Master Workflow
+## 1. Bốn Cổng Quyết Định Bắt Buộc Trong Master Workflow (`Local :8200 · 0 LLM Token`)
 
 | Gate | Thời điểm chạy | Chế độ | Các Claim bắt buộc |
 |------|----------------|--------|--------------------|
+| **DG0 — Phản biện Trước Plan (`S2.5`)** | Sau `S2 Investigate`, **TRƯỚC** khi viết `09_tasks_solution_*.md` | Mode A (`run --stage dg0`) | `C-REQ` (Mục tiêu thật của User), `C-REALITY` (Sự thật vật lý tại `REF:` / binary trên máy), `C-CONTRA` (Bác bỏ các giả định/ví dụ sai thực tế trong prompt) |
 | **DG1 — Giải pháp** | Trước khi trình `09_tasks_solution_*.md` (cuối S3) | Mode A (`run --stage dg1`) | `S-RC` (Root cause tại `REF:`), `S-FIX` (Thay đổi loại bỏ lỗi), `S-IMPACT` (Caller/consumer không vỡ), `S-PATTERN` (Đúng pattern dự án) |
 | **DG2 — Code Demo** | Cho các khối code demo trong `09_tasks_solution_*.md` | Mode A (`run --stage dg2`) | `D-BEHAV` (Hành vi chính), `D-EDGE` (Xử lý biên/lỗi), `D-API` (Chỉ gọi hàm/field có thật tại `REF:`) |
 | **DG3 — Audit / Self-Audit** | Khi Audit theo yêu cầu User hoặc ở chặng `S5 SELF-AUDIT` | Mode A (`run --stage dg3`) & Mode B (`review`) | `A-F` (Mỗi finding có `REF:`), `A-R` (Mỗi requirement `R1..Rn` đạt tại `REF:`), `A-SCOPE` (Không vượt phạm vi duyệt) + Review `git diff -U30` |

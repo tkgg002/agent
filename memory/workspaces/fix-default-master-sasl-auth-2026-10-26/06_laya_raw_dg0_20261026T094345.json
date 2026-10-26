@@ -1,0 +1,911 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "critique",
+    "claim": "In connection_manager.go, GetMasterDB only short-circuits to RoleDestination when key is empty or 'default', and for 'default_master' it queries cdc_system.connection_registry and calls buildDSNFromFieldsPatched(&conn) when dsn is empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:58-122\nfunc (m *ConnectionManager) GetMasterDB(ctx context.Context, key string) (*gorm.DB, error) {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" || key == \"default\" {\n\t\treturn m.reg.GetDB(database.RoleDestination)\n\t}\n\n\tm.masterPoolMu.RLock()\n\tif db, ok := m.masterDBPool[key]; ok && db != nil {\n\t\tm.masterPoolMu.RUnlock()\n\t\treturn db, nil\n\t}\n\tm.masterPoolMu.RUnlock()\n\n\tm.masterPoolMu.Lock()\n\tdefer m.masterPoolMu.Unlock()\n\n\t// Double-check cache\n\tif db, ok := m.masterDBPool[key]; ok && db != nil {\n\t\treturn db, nil\n\t}\n\n\t// 1. Check connection overrides\n\tvar dsn string\n\tif m.cfg != nil && len(m.cfg.ConnectionOverrides) > 0 {\n\t\tif v, ok := m.cfg.ConnectionOverrides[key]; ok && strings.TrimSpace(v) != \"\" {\n\t\t\tdsn = strings.TrimSpace(v)\n\t\t} else if v, ok := m.cfg.ConnectionOverrides[strings.ToLower(key)]; ok && strings.TrimSpace(v) != \"\" {\n\t\t\tdsn = strings.TrimSpace(v)\n\t\t}\n\t}\n\n\t// 2. Query system DB for connection_registry\n\tvar foundActiveMasterRecord bool\n\tif dsn == \"\" {\n\t\tsysDB, err := m.GetSystemDB(ctx)\n\t\tif err == nil && sysDB != nil {\n\t\t\tvar conn modelsource.ConnectionRegistry\n\t\t\tqErr := sysDB.WithContext(ctx).Table(\"cdc_system.connection_registry\").\n\t\t\t\tWhere(\"(connection_code = ? OR connection_code = ?) AND status = 'active'\", key, strings.ToLower(key)).\n\t\t\t\tFirst(&conn).Error\n\t\t\tif qErr == nil {\n\t\t\t\tfoundActiveMasterRecord = true\n\t\t\t\tif len(conn.OptionsJSON) > 0 {\n\t\t\t\t\tvar opts map[string]interface{}\n\t\t\t\t\tif err := json.Unmarshal(conn.OptionsJSON, &opts); err == nil {\n\t\t\t\t\t\tif dsnVal, ok := opts[\"dsn\"].(string); ok && strings.TrimSpace(dsnVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(dsnVal)\n\t\t\t\t\t\t} else if urlVal, ok := opts[\"url\"].(string); ok && strings.TrimSpace(urlVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(urlVal)\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" && conn.SecretRef != \"\" {\n\t\t\t\t\tif plain := tryPlainDSN(conn.SecretRef); plain != \"\" {\n\t\t\t\t\t\tdsn = plain\n\t\t\t\t\t} else if envVal := tryEnvPointer(conn.SecretRef); envVal != \"\" {\n\t\t\t\t\t\tdsn = envVal\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" {\n\t\t\t\t\tdsn = buildDSNFromFieldsPatched(&conn)\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}",
+    "flow": "GetMasterDB queries cdc_system.connection_registry for key='default_master' and invokes buildDSNFromFieldsPatched(&conn) when OptionsJSON and SecretRef do not yield a DSN.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.2471,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.4325,
+                "INCORRECT": 0.528,
+                "UNSUPPORTED": 0.0394
+              },
+              "confidence": 0.2471,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In connection_manager.go, GetMasterDB only short-circuits to RoleDestination when key is empty or 'default', and for 'default_master' it queries cdc_system.connection_registry and calls buildDSNFromFieldsPatched(&conn) when dsn is empty.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:58-122\nfunc (m *ConnectionManager) GetMasterDB(ctx context.Context, key string) (*gorm.DB, error) {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" || key == \"default\" {\n\t\treturn m.reg.GetDB(database.RoleDestination)\n\t}\n\n\tm.masterPoolMu.RLock()\n\tif db, ok := m.masterDBPool[key]; ok && db != nil {\n\t\tm.masterPoolMu.RUnlock()\n\t\treturn db, nil\n\t}\n\tm.masterPoolMu.RUnlock()\n\n\tm.masterPoolMu.Lock()\n\tdefer m.masterPoolMu.Unlock()\n\n\t// Double-check cache\n\tif db, ok := m.masterDBPool[key]; ok && db != nil {\n\t\treturn db, nil\n\t}\n\n\t// 1. Check connection overrides\n\tvar dsn string\n\tif m.cfg != nil && len(m.cfg.ConnectionOverrides) > 0 {\n\t\tif v, ok := m.cfg.ConnectionOverrides[key]; ok && strings.TrimSpace(v) != \"\" {\n\t\t\tdsn = strings.TrimSpace(v)\n\t\t} else if v, ok := m.cfg.ConnectionOverrides[strings.ToLower(key)]; ok && strings.TrimSpace(v) != \"\" {\n\t\t\tdsn = strings.TrimSpace(v)\n\t\t}\n\t}\n\n\t// 2. Query system DB for connection_registry\n\tvar foundActiveMasterRecord bool\n\tif dsn == \"\" {\n\t\tsysDB, err := m.GetSystemDB(ctx)\n\t\tif err == nil && sysDB != nil {\n\t\t\tvar conn modelsource.ConnectionRegistry\n\t\t\tqErr := sysDB.WithContext(ctx).Table(\"cdc_system.connection_registry\").\n\t\t\t\tWhere(\"(connection_code = ? OR connection_code = ?) AND status = 'active'\", key, strings.ToLower(key)).\n\t\t\t\tFirst(&conn).Error\n\t\t\tif qErr == nil {\n\t\t\t\tfoundActiveMasterRecord = true\n\t\t\t\tif len(conn.OptionsJSON) > 0 {\n\t\t\t\t\tvar opts map[string]interface{}\n\t\t\t\t\tif err := json.Unmarshal(conn.OptionsJSON, &opts); err == nil {\n\t\t\t\t\t\tif dsnVal, ok := opts[\"dsn\"].(string); ok && strings.TrimSpace(dsnVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(dsnVal)\n\t\t\t\t\t\t} else if urlVal, ok := opts[\"url\"].(string); ok && strings.TrimSpace(urlVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(urlVal)\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" && conn.SecretRef != \"\" {\n\t\t\t\t\tif plain := tryPlainDSN(conn.SecretRef); plain != \"\" {\n\t\t\t\t\t\tdsn = plain\n\t\t\t\t\t} else if envVal := tryEnvPointer(conn.SecretRef); envVal != \"\" {\n\t\t\t\t\t\tdsn = envVal\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" {\n\t\t\t\t\tdsn = buildDSNFromFieldsPatched(&conn)\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}",
+          "flow": "GetMasterDB queries cdc_system.connection_registry for key='default_master' and invokes buildDSNFromFieldsPatched(&conn) when OptionsJSON and SecretRef do not yield a DSN."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.174,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5036,
+                "INCORRECT": 0.4193,
+                "UNSUPPORTED": 0.0771
+              },
+              "confidence": 0.174,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "GetMasterDB queries cdc_system.connection_registry for key='default_master' and invokes buildDSNFromFieldsPatched(&conn) when OptionsJSON and SecretRef do not yield a DSN.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:58-122\nfunc (m *ConnectionManager) GetMasterDB(ctx context.Context, key string) (*gorm.DB, error) {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" || key == \"default\" {\n\t\treturn m.reg.GetDB(database.RoleDestination)\n\t}\n\n\tm.masterPoolMu.RLock()\n\tif db, ok := m.masterDBPool[key]; ok && db != nil {\n\t\tm.masterPoolMu.RUnlock()\n\t\treturn db, nil\n\t}\n\tm.masterPoolMu.RUnlock()\n\n\tm.masterPoolMu.Lock()\n\tdefer m.masterPoolMu.Unlock()\n\n\t// Double-check cache\n\tif db, ok := m.masterDBPool[key]; ok && db != nil {\n\t\treturn db, nil\n\t}\n\n\t// 1. Check connection overrides\n\tvar dsn string\n\tif m.cfg != nil && len(m.cfg.ConnectionOverrides) > 0 {\n\t\tif v, ok := m.cfg.ConnectionOverrides[key]; ok && strings.TrimSpace(v) != \"\" {\n\t\t\tdsn = strings.TrimSpace(v)\n\t\t} else if v, ok := m.cfg.ConnectionOverrides[strings.ToLower(key)]; ok && strings.TrimSpace(v) != \"\" {\n\t\t\tdsn = strings.TrimSpace(v)\n\t\t}\n\t}\n\n\t// 2. Query system DB for connection_registry\n\tvar foundActiveMasterRecord bool\n\tif dsn == \"\" {\n\t\tsysDB, err := m.GetSystemDB(ctx)\n\t\tif err == nil && sysDB != nil {\n\t\t\tvar conn modelsource.ConnectionRegistry\n\t\t\tqErr := sysDB.WithContext(ctx).Table(\"cdc_system.connection_registry\").\n\t\t\t\tWhere(\"(connection_code = ? OR connection_code = ?) AND status = 'active'\", key, strings.ToLower(key)).\n\t\t\t\tFirst(&conn).Error\n\t\t\tif qErr == nil {\n\t\t\t\tfoundActiveMasterRecord = true\n\t\t\t\tif len(conn.OptionsJSON) > 0 {\n\t\t\t\t\tvar opts map[string]interface{}\n\t\t\t\t\tif err := json.Unmarshal(conn.OptionsJSON, &opts); err == nil {\n\t\t\t\t\t\tif dsnVal, ok := opts[\"dsn\"].(string); ok && strings.TrimSpace(dsnVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(dsnVal)\n\t\t\t\t\t\t} else if urlVal, ok := opts[\"url\"].(string); ok && strings.TrimSpace(urlVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(urlVal)\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" && conn.SecretRef != \"\" {\n\t\t\t\t\tif plain := tryPlainDSN(conn.SecretRef); plain != \"\" {\n\t\t\t\t\t\tdsn = plain\n\t\t\t\t\t} else if envVal := tryEnvPointer(conn.SecretRef); envVal != \"\" {\n\t\t\t\t\t\tdsn = envVal\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" {\n\t\t\t\t\tdsn = buildDSNFromFieldsPatched(&conn)\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}",
+          "claim": "In connection_manager.go, GetMasterDB only short-circuits to RoleDestination when key is empty or 'default', and for 'default_master' it queries cdc_system.connection_registry and calls buildDSNFromFieldsPatched(&conn) when dsn is empty."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7548,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9594,
+                "NO": 0.0406
+              },
+              "confidence": 0.7548,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:58-122\nfunc (m *ConnectionManager) GetMasterDB(ctx context.Context, key string) (*gorm.DB, error) {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" || key == \"default\" {\n\t\treturn m.reg.GetDB(database.RoleDestination)\n\t}\n\n\tm.masterPoolMu.RLock()\n\tif db, ok := m.masterDBPool[key]; ok && db != nil {\n\t\tm.masterPoolMu.RUnlock()\n\t\treturn db, nil\n\t}\n\tm.masterPoolMu.RUnlock()\n\n\tm.masterPoolMu.Lock()\n\tdefer m.masterPoolMu.Unlock()\n\n\t// Double-check cache\n\tif db, ok := m.masterDBPool[key]; ok && db != nil {\n\t\treturn db, nil\n\t}\n\n\t// 1. Check connection overrides\n\tvar dsn string\n\tif m.cfg != nil && len(m.cfg.ConnectionOverrides) > 0 {\n\t\tif v, ok := m.cfg.ConnectionOverrides[key]; ok && strings.TrimSpace(v) != \"\" {\n\t\t\tdsn = strings.TrimSpace(v)\n\t\t} else if v, ok := m.cfg.ConnectionOverrides[strings.ToLower(key)]; ok && strings.TrimSpace(v) != \"\" {\n\t\t\tdsn = strings.TrimSpace(v)\n\t\t}\n\t}\n\n\t// 2. Query system DB for connection_registry\n\tvar foundActiveMasterRecord bool\n\tif dsn == \"\" {\n\t\tsysDB, err := m.GetSystemDB(ctx)\n\t\tif err == nil && sysDB != nil {\n\t\t\tvar conn modelsource.ConnectionRegistry\n\t\t\tqErr := sysDB.WithContext(ctx).Table(\"cdc_system.connection_registry\").\n\t\t\t\tWhere(\"(connection_code = ? OR connection_code = ?) AND status = 'active'\", key, strings.ToLower(key)).\n\t\t\t\tFirst(&conn).Error\n\t\t\tif qErr == nil {\n\t\t\t\tfoundActiveMasterRecord = true\n\t\t\t\tif len(conn.OptionsJSON) > 0 {\n\t\t\t\t\tvar opts map[string]interface{}\n\t\t\t\t\tif err := json.Unmarshal(conn.OptionsJSON, &opts); err == nil {\n\t\t\t\t\t\tif dsnVal, ok := opts[\"dsn\"].(string); ok && strings.TrimSpace(dsnVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(dsnVal)\n\t\t\t\t\t\t} else if urlVal, ok := opts[\"url\"].(string); ok && strings.TrimSpace(urlVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(urlVal)\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" && conn.SecretRef != \"\" {\n\t\t\t\t\tif plain := tryPlainDSN(conn.SecretRef); plain != \"\" {\n\t\t\t\t\t\tdsn = plain\n\t\t\t\t\t} else if envVal := tryEnvPointer(conn.SecretRef); envVal != \"\" {\n\t\t\t\t\t\tdsn = envVal\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" {\n\t\t\t\t\tdsn = buildDSNFromFieldsPatched(&conn)\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}",
+          "claim": "In connection_manager.go, GetMasterDB only short-circuits to RoleDestination when key is empty or 'default', and for 'default_master' it queries cdc_system.connection_registry and calls buildDSNFromFieldsPatched(&conn) when dsn is empty."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "critique",
+    "claim": "In master_connection.go, EnsureDefaultMasterConnection falls back to cfg.Host, cfg.Port, and cfg.Database (CMS control-plane DB cdc_cms_database) and updates connection_code='default_master' in cdc_system.connection_registry without setting options_json credentials.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:16-56\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, cfg config.DBConfig, logger *zap.Logger) error {\n\thost := strings.TrimSpace(os.Getenv(\"CMS_MASTER_DB_HOST\"))\n\tif host == \"\" {\n\t\thost = strings.TrimSpace(os.Getenv(\"CDS_MASTER_DB_HOST\"))\n\t}\n\tif host == \"\" {\n\t\thost = strings.TrimSpace(cfg.Host)\n\t}\n\tport := cfg.Port\n\tif pStr := strings.TrimSpace(os.Getenv(\"CMS_MASTER_DB_PORT\")); pStr != \"\" {\n\t\tif p, err := strconv.Atoi(pStr); err == nil && p > 0 {\n\t\t\tport = p\n\t\t}\n\t} else if pStr := strings.TrimSpace(os.Getenv(\"CDS_MASTER_DB_PORT\")); pStr != \"\" {\n\t\tif p, err := strconv.Atoi(pStr); err == nil && p > 0 {\n\t\t\tport = p\n\t\t}\n\t}\n\tdatabase := strings.TrimSpace(os.Getenv(\"CMS_MASTER_DB_DATABASE\"))\n\tif database == \"\" {\n\t\tdatabase = strings.TrimSpace(os.Getenv(\"CDS_MASTER_DB_NAME\"))\n\t}\n\tif database == \"\" {\n\t\tdatabase = strings.TrimSpace(cfg.Database)\n\t}\n\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type,\n\t\t\t host, port, default_database, secret_ref, status)\n\t\tVALUES ('default_master', 'Default Master Connection',\n\t\t        'master', 'postgresql',\n\t\t        NULLIF(?, ''), NULLIF(?, 0), NULLIF(?, ''), 'env:CDS_MASTER_DB_PASSWORD', 'active')\n\t\tON CONFLICT (connection_code) DO UPDATE\n\t\t   SET host             = COALESCE(NULLIF(EXCLUDED.host, ''), cdc_system.connection_registry.host),\n\t\t       port             = COALESCE(EXCLUDED.port, cdc_system.connection_registry.port),\n\t\t       default_database = COALESCE(NULLIF(EXCLUDED.default_database, ''), cdc_system.connection_registry.default_database),\n\t\t       status           = 'active',\n\t\t       updated_at       = NOW()\n\t`, host, port, database).Error",
+    "flow": "EnsureDefaultMasterConnection falls back to cfg.Host, cfg.Port, cfg.Database and upserts them into default_master with NULL options_json.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7226,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.926,
+                "INCORRECT": 0.0562,
+                "UNSUPPORTED": 0.0178
+              },
+              "confidence": 0.7226,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 999,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In master_connection.go, EnsureDefaultMasterConnection falls back to cfg.Host, cfg.Port, and cfg.Database (CMS control-plane DB cdc_cms_database) and updates connection_code='default_master' in cdc_system.connection_registry without setting options_json credentials.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:16-56\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, cfg config.DBConfig, logger *zap.Logger) error {\n\thost := strings.TrimSpace(os.Getenv(\"CMS_MASTER_DB_HOST\"))\n\tif host == \"\" {\n\t\thost = strings.TrimSpace(os.Getenv(\"CDS_MASTER_DB_HOST\"))\n\t}\n\tif host == \"\" {\n\t\thost = strings.TrimSpace(cfg.Host)\n\t}\n\tport := cfg.Port\n\tif pStr := strings.TrimSpace(os.Getenv(\"CMS_MASTER_DB_PORT\")); pStr != \"\" {\n\t\tif p, err := strconv.Atoi(pStr); err == nil && p > 0 {\n\t\t\tport = p\n\t\t}\n\t} else if pStr := strings.TrimSpace(os.Getenv(\"CDS_MASTER_DB_PORT\")); pStr != \"\" {\n\t\tif p, err := strconv.Atoi(pStr); err == nil && p > 0 {\n\t\t\tport = p\n\t\t}\n\t}\n\tdatabase := strings.TrimSpace(os.Getenv(\"CMS_MASTER_DB_DATABASE\"))\n\tif database == \"\" {\n\t\tdatabase = strings.TrimSpace(os.Getenv(\"CDS_MASTER_DB_NAME\"))\n\t}\n\tif database == \"\" {\n\t\tdatabase = strings.TrimSpace(cfg.Database)\n\t}\n\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type,\n\t\t\t host, port, default_database, secret_ref, status)\n\t\tVALUES ('default_master', 'Default Master Connection',\n\t\t        'master', 'postgresql',\n\t\t        NULLIF(?, ''), NULLIF(?, 0), NULLIF(?, ''), 'env:CDS_MASTER_DB_PASSWORD', 'active')\n\t\tON CONFLICT (connection_code) DO UPDATE\n\t\t   SET host             = COALESCE(NULLIF(EXCLUDED.host, ''), cdc_system.connection_registry.host),\n\t\t       port             = COALESCE(EXCLUDED.port, cdc_system.connection_registry.port),\n\t\t       default_database = COALESCE(NULLIF(EXCLUDED.default_database, ''), cdc_system.connection_registry.default_database),\n\t\t       status           = 'active',\n\t\t       updated_at       = NOW()\n\t`, host, port, database).Error",
+          "flow": "EnsureDefaultMasterConnection falls back to cfg.Host, cfg.Port, cfg.Database and upserts them into default_master with NULL options_json."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3114,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7059,
+                "INCORRECT": 0.2327,
+                "UNSUPPORTED": 0.0614
+              },
+              "confidence": 0.3114,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1004,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "EnsureDefaultMasterConnection falls back to cfg.Host, cfg.Port, cfg.Database and upserts them into default_master with NULL options_json.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:16-56\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, cfg config.DBConfig, logger *zap.Logger) error {\n\thost := strings.TrimSpace(os.Getenv(\"CMS_MASTER_DB_HOST\"))\n\tif host == \"\" {\n\t\thost = strings.TrimSpace(os.Getenv(\"CDS_MASTER_DB_HOST\"))\n\t}\n\tif host == \"\" {\n\t\thost = strings.TrimSpace(cfg.Host)\n\t}\n\tport := cfg.Port\n\tif pStr := strings.TrimSpace(os.Getenv(\"CMS_MASTER_DB_PORT\")); pStr != \"\" {\n\t\tif p, err := strconv.Atoi(pStr); err == nil && p > 0 {\n\t\t\tport = p\n\t\t}\n\t} else if pStr := strings.TrimSpace(os.Getenv(\"CDS_MASTER_DB_PORT\")); pStr != \"\" {\n\t\tif p, err := strconv.Atoi(pStr); err == nil && p > 0 {\n\t\t\tport = p\n\t\t}\n\t}\n\tdatabase := strings.TrimSpace(os.Getenv(\"CMS_MASTER_DB_DATABASE\"))\n\tif database == \"\" {\n\t\tdatabase = strings.TrimSpace(os.Getenv(\"CDS_MASTER_DB_NAME\"))\n\t}\n\tif database == \"\" {\n\t\tdatabase = strings.TrimSpace(cfg.Database)\n\t}\n\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type,\n\t\t\t host, port, default_database, secret_ref, status)\n\t\tVALUES ('default_master', 'Default Master Connection',\n\t\t        'master', 'postgresql',\n\t\t        NULLIF(?, ''), NULLIF(?, 0), NULLIF(?, ''), 'env:CDS_MASTER_DB_PASSWORD', 'active')\n\t\tON CONFLICT (connection_code) DO UPDATE\n\t\t   SET host             = COALESCE(NULLIF(EXCLUDED.host, ''), cdc_system.connection_registry.host),\n\t\t       port             = COALESCE(EXCLUDED.port, cdc_system.connection_registry.port),\n\t\t       default_database = COALESCE(NULLIF(EXCLUDED.default_database, ''), cdc_system.connection_registry.default_database),\n\t\t       status           = 'active',\n\t\t       updated_at       = NOW()\n\t`, host, port, database).Error",
+          "claim": "In master_connection.go, EnsureDefaultMasterConnection falls back to cfg.Host, cfg.Port, and cfg.Database (CMS control-plane DB cdc_cms_database) and updates connection_code='default_master' in cdc_system.connection_registry without setting options_json credentials."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4613,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8767,
+                "NO": 0.1233
+              },
+              "confidence": 0.4613,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 905,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:16-56\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, cfg config.DBConfig, logger *zap.Logger) error {\n\thost := strings.TrimSpace(os.Getenv(\"CMS_MASTER_DB_HOST\"))\n\tif host == \"\" {\n\t\thost = strings.TrimSpace(os.Getenv(\"CDS_MASTER_DB_HOST\"))\n\t}\n\tif host == \"\" {\n\t\thost = strings.TrimSpace(cfg.Host)\n\t}\n\tport := cfg.Port\n\tif pStr := strings.TrimSpace(os.Getenv(\"CMS_MASTER_DB_PORT\")); pStr != \"\" {\n\t\tif p, err := strconv.Atoi(pStr); err == nil && p > 0 {\n\t\t\tport = p\n\t\t}\n\t} else if pStr := strings.TrimSpace(os.Getenv(\"CDS_MASTER_DB_PORT\")); pStr != \"\" {\n\t\tif p, err := strconv.Atoi(pStr); err == nil && p > 0 {\n\t\t\tport = p\n\t\t}\n\t}\n\tdatabase := strings.TrimSpace(os.Getenv(\"CMS_MASTER_DB_DATABASE\"))\n\tif database == \"\" {\n\t\tdatabase = strings.TrimSpace(os.Getenv(\"CDS_MASTER_DB_NAME\"))\n\t}\n\tif database == \"\" {\n\t\tdatabase = strings.TrimSpace(cfg.Database)\n\t}\n\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type,\n\t\t\t host, port, default_database, secret_ref, status)\n\t\tVALUES ('default_master', 'Default Master Connection',\n\t\t        'master', 'postgresql',\n\t\t        NULLIF(?, ''), NULLIF(?, 0), NULLIF(?, ''), 'env:CDS_MASTER_DB_PASSWORD', 'active')\n\t\tON CONFLICT (connection_code) DO UPDATE\n\t\t   SET host             = COALESCE(NULLIF(EXCLUDED.host, ''), cdc_system.connection_registry.host),\n\t\t       port             = COALESCE(EXCLUDED.port, cdc_system.connection_registry.port),\n\t\t       default_database = COALESCE(NULLIF(EXCLUDED.default_database, ''), cdc_system.connection_registry.default_database),\n\t\t       status           = 'active',\n\t\t       updated_at       = NOW()\n\t`, host, port, database).Error",
+          "claim": "In master_connection.go, EnsureDefaultMasterConnection falls back to cfg.Host, cfg.Port, and cfg.Database (CMS control-plane DB cdc_cms_database) and updates connection_code='default_master' in cdc_system.connection_registry without setting options_json credentials."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "critique",
+    "claim": "In metadata_registry_service.go, buildDSNFromFieldsPatched constructs a postgres:// URL with empty userInfo when conn.Host, conn.Port, and conn.DefaultDatabase are non-empty even if OptionsJSON has no username or password.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/metadata_registry_service.go:560-585\n\t// Build userinfo segment: \"user:pass@\" — omitted when no credentials.\n\tuserInfo := \"\"\n\tif username != \"\" {\n\t\tif password != \"\" {\n\t\t\tuserInfo = username + \":\" + password + \"@\"\n\t\t} else {\n\t\t\tuserInfo = username + \"@\"\n\t\t}\n\t}\n\n\tswitch strings.ToLower(strings.TrimSpace(conn.EngineType)) {\n\tcase \"mongodb\", \"mongo\":\n\t\treturn fmt.Sprintf(\"mongodb://%s%s:%d/\", userInfo, host, port)\n\tcase \"sftp\":\n\t\treturn fmt.Sprintf(\"sftp://%s%s:%d/%s\", userInfo, host, port, db)\n\tcase \"postgres\", \"postgresql\":\n\t\tif db == \"\" {\n\t\t\treturn \"\"\n\t\t}\n\t\tsearchPath := \"\"\n\t\tif conn.DefaultSchema != nil && *conn.DefaultSchema != \"\" {\n\t\t\tsearchPath = fmt.Sprintf(\"&search_path=%s\", *conn.DefaultSchema)\n\t\t}\n\t\treturn fmt.Sprintf(\"postgres://%s%s:%d/%s?sslmode=%s%s\", userInfo, host, port, db, sslmode, searchPath)\n\t}\n\treturn \"\"",
+    "flow": "When username is empty, userInfo is empty, and buildDSNFromFieldsPatched returns postgres://host:port/db?sslmode=disable without credentials.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4469,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7518,
+                "INCORRECT": 0.2364,
+                "UNSUPPORTED": 0.0117
+              },
+              "confidence": 0.4469,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 606,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In metadata_registry_service.go, buildDSNFromFieldsPatched constructs a postgres:// URL with empty userInfo when conn.Host, conn.Port, and conn.DefaultDatabase are non-empty even if OptionsJSON has no username or password.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/metadata_registry_service.go:560-585\n\t// Build userinfo segment: \"user:pass@\" — omitted when no credentials.\n\tuserInfo := \"\"\n\tif username != \"\" {\n\t\tif password != \"\" {\n\t\t\tuserInfo = username + \":\" + password + \"@\"\n\t\t} else {\n\t\t\tuserInfo = username + \"@\"\n\t\t}\n\t}\n\n\tswitch strings.ToLower(strings.TrimSpace(conn.EngineType)) {\n\tcase \"mongodb\", \"mongo\":\n\t\treturn fmt.Sprintf(\"mongodb://%s%s:%d/\", userInfo, host, port)\n\tcase \"sftp\":\n\t\treturn fmt.Sprintf(\"sftp://%s%s:%d/%s\", userInfo, host, port, db)\n\tcase \"postgres\", \"postgresql\":\n\t\tif db == \"\" {\n\t\t\treturn \"\"\n\t\t}\n\t\tsearchPath := \"\"\n\t\tif conn.DefaultSchema != nil && *conn.DefaultSchema != \"\" {\n\t\t\tsearchPath = fmt.Sprintf(\"&search_path=%s\", *conn.DefaultSchema)\n\t\t}\n\t\treturn fmt.Sprintf(\"postgres://%s%s:%d/%s?sslmode=%s%s\", userInfo, host, port, db, sslmode, searchPath)\n\t}\n\treturn \"\"",
+          "flow": "When username is empty, userInfo is empty, and buildDSNFromFieldsPatched returns postgres://host:port/db?sslmode=disable without credentials."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3284,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6295,
+                "INCORRECT": 0.3502,
+                "UNSUPPORTED": 0.0203
+              },
+              "confidence": 0.3284,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 611,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "When username is empty, userInfo is empty, and buildDSNFromFieldsPatched returns postgres://host:port/db?sslmode=disable without credentials.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/metadata_registry_service.go:560-585\n\t// Build userinfo segment: \"user:pass@\" — omitted when no credentials.\n\tuserInfo := \"\"\n\tif username != \"\" {\n\t\tif password != \"\" {\n\t\t\tuserInfo = username + \":\" + password + \"@\"\n\t\t} else {\n\t\t\tuserInfo = username + \"@\"\n\t\t}\n\t}\n\n\tswitch strings.ToLower(strings.TrimSpace(conn.EngineType)) {\n\tcase \"mongodb\", \"mongo\":\n\t\treturn fmt.Sprintf(\"mongodb://%s%s:%d/\", userInfo, host, port)\n\tcase \"sftp\":\n\t\treturn fmt.Sprintf(\"sftp://%s%s:%d/%s\", userInfo, host, port, db)\n\tcase \"postgres\", \"postgresql\":\n\t\tif db == \"\" {\n\t\t\treturn \"\"\n\t\t}\n\t\tsearchPath := \"\"\n\t\tif conn.DefaultSchema != nil && *conn.DefaultSchema != \"\" {\n\t\t\tsearchPath = fmt.Sprintf(\"&search_path=%s\", *conn.DefaultSchema)\n\t\t}\n\t\treturn fmt.Sprintf(\"postgres://%s%s:%d/%s?sslmode=%s%s\", userInfo, host, port, db, sslmode, searchPath)\n\t}\n\treturn \"\"",
+          "claim": "In metadata_registry_service.go, buildDSNFromFieldsPatched constructs a postgres:// URL with empty userInfo when conn.Host, conn.Port, and conn.DefaultDatabase are non-empty even if OptionsJSON has no username or password."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.3037,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8125,
+                "NO": 0.1875
+              },
+              "confidence": 0.3037,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 511,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/metadata_registry_service.go:560-585\n\t// Build userinfo segment: \"user:pass@\" — omitted when no credentials.\n\tuserInfo := \"\"\n\tif username != \"\" {\n\t\tif password != \"\" {\n\t\t\tuserInfo = username + \":\" + password + \"@\"\n\t\t} else {\n\t\t\tuserInfo = username + \"@\"\n\t\t}\n\t}\n\n\tswitch strings.ToLower(strings.TrimSpace(conn.EngineType)) {\n\tcase \"mongodb\", \"mongo\":\n\t\treturn fmt.Sprintf(\"mongodb://%s%s:%d/\", userInfo, host, port)\n\tcase \"sftp\":\n\t\treturn fmt.Sprintf(\"sftp://%s%s:%d/%s\", userInfo, host, port, db)\n\tcase \"postgres\", \"postgresql\":\n\t\tif db == \"\" {\n\t\t\treturn \"\"\n\t\t}\n\t\tsearchPath := \"\"\n\t\tif conn.DefaultSchema != nil && *conn.DefaultSchema != \"\" {\n\t\t\tsearchPath = fmt.Sprintf(\"&search_path=%s\", *conn.DefaultSchema)\n\t\t}\n\t\treturn fmt.Sprintf(\"postgres://%s%s:%d/%s?sslmode=%s%s\", userInfo, host, port, db, sslmode, searchPath)\n\t}\n\treturn \"\"",
+          "claim": "In metadata_registry_service.go, buildDSNFromFieldsPatched constructs a postgres:// URL with empty userInfo when conn.Host, conn.Port, and conn.DefaultDatabase are non-empty even if OptionsJSON has no username or password."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In ConnectionManager.GetShadowDB, the method ignores the key parameter and returns m.reg.GetDB(database.RoleShadow).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:53-56\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}",
+    "flow": "GetShadowDB directly calls and returns m.reg.GetDB(database.RoleShadow).",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6279,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8934,
+                "INCORRECT": 0.0689,
+                "UNSUPPORTED": 0.0378
+              },
+              "confidence": 0.6279,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 266,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In ConnectionManager.GetShadowDB, the method ignores the key parameter and returns m.reg.GetDB(database.RoleShadow).",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:53-56\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}",
+          "flow": "GetShadowDB directly calls and returns m.reg.GetDB(database.RoleShadow)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2546,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4974,
+                "INCORRECT": 0.4681,
+                "UNSUPPORTED": 0.0345
+              },
+              "confidence": 0.2546,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 271,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "GetShadowDB directly calls and returns m.reg.GetDB(database.RoleShadow).",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:53-56\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}",
+          "claim": "In ConnectionManager.GetShadowDB, the method ignores the key parameter and returns m.reg.GetDB(database.RoleShadow)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8106,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.971,
+                "NO": 0.029
+              },
+              "confidence": 0.8106,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 184,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:53-56\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}",
+          "claim": "In ConnectionManager.GetShadowDB, the method ignores the key parameter and returns m.reg.GetDB(database.RoleShadow)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In ConnectionManager.GetShadowDB, the method panics whenever key is non-empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:53-56\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}",
+    "flow": "GetShadowDB never panics; it ignores key and returns m.reg.GetDB(database.RoleShadow).",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6206,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8739,
+                "INCORRECT": 0.1149,
+                "UNSUPPORTED": 0.0112
+              },
+              "confidence": 0.6206,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 261,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In ConnectionManager.GetShadowDB, the method panics whenever key is non-empty.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:53-56\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}",
+          "flow": "GetShadowDB never panics; it ignores key and returns m.reg.GetDB(database.RoleShadow)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2692,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6221,
+                "INCORRECT": 0.3319,
+                "UNSUPPORTED": 0.046
+              },
+              "confidence": 0.2692,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 267,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "GetShadowDB never panics; it ignores key and returns m.reg.GetDB(database.RoleShadow).",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:53-56\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}",
+          "claim": "In ConnectionManager.GetShadowDB, the method panics whenever key is non-empty."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.4359,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.1325,
+                "NO": 0.8675
+              },
+              "confidence": 0.4359,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 175,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:53-56\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}",
+          "claim": "In ConnectionManager.GetShadowDB, the method panics whenever key is non-empty."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In EnsureDefaultMasterConnection, the SQL query deletes all rows from cdc_system.connection_registry.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:42-56\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type,\n\t\t\t host, port, default_database, secret_ref, status)\n\t\tVALUES ('default_master', 'Default Master Connection',\n\t\t        'master', 'postgresql',\n\t\t        NULLIF(?, ''), NULLIF(?, 0), NULLIF(?, ''), 'env:CDS_MASTER_DB_PASSWORD', 'active')\n\t\tON CONFLICT (connection_code) DO UPDATE\n\t\t   SET host             = COALESCE(NULLIF(EXCLUDED.host, ''), cdc_system.connection_registry.host),\n\t\t       port             = COALESCE(EXCLUDED.port, cdc_system.connection_registry.port),\n\t\t       default_database = COALESCE(NULLIF(EXCLUDED.default_database, ''), cdc_system.connection_registry.default_database),\n\t\t       status           = 'active',\n\t\t       updated_at       = NOW()\n\t`, host, port, database).Error",
+    "flow": "EnsureDefaultMasterConnection executes INSERT ... ON CONFLICT DO UPDATE, not DELETE.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7469,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9359,
+                "INCORRECT": 0.0436,
+                "UNSUPPORTED": 0.0204
+              },
+              "confidence": 0.7469,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 566,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In EnsureDefaultMasterConnection, the SQL query deletes all rows from cdc_system.connection_registry.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:42-56\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type,\n\t\t\t host, port, default_database, secret_ref, status)\n\t\tVALUES ('default_master', 'Default Master Connection',\n\t\t        'master', 'postgresql',\n\t\t        NULLIF(?, ''), NULLIF(?, 0), NULLIF(?, ''), 'env:CDS_MASTER_DB_PASSWORD', 'active')\n\t\tON CONFLICT (connection_code) DO UPDATE\n\t\t   SET host             = COALESCE(NULLIF(EXCLUDED.host, ''), cdc_system.connection_registry.host),\n\t\t       port             = COALESCE(EXCLUDED.port, cdc_system.connection_registry.port),\n\t\t       default_database = COALESCE(NULLIF(EXCLUDED.default_database, ''), cdc_system.connection_registry.default_database),\n\t\t       status           = 'active',\n\t\t       updated_at       = NOW()\n\t`, host, port, database).Error",
+          "flow": "EnsureDefaultMasterConnection executes INSERT ... ON CONFLICT DO UPDATE, not DELETE."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.3307,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.1211,
+                "INCORRECT": 0.1288,
+                "UNSUPPORTED": 0.7501
+              },
+              "confidence": 0.3307,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 571,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "EnsureDefaultMasterConnection executes INSERT ... ON CONFLICT DO UPDATE, not DELETE.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:42-56\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type,\n\t\t\t host, port, default_database, secret_ref, status)\n\t\tVALUES ('default_master', 'Default Master Connection',\n\t\t        'master', 'postgresql',\n\t\t        NULLIF(?, ''), NULLIF(?, 0), NULLIF(?, ''), 'env:CDS_MASTER_DB_PASSWORD', 'active')\n\t\tON CONFLICT (connection_code) DO UPDATE\n\t\t   SET host             = COALESCE(NULLIF(EXCLUDED.host, ''), cdc_system.connection_registry.host),\n\t\t       port             = COALESCE(EXCLUDED.port, cdc_system.connection_registry.port),\n\t\t       default_database = COALESCE(NULLIF(EXCLUDED.default_database, ''), cdc_system.connection_registry.default_database),\n\t\t       status           = 'active',\n\t\t       updated_at       = NOW()\n\t`, host, port, database).Error",
+          "claim": "In EnsureDefaultMasterConnection, the SQL query deletes all rows from cdc_system.connection_registry."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.2133,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.7649,
+                "NO": 0.2351
+              },
+              "confidence": 0.2133,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 488,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:42-56\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type,\n\t\t\t host, port, default_database, secret_ref, status)\n\t\tVALUES ('default_master', 'Default Master Connection',\n\t\t        'master', 'postgresql',\n\t\t        NULLIF(?, ''), NULLIF(?, 0), NULLIF(?, ''), 'env:CDS_MASTER_DB_PASSWORD', 'active')\n\t\tON CONFLICT (connection_code) DO UPDATE\n\t\t   SET host             = COALESCE(NULLIF(EXCLUDED.host, ''), cdc_system.connection_registry.host),\n\t\t       port             = COALESCE(EXCLUDED.port, cdc_system.connection_registry.port),\n\t\t       default_database = COALESCE(NULLIF(EXCLUDED.default_database, ''), cdc_system.connection_registry.default_database),\n\t\t       status           = 'active',\n\t\t       updated_at       = NOW()\n\t`, host, port, database).Error",
+          "claim": "In EnsureDefaultMasterConnection, the SQL query deletes all rows from cdc_system.connection_registry."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

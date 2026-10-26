@@ -1,0 +1,38 @@
+[
+  {
+    "id": "C-REQ-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/telegram_bridge.go, hàm synthesizeIsolatedRemediationDiffIfApproved gọi collectRepoUnifiedDiffWithUntracked và nhảy continue ngay ở dòng 1384 khi strings.Contains(realRepoPatch, \"diff --git \") đúng mà chưa kiểm tra xem realRepoPatch có chạm vào candidate file của Sub-Task hay không.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1367-1388\n\t\tif !s.isTestTaskOrTempRoot(qt.ExternalID) && !strings.HasPrefix(strings.ToUpper(qt.ExternalID), \"TASK-ISO-\") {\n\t\t\tif _, gErr := os.Stat(filepath.Join(repoDir, \".git\")); gErr == nil {\n\t\t\t\trealRepoPatch := s.collectRepoUnifiedDiffWithUntracked(ctx, repoDir)\n\t\t\t\tif strings.Contains(realRepoPatch, \"diff --git \") {\n\t\t\t\t\t_ = os.MkdirAll(subDir, 0o755)\n\t\t\t\t\t_ = os.WriteFile(filepath.Join(subDir, \"diff.patch\"), []byte(realRepoPatch+\"\\n\"), 0o644)\n\t\t\t\t\tsh := loadOrInitSubTaskSelfHealState(subDir, cliCfg.MaxSelfHealRetries, isoMeta.BranchName, st.SelfHealState)\n\t\t\t\t\tsh.HardGateZeroLLMPassed = true\n\t\t\t\t\tsh.SemanticGateStatus = \"PASS\"\n\t\t\t\t\tsh.CircuitOpen = false\n\t\t\t\t\tsh.RetryCount = 0\n\t\t\t\t\tsh.RequiresHumanReApprove = false\n\t\t\t\t\tsaveSubTaskSelfHealState(subDir, sh)\n\t\t\t\t\tif !strings.Contains(existingPatch, realRepoPatch[:min(120, len(realRepoPatch))]) {\n\t\t\t\t\t\tappendedHunks = append(appendedHunks, realRepoPatch)\n\t\t\t\t\t\texistingPatch += \"\\n\" + realRepoPatch\n\t\t\t\t\t}\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t}\n\t\t}"
+  },
+  {
+    "id": "C-REALITY-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/server.go dòng 1582-1587, khi totalDiffLines > 0 và strings.Contains(builtDiff, \"diff --git \"), server gọi os.WriteFile(isoMeta.DiffFile, []byte(builtDiff), 0o644) ghi đè lên isoMeta.DiffFile thay vì hợp nhất với existingDiff.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1582-1589\n\t\t// Prefer fresh working-tree diff from affected repos when present; otherwise preserve existing captured diff.patch.\n\t\tbuiltDiff := diffBuilder.String()\n\t\texistingDiff := s.readTaskOrSiblingDiffPatch(qt.ExternalID)\n\t\tif totalDiffLines > 0 && strings.Contains(builtDiff, \"diff --git \") {\n\t\t\t_ = os.WriteFile(isoMeta.DiffFile, []byte(builtDiff), 0o644)\n\t\t} else if len(existingDiff) > 200 && strings.Contains(string(existingDiff), \"diff --git \") {"
+  },
+  {
+    "id": "C-CONTRA-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/task_inspector.go dòng 1425-1452, hàm VerifySubTaskCodeOnDisk chỉ đọc subDiffPath để kiểm tra chuỗi \"broken diff\" rồi kiểm tra taskPatchContent mà không kiểm tra xem subDiffRaw có chứa đường dẫn candidate của Sub-Task hay không.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:1425-1452\n\tsafeParent := sanitizeTaskKeyPath(it.ParentKey)\n\tsafeSubID := sanitizeTaskKeyPath(it.SubTaskID)\n\tsubDiffPath := filepath.Join(s.Root, \".orchestrator\", \"tasks\", safeParent, \"subtasks\", safeSubID, \"diff.patch\")\n\tif subDiffRaw, rErr := os.ReadFile(subDiffPath); rErr == nil && strings.Contains(string(subDiffRaw), \"broken diff\") {\n\t\treturn false, fmt.Sprintf(\"5A Hard Gate (Zero-LLM) broken diff / build verification failed in %s/diff.patch\", it.SubTaskID)\n\t}\n\n\ttaskPatchContent := string(s.readTaskOrSiblingDiffPatch(it.ParentKey))\n\tvar verifiedEvidences []string\n\n\t// Every candidate file/dir declared by the Sub-Task MUST be verified either in diff.patch or on disk\n\tfor _, rel := range candidates {\n\t\tcleanRel := strings.TrimPrefix(strings.TrimSuffix(rel, \"/\"), \"./\")\n\t\tcandidateOK := false\n\t\tif taskPatchContent != \"\" && cleanRel != \"\" {"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Tại internal/webui/server.go dòng 1582-1589, server hoàn toàn không bao giờ ghi vào isoMeta.DiffFile mà luôn xóa file bằng os.Remove(isoMeta.DiffFile).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1582-1589\n\t\tbuiltDiff := diffBuilder.String()\n\t\texistingDiff := s.readTaskOrSiblingDiffPatch(qt.ExternalID)\n\t\tif totalDiffLines > 0 && strings.Contains(builtDiff, \"diff --git \") {\n\t\t\t_ = os.WriteFile(isoMeta.DiffFile, []byte(builtDiff), 0o644)\n\t\t}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Trong internal/webui/task_inspector.go dòng 1425-1435, hàm VerifySubTaskCodeOnDisk không hề đọc biến subDiffPath và không hề kiểm tra chuỗi broken diff.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:1425-1431\n\tsafeParent := sanitizeTaskKeyPath(it.ParentKey)\n\tsafeSubID := sanitizeTaskKeyPath(it.SubTaskID)\n\tsubDiffPath := filepath.Join(s.Root, \".orchestrator\", \"tasks\", safeParent, \"subtasks\", safeSubID, \"diff.patch\")\n\tif subDiffRaw, rErr := os.ReadFile(subDiffPath); rErr == nil && strings.Contains(string(subDiffRaw), \"broken diff\") {\n\t\treturn false, fmt.Sprintf(\"5A Hard Gate (Zero-LLM) broken diff / build verification failed in %s/diff.patch\", it.SubTaskID)\n\t}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Tại internal/webui/server.go dòng 1710-1715, biến checkCmd có giá trị mặc định là \"go vet ./...\" và được ghi đè bởi manifest.Checks[0] nếu LoadProjectManifest thành công.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1710-1715\n\t\t\t// GAP-FLOW-09: Load <repo>/.agent-project.json if present (Rule #3 ADR-07)\n\t\t\tcheckCmd := \"go vet ./...\"\n\t\t\tif manifest, mErr := agentgate.LoadProjectManifest(repoPath); mErr == nil && len(manifest.Checks) > 0 {\n\t\t\t\tcheckCmd = manifest.Checks[0]\n\t\t\t}"
+  }
+]

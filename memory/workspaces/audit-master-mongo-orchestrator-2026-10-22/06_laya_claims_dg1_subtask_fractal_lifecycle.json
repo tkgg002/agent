@@ -1,0 +1,80 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Kiểm tra SubTaskInputContractDTO và SubTaskOutputContractDTO trong task_inspector.go dòng 42-59",
+    "claim": "Trong task_inspector.go dòng 42-59, SubTaskInputContractDTO khai báo SourceContext, UpstreamSubTaskIDs, UpstreamDeliverables, UpstreamReady, InputSpec và SubTaskOutputContractDTO khai báo Deliverables, DownstreamSubTaskIDs, DiffFile, AuditFile, EvidenceReceiptID, HandoffReady.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:42-59\n// SubTaskInputContractDTO defines the explicit input contract of an individual Sub-Task (TASK-SUB-01).\ntype SubTaskInputContractDTO struct {\n\tSourceContext        string   `json:\"source_context\"`         // Exact file:line touchpoint in TargetRepo\n\tUpstreamSubTaskIDs   []string `json:\"upstream_sub_task_ids\"`  // DependsOn Sub-Task IDs from Wave N-1\n\tUpstreamDeliverables []string `json:\"upstream_deliverables\"`  // Concrete outputs handed off from upstream Wave N-1 Sub-Tasks\n\tUpstreamReady        bool     `json:\"upstream_ready\"`         // true if Wave 0 or all UpstreamSubTaskIDs have reached DONE\n\tInputSpec            string   `json:\"input_spec\"`             // Input payload / struct / interface / context specification\n}\n\n// SubTaskOutputContractDTO defines the explicit output deliverables produced by an individual Sub-Task (TASK-SUB-01).\ntype SubTaskOutputContractDTO struct {\n\tDeliverables         []string `json:\"deliverables\"`            // Concrete symbols, files, or endpoints produced by this Sub-Task\n\tDownstreamSubTaskIDs []string `json:\"downstream_sub_task_ids\"` // Sub-Tasks in Wave N+1 that consume this output as their input\n\tDiffFile             string   `json:\"diff_file\"`               // .orchestrator/tasks/<parent>/subtasks/<subID>/diff.patch\n\tAuditFile            string   `json:\"audit_file\"`              // .orchestrator/tasks/<parent>/subtasks/<subID>/audit_report.md\n\tEvidenceReceiptID    string   `json:\"evidence_receipt_id\"`     // EV-... receipt verifying this Sub-Task\n\tHandoffReady         bool     `json:\"handoff_ready\"`           // true when Sub-Task reaches Isolated Branch (DONE)\n}"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Kiểm tra tính toán UpstreamReady và HANDOFF_READY trong populateSubTaskFractalContractsAndArtifacts tại task_inspector.go dòng 1676-1688",
+    "claim": "Trong task_inspector.go dòng 1676-1688, vòng lặp duyệt qua st.DependsOn kiểm tra isDepDone (dep.Status == done hoặc dep.Stage == DONE); nếu !isDepDone thì gán upstreamReady = false, ngược lại gán statusTag = \"HANDOFF_READY ✓\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:1676-1688\n\t\t} else {\n\t\t\tfor _, depID := range st.DependsOn {\n\t\t\t\tif dep, ok := byID[depID]; ok {\n\t\t\t\t\tisDepDone := strings.EqualFold(dep.Status, \"done\") || strings.EqualFold(dep.Stage, \"DONE\")\n\t\t\t\t\tif !isDepDone {\n\t\t\t\t\t\tupstreamReady = false\n\t\t\t\t\t}\n\t\t\t\t\tstatusTag := \"PENDING\"\n\t\t\t\t\tif isDepDone {\n\t\t\t\t\t\tstatusTag = \"HANDOFF_READY ✓\"\n\t\t\t\t\t}\n\t\t\t\t\tupstreamDeliverables = append(upstreamDeliverables,\n\t\t\t\t\t\tfmt.Sprintf(\"[%s · %s · %s] %s (%s)\", dep.SubTaskID, dep.TargetRepoName, statusTag, dep.Title, dep.ContextFileLine))"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Kiểm tra định tuyến action subtask_* trong handleTaskAction tại server.go dòng 977-989",
+    "claim": "Trong server.go dòng 977-989, khi strings.HasPrefix(req.Action, \"subtask_\") bằng true, hàm tìm qt qua findQueuedTask, cập nhật s.selectedTaskKey = qt.ExternalID, gọi s.loadOrGenerateSubTasks(*qt), thực thi s.runSubTaskLifecycleAction và phát sự kiện subtasks_updated.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:977-989\n\tif strings.HasPrefix(req.Action, \"subtask_\") {\n\t\tqt, findErr := s.findQueuedTask(r.Context(), req.TaskKey)\n\t\tif findErr != nil {\n\t\t\thttp.Error(w, findErr.Error(), http.StatusNotFound)\n\t\t\treturn\n\t\t}\n\t\ts.mu.Lock()\n\t\ts.selectedTaskKey = qt.ExternalID\n\t\ts.mu.Unlock()\n\t\titems := s.loadOrGenerateSubTasks(*qt)\n\t\t_ = s.runSubTaskLifecycleAction(r.Context(), *qt, items, req.SubTaskID, req.Action)\n\t\ts.broadcast(\"subtasks_updated\")\n\t} else {"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Kiểm tra DashboardResponse trong server.go dòng 195-204",
+    "claim": "Trong server.go dòng 195-204, struct DashboardResponse khai báo ActiveSubTasks []SubTaskDTO và ActiveStepReports []StepReportDTO để trả dữ liệu về giao diện.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:195-204\n\tActiveTaskKey       string                       `json:\"active_task_key\"`\n\tActiveTaskTitle     string                       `json:\"active_task_title\"`\n\tActiveTaskStage     string                       `json:\"active_task_stage\"`\n\tActiveTargetRepo    string                       `json:\"active_target_repo\"`\n\tActiveAffectedRepos []string                     `json:\"active_affected_repos\"`\n\tActiveIsolation     TaskIsolationDTO             `json:\"active_isolation\"`\n\tActiveTaskLogs      []string                     `json:\"active_task_logs\"`\n\tActiveSubTasks      []SubTaskDTO                 `json:\"active_sub_tasks\"`\n\tActiveStepReports   []StepReportDTO              `json:\"active_step_reports\"`\n\tActiveAgentKernel   ActiveAgentKernelDTO         `json:\"active_agent_kernel\"`"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Kiểm tra gán WorktreePath mặc định cho Sub-Task trong task_inspector.go dòng 1088-1097",
+    "claim": "Trong task_inspector.go dòng 1088-1097, nếu items[i].WorktreePath rỗng thì hàm gán items[i].WorktreePath = filepath.Join(\".orchestrator\", \"worktrees\", safeParent, items[i].TargetRepoName).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:1088-1097\n\tsafeParent := sanitizeTaskKeyPath(qt.ExternalID)\n\tfor i := range items {\n\t\tif items[i].TargetRepo == \"\" || items[i].TargetRepoName == \"\" {\n\t\t\trPath, rName := s.resolveRepoFromContextLine(items[i].ContextFileLine+\" \"+items[i].TargetFiles, items[i].GroupTitle, items[i].Title, affectedRepos)\n\t\t\titems[i].TargetRepo = rPath\n\t\t\titems[i].TargetRepoName = rName\n\t\t}\n\t\tif items[i].WorktreePath == \"\" {\n\t\t\titems[i].WorktreePath = filepath.Join(\".orchestrator\", \"worktrees\", safeParent, items[i].TargetRepoName)\n\t\t}"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Kiểm tra điều kiện biên khi qt.ExternalID rỗng trong loadOrGenerateSubTasks tại task_inspector.go dòng 1057-1060",
+    "claim": "Trong task_inspector.go dòng 1057-1060, khi qt.ExternalID rỗng thì hàm loadOrGenerateSubTasks trả về nil.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:1057-1060\nfunc (s *Server) loadOrGenerateSubTasks(qt queue.QueuedTask) []SubTaskDTO {\n\tif qt.ExternalID == \"\" {\n\t\treturn nil\n\t}"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Kiểm tra các trường Waves, Edges, AutopilotStages trong DashboardResponse tại server.go dòng 217-220",
+    "claim": "Trong server.go dòng 217-220, DashboardResponse khai báo Waves []WaveColumnDTO, Edges []WaveEdgeDTO, AutopilotStages []AutopilotStageGroupDTO và AutopilotCycles []AutopilotCycleSectionDTO.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:217-220\n\tWaves               []WaveColumnDTO              `json:\"waves\"`\n\tEdges               []WaveEdgeDTO                `json:\"edges\"`\n\tAutopilotStages     []AutopilotStageGroupDTO     `json:\"autopilot_stages\"`\n\tAutopilotCycles     []AutopilotCycleSectionDTO   `json:\"autopilot_cycles\"`"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "flow": "Control false: phát biểu sai kết quả trả về của loadOrGenerateSubTasks khi qt.ExternalID rỗng tại task_inspector.go dòng 1057-1060",
+    "claim": "Trong task_inspector.go dòng 1057-1060, khi qt.ExternalID rỗng thì loadOrGenerateSubTasks gọi panic(\"missing external id\").",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:1057-1060\nfunc (s *Server) loadOrGenerateSubTasks(qt queue.QueuedTask) []SubTaskDTO {\n\tif qt.ExternalID == \"\" {\n\t\treturn nil\n\t}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "flow": "Control false: phát biểu sai kiểu dữ liệu của ActiveSubTasks trong server.go dòng 200-203",
+    "claim": "Trong server.go dòng 200-203, trường ActiveSubTasks trong DashboardResponse có kiểu dữ liệu là map[string]int.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:200-203\n\tActiveIsolation     TaskIsolationDTO             `json:\"active_isolation\"`\n\tActiveTaskLogs      []string                     `json:\"active_task_logs\"`\n\tActiveSubTasks      []SubTaskDTO                 `json:\"active_sub_tasks\"`\n\tActiveStepReports   []StepReportDTO              `json:\"active_step_reports\"`"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "flow": "Control true: xác nhận chính xác kiểu dữ liệu của ActiveSubTasks trong server.go dòng 200-203",
+    "claim": "Trong server.go dòng 200-203, trường ActiveSubTasks trong DashboardResponse có kiểu dữ liệu là []SubTaskDTO.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:200-203\n\tActiveIsolation     TaskIsolationDTO             `json:\"active_isolation\"`\n\tActiveTaskLogs      []string                     `json:\"active_task_logs\"`\n\tActiveSubTasks      []SubTaskDTO                 `json:\"active_sub_tasks\"`\n\tActiveStepReports   []StepReportDTO              `json:\"active_step_reports\"`"
+  }
+]
+

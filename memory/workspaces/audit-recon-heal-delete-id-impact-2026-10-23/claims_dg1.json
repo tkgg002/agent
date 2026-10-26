@@ -1,0 +1,73 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "claim": "In MasterBindingRepo.ListMasterTargetsByShadowIdentity, the SQL query currently joins cdc_system.connection_registry scr ON scr.id = COALESCE(mb.shadow_connection_id, sb.shadow_connection_id), whereas cdc_system.master_binding does not have a shadow_connection_id column.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go:95-105\n\terr := r.db.WithContext(ctx).Raw(\n\t\t`SELECT mb.id,\n\t\t        COALESCE(NULLIF(mb.master_schema, ''), 'public') || '.' || mb.master_table AS master_fqn,\n\t\t        COALESCE(mcr.connection_code, '') AS master_connection_key\n\t\t   FROM cdc_system.master_binding mb\n\t\t   JOIN cdc_system.shadow_binding sb ON sb.id = mb.shadow_binding_id\n\t\t   LEFT JOIN cdc_system.connection_registry mcr ON mcr.id = mb.master_connection_id\n\t\t   LEFT JOIN cdc_system.connection_registry scr ON scr.id = COALESCE(mb.shadow_connection_id, sb.shadow_connection_id)\n\t\t  WHERE mb.is_active = true\n\t\t    AND mb.schema_status = 'approved'",
+    "flow": "ListMasterTargetsByShadowIdentity references mb.shadow_connection_id in COALESCE(mb.shadow_connection_id, sb.shadow_connection_id), which fails on PostgreSQL because only shadow_binding sb has shadow_connection_id."
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "claim": "In BatchBuffer.resolvePostIngestSchedule and SinkWorker.resolvePostIngestSchedule, the SQL query joins cdc_system.connection_registry cr ON cr.id = COALESCE(mb.shadow_connection_id, sb.shadow_connection_id), causing PostgreSQL to return an error and trigger the fail-open branch.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:172-189\n\terr := bb.db.WithContext(ctx).Raw(`\n\t\tSELECT COUNT(*) AS cnt,\n\t\t       COALESCE(MAX(sb.binding_code), '') AS binding_code,\n\t\t       COALESCE(MAX(sb.shadow_schema), '') AS shadow_schema,\n\t\t       COALESCE(MAX(cr.connection_code), '') AS shadow_connection_key\n\t\t  FROM cdc_system.transmute_schedule ts\n\t\t  JOIN cdc_system.master_binding mb ON mb.id = ts.master_binding_id\n\t\t  JOIN cdc_system.shadow_binding sb ON sb.id = mb.shadow_binding_id\n\t\t  LEFT JOIN cdc_system.connection_registry cr ON cr.id = COALESCE(mb.shadow_connection_id, sb.shadow_connection_id)\n\t\t WHERE ts.mode = 'post_ingest' AND ts.is_enabled = true\n\t\t   AND mb.is_active = true AND mb.schema_status = 'approved'\n\t\t   AND sb.shadow_table = ?\n\t\t   AND COALESCE(sb.shadow_schema, '') = COALESCE(NULLIF(?, ''), COALESCE(sb.shadow_schema, ''))\n\t`, shadowTable, shadowSchema).Scan(&row).Error\n\tif err != nil {\n\t\t// fail-open: không nuốt realtime khi gate lỗi tạm thời\n\t\treturn postIngestCacheEntry{enabled: true, shadowSchema: shadowSchema}\n\t}",
+    "flow": "When PostgreSQL rejects mb.shadow_connection_id, err is non-nil and resolvePostIngestSchedule returns a fail-open entry with empty bindingCode and shadowConnKey."
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "claim": "In transmuter_utils.go, resolveConflictTarget reads the primary key strictly from binding.TransformSpec via parsePKFromSpec and isMasterPKMappedFromSourcePK verifies TargetColumn == pkCol against mapping_rule_master.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:736-776\nfunc resolveConflictTarget(binding *masterBindingRuntime, colTypes map[string]string) string {\n\tif binding != nil && len(binding.TransformSpec) > 0 {\n\t\tpk := parsePKFromSpec(binding.TransformSpec)\n\t\tif pk != \"\" && pk != \"_gpay_id\" && ddlIdentRe.MatchString(pk) {\n\t\t\tif colTypes == nil {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t\tif _, ok := colTypes[pk]; ok {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t}\n\t}\n\treturn \"_gpay_id\"\n}\n\n// isMasterPKMappedFromSourcePK verifies via mapping_rule_master that the Master PK column\n// resolved from transform_spec.pk maps from the source primary key (binding.SourcePK or _source_id).\nfunc isMasterPKMappedFromSourcePK(binding *masterBindingRuntime, rules []mappingRuleRow, pkCol string) bool {\n\tif binding == nil || pkCol == \"\" || pkCol == \"_gpay_id\" || binding.TransformType == \"flatten\" {\n\t\treturn false\n\t}\n\tfor _, r := range rules {\n\t\tif r.TargetColumn == pkCol {\n\t\t\tsrcField := strings.TrimSpace(r.SourceField)\n\t\t\tif srcField == \"\" {\n\t\t\t\tsrcField = r.TargetColumn\n\t\t\t}\n\t\t\tif srcField == \"_source_id\" {\n\t\t\t\treturn true\n\t\t\t}\n\t\t\tif binding.SourcePK != \"\" {\n\t\t\t\treturn srcField == binding.SourcePK\n\t\t\t}\n\t\t\treturn srcField == pkCol\n\t\t}\n\t}\n\tif len(rules) == 0 {\n\t\treturn binding.SourcePK == \"\" || pkCol == binding.SourcePK\n\t}\n\treturn false\n}",
+    "flow": "resolveConflictTarget extracts pk from TransformSpec JSON and isMasterPKMappedFromSourcePK validates that pkCol maps from binding.SourcePK or _source_id."
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "claim": "In ReconCore.ResolveShadowBindingIdentity, the query joins cdc_system.connection_registry cr ON cr.id = sb.shadow_connection_id directly on cdc_system.shadow_binding sb.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_engine_segment_b.go:53-65\n\terr := rc.db.WithContext(ctx).Raw(`\n\t\tSELECT COALESCE(sb.binding_code, '') AS binding_code,\n\t\t       COALESCE(sb.shadow_schema, '') AS shadow_schema,\n\t\t       COALESCE(cr.connection_code, '') AS shadow_connection_key\n\t\t  FROM cdc_system.shadow_binding sb\n\t\t  LEFT JOIN cdc_system.connection_registry cr ON cr.id = sb.shadow_connection_id\n\t\t WHERE sb.is_active = true\n\t\t   AND sb.shadow_table = ?\n\t\t   AND COALESCE(sb.shadow_schema, '') = COALESCE(NULLIF(?, ''), COALESCE(sb.shadow_schema, ''))\n\t\t ORDER BY sb.id ASC\n\t\t LIMIT 1\n\t`, shadowTable, shadowSchema).Scan(&row).Error",
+    "flow": "ResolveShadowBindingIdentity joins connection_registry cr on cr.id = sb.shadow_connection_id."
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "claim": "In the updated Demo 2 for ListMasterTargetsByShadowIdentity, scr joins on scr.id = sb.shadow_connection_id without referencing mb.shadow_connection_id.",
+    "evidence": "DEMO:\n\tFROM cdc_system.master_binding mb\n\tJOIN cdc_system.shadow_binding sb ON sb.id = mb.shadow_binding_id\n\tLEFT JOIN cdc_system.connection_registry scr ON scr.id = sb.shadow_connection_id\n\tLEFT JOIN cdc_system.connection_registry mcr ON mcr.id = mb.master_connection_id",
+    "flow": "The LEFT JOIN for scr uses scr.id = sb.shadow_connection_id."
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "claim": "In Demo 1, deleteFromMasterBySourceAndGpayIDs only deletes by pkCol when pkCol != '' && pkCol != '_gpay_id' && isMasterPKMappedFromSourcePK(binding, rules, pkCol).",
+    "evidence": "DEMO:\nif len(cleanSourceIDs) > 0 && pkCol != \"\" && pkCol != \"_gpay_id\" && isMasterPKMappedFromSourcePK(binding, rules, pkCol) {",
+    "flow": "deleteFromMasterBySourceAndGpayIDs checks isMasterPKMappedFromSourcePK(binding, rules, pkCol) before deleting by pkCol."
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "claim": "In Demo 3, UpdateMasterSpecCommand.Validate returns a validation error when parsed['pk'] is empty.",
+    "evidence": "DEMO:\n\tpk, _ := parsed[\"pk\"].(string)\n\tif strings.TrimSpace(pk) == \"\" {\n\t\treturn fmt.Errorf(\"%w: spec must contain a non-empty \\\"pk\\\" field (e.g. {\\\"pk\\\":\\\"_id\\\"})\", domain.ErrValidation)\n\t}",
+    "flow": "Validate extracts parsed['pk'] and returns an error if strings.TrimSpace(pk) == ''."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB, when len(out) == 0 and effectiveIDType == gpay, the function returns nil, nil instead of returning inputIDs.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:901-908\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+    "flow": "resolveSourceIDsForSegmentB checks if len(out) == 0; if effectiveIDType == gpay, it returns nil, nil."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB, when len(out) == 0 and effectiveIDType == gpay, the function always panics instead of returning.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:901-908\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+    "flow": "resolveSourceIDsForSegmentB returns nil, nil when len(out) == 0 and effectiveIDType == gpay; it never panics."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In TransmuterModule.lookupShadowGpayIDs, the SQL query filters WHERE _deleted = true and ignores all active rows.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1513-1527\n\t\tvar rows []struct {\n\t\t\tSourceID string `gorm:\"column:_source_id\"`\n\t\t\tGpayID   int64  `gorm:\"column:_gpay_id\"`\n\t\t}\n\t\tquery := fmt.Sprintf(`SELECT _source_id, %s FROM %s WHERE _source_id IN (?) ORDER BY COALESCE(_deleted, false) ASC, %s DESC`, pkSelect, shadowQT, pkIdent)\n\t\tif errQ := shadowDB.WithContext(ctx).Raw(query, uniqueIDs[i:end]).Scan(&rows).Error; errQ == nil {\n\t\t\tfor _, r := range rows {\n\t\t\t\tif r.SourceID != \"\" && r.GpayID > 0 {\n\t\t\t\t\tif _, exists := res[r.SourceID]; !exists {\n\t\t\t\t\t\tres[r.SourceID] = r.GpayID\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}",
+    "flow": "lookupShadowGpayIDs queries WHERE _source_id IN (?) ORDER BY COALESCE(_deleted, false) ASC, _gpay_id DESC, prioritizing non-deleted rows first."
+  }
+]
+

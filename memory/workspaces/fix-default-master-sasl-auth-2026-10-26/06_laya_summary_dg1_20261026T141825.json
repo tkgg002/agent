@@ -1,0 +1,174 @@
+{
+  "mode": "claim",
+  "stage": "dg1",
+  "workspace": "fix-default-master-sasl-auth-2026-10-26",
+  "ts": "20261026T141825",
+  "trusted_rounds": [
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-default-master-sasl-auth-2026-10-26/06_laya_raw_dg1_20261026T141825.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In transmuter.go lines 356-376, when state.LastCursorJSON has last_gpay_id > 0, Run sets lastGpayID = int64(fVal) and counts remaining shadow rows without checking whether activeShadowRows exceeds masterCount.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2223
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3644
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7844
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In recon_execute_heal_handler.go lines 596-604, when DELETE FROM master WHERE _gpay_id IN (toDeleteGpay) succeeds without error, the code currently increments pruned by int(res.RowsAffected) instead of len(toDeleteGpay).",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5674
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.2096
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6856
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In transmuter.go lines 1122-1126, inferLastGpayIDFromMaster queries SELECT _gpay_id FROM master WHERE _gpay_id <= maxShadowID ORDER BY _gpay_id DESC LIMIT 50 and scans the max matching shadowPK into inferred.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4599
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3686
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6105
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In transmuter_utils.go lines 736-749, resolveConflictTarget extracts pk via parsePKFromSpec(binding.TransformSpec) and returns \"_gpay_id\" if pk is empty or not in colTypes.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4698
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1851
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7216
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In transmuter.go lines 137-156, NewTransmuterModule executes an UPDATE on cdc_system.master_binding to backfill transform_spec.pk from cdc_system.source_object_registry.primary_key_field.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4725
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1261
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6797
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In recon_execute_heal_handler.go lines 639-660, both the numeric PK and string PK prune loops execute masterDB.WithContext(ctx).Exec(delSQL, ...) in batches.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "INCORRECT",
+          "confidence": 0.0282
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1073
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6928
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In transmuter.go lines 129-171, NewTransmuterModule initializes TransmuterModule with batchSize 2000 and cacheTTL 60 seconds.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "INCORRECT",
+          "confidence": 0.0575
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.0129
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8854
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

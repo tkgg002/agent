@@ -76,3 +76,18 @@ Toàn bộ 5 phát hiện phản biện (`AF-01..AF-05`) từ đợt Audit trư�
    - Mode A: `06_laya_summary_dg3_20261021T094856.json` (`gate: "PASS"`).
    - Mode B: `06_laya_summary_dg3review_20261021T094858.json` & `06_laya_summary_dg3review_20261021T094930.json` (`gate: "PASS"`).
 
+---
+
+## 6. Đối soát Trạng thái Git & Working Tree trên 3 Repositories (`2026-10-21T15:19+07:00`)
+
+- **Nguyên nhân tab Source Control (Changes) trên IDE hiển thị `0 changes`:** Toàn bộ thay đổi đã được đóng gói vào **Local Commits** trên nhánh `recon-heal` (chưa `git push` lên `origin/recon-heal`), nên `git status` hiển thị `working tree clean` chứ **không bị mất bất kỳ dòng code nào**.
+- **Chi tiết các Local Commits đang nằm ahead of `origin/recon-heal`:**
+  1. **`centralized-data-service` (nhánh `recon-heal`, ahead of `origin/recon-heal` `33ea3ba` bởi 3 local commits — 13 files changed, `+1,498 / -190` dòng):**
+     - `43e5da7` (`2026-10-21 09:46:23`): `fix(master): track deleted count separately in TransmuteResult and activity log (F6)` (`4 files changed, 200 insertions(+), 36 deletions(-)`)
+     - `08c05a8` (`2026-10-20 16:43:35`): `fix(cdc): resolve audit findings AF-01..AF-05 for shadow-master sync and heal` (`8 files changed, 287 insertions(+), 79 deletions(-)`)
+     - `30b1b00` (`2026-10-20 15:19:20`): `fix(master,shadow,recon): resolve F1-F5 shadow-to-master update/delete drop and dynamic pk conflict target` (`11 files changed, 1089 insertions(+), 153 deletions(-)`)
+  2. **`cdc-cms-service` (nhánh `recon-heal`, ahead of `origin/recon-heal` `245907f` bởi 1 local commit — 3 files changed, `+198 / -14` dòng):**
+     - `069c456` (`2026-10-21 09:46:25`): `fix(recon): aggregate master_deleted and transmute_poison_pill in GetDailyFlow (F7, F8)` (`3 files changed, 198 insertions(+), 14 deletions(-)`)
+  3. **`cdc-cms-web` (nhánh `recon-heal`, ahead of `origin/recon-heal` `67be11a` bởi 1 local commit — 2 files changed, `+5 / -3` dòng):**
+     - `2b2fa59` (`2026-10-21 09:46:27`): `feat(recon-ui): display Delete(d) metric column for Master in CDC Daily Flow (F7)` (`2 files changed, 5 insertions(+), 3 deletions(-)`)
+

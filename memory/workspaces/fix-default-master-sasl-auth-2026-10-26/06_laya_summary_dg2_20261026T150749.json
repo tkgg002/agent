@@ -1,0 +1,176 @@
+{
+  "mode": "claim",
+  "stage": "dg2",
+  "workspace": "fix-default-master-sasl-auth-2026-10-26",
+  "ts": "20261026T150749",
+  "trusted_rounds": [
+    "r2",
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-default-master-sasl-auth-2026-10-26/06_laya_raw_dg1_20261026T150749.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In transmuter_utils.go, deterministicGpayID returns shadowGpayID unchanged when keySuffix is empty, so multiple master bindings fanning out from one shadow table receive the same _gpay_id as the shadow row.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:421-424 deterministicGpayID returns shadowGpayID directly when keySuffix is empty.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6208
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.0297
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.214
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In recon_stream_bucket_engine.go, lookupMasterRefExact selects id, master_schema, master_table, shadow_schema, shadow_table, and master_connection_key without selecting mb.transform_spec.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.8488
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.5752
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0975
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In transmuter.go, bulkUpsertMaster currently hardcodes ON CONFLICT (\"_gpay_id\") DO UPDATE and, when conflictTarget != \"_gpay_id\", deletes existing Master rows whose _gpay_id is not in gpayIDs before inserting.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1815-1857 bulkUpsertMaster hardcodes ON CONFLICT (\"_gpay_id\") and deletes rows by conflictTarget when _gpay_id differs.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3607
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.142
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.3798
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In master_ddl_generator.go, when pkCol parsed from TransformSpec is non-empty, not '_gpay_id', and present in realCols, a CREATE UNIQUE INDEX IF NOT EXISTS ux_<table>_<pkCol> statement is appended to idx.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4094
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2749
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.829
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the demo for bulkUpsertMaster, ON CONFLICT uses conflictIdent (the quoted conflictTarget) and the UPDATE SET loop skips both '_gpay_id' and conflictTarget.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-default-master-sasl-auth-2026-10-26/09_tasks_solution_default_master_auth.md:840-870 demo uses ON CONFLICT (conflictIdent) and skips _gpay_id and conflictTarget in sets.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.7095
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2774
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4438
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the demo for bulkUpsertMaster, if Raw execution fails with 42P10 when conflictTarget != '_gpay_id', it executes CREATE UNIQUE INDEX IF NOT EXISTS ux_<MasterTable>_<conflictTarget> and retries the Raw query once.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.7699
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4336
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6837
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the demo for ResolveSegmentBPKPair, when TransformSpec defines a valid pk different from segBPKColumn and the column exists on the Master table, it returns ('_source_id', pk, 'id').",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.7047
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3425
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.9467
+        }
+      }
+    }
+  ],
+  "gate": "PASS",
+  "summary_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-default-master-sasl-auth-2026-10-26/06_laya_summary_dg1_20261026T150749.json"
+}

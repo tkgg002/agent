@@ -1,0 +1,52 @@
+[
+  {
+    "id": "S-RC-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "loadCLISettings in task_inspector.go",
+    "claim": "loadCLISettings currently sets LayaGateModel to claude-sonnet-4-6 (antigravity) and SecurityModel to codex-5.3 (antigravity).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:689-691\n\t\tLayaGateModel:      \"claude-sonnet-4-6 (antigravity)\",\n\t\tSecurityModel:      \"codex-5.3 (antigravity)\",\n\t\tMaxSelfHealRetries: 3,"
+  },
+  {
+    "id": "S-FIX-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "laya_gate.py DEFAULT_URL and build_parser",
+    "claim": "laya_gate.py connects to http://127.0.0.1:8200/v1/predict and will be upgraded to support stage dg0 for Pre-Plan Adversarial Critique.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:41-43\nFALLBACK_STATE_ROOT = AGENT_ROOT / \".agents\" / \"state\" / \"workspaces\"\nDEFAULT_URL = \"http://127.0.0.1:8200/v1/predict\""
+  },
+  {
+    "id": "S-IMPACT-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "buildAutopilotView in internal/webui/server.go",
+    "claim": "buildAutopilotView in server.go constructs the AutopilotStageGroupDTO pipeline and will include the Pre-Plan Critique (DG0 · Laya :8200) wave before Plan.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:2880-2886\n\tstages := []AutopilotStageGroupDTO{\n\t\t{\n\t\t\tID: \"start\",\n\t\t\tCards: []AutopilotSubCardDTO{\n\t\t\t\t{Title: \"Start · Scope\", Subtitle: startLabel, Meta: \"Repo: \" + repoName, Status: \"done\", RoleLabel: \"🧠 BRAIN · Intake\", AgentSlot: \"Slot A\", SkillBadge: \"/brain-delegate\", Model: cliCfg.PlannerModel},\n\t\t\t},\n\t\t},"
+  },
+  {
+    "id": "D-BEHAV-01",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "BuildAndRunCalibratedLayaGate in internal/agentgate/kernel_bridge.go",
+    "claim": "BuildAndRunCalibratedLayaGate in kernel_bridge.go invokes laya_gate.py against http://127.0.0.1:8200 and will support dg0, dg1, dg2, and dg3.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:779-786\n\tif g != nil && g.AgentCoreDir != \"\" && (!isTempTestWorkspace(workspaceDir) || os.Getenv(\"ORCH_LIVE_LAYA_IN_TESTS\") == \"1\") && checkLayaHealthHTTP(\"http://127.0.0.1:8200/health\") {\n\t\tscript := filepath.Join(g.AgentCoreDir, \"tooling\", \"laya_gate.py\")\n\t\tif _, statErr := os.Stat(script); statErr == nil {\n\t\t\tout, runErr := runPythonTool(ctx, g.AgentCoreDir, script,\n\t\t\t\t\"run\",\n\t\t\t\t\"--stage\", stage,"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "laya_gate.py sends requests to an external cloud URL https://api.openai.com/v1/predict.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:41-43\nFALLBACK_STATE_ROOT = AGENT_ROOT / \".agents\" / \"state\" / \"workspaces\"\nDEFAULT_URL = \"http://127.0.0.1:8200/v1/predict\""
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "loadCLISettings sets MaxSelfHealRetries to 999.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:689-691\n\t\tLayaGateModel:      \"claude-sonnet-4-6 (antigravity)\",\n\t\tSecurityModel:      \"codex-5.3 (antigravity)\",\n\t\tMaxSelfHealRetries: 3,"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "DEFAULT_URL in laya_gate.py is http://127.0.0.1:8200/v1/predict.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:41-43\nFALLBACK_STATE_ROOT = AGENT_ROOT / \".agents\" / \"state\" / \"workspaces\"\nDEFAULT_URL = \"http://127.0.0.1:8200/v1/predict\""
+  }
+]

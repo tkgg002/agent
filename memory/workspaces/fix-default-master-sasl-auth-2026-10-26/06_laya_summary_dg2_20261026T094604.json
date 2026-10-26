@@ -1,0 +1,175 @@
+{
+  "mode": "claim",
+  "stage": "dg2",
+  "workspace": "fix-default-master-sasl-auth-2026-10-26",
+  "ts": "20261026T094604",
+  "trusted_rounds": [
+    "r1"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-default-master-sasl-auth-2026-10-26/06_laya_raw_dg1_20261026T094604.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In connection_manager.go lines 95-122, when key is 'default_master', GetMasterDB queries cdc_system.connection_registry and calls buildDSNFromFieldsPatched(&conn) unconditionally when OptionsJSON has no dsn/url and SecretRef is not a URL.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:94-120 — GetMasterDB queries connection_registry and calls buildDSNFromFieldsPatched(&conn) whenever dsn is still empty.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3553
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.3436
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.5343
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In connection_manager.go lines 124-137, when dsn remains empty for an active master record in connection_registry, GetMasterDB resolves destDB via m.reg.GetDB(database.RoleDestination) and caches it in m.masterDBPool[key].",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:126-131 — when dsn is empty and foundActiveMasterRecord is true, RoleDestination pool is cached in masterDBPool[key] and returned.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3318
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6001
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7345
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In master_repo_gorm.go lines 641-649, custom master connections created via CreateMasterConnection always store the full authenticated DSN under opts['dsn'] and opts['url'] inside options_json.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_repo_gorm.go:641-645 — CreateMasterConnection stores dsn and url keys holding the full DSN in options_json.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2062
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4564
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4046
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In multi.go lines 163-168, RoleDestination resolves its DSN directly from r.cfg.MasterDB.PgxDSN().",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5854
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.2846
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0274
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the demo for GetMasterDB, buildDSNFromFieldsPatched(&conn) is only called when dsn is empty and hasOptionCredentials is true (options_json contains a non-empty username or user).",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-default-master-sasl-auth-2026-10-26/09_tasks_solution_default_master_auth.md:92-119 — Code demo checks hasOptionCredentials before calling buildDSNFromFieldsPatched(&conn).",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2465
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1946
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.0687
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the demo for EnsureDefaultMasterConnection, an UPDATE statement clears host, port, and default_database to NULL on 'default_master' when options_json is NULL or has no dsn/url/username/user.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.7745
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.8092
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8127
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the demo for EnsureDefaultMasterConnection, the function signature is EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error and does not take cfg.DB.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.8244
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.4464
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4189
+        }
+      }
+    }
+  ],
+  "gate": "PASS",
+  "summary_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-default-master-sasl-auth-2026-10-26/06_laya_summary_dg1_20261026T094604.json"
+}

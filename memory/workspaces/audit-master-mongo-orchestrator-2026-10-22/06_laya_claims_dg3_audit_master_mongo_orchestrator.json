@@ -1,0 +1,56 @@
+[
+  {
+    "id": "A-ORCH-SPLIT",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "SyncRealWorkspaceState bảo vệ task của User không bị ghi đè bởi agent-workspace",
+    "claim": "Khi tìm thấy task đã tồn tại trong existingByKey[pt.Key], nếu cur.Source khác rỗng và khác agent-workspace thì SyncRealWorkspaceState thực hiện continue không ghi đè.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/seed_data.go:278-288\n\t\tif cur, ok := existingByKey[pt.Key]; ok {\n\t\t\tif cur.Source != \"\" && cur.Source != \"agent-workspace\" {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\ttargetStage := cur.Stage\n\t\t\tif pt.Done && cur.Stage != queue.StageDone {\n\t\t\t\ttargetStage = queue.StageDone\n\t\t\t}\n\t\t\t_ = s.QueueStore.UpdateWaveAndStage(ctx, cur.ID, waveIdx, targetStage, mdl, pt.Score)\n\t\t\tcontinue\n\t\t}"
+  },
+  {
+    "id": "A-ORCH-CHAT",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "classifyChatActionMode tự động nhận diện báo cáo Audit trong Co-Architect Chat",
+    "claim": "Khi tin nhắn chứa mã phát hiện auditFindingCodeRe hoặc remediationTaskRe, hàm classifyChatActionMode trả về ingest_audit_remediation.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_chat.go:920-929\nfunc classifyChatActionMode(cleanMsg, requestedMode string) string {\n\tlowerMsg := strings.ToLower(cleanMsg)\n\t// Always detect pasted Audit Reports or Remediation Plans regardless of dropdown default\n\tif auditFindingCodeRe.MatchString(cleanMsg) ||\n\t\tremediationTaskRe.MatchString(cleanMsg) ||\n\t\tstrings.Contains(lowerMsg, \"audit_report_\") ||\n\t\tstrings.Contains(lowerMsg, \"09_tasks_solution_audit_\") ||\n\t\t(strings.Contains(lowerMsg, \"lỗ hổng\") && strings.Contains(lowerMsg, \"phương án khắc phục\")) {\n\t\treturn \"ingest_audit_remediation\"\n\t}"
+  },
+  {
+    "id": "A-ORCH-ISOLATE",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "runTaskLifecycleAction cô lập repo ngoài s.Root trong pha implement",
+    "claim": "Khi filepath.Clean(repoPath) khác filepath.Clean(s.Root) và isolatedRepoWT chưa có .git, execDir được gán bằng chuỗi rỗng để không chạy lệnh git trên repo ngoài.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1136-1144\n\t\t\tisolatedRepoWT := filepath.Join(s.Root, \".orchestrator\", \"worktrees\", safeParent, repoName)\n\t\t\texecDir := repoPath\n\t\t\tif filepath.Clean(repoPath) != filepath.Clean(s.Root) {\n\t\t\t\tif _, wtGitErr := os.Stat(filepath.Join(isolatedRepoWT, \".git\")); wtGitErr == nil {\n\t\t\t\t\texecDir = isolatedRepoWT\n\t\t\t\t} else {\n\t\t\t\t\texecDir = \"\"\n\t\t\t\t}\n\t\t\t}"
+  },
+  {
+    "id": "A-SA01-NOPAPER",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "VerifySubTaskCodeOnDisk bắt buộc mọi candidate path phải có mặt trong diff.patch hoặc trên đĩa và từ chối ngay nếu thiếu",
+    "claim": "Khi candidateOK bằng false và os.Stat(absPath) trả về lỗi err != nil, hàm VerifySubTaskCodeOnDisk trả về false kèm lý do missing on disk and not in diff.patch.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:1239-1247\n\t\tif candidateOK {\n\t\t\tcontinue\n\t\t}\n\n\t\tabsPath := filepath.Join(repoDir, rel)\n\t\tfi, err := os.Stat(absPath)\n\t\tif err != nil {\n\t\t\treturn false, fmt.Sprintf(\"missing on disk and not in diff.patch: %s:%s\", filepath.Base(repoDir), rel)\n\t\t}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "flow": "Control false: đảo ngược kết quả trả về của classifyChatActionMode khi gặp auditFindingCodeRe",
+    "claim": "Khi auditFindingCodeRe.MatchString(cleanMsg) bằng true, hàm classifyChatActionMode trả về discuss.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_chat.go:923-929\n\tif auditFindingCodeRe.MatchString(cleanMsg) ||\n\t\tremediationTaskRe.MatchString(cleanMsg) ||\n\t\tstrings.Contains(lowerMsg, \"audit_report_\") ||\n\t\tstrings.Contains(lowerMsg, \"09_tasks_solution_audit_\") ||\n\t\t(strings.Contains(lowerMsg, \"lỗ hổng\") && strings.Contains(lowerMsg, \"phương án khắc phục\")) {\n\t\treturn \"ingest_audit_remediation\"\n\t}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "flow": "Control false: đảo điều kiện isTestTaskOrTempRoot đối với tiền tố TASK-DUAL-",
+    "claim": "Khi strings.HasPrefix(upperID, \"TASK-DUAL-\") bằng true, hàm isTestTaskOrTempRoot trả về false.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:689-693\nfunc isTestTaskOrTempRoot(root string, externalID string) bool {\n\tupperID := strings.ToUpper(strings.TrimSpace(externalID))\n\tif strings.HasPrefix(upperID, \"TASK-DUAL-\") || strings.HasPrefix(upperID, \"TASK-TEST-\") || strings.HasPrefix(upperID, \"TEST-\") {\n\t\treturn true\n\t}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "flow": "Control true: khớp nguyên văn điều kiện isTestTaskOrTempRoot đối với tiền tố TASK-DUAL-",
+    "claim": "Khi strings.HasPrefix(upperID, \"TASK-DUAL-\") là true, hàm isTestTaskOrTempRoot trả về true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:689-693\nfunc isTestTaskOrTempRoot(root string, externalID string) bool {\n\tupperID := strings.ToUpper(strings.TrimSpace(externalID))\n\tif strings.HasPrefix(upperID, \"TASK-DUAL-\") || strings.HasPrefix(upperID, \"TASK-TEST-\") || strings.HasPrefix(upperID, \"TEST-\") {\n\t\treturn true\n\t}"
+  }
+]
+

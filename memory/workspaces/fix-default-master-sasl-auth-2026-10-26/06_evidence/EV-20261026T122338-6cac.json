@@ -1,0 +1,11 @@
+{
+  "id": "EV-20261026T122338-6cac",
+  "cmd": "bash -c \necho \"=== 1. Shadow active count ===\"\ndocker exec gpay-postgres-shadow sh -c \"psql -U \\\"\\$POSTGRES_USER\\\" -d \\\"\\$POSTGRES_DB\\\" -tAc \\\"SELECT COUNT(*) FROM shadow_traitestpbs.payment_bills WHERE NOT COALESCE(_deleted, false);\\\"\"\necho \"=== 2. Master count (payment_bills & payment_bills_1) ===\"\ndocker exec gpay-postgres-dest sh -c \"psql -U \\\"\\$POSTGRES_USER\\\" -d \\\"\\$POSTGRES_DB\\\" -tAc \\\"SELECT COUNT(*) FROM master_payment_bill_service.payment_bills; SELECT COUNT(*) FROM master_payment_bill_service.payment_bills_1;\\\"\"\necho \"=== 3. Sample row from shadow_traitestpbs.payment_bills ===\"\ndocker exec gpay-postgres-shadow sh -c \"psql -U \\\"\\$POSTGRES_USER\\\" -d \\\"\\$POSTGRES_DB\\\" -c \\\"SELECT _gpay_id, _source_id, _source_ts FROM shadow_traitestpbs.payment_bills WHERE NOT COALESCE(_deleted, false) ORDER BY _gpay_id DESC LIMIT 3;\\\"\"\necho \"=== 4. Matching rows in master_payment_bill_service.payment_bills ===\"\ndocker exec gpay-postgres-dest sh -c \"psql -U \\\"\\$POSTGRES_USER\\\" -d \\\"\\$POSTGRES_DB\\\" -c \\\"SELECT _gpay_id, _id, _source_ts FROM master_payment_bill_service.payment_bills ORDER BY _gpay_id DESC LIMIT 3;\\\"\"\n",
+  "cwd": "/Users/trainguyen/Documents/work/agent",
+  "kind": "runtime",
+  "exit": 0,
+  "started_at": "2026-10-26T12:23:38+07:00",
+  "stdout_tail": "=== 1. Shadow active count ===\n55918\n=== 2. Master count (payment_bills & payment_bills_1) ===\n55918\n55918\n=== 3. Sample row from shadow_traitestpbs.payment_bills ===\n      _gpay_id      | _source_id |  _source_ts   \n--------------------+------------+---------------\n 108072211822149679 | 57275      | 1792992017772\n 108072169862332461 | 57274      | 1792992007989\n 108070928394485802 | 57273      | 1792991730655\n(3 rows)\n\n=== 4. Matching rows in master_payment_bill_service.payment_bills ===\n      _gpay_id      |  _id  |  _source_ts   \n--------------------+-------+---------------\n 108072211822149679 | 57275 | 1792992017772\n 108072169862332461 | 57274 | 1792992007989\n 108070928394485802 | 57273 | 1792991730655\n(3 rows)\n\nbash: -c: option requires an argument\n",
+  "stdout_sha256": "04fa8c9dc82d73936f990bafe5cd11993bc3ddce55d1a086df79c32052c868e5",
+  "src_fingerprint": "13082754e960b7d845ab7ee07439a2999464e8922750d59c7769fefcc5dac9b1"
+}

@@ -1,0 +1,62 @@
+[
+  {
+    "id": "S-RC-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/telegram_bridge.go dòng 800-825, hàm handleTelegramTaskListCommand in các task ở trạng thái NEEDS_YOU bằng đúng 1 dòng rút gọn mà chưa hiển thị Nguyên nhân, Giải pháp, danh sách Sub-Tasks và danh sách tên file bị ảnh hưởng.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:800-825\n\t\t\tcase uiStage == \"NEEDS_YOU\":\n\t\t\t\tqueuePos++\n\t\t\t\tstatusBadge = fmt.Sprintf(\"⏸ CHỜ APPROVE (#%d)\", queuePos)\n\t\t\tcase uiStage == \"DONE\":\n\t\t\t\tstatusBadge = \"✅ ĐÃ XONG\"\n\t\t\tdefault:\n\t\t\t\tqueuePos++\n\t\t\t\tstatusBadge = fmt.Sprintf(\"⏳ HÀNG ĐỢI (#%d)\", queuePos)\n\t\t\t}\n\t\t\tactiveMark := \"\"\n\t\t\tif strings.EqualFold(qt.ExternalID, selectedKey) {\n\t\t\t\tactiveMark = \" 🎯\"\n\t\t\t}\n\t\t\tsb.WriteString(fmt.Sprintf(\"• *%s*%s [%s] — %s (`%d/%d Sub-Tasks`%s)\\n\",\n\t\t\t\tqt.ExternalID,\n\t\t\t\tactiveMark,\n\t\t\t\tstatusBadge,\n\t\t\t\ttruncateRunes(qt.Title, 52),\n\t\t\t\tdoneSubs,\n\t\t\t\tlen(subTasks),\n\t\t\t\tdiffTag,\n\t\t\t))"
+  },
+  {
+    "id": "S-FIX-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/telegram_bridge.go dòng 938-958, hàm notifyTelegramOnS3PlanReadyForce hiện chỉ gửi thông tin tóm tắt bề mặt và đường dẫn isoMeta.PlanFile; việc bổ sung extractTaskApprovalDossier sẽ trích xuất đầy đủ Nguyên nhân, Giải pháp, Code Demo, danh sách Sub-Tasks và danh sách file bị ảnh hưởng vào bản tin Telegram.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:938-958\n\tmsgText := fmt.Sprintf(\n\t\t\"✈️ *[AI-ORCHESTRATOR · S3 SOLUTION READY]*\\n\"+\n\t\t\t\"• *Trạng thái:* `%s` (`NEEDS_YOU`)\\n\"+\n\t\t\t\"• *Task:* `%s` — %s\\n\"+\n\t\t\t\"• *Affected Repos (%d):* `%s`\\n\"+\n\t\t\t\"• *Sub-Tasks (`08_tasks.md`):* `%d/%d done`\\n\"+\n\t\t\t\"• *File Giải pháp & Code Demo:* `%s`\\n\\n\""
+  },
+  {
+    "id": "S-IMPACT-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/server.go dòng 1051-1069, hàm findQueuedTask hiện chỉ so sánh strings.EqualFold(all[i].ExternalID, taskKey); việc mở rộng hỗ trợ mã #<ID> và sanitizeTaskKeyPath giúp định danh chính xác cả các task có khoảng trắng tiếng Việt hoặc nhiều dấu gạch ngang.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1051-1069\nfunc (s *Server) findQueuedTask(ctx context.Context, taskKey string) (*queue.QueuedTask, error) {\n\tif s.QueueStore == nil {\n\t\treturn nil, fmt.Errorf(\"queue store is not initialized\")\n\t}\n\tall, err := s.QueueStore.ListAll(ctx)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tif len(all) == 0 {\n\t\treturn nil, fmt.Errorf(\"no tasks in queue\")\n\t}\n\ttaskKey = strings.TrimSpace(taskKey)\n\tif taskKey != \"\" {\n\t\tfor i := range all {\n\t\t\tif strings.EqualFold(all[i].ExternalID, taskKey) {\n\t\t\t\treturn &all[i], nil\n\t\t\t}\n\t\t}\n\t}"
+  },
+  {
+    "id": "S-PATTERN-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/task_chat.go dòng 843-907, nhánh case revise_solution đã chuẩn hóa luồng cập nhật 09_tasks_solution.md, xóa .user-approved và chuyển stage về queue.StageNeedsYou để chống Scope Drift khi sửa giải pháp S3.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_chat.go:867-905\n\t\tupdatedPlan := strings.TrimRight(planStr, \"\\n\") + \"\\n\" + revisionBlock\n\t\t_ = os.WriteFile(isoMeta.PlanFile, []byte(updatedPlan), 0o644)\n\n\t\t// TASK-PIPE-02: Tier-2 Architectural Re-Plan (S5 -> S3 -> Human Gate NEEDS_YOU)\n\t\t_ = os.Remove(filepath.Join(isoMeta.ArtifactDir, \".user-approved\"))\n\t\tif s.QueueStore != nil {\n\t\t\t_ = s.QueueStore.UpdateStage(ctx, qt.ID, queue.StageNeedsYou, selectedModel, isoMeta.WorktreePath)\n\t\t}"
+  },
+  {
+    "id": "D-BEHAV-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/telegram_bridge.go dòng 593-615, hàm processIncomingTelegramCommand hiện trả lỗi khi isApprove == false; việc bổ sung nhánh kiểm tra REVISE_PROMPT, VIEW_PLAN, /revise và PendingRevisionTaskKey cho phép xử lý phản hồi chỉnh sửa giải pháp trực tiếp từ Telegram.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:593-615\n\tif isTelegramTaskListCommand(cleanText) {\n\t\treturn s.handleTelegramTaskListCommand(ctx, chatID, fromUser)\n\t}\n\tif isTelegramRunTaskCommand(cleanText) {\n\t\treturn s.handleTelegramRunTaskCommand(ctx, explicitTaskKey, cleanText, chatID, fromUser, stepDelay)\n\t}\n\n\tisApprove := strings.Contains(lower, \"approve\") ||\n\t\tstrings.Contains(lower, \"/approve\") ||\n\t\tstrings.Contains(lower, \"duyệt\") ||\n\t\tstrings.Contains(lower, \"duyet\") ||\n\t\tstrings.Contains(lower, \"ok chạy\") ||\n\t\tstrings.Contains(lower, \"chạy đi\") ||\n\t\tlower == \"ok\" ||\n\t\tlower == \"chạy\" ||\n\t\tlower == \"chay\" ||\n\t\tstrings.HasPrefix(lower, \"ok \") ||\n\t\tstrings.HasPrefix(lower, \"chạy \") ||\n\t\tstrings.HasPrefix(lower, \"chay \")\n\tif !isApprove {\n\t\ts.appendTelegramEvent(\"INBOUND_MSG\", explicitTaskKey, fmt.Sprintf(\"@%s: %s (ignored — not a /task, RUN_TASK, or APPROVE command)\", fromUser, cleanText), \"IGNORED\")\n\t\treturn \"\", fmt.Errorf(\"telegram message does not contain /task, RUN_TASK, or APPROVE command: %q\", cleanText)\n\t}"
+  },
+  {
+    "id": "D-EDGE-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/telegram_bridge.go dòng 1040-1073, hàm sendTelegramBotMessageWithCustomKeyboard đã có vòng lặp thử gửi với parse_mode Markdown trước và tự động retry không có parse_mode nếu Telegram trả lỗi HTTP 400 do ký tự đặc biệt.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1040-1073\n\tfor _, useMarkdown := range []bool{true, false} {\n\t\tbodyMap := map[string]any{\n\t\t\t\"chat_id\": chatID,\n\t\t\t\"text\":    text,\n\t\t}\n\t\tif kb != nil {\n\t\t\tbodyMap[\"reply_markup\"] = kb\n\t\t}\n\t\tif useMarkdown {\n\t\t\tbodyMap[\"parse_mode\"] = \"Markdown\"\n\t\t}"
+  },
+  {
+    "id": "D-API-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/server.go dòng 2684-2725, hàm inspectTaskRepoDiffSummary hiện thu thập map seenFiles từ iso.DiffFile và git status --short nhưng chỉ trả về (cnt int, summary string) mà chưa trả về slice tên file.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:2684-2725\nfunc (s *Server) inspectTaskRepoDiffSummary(ctx context.Context, qt queue.QueuedTask, iso TaskIsolationDTO, affectedRepos []string) (int, string) {\n\tseenFiles := make(map[string]bool)\n\tvar repoNames []string\n\tif rawDiff, err := os.ReadFile(iso.DiffFile); err == nil && len(rawDiff) > 0 {"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Tại internal/webui/server.go dòng 2684-2725, hàm inspectTaskRepoDiffSummary hoàn toàn không đọc iso.DiffFile mà xóa toàn bộ thư mục .git trên ổ cứng.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:2684-2697\nfunc (s *Server) inspectTaskRepoDiffSummary(ctx context.Context, qt queue.QueuedTask, iso TaskIsolationDTO, affectedRepos []string) (int, string) {\n\tseenFiles := make(map[string]bool)\n\tvar repoNames []string\n\tif rawDiff, err := os.ReadFile(iso.DiffFile); err == nil && len(rawDiff) > 0 {"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Tại internal/webui/task_chat.go dòng 867-885, nhánh revise_solution không bao giờ ghi vào isoMeta.PlanFile và luôn giữ nguyên file .user-approved mà không xóa.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_chat.go:867-882\n\t\tupdatedPlan := strings.TrimRight(planStr, \"\\n\") + \"\\n\" + revisionBlock\n\t\t_ = os.WriteFile(isoMeta.PlanFile, []byte(updatedPlan), 0o644)\n\t\t_ = os.Remove(filepath.Join(isoMeta.ArtifactDir, \".user-approved\"))"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Tại internal/webui/telegram_bridge.go dòng 1026-1030, nếu token hoặc chatID rỗng thì hàm sendTelegramBotMessageWithCustomKeyboard trả về chuỗi QUEUED_LOCAL_BRIDGE.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1026-1030\n\ttoken := strings.TrimSpace(cfg.BotTokenEncrypted)\n\tchatID := strings.TrimSpace(cfg.ChatID)\n\tif token == \"\" || chatID == \"\" {\n\t\treturn \"QUEUED_LOCAL_BRIDGE (Chưa nhập BotToken/ChatID thật — Sẵn sàng nhận Webhook/Test APPROVE)\"\n\t}"
+  }
+]

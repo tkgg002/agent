@@ -1,0 +1,79 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Nguyên nhân lệch trường JSON notify_on_s3_plan (app.js) vs notify_on_s3 (telegram_bridge.go) làm tắt thông báo Telegram",
+    "claim": "Trong app.js dòng 2403-2411, hàm submitTelegramSettings gửi trường JSON là notify_on_s3_plan, trong khi TelegramSettingsDTO ở telegram_bridge.go dòng 52-60 lại dùng tag json:\"notify_on_s3\", khiến req.NotifyOnS3 bị unmarshal thành false.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/app.js:2403-2411\n  const payload = {\n    enabled: Boolean(document.getElementById(\"tg-enabled\")?.checked),\n    bot_token: document.getElementById(\"tg-bot-token\")?.value.trim() || \"\",\n    chat_id: document.getElementById(\"tg-chat-id\")?.value.trim() || \"\",\n    bot_username: document.getElementById(\"tg-bot-username\")?.value.trim() || \"@ai_orchestrator_bot\",\n    notify_on_s3_plan: Boolean(document.getElementById(\"tg-notify-s3\")?.checked),\n    auto_run_on_approve: Boolean(document.getElementById(\"tg-auto-run\")?.checked),\n    polling_enabled: Boolean(document.getElementById(\"tg-polling\")?.checked),\n  };\nREF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:52-60\ntype TelegramSettingsDTO struct {\n\tEnabled          bool               `json:\"enabled\"`\n\tBotToken         string             `json:\"bot_token,omitempty\"` // Only accepted on POST input; never returned unmasked in GET\n\tMaskedBotToken   string             `json:\"masked_bot_token\"`\n\tHasBotToken      bool               `json:\"has_bot_token\"`\n\tChatID           string             `json:\"chat_id\"`\n\tBotUsername      string             `json:\"bot_username\"`\n\tNotifyOnS3       bool               `json:\"notify_on_s3\"`"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Nguyên nhân notifyTelegramOnS3PlanReady dừng ngay với DISABLED khi NotifyOnS3 là false",
+    "claim": "Trong telegram_bridge.go dòng 410-414, hàm notifyTelegramOnS3PlanReady kiểm tra nếu !cfg.Enabled hoặc !cfg.NotifyOnS3 thì trả về DISABLED ngay lập tức mà không gọi sendTelegramBotMessage.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:410-414\nfunc (s *Server) notifyTelegramOnS3PlanReady(ctx context.Context, qt queue.QueuedTask, isoMeta TaskIsolationDTO, subTasks []SubTaskDTO, reasonLabel string) string {\n\tcfg := s.loadTelegramPersistedConfig()\n\tif !cfg.Enabled || !cfg.NotifyOnS3 {\n\t\treturn \"DISABLED\"\n\t}"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Nguyên nhân testTelegramS3Notification trong app.js không gửi kèm dữ liệu form và đọc sai trường data.settings",
+    "claim": "Trong app.js dòng 2439-2456, hàm testTelegramS3Notification chỉ gửi { task_key: activeKey } và đọc data.settings thay vì data.delivery_status và data.telegram_settings.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/app.js:2439-2456\nasync function testTelegramS3Notification() {\n  const activeKey = dashboardState?.active_task_key || selectedChainKey || \"TASK-11\";\n  const stEl = document.getElementById(\"tg-test-status\");\n  if (stEl) stEl.textContent = `⏳ Đang gửi thông báo S3 Plan của ${activeKey} qua Telegram Bridge...`;\n  try {\n    const res = await fetch(\"/api/settings/telegram/test\", {\n      method: \"POST\",\n      headers: { \"Content-Type\": \"application/json\" },\n      body: JSON.stringify({ task_key: activeKey }),\n    });\n    const data = await res.json();\n    if (stEl) {\n      stEl.textContent = `✓ Đã gửi thông báo S3 cho ${activeKey}: ${data.settings?.last_status || \"OK\"}`;\n    }\n    if (data.settings) {\n      if (dashboardState) dashboardState.telegram_settings = data.settings;\n      renderTelegramEventsInModal(data.settings.recent_events || []);\n    }"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Cấu trúc response của handleTelegramTestSend trong telegram_bridge.go dòng 251-258",
+    "claim": "Trong telegram_bridge.go dòng 251-258, hàm handleTelegramTestSend trả về JSON gồm các khóa ok, task_key, delivery_status và telegram_settings.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:251-258\n\tw.Header().Set(\"Content-Type\", \"application/json; charset=utf-8\")\n\t_ = json.NewEncoder(w).Encode(map[string]any{\n\t\t\"ok\":                true,\n\t\t\"task_key\":          qt.ExternalID,\n\t\t\"delivery_status\":   sentStatus,\n\t\t\"telegram_settings\": s.loadTelegramSettings(),\n\t})\n}"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Code Demo sendTelegramBotMessageWithKeyboard trong 09_tasks_solution_co_architect_approve_run_reply.md dòng 167-215",
+    "claim": "Trong 09_tasks_solution_co_architect_approve_run_reply.md dòng 167-215, hàm sendTelegramBotMessageWithKeyboard gắn inline_keyboard chứa callback_data APPROVE và thử gửi với useMarkdown từ true sang false để tự động fallback nếu Markdown lỗi 400.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_co_architect_approve_run_reply.md:167-215\nfunc (s *Server) sendTelegramBotMessageWithKeyboard(ctx context.Context, cfg telegramPersistedConfig, text string, taskKey string) string {\n\ttoken := strings.TrimSpace(cfg.BotTokenEncrypted)\n\tchatID := strings.TrimSpace(cfg.ChatID)\n\tif token == \"\" || chatID == \"\" {\n\t\treturn \"QUEUED_LOCAL_BRIDGE (Chưa nhập BotToken/ChatID thật — Sẵn sàng nhận Webhook/Test APPROVE)\"\n\t}\n\tapiURL := fmt.Sprintf(\"https://api.telegram.org/bot%s/sendMessage\", token)\n\tkb := map[string]any{\n\t\t\"inline_keyboard\": [][]map[string]string{\n\t\t\t{\n\t\t\t\t{\n\t\t\t\t\t\"text\":          fmt.Sprintf(\"✅ APPROVE %s & Chạy S4–S5 Ngay\", taskKey),\n\t\t\t\t\t\"callback_data\": fmt.Sprintf(\"APPROVE %s\", taskKey),\n\t\t\t\t},\n\t\t\t},\n\t\t},\n\t}\n\tfor _, useMarkdown := range []bool{true, false} {\n\t\tbodyMap := map[string]any{\n\t\t\t\"chat_id\":      chatID,\n\t\t\t\"text\":         text,\n\t\t\t\"reply_markup\": kb,\n\t\t}\n\t\tif useMarkdown {\n\t\t\tbodyMap[\"parse_mode\"] = \"Markdown\"\n\t\t}\n\t\trawBody, _ := json.Marshal(bodyMap)\n\t\treqCtx, cancel := context.WithTimeout(ctx, 6*time.Second)\n\t\treq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, apiURL, bytes.NewReader(rawBody))\n\t\tif err != nil {\n\t\t\tcancel()\n\t\t\treturn \"LOCAL_FALLBACK\"\n\t\t}\n\t\treq.Header.Set(\"Content-Type\", \"application/json\")\n\t\tresp, err := http.DefaultClient.Do(req)\n\t\tif err != nil {\n\t\t\tcancel()\n\t\t\treturn \"LOCAL_BRIDGE_LOGGED\"\n\t\t}\n\t\t_, _ = io.Copy(io.Discard, resp.Body)\n\t\t_ = resp.Body.Close()\n\t\tcancel()\n\t\tif resp.StatusCode >= 200 && resp.StatusCode < 300 {\n\t\t\treturn \"SENT_TELEGRAM_API_OK\"\n\t\t}\n\t\t// Nếu Markdown lỗi 400 (can't parse entities), vòng lặp tự fallback sang plain text!\n\t}\n\treturn \"TELEGRAM_HTTP_400\"\n}"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Bảo mật che BotToken trong maskTelegramBotToken ở telegram_bridge.go dòng 86-98",
+    "claim": "Trong telegram_bridge.go dòng 86-98, hàm maskTelegramBotToken luôn che phần giữa của token bằng dấu *** hoặc trả về bot*** nếu độ dài <= 10.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:86-98\nfunc maskTelegramBotToken(raw string) string {\n\traw = strings.TrimSpace(raw)\n\tif raw == \"\" {\n\t\treturn \"\"\n\t}\n\tif strings.Contains(raw, \"***\") {\n\t\treturn raw\n\t}\n\tif len(raw) <= 10 {\n\t\treturn \"bot***\"\n\t}\n\treturn raw[:6] + \"***\" + raw[len(raw)-4:]\n}"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Nút Gửi Thử Thông Báo S3 Plan trong index.html dòng 953-956",
+    "claim": "Trong index.html dòng 953-956, nút Gửi Thử Thông Báo S3 Plan gọi hàm testTelegramS3Notification().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/index.html:953-956\n            <div style=\"display:flex;gap:6px;flex-wrap:wrap;\">\n              <button type=\"button\" class=\"btn-mini-cli\" onclick=\"testTelegramS3Notification()\">📤 Gửi Thử Thông Báo S3 Plan</button>\n              <button type=\"button\" class=\"btn-mini-cli\" style=\"border-color:#22c55e;color:#4ade80;\" onclick=\"simulateTelegramRemoteApprove()\">⚡ Giả Lập Nhắn \"APPROVE\" Từ Telegram</button>\n            </div>"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "flow": "Control false: khai báo sai giá trị trả về khi !cfg.NotifyOnS3 trong telegram_bridge.go dòng 410-414",
+    "claim": "Trong telegram_bridge.go dòng 410-414, khi !cfg.NotifyOnS3 thì hàm notifyTelegramOnS3PlanReady vẫn tiếp tục gửi tin nhắn và trả về SENT_TELEGRAM_API_OK.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:410-414\nfunc (s *Server) notifyTelegramOnS3PlanReady(ctx context.Context, qt queue.QueuedTask, isoMeta TaskIsolationDTO, subTasks []SubTaskDTO, reasonLabel string) string {\n\tcfg := s.loadTelegramPersistedConfig()\n\tif !cfg.Enabled || !cfg.NotifyOnS3 {\n\t\treturn \"DISABLED\"\n\t}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "flow": "Control false: khai báo sai hàm onclick của nút Gửi Thử Thông Báo S3 Plan trong index.html dòng 953-956",
+    "claim": "Trong index.html dòng 953-956, nút Gửi Thử Thông Báo S3 Plan có thuộc tính onclick là closeTelegramSettingsModal().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/index.html:953-956\n            <div style=\"display:flex;gap:6px;flex-wrap:wrap;\">\n              <button type=\"button\" class=\"btn-mini-cli\" onclick=\"testTelegramS3Notification()\">📤 Gửi Thử Thông Báo S3 Plan</button>\n              <button type=\"button\" class=\"btn-mini-cli\" style=\"border-color:#22c55e;color:#4ade80;\" onclick=\"simulateTelegramRemoteApprove()\">⚡ Giả Lập Nhắn \"APPROVE\" Từ Telegram</button>\n            </div>"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "flow": "Control true: xác nhận chính xác thuộc tính onclick của nút Gửi Thử Thông Báo S3 Plan trong index.html dòng 953-956",
+    "claim": "Trong index.html dòng 953-956, nút Gửi Thử Thông Báo S3 Plan có thuộc tính onclick là testTelegramS3Notification().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/index.html:953-956\n            <div style=\"display:flex;gap:6px;flex-wrap:wrap;\">\n              <button type=\"button\" class=\"btn-mini-cli\" onclick=\"testTelegramS3Notification()\">📤 Gửi Thử Thông Báo S3 Plan</button>\n              <button type=\"button\" class=\"btn-mini-cli\" style=\"border-color:#22c55e;color:#4ade80;\" onclick=\"simulateTelegramRemoteApprove()\">⚡ Giả Lập Nhắn \"APPROVE\" Từ Telegram</button>\n            </div>"
+  }
+]

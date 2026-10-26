@@ -1,0 +1,1063 @@
+[
+  {
+    "id": "A-BACKFILL",
+    "kind": "audit",
+    "basis": "code",
+    "claim": "In master_connection.go lines 50-72, EnsureDefaultMasterConnection updates cdc_system.master_binding.transform_spec with pk from source_object_registry.primary_key_field when transform_type <> flatten and transform_spec->>pk is empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:50-75\n\t// Chuẩn hóa cấu hình transform_spec.pk từ source_object_registry.primary_key_field\n\t// cho các master_binding cũ được tạo trước khi có trường pk trong transform_spec.\n\tbackfillRes := db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.master_binding mb\n\t\t   SET transform_spec = jsonb_set(\n\t\t           CASE\n\t\t               WHEN mb.transform_spec IS NULL OR jsonb_typeof(mb.transform_spec) <> 'object' THEN '{}'::jsonb\n\t\t               ELSE mb.transform_spec\n\t\t           END,\n\t\t           '{pk}',\n\t\t           to_jsonb(BTRIM(sor.primary_key_field)),\n\t\t           true\n\t\t       ),\n\t\t       updated_at = NOW()\n\t\t  FROM cdc_system.source_object_registry sor\n\t\t WHERE sor.id = mb.source_object_id\n\t\t   AND COALESCE(mb.transform_type, '') <> 'flatten'\n\t\t   AND COALESCE(BTRIM(mb.transform_spec->>'pk'), '') = ''\n\t\t   AND COALESCE(BTRIM(sor.primary_key_field), '') <> ''\n\t`)\n\tif backfillRes.Error != nil {\n\t\treturn fmt.Errorf(\"backfill master_binding transform_spec.pk: %w\", backfillRes.Error)\n\t}\n\n\tlogger.Info(\"master connection seeded\",\n\t\tzap.String(\"connection_code\", \"default_master\"),\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5117,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8301,
+                "INCORRECT": 0.1389,
+                "UNSUPPORTED": 0.031
+              },
+              "confidence": 0.5117,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 728,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In master_connection.go lines 50-72, EnsureDefaultMasterConnection updates cdc_system.master_binding.transform_spec with pk from source_object_registry.primary_key_field when transform_type <> flatten and transform_spec->>pk is empty.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:50-75\n\t// Chuẩn hóa cấu hình transform_spec.pk từ source_object_registry.primary_key_field\n\t// cho các master_binding cũ được tạo trước khi có trường pk trong transform_spec.\n\tbackfillRes := db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.master_binding mb\n\t\t   SET transform_spec = jsonb_set(\n\t\t           CASE\n\t\t               WHEN mb.transform_spec IS NULL OR jsonb_typeof(mb.transform_spec) <> 'object' THEN '{}'::jsonb\n\t\t               ELSE mb.transform_spec\n\t\t           END,\n\t\t           '{pk}',\n\t\t           to_jsonb(BTRIM(sor.primary_key_field)),\n\t\t           true\n\t\t       ),\n\t\t       updated_at = NOW()\n\t\t  FROM cdc_system.source_object_registry sor\n\t\t WHERE sor.id = mb.source_object_id\n\t\t   AND COALESCE(mb.transform_type, '') <> 'flatten'\n\t\t   AND COALESCE(BTRIM(mb.transform_spec->>'pk'), '') = ''\n\t\t   AND COALESCE(BTRIM(sor.primary_key_field), '') <> ''\n\t`)\n\tif backfillRes.Error != nil {\n\t\treturn fmt.Errorf(\"backfill master_binding transform_spec.pk: %w\", backfillRes.Error)\n\t}\n\n\tlogger.Info(\"master connection seeded\",\n\t\tzap.String(\"connection_code\", \"default_master\"),\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0316,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4075,
+                "INCORRECT": 0.3777,
+                "UNSUPPORTED": 0.2147
+              },
+              "confidence": 0.0316,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 734,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:50-75\n\t// Chuẩn hóa cấu hình transform_spec.pk từ source_object_registry.primary_key_field\n\t// cho các master_binding cũ được tạo trước khi có trường pk trong transform_spec.\n\tbackfillRes := db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.master_binding mb\n\t\t   SET transform_spec = jsonb_set(\n\t\t           CASE\n\t\t               WHEN mb.transform_spec IS NULL OR jsonb_typeof(mb.transform_spec) <> 'object' THEN '{}'::jsonb\n\t\t               ELSE mb.transform_spec\n\t\t           END,\n\t\t           '{pk}',\n\t\t           to_jsonb(BTRIM(sor.primary_key_field)),\n\t\t           true\n\t\t       ),\n\t\t       updated_at = NOW()\n\t\t  FROM cdc_system.source_object_registry sor\n\t\t WHERE sor.id = mb.source_object_id\n\t\t   AND COALESCE(mb.transform_type, '') <> 'flatten'\n\t\t   AND COALESCE(BTRIM(mb.transform_spec->>'pk'), '') = ''\n\t\t   AND COALESCE(BTRIM(sor.primary_key_field), '') <> ''\n\t`)\n\tif backfillRes.Error != nil {\n\t\treturn fmt.Errorf(\"backfill master_binding transform_spec.pk: %w\", backfillRes.Error)\n\t}\n\n\tlogger.Info(\"master connection seeded\",\n\t\tzap.String(\"connection_code\", \"default_master\"),\n",
+          "claim": "In master_connection.go lines 50-72, EnsureDefaultMasterConnection updates cdc_system.master_binding.transform_spec with pk from source_object_registry.primary_key_field when transform_type <> flatten and transform_spec->>pk is empty."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5209,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8968,
+                "NO": 0.1032
+              },
+              "confidence": 0.5209,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 667,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:50-75\n\t// Chuẩn hóa cấu hình transform_spec.pk từ source_object_registry.primary_key_field\n\t// cho các master_binding cũ được tạo trước khi có trường pk trong transform_spec.\n\tbackfillRes := db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.master_binding mb\n\t\t   SET transform_spec = jsonb_set(\n\t\t           CASE\n\t\t               WHEN mb.transform_spec IS NULL OR jsonb_typeof(mb.transform_spec) <> 'object' THEN '{}'::jsonb\n\t\t               ELSE mb.transform_spec\n\t\t           END,\n\t\t           '{pk}',\n\t\t           to_jsonb(BTRIM(sor.primary_key_field)),\n\t\t           true\n\t\t       ),\n\t\t       updated_at = NOW()\n\t\t  FROM cdc_system.source_object_registry sor\n\t\t WHERE sor.id = mb.source_object_id\n\t\t   AND COALESCE(mb.transform_type, '') <> 'flatten'\n\t\t   AND COALESCE(BTRIM(mb.transform_spec->>'pk'), '') = ''\n\t\t   AND COALESCE(BTRIM(sor.primary_key_field), '') <> ''\n\t`)\n\tif backfillRes.Error != nil {\n\t\treturn fmt.Errorf(\"backfill master_binding transform_spec.pk: %w\", backfillRes.Error)\n\t}\n\n\tlogger.Info(\"master connection seeded\",\n\t\tzap.String(\"connection_code\", \"default_master\"),\n",
+          "claim": "In master_connection.go lines 50-72, EnsureDefaultMasterConnection updates cdc_system.master_binding.transform_spec with pk from source_object_registry.primary_key_field when transform_type <> flatten and transform_spec->>pk is empty."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "A-RUNEVENTS",
+    "kind": "audit",
+    "basis": "code",
+    "claim": "In transmuter.go lines 786-811, RunEvents looks up shadowGID from Shadow and if shadowGID <= 0 increments res.Skipped and continues without calling deterministicSourceGpayID.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:786-812\n\t\tshadowGID := shadowGpayMap[ev.SourceID]\n\t\tif shadowGID == 0 && ev.SourceID != \"\" {\n\t\t\tif refreshed := t.lookupShadowGpayIDs(ctx, masterRow, []string{ev.SourceID}); refreshed[ev.SourceID] > 0 {\n\t\t\t\tshadowGID = refreshed[ev.SourceID]\n\t\t\t\tshadowGpayMap[ev.SourceID] = shadowGID\n\t\t\t} else if masterRow.ShadowTable != \"\" {\n\t\t\t\tif shadowRows, fetchErr := t.fetchShadowBatch(ctx, masterRow, 0, []string{ev.SourceID}); fetchErr == nil && len(shadowRows) > 0 && shadowRows[0].GpayID > 0 {\n\t\t\t\t\tshadowGID = shadowRows[0].GpayID\n\t\t\t\t\tshadowGpayMap[ev.SourceID] = shadowGID\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif shadowGID <= 0 {\n\t\t\tres.Skipped++\n\t\t\tcontinue\n\t\t}\n\t\trecords := make([]map[string]any, 0, len(emits))\n\t\tfor _, e := range emits {\n\t\t\trec := e.Cols\n\t\t\trec[\"_gpay_id\"] = deterministicGpayID(shadowGID, e.KeySuffix)\n\t\t\trec[\"_source_ts\"] = ev.SourceTs\n\t\t\trec[\"_deleted\"] = false\n\t\t\trecords = append(records, rec)\n\t\t}\n\n\t\tvar upsertErr error\n\t\tconst maxRetries = 3\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2066,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6608,
+                "INCORRECT": 0.1437,
+                "UNSUPPORTED": 0.1955
+              },
+              "confidence": 0.2066,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 683,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmuter.go lines 786-811, RunEvents looks up shadowGID from Shadow and if shadowGID <= 0 increments res.Skipped and continues without calling deterministicSourceGpayID.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:786-812\n\t\tshadowGID := shadowGpayMap[ev.SourceID]\n\t\tif shadowGID == 0 && ev.SourceID != \"\" {\n\t\t\tif refreshed := t.lookupShadowGpayIDs(ctx, masterRow, []string{ev.SourceID}); refreshed[ev.SourceID] > 0 {\n\t\t\t\tshadowGID = refreshed[ev.SourceID]\n\t\t\t\tshadowGpayMap[ev.SourceID] = shadowGID\n\t\t\t} else if masterRow.ShadowTable != \"\" {\n\t\t\t\tif shadowRows, fetchErr := t.fetchShadowBatch(ctx, masterRow, 0, []string{ev.SourceID}); fetchErr == nil && len(shadowRows) > 0 && shadowRows[0].GpayID > 0 {\n\t\t\t\t\tshadowGID = shadowRows[0].GpayID\n\t\t\t\t\tshadowGpayMap[ev.SourceID] = shadowGID\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif shadowGID <= 0 {\n\t\t\tres.Skipped++\n\t\t\tcontinue\n\t\t}\n\t\trecords := make([]map[string]any, 0, len(emits))\n\t\tfor _, e := range emits {\n\t\t\trec := e.Cols\n\t\t\trec[\"_gpay_id\"] = deterministicGpayID(shadowGID, e.KeySuffix)\n\t\t\trec[\"_source_ts\"] = ev.SourceTs\n\t\t\trec[\"_deleted\"] = false\n\t\t\trecords = append(records, rec)\n\t\t}\n\n\t\tvar upsertErr error\n\t\tconst maxRetries = 3\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.2619,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.1786,
+                "INCORRECT": 0.7014,
+                "UNSUPPORTED": 0.12
+              },
+              "confidence": 0.2619,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 689,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:786-812\n\t\tshadowGID := shadowGpayMap[ev.SourceID]\n\t\tif shadowGID == 0 && ev.SourceID != \"\" {\n\t\t\tif refreshed := t.lookupShadowGpayIDs(ctx, masterRow, []string{ev.SourceID}); refreshed[ev.SourceID] > 0 {\n\t\t\t\tshadowGID = refreshed[ev.SourceID]\n\t\t\t\tshadowGpayMap[ev.SourceID] = shadowGID\n\t\t\t} else if masterRow.ShadowTable != \"\" {\n\t\t\t\tif shadowRows, fetchErr := t.fetchShadowBatch(ctx, masterRow, 0, []string{ev.SourceID}); fetchErr == nil && len(shadowRows) > 0 && shadowRows[0].GpayID > 0 {\n\t\t\t\t\tshadowGID = shadowRows[0].GpayID\n\t\t\t\t\tshadowGpayMap[ev.SourceID] = shadowGID\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif shadowGID <= 0 {\n\t\t\tres.Skipped++\n\t\t\tcontinue\n\t\t}\n\t\trecords := make([]map[string]any, 0, len(emits))\n\t\tfor _, e := range emits {\n\t\t\trec := e.Cols\n\t\t\trec[\"_gpay_id\"] = deterministicGpayID(shadowGID, e.KeySuffix)\n\t\t\trec[\"_source_ts\"] = ev.SourceTs\n\t\t\trec[\"_deleted\"] = false\n\t\t\trecords = append(records, rec)\n\t\t}\n\n\t\tvar upsertErr error\n\t\tconst maxRetries = 3\n",
+          "claim": "In transmuter.go lines 786-811, RunEvents looks up shadowGID from Shadow and if shadowGID <= 0 increments res.Skipped and continues without calling deterministicSourceGpayID."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5436,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9039,
+                "NO": 0.0961
+              },
+              "confidence": 0.5436,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 622,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:786-812\n\t\tshadowGID := shadowGpayMap[ev.SourceID]\n\t\tif shadowGID == 0 && ev.SourceID != \"\" {\n\t\t\tif refreshed := t.lookupShadowGpayIDs(ctx, masterRow, []string{ev.SourceID}); refreshed[ev.SourceID] > 0 {\n\t\t\t\tshadowGID = refreshed[ev.SourceID]\n\t\t\t\tshadowGpayMap[ev.SourceID] = shadowGID\n\t\t\t} else if masterRow.ShadowTable != \"\" {\n\t\t\t\tif shadowRows, fetchErr := t.fetchShadowBatch(ctx, masterRow, 0, []string{ev.SourceID}); fetchErr == nil && len(shadowRows) > 0 && shadowRows[0].GpayID > 0 {\n\t\t\t\t\tshadowGID = shadowRows[0].GpayID\n\t\t\t\t\tshadowGpayMap[ev.SourceID] = shadowGID\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif shadowGID <= 0 {\n\t\t\tres.Skipped++\n\t\t\tcontinue\n\t\t}\n\t\trecords := make([]map[string]any, 0, len(emits))\n\t\tfor _, e := range emits {\n\t\t\trec := e.Cols\n\t\t\trec[\"_gpay_id\"] = deterministicGpayID(shadowGID, e.KeySuffix)\n\t\t\trec[\"_source_ts\"] = ev.SourceTs\n\t\t\trec[\"_deleted\"] = false\n\t\t\trecords = append(records, rec)\n\t\t}\n\n\t\tvar upsertErr error\n\t\tconst maxRetries = 3\n",
+          "claim": "In transmuter.go lines 786-811, RunEvents looks up shadowGID from Shadow and if shadowGID <= 0 increments res.Skipped and continues without calling deterministicSourceGpayID."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "A-BULKUPSERT",
+    "kind": "audit",
+    "basis": "code",
+    "claim": "In transmuter.go lines 1802-1870, bulkUpsertMaster uses ON CONFLICT (\"_gpay_id\") DO UPDATE SET and when conflictTarget != \"_gpay_id\" executes DELETE FROM qt WHERE conflictTarget IN (?) AND \"_gpay_id\" NOT IN (?) inside a transaction before INSERT.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1802-1872\n\tconflictTarget := resolveConflictTarget(binding, colTypes)\n\n\tsets := make([]string, 0, len(keys))\n\tfor _, k := range keys {\n\t\tif k == \"_gpay_id\" {\n\t\t\tcontinue\n\t\t}\n\t\tsets = append(sets, fmt.Sprintf(\"%s = EXCLUDED.%s\", quoteTransmuteIdent(k), quoteTransmuteIdent(k)))\n\t}\n\tsets = append(sets, `\"_updated_at\" = NOW()`)\n\n\tqt := quoteTransmuteQualified(binding.MasterSchema, binding.MasterTable)\n\tvar sqlText string\n\tif isFullSync {\n\t\tsqlText = fmt.Sprintf(`INSERT INTO %s (%s) VALUES %s\n\t\t\tON CONFLICT (\"_gpay_id\") DO UPDATE SET %s\n\t\t\tRETURNING (xmax = 0) AS inserted`,\n\t\t\tqt, strings.Join(cols, \", \"), strings.Join(placeholders, \", \"),\n\t\t\tstrings.Join(sets, \", \"))\n\t} else {\n\t\tconst clockSkewToleranceMs = 2000\n\t\tsqlText = fmt.Sprintf(`INSERT INTO %s (%s) VALUES %s\n\t\t\tON CONFLICT (\"_gpay_id\") DO UPDATE SET %s\n\t\t\tWHERE COALESCE(EXCLUDED._source_ts, 0) >= COALESCE(%s._source_ts, 0) - %d\n\t\t\tRETURNING (xmax = 0) AS inserted`,\n\t\t\tqt, strings.Join(cols, \", \"), strings.Join(placeholders, \", \"),\n\t\t\tstrings.Join(sets, \", \"), qt, clockSkewToleranceMs)\n\t}\n\n\tvar resRows []struct {\n\t\tInserted bool `gorm:\"column:inserted\"`\n\t}\n\tvar execErr error\n\tif conflictTarget != \"_gpay_id\" {\n\t\tpkVals := make([]any, 0, len(records))\n\t\tgpayIDs := make([]int64, 0, len(records))\n\t\tfor _, rec := range records {\n\t\t\tif pv := sqlBindValueTransmute(rec[conflictTarget]); pv != nil {\n\t\t\t\tpkVals = append(pkVals, pv)\n\t\t\t}\n\t\t\tif gid, ok := rec[\"_gpay_id\"].(int64); ok && gid > 0 {\n\t\t\t\tgpayIDs = append(gpayIDs, gid)\n\t\t\t}\n\t\t}\n\t\texecErr = masterDB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {\n\t\t\tresRows = nil\n\t\t\tif len(pkVals) > 0 && len(gpayIDs) > 0 {\n\t\t\t\tdelSQL := fmt.Sprintf(`DELETE FROM %s WHERE %s IN (?) AND \"_gpay_id\" NOT IN (?)`,\n\t\t\t\t\tqt, quoteTransmuteIdent(conflictTarget))\n\t\t\t\tif delErr := tx.Exec(delSQL, pkVals, gpayIDs).Error; delErr != nil {\n\t\t\t\t\treturn delErr\n\t\t\t\t}\n\t\t\t}\n\t\t\treturn tx.Raw(sqlText, values...).Scan(&resRows).Error\n\t\t})\n\t} else {\n\t\texecErr = masterDB.WithContext(ctx).Raw(sqlText, values...).Scan(&resRows).Error\n\t}\n\tif execErr != nil {\n\t\tif failedField := findFailedFieldFromErr(execErr, records); failedField != \"\" {\n\t\t\texecErr = fmt.Errorf(\"%w (potential failed field: %q)\", execErr, failedField)\n\t\t}\n\t\treturn 0, 0, int64(len(records)), execErr\n\t}\n\n\tvar inserted, updated int64\n\tfor _, r := range resRows {\n\t\tif r.Inserted {\n\t\t\tinserted++\n\t\t} else {\n\t\t\tupdated++\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3322,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7272,
+                "INCORRECT": 0.2096,
+                "UNSUPPORTED": 0.0632
+              },
+              "confidence": 0.3322,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmuter.go lines 1802-1870, bulkUpsertMaster uses ON CONFLICT (\"_gpay_id\") DO UPDATE SET and when conflictTarget != \"_gpay_id\" executes DELETE FROM qt WHERE conflictTarget IN (?) AND \"_gpay_id\" NOT IN (?) inside a transaction before INSERT.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1802-1872\n\tconflictTarget := resolveConflictTarget(binding, colTypes)\n\n\tsets := make([]string, 0, len(keys))\n\tfor _, k := range keys {\n\t\tif k == \"_gpay_id\" {\n\t\t\tcontinue\n\t\t}\n\t\tsets = append(sets, fmt.Sprintf(\"%s = EXCLUDED.%s\", quoteTransmuteIdent(k), quoteTransmuteIdent(k)))\n\t}\n\tsets = append(sets, `\"_updated_at\" = NOW()`)\n\n\tqt := quoteTransmuteQualified(binding.MasterSchema, binding.MasterTable)\n\tvar sqlText string\n\tif isFullSync {\n\t\tsqlText = fmt.Sprintf(`INSERT INTO %s (%s) VALUES %s\n\t\t\tON CONFLICT (\"_gpay_id\") DO UPDATE SET %s\n\t\t\tRETURNING (xmax = 0) AS inserted`,\n\t\t\tqt, strings.Join(cols, \", \"), strings.Join(placeholders, \", \"),\n\t\t\tstrings.Join(sets, \", \"))\n\t} else {\n\t\tconst clockSkewToleranceMs = 2000\n\t\tsqlText = fmt.Sprintf(`INSERT INTO %s (%s) VALUES %s\n\t\t\tON CONFLICT (\"_gpay_id\") DO UPDATE SET %s\n\t\t\tWHERE COALESCE(EXCLUDED._source_ts, 0) >= COALESCE(%s._source_ts, 0) - %d\n\t\t\tRETURNING (xmax = 0) AS inserted`,\n\t\t\tqt, strings.Join(cols, \", \"), strings.Join(placeholders, \", \"),\n\t\t\tstrings.Join(sets, \", \"), qt, clockSkewToleranceMs)\n\t}\n\n\tvar resRows []struct {\n\t\tInserted bool `gorm:\"column:inserted\"`\n\t}\n\tvar execErr error\n\tif conflictTarget != \"_gpay_id\" {\n\t\tpkVals := make([]any, 0, len(records))\n\t\tgpayIDs := make([]int64, 0, len(records))\n\t\tfor _, rec := range records {\n\t\t\tif pv := sqlBindValueTransmute(rec[conflictTarget]); pv != nil {\n\t\t\t\tpkVals = append(pkVals, pv)\n\t\t\t}\n\t\t\tif gid, ok := rec[\"_gpay_id\"].(int64); ok && gid > 0 {\n\t\t\t\tgpayIDs = append(gpayIDs, gid)\n\t\t\t}\n\t\t}\n\t\texecErr = masterDB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {\n\t\t\tresRows = nil\n\t\t\tif len(pkVals) > 0 && len(gpayIDs) > 0 {\n\t\t\t\tdelSQL := fmt.Sprintf(`DELETE FROM %s WHERE %s IN (?) AND \"_gpay_id\" NOT IN (?)`,\n\t\t\t\t\tqt, quoteTransmuteIdent(conflictTarget))\n\t\t\t\tif delErr := tx.Exec(delSQL, pkVals, gpayIDs).Error; delErr != nil {\n\t\t\t\t\treturn delErr\n\t\t\t\t}\n\t\t\t}\n\t\t\treturn tx.Raw(sqlText, values...).Scan(&resRows).Error\n\t\t})\n\t} else {\n\t\texecErr = masterDB.WithContext(ctx).Raw(sqlText, values...).Scan(&resRows).Error\n\t}\n\tif execErr != nil {\n\t\tif failedField := findFailedFieldFromErr(execErr, records); failedField != \"\" {\n\t\t\texecErr = fmt.Errorf(\"%w (potential failed field: %q)\", execErr, failedField)\n\t\t}\n\t\treturn 0, 0, int64(len(records)), execErr\n\t}\n\n\tvar inserted, updated int64\n\tfor _, r := range resRows {\n\t\tif r.Inserted {\n\t\t\tinserted++\n\t\t} else {\n\t\t\tupdated++\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1269,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.519,
+                "INCORRECT": 0.364,
+                "UNSUPPORTED": 0.117
+              },
+              "confidence": 0.1269,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1802-1872\n\tconflictTarget := resolveConflictTarget(binding, colTypes)\n\n\tsets := make([]string, 0, len(keys))\n\tfor _, k := range keys {\n\t\tif k == \"_gpay_id\" {\n\t\t\tcontinue\n\t\t}\n\t\tsets = append(sets, fmt.Sprintf(\"%s = EXCLUDED.%s\", quoteTransmuteIdent(k), quoteTransmuteIdent(k)))\n\t}\n\tsets = append(sets, `\"_updated_at\" = NOW()`)\n\n\tqt := quoteTransmuteQualified(binding.MasterSchema, binding.MasterTable)\n\tvar sqlText string\n\tif isFullSync {\n\t\tsqlText = fmt.Sprintf(`INSERT INTO %s (%s) VALUES %s\n\t\t\tON CONFLICT (\"_gpay_id\") DO UPDATE SET %s\n\t\t\tRETURNING (xmax = 0) AS inserted`,\n\t\t\tqt, strings.Join(cols, \", \"), strings.Join(placeholders, \", \"),\n\t\t\tstrings.Join(sets, \", \"))\n\t} else {\n\t\tconst clockSkewToleranceMs = 2000\n\t\tsqlText = fmt.Sprintf(`INSERT INTO %s (%s) VALUES %s\n\t\t\tON CONFLICT (\"_gpay_id\") DO UPDATE SET %s\n\t\t\tWHERE COALESCE(EXCLUDED._source_ts, 0) >= COALESCE(%s._source_ts, 0) - %d\n\t\t\tRETURNING (xmax = 0) AS inserted`,\n\t\t\tqt, strings.Join(cols, \", \"), strings.Join(placeholders, \", \"),\n\t\t\tstrings.Join(sets, \", \"), qt, clockSkewToleranceMs)\n\t}\n\n\tvar resRows []struct {\n\t\tInserted bool `gorm:\"column:inserted\"`\n\t}\n\tvar execErr error\n\tif conflictTarget != \"_gpay_id\" {\n\t\tpkVals := make([]any, 0, len(records))\n\t\tgpayIDs := make([]int64, 0, len(records))\n\t\tfor _, rec := range records {\n\t\t\tif pv := sqlBindValueTransmute(rec[conflictTarget]); pv != nil {\n\t\t\t\tpkVals = append(pkVals, pv)\n\t\t\t}\n\t\t\tif gid, ok := rec[\"_gpay_id\"].(int64); ok && gid > 0 {\n\t\t\t\tgpayIDs = append(gpayIDs, gid)\n\t\t\t}\n\t\t}\n\t\texecErr = masterDB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {\n\t\t\tresRows = nil\n\t\t\tif len(pkVals) > 0 && len(gpayIDs) > 0 {\n\t\t\t\tdelSQL := fmt.Sprintf(`DELETE FROM %s WHERE %s IN (?) AND \"_gpay_id\" NOT IN (?)`,\n\t\t\t\t\tqt, quoteTransmuteIdent(conflictTarget))\n\t\t\t\tif delErr := tx.Exec(delSQL, pkVals, gpayIDs).Error; delErr != nil {\n\t\t\t\t\treturn delErr\n\t\t\t\t}\n\t\t\t}\n\t\t\treturn tx.Raw(sqlText, values...).Scan(&resRows).Error\n\t\t})\n\t} else {\n\t\texecErr = masterDB.WithContext(ctx).Raw(sqlText, values...).Scan(&resRows).Error\n\t}\n\tif execErr != nil {\n\t\tif failedField := findFailedFieldFromErr(execErr, records); failedField != \"\" {\n\t\t\texecErr = fmt.Errorf(\"%w (potential failed field: %q)\", execErr, failedField)\n\t\t}\n\t\treturn 0, 0, int64(len(records)), execErr\n\t}\n\n\tvar inserted, updated int64\n\tfor _, r := range resRows {\n\t\tif r.Inserted {\n\t\t\tinserted++\n\t\t} else {\n\t\t\tupdated++\n",
+          "claim": "In transmuter.go lines 1802-1870, bulkUpsertMaster uses ON CONFLICT (\"_gpay_id\") DO UPDATE SET and when conflictTarget != \"_gpay_id\" executes DELETE FROM qt WHERE conflictTarget IN (?) AND \"_gpay_id\" NOT IN (?) inside a transaction before INSERT."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6372,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9308,
+                "NO": 0.0692
+              },
+              "confidence": 0.6372,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1802-1872\n\tconflictTarget := resolveConflictTarget(binding, colTypes)\n\n\tsets := make([]string, 0, len(keys))\n\tfor _, k := range keys {\n\t\tif k == \"_gpay_id\" {\n\t\t\tcontinue\n\t\t}\n\t\tsets = append(sets, fmt.Sprintf(\"%s = EXCLUDED.%s\", quoteTransmuteIdent(k), quoteTransmuteIdent(k)))\n\t}\n\tsets = append(sets, `\"_updated_at\" = NOW()`)\n\n\tqt := quoteTransmuteQualified(binding.MasterSchema, binding.MasterTable)\n\tvar sqlText string\n\tif isFullSync {\n\t\tsqlText = fmt.Sprintf(`INSERT INTO %s (%s) VALUES %s\n\t\t\tON CONFLICT (\"_gpay_id\") DO UPDATE SET %s\n\t\t\tRETURNING (xmax = 0) AS inserted`,\n\t\t\tqt, strings.Join(cols, \", \"), strings.Join(placeholders, \", \"),\n\t\t\tstrings.Join(sets, \", \"))\n\t} else {\n\t\tconst clockSkewToleranceMs = 2000\n\t\tsqlText = fmt.Sprintf(`INSERT INTO %s (%s) VALUES %s\n\t\t\tON CONFLICT (\"_gpay_id\") DO UPDATE SET %s\n\t\t\tWHERE COALESCE(EXCLUDED._source_ts, 0) >= COALESCE(%s._source_ts, 0) - %d\n\t\t\tRETURNING (xmax = 0) AS inserted`,\n\t\t\tqt, strings.Join(cols, \", \"), strings.Join(placeholders, \", \"),\n\t\t\tstrings.Join(sets, \", \"), qt, clockSkewToleranceMs)\n\t}\n\n\tvar resRows []struct {\n\t\tInserted bool `gorm:\"column:inserted\"`\n\t}\n\tvar execErr error\n\tif conflictTarget != \"_gpay_id\" {\n\t\tpkVals := make([]any, 0, len(records))\n\t\tgpayIDs := make([]int64, 0, len(records))\n\t\tfor _, rec := range records {\n\t\t\tif pv := sqlBindValueTransmute(rec[conflictTarget]); pv != nil {\n\t\t\t\tpkVals = append(pkVals, pv)\n\t\t\t}\n\t\t\tif gid, ok := rec[\"_gpay_id\"].(int64); ok && gid > 0 {\n\t\t\t\tgpayIDs = append(gpayIDs, gid)\n\t\t\t}\n\t\t}\n\t\texecErr = masterDB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {\n\t\t\tresRows = nil\n\t\t\tif len(pkVals) > 0 && len(gpayIDs) > 0 {\n\t\t\t\tdelSQL := fmt.Sprintf(`DELETE FROM %s WHERE %s IN (?) AND \"_gpay_id\" NOT IN (?)`,\n\t\t\t\t\tqt, quoteTransmuteIdent(conflictTarget))\n\t\t\t\tif delErr := tx.Exec(delSQL, pkVals, gpayIDs).Error; delErr != nil {\n\t\t\t\t\treturn delErr\n\t\t\t\t}\n\t\t\t}\n\t\t\treturn tx.Raw(sqlText, values...).Scan(&resRows).Error\n\t\t})\n\t} else {\n\t\texecErr = masterDB.WithContext(ctx).Raw(sqlText, values...).Scan(&resRows).Error\n\t}\n\tif execErr != nil {\n\t\tif failedField := findFailedFieldFromErr(execErr, records); failedField != \"\" {\n\t\t\texecErr = fmt.Errorf(\"%w (potential failed field: %q)\", execErr, failedField)\n\t\t}\n\t\treturn 0, 0, int64(len(records)), execErr\n\t}\n\n\tvar inserted, updated int64\n\tfor _, r := range resRows {\n\t\tif r.Inserted {\n\t\t\tinserted++\n\t\t} else {\n\t\t\tupdated++\n",
+          "claim": "In transmuter.go lines 1802-1870, bulkUpsertMaster uses ON CONFLICT (\"_gpay_id\") DO UPDATE SET and when conflictTarget != \"_gpay_id\" executes DELETE FROM qt WHERE conflictTarget IN (?) AND \"_gpay_id\" NOT IN (?) inside a transaction before INSERT."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "A-MODAL",
+    "kind": "audit",
+    "basis": "code",
+    "claim": "In ExecuteHealModal.tsx lines 191-208, useEffect computes hasRemainingOrphan and sets setPruneMissingSrc(segment === \"shadow_master\" ? hasRemainingOrphan : false).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ExecuteHealModal.tsx:191-208\n  useEffect(() => {\n    if (open && reports.length > 0) {\n      const hasRemainingMismatched = reports.some(\n        (r) => r.stale_count - (r.healed_mismatched_count || 0) > 0\n      );\n      const hasRemainingMissingDest = reports.some(\n        (r) => r.missing_count - (r.healed_missing_dest_count || 0) > 0\n      );\n      const hasRemainingOrphan = reports.some(\n        (r) => r.orphan_count - (r.pruned_missing_src_count || 0) > 0\n      );\n\n      setHealMismatched(hasRemainingMismatched);\n      setHealMissingDest(hasRemainingMissingDest);\n      setPruneMissingSrc(segment === 'shadow_master' ? hasRemainingOrphan : false);\n    }\n  }, [open, data, segment]);\n\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4084,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7641,
+                "INCORRECT": 0.1983,
+                "UNSUPPORTED": 0.0377
+              },
+              "confidence": 0.4084,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 490,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In ExecuteHealModal.tsx lines 191-208, useEffect computes hasRemainingOrphan and sets setPruneMissingSrc(segment === \"shadow_master\" ? hasRemainingOrphan : false).",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ExecuteHealModal.tsx:191-208\n  useEffect(() => {\n    if (open && reports.length > 0) {\n      const hasRemainingMismatched = reports.some(\n        (r) => r.stale_count - (r.healed_mismatched_count || 0) > 0\n      );\n      const hasRemainingMissingDest = reports.some(\n        (r) => r.missing_count - (r.healed_missing_dest_count || 0) > 0\n      );\n      const hasRemainingOrphan = reports.some(\n        (r) => r.orphan_count - (r.pruned_missing_src_count || 0) > 0\n      );\n\n      setHealMismatched(hasRemainingMismatched);\n      setHealMissingDest(hasRemainingMissingDest);\n      setPruneMissingSrc(segment === 'shadow_master' ? hasRemainingOrphan : false);\n    }\n  }, [open, data, segment]);\n\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.7138,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9254,
+                "INCORRECT": 0.0471,
+                "UNSUPPORTED": 0.0275
+              },
+              "confidence": 0.7138,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 495,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ExecuteHealModal.tsx:191-208\n  useEffect(() => {\n    if (open && reports.length > 0) {\n      const hasRemainingMismatched = reports.some(\n        (r) => r.stale_count - (r.healed_mismatched_count || 0) > 0\n      );\n      const hasRemainingMissingDest = reports.some(\n        (r) => r.missing_count - (r.healed_missing_dest_count || 0) > 0\n      );\n      const hasRemainingOrphan = reports.some(\n        (r) => r.orphan_count - (r.pruned_missing_src_count || 0) > 0\n      );\n\n      setHealMismatched(hasRemainingMismatched);\n      setHealMissingDest(hasRemainingMissingDest);\n      setPruneMissingSrc(segment === 'shadow_master' ? hasRemainingOrphan : false);\n    }\n  }, [open, data, segment]);\n\n",
+          "claim": "In ExecuteHealModal.tsx lines 191-208, useEffect computes hasRemainingOrphan and sets setPruneMissingSrc(segment === \"shadow_master\" ? hasRemainingOrphan : false)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.954,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9949,
+                "NO": 0.0051
+              },
+              "confidence": 0.954,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 428,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ExecuteHealModal.tsx:191-208\n  useEffect(() => {\n    if (open && reports.length > 0) {\n      const hasRemainingMismatched = reports.some(\n        (r) => r.stale_count - (r.healed_mismatched_count || 0) > 0\n      );\n      const hasRemainingMissingDest = reports.some(\n        (r) => r.missing_count - (r.healed_missing_dest_count || 0) > 0\n      );\n      const hasRemainingOrphan = reports.some(\n        (r) => r.orphan_count - (r.pruned_missing_src_count || 0) > 0\n      );\n\n      setHealMismatched(hasRemainingMismatched);\n      setHealMissingDest(hasRemainingMissingDest);\n      setPruneMissingSrc(segment === 'shadow_master' ? hasRemainingOrphan : false);\n    }\n  }, [open, data, segment]);\n\n",
+          "claim": "In ExecuteHealModal.tsx lines 191-208, useEffect computes hasRemainingOrphan and sets setPruneMissingSrc(segment === \"shadow_master\" ? hasRemainingOrphan : false)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "In master_connection.go lines 18-33, EnsureDefaultMasterConnection inserts connection_code default_master into cdc_system.connection_registry with ON CONFLICT (connection_code) DO NOTHING.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:18-33\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error\n\tif err != nil {\n\t\treturn fmt.Errorf(\"seed default_master connection: %w\", err)\n\t}\n\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3343,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7058,
+                "INCORRECT": 0.2494,
+                "UNSUPPORTED": 0.0448
+              },
+              "confidence": 0.3343,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 453,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In master_connection.go lines 18-33, EnsureDefaultMasterConnection inserts connection_code default_master into cdc_system.connection_registry with ON CONFLICT (connection_code) DO NOTHING.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:18-33\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error\n\tif err != nil {\n\t\treturn fmt.Errorf(\"seed default_master connection: %w\", err)\n\t}\n\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2305,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6207,
+                "INCORRECT": 0.3091,
+                "UNSUPPORTED": 0.0702
+              },
+              "confidence": 0.2305,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 459,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:18-33\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error\n\tif err != nil {\n\t\treturn fmt.Errorf(\"seed default_master connection: %w\", err)\n\t}\n\n",
+          "claim": "In master_connection.go lines 18-33, EnsureDefaultMasterConnection inserts connection_code default_master into cdc_system.connection_registry with ON CONFLICT (connection_code) DO NOTHING."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.2272,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.773,
+                "NO": 0.227
+              },
+              "confidence": 0.2272,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 392,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:18-33\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error\n\tif err != nil {\n\t\treturn fmt.Errorf(\"seed default_master connection: %w\", err)\n\t}\n\n",
+          "claim": "In master_connection.go lines 18-33, EnsureDefaultMasterConnection inserts connection_code default_master into cdc_system.connection_registry with ON CONFLICT (connection_code) DO NOTHING."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In master_connection.go lines 18-33, EnsureDefaultMasterConnection executes DROP SCHEMA cdc_system CASCADE on every startup.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:18-33\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error\n\tif err != nil {\n\t\treturn fmt.Errorf(\"seed default_master connection: %w\", err)\n\t}\n\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1228,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4845,
+                "INCORRECT": 0.4026,
+                "UNSUPPORTED": 0.1129
+              },
+              "confidence": 0.1228,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 439,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In master_connection.go lines 18-33, EnsureDefaultMasterConnection executes DROP SCHEMA cdc_system CASCADE on every startup.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:18-33\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error\n\tif err != nil {\n\t\treturn fmt.Errorf(\"seed default_master connection: %w\", err)\n\t}\n\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.3234,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0624,
+                "INCORRECT": 0.2191,
+                "UNSUPPORTED": 0.7185
+              },
+              "confidence": 0.3234,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 445,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:18-33\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error\n\tif err != nil {\n\t\treturn fmt.Errorf(\"seed default_master connection: %w\", err)\n\t}\n\n",
+          "claim": "In master_connection.go lines 18-33, EnsureDefaultMasterConnection executes DROP SCHEMA cdc_system CASCADE on every startup."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.287,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.1956,
+                "NO": 0.8044
+              },
+              "confidence": 0.287,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 378,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/bootstrap/master_connection.go:18-33\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error\n\tif err != nil {\n\t\treturn fmt.Errorf(\"seed default_master connection: %w\", err)\n\t}\n\n",
+          "claim": "In master_connection.go lines 18-33, EnsureDefaultMasterConnection executes DROP SCHEMA cdc_system CASCADE on every startup."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In ExecuteHealModal.tsx lines 191-208, useEffect calls window.location.reload() in an infinite while(true) loop.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ExecuteHealModal.tsx:191-208\n  useEffect(() => {\n    if (open && reports.length > 0) {\n      const hasRemainingMismatched = reports.some(\n        (r) => r.stale_count - (r.healed_mismatched_count || 0) > 0\n      );\n      const hasRemainingMissingDest = reports.some(\n        (r) => r.missing_count - (r.healed_missing_dest_count || 0) > 0\n      );\n      const hasRemainingOrphan = reports.some(\n        (r) => r.orphan_count - (r.pruned_missing_src_count || 0) > 0\n      );\n\n      setHealMismatched(hasRemainingMismatched);\n      setHealMissingDest(hasRemainingMissingDest);\n      setPruneMissingSrc(segment === 'shadow_master' ? hasRemainingOrphan : false);\n    }\n  }, [open, data, segment]);\n\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3115,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6985,
+                "INCORRECT": 0.2458,
+                "UNSUPPORTED": 0.0557
+              },
+              "confidence": 0.3115,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 479,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In ExecuteHealModal.tsx lines 191-208, useEffect calls window.location.reload() in an infinite while(true) loop.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ExecuteHealModal.tsx:191-208\n  useEffect(() => {\n    if (open && reports.length > 0) {\n      const hasRemainingMismatched = reports.some(\n        (r) => r.stale_count - (r.healed_mismatched_count || 0) > 0\n      );\n      const hasRemainingMissingDest = reports.some(\n        (r) => r.missing_count - (r.healed_missing_dest_count || 0) > 0\n      );\n      const hasRemainingOrphan = reports.some(\n        (r) => r.orphan_count - (r.pruned_missing_src_count || 0) > 0\n      );\n\n      setHealMismatched(hasRemainingMismatched);\n      setHealMissingDest(hasRemainingMissingDest);\n      setPruneMissingSrc(segment === 'shadow_master' ? hasRemainingOrphan : false);\n    }\n  }, [open, data, segment]);\n\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.5398,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.0348,
+                "INCORRECT": 0.8492,
+                "UNSUPPORTED": 0.116
+              },
+              "confidence": 0.5398,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 485,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ExecuteHealModal.tsx:191-208\n  useEffect(() => {\n    if (open && reports.length > 0) {\n      const hasRemainingMismatched = reports.some(\n        (r) => r.stale_count - (r.healed_mismatched_count || 0) > 0\n      );\n      const hasRemainingMissingDest = reports.some(\n        (r) => r.missing_count - (r.healed_missing_dest_count || 0) > 0\n      );\n      const hasRemainingOrphan = reports.some(\n        (r) => r.orphan_count - (r.pruned_missing_src_count || 0) > 0\n      );\n\n      setHealMismatched(hasRemainingMismatched);\n      setHealMissingDest(hasRemainingMissingDest);\n      setPruneMissingSrc(segment === 'shadow_master' ? hasRemainingOrphan : false);\n    }\n  }, [open, data, segment]);\n\n",
+          "claim": "In ExecuteHealModal.tsx lines 191-208, useEffect calls window.location.reload() in an infinite while(true) loop."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.479,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.1171,
+                "NO": 0.8829
+              },
+              "confidence": 0.479,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 418,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ExecuteHealModal.tsx:191-208\n  useEffect(() => {\n    if (open && reports.length > 0) {\n      const hasRemainingMismatched = reports.some(\n        (r) => r.stale_count - (r.healed_mismatched_count || 0) > 0\n      );\n      const hasRemainingMissingDest = reports.some(\n        (r) => r.missing_count - (r.healed_missing_dest_count || 0) > 0\n      );\n      const hasRemainingOrphan = reports.some(\n        (r) => r.orphan_count - (r.pruned_missing_src_count || 0) > 0\n      );\n\n      setHealMismatched(hasRemainingMismatched);\n      setHealMissingDest(hasRemainingMissingDest);\n      setPruneMissingSrc(segment === 'shadow_master' ? hasRemainingOrphan : false);\n    }\n  }, [open, data, segment]);\n\n",
+          "claim": "In ExecuteHealModal.tsx lines 191-208, useEffect calls window.location.reload() in an infinite while(true) loop."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

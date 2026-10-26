@@ -1,0 +1,74 @@
+[
+  {
+    "id": "AUDIT-CMS-DB-01",
+    "kind": "real",
+    "basis": "verified",
+    "claim": "Tại master_mapping_rule_repo_gorm.go, hằng số masterRuleSelectJoin SELECT COALESCE(NULLIF(m.transform_fn, ''), v2.transform_fn) AS transform_fn từ bảng cdc_system.mapping_rule_master LEFT JOIN cdc_system.mapping_rule_v2.",
+    "flow": "masterRuleRepoGorm -> masterRuleSelectJoin -> COALESCE(NULLIF(m.transform_fn, ''), v2.transform_fn)",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_mapping_rule_repo_gorm.go:95-103\n\t       COALESCE(v2.target_column, m.source_field) AS source_field,\n\t       COALESCE(m.source_path, v2.source_path)   AS source_path,\n\t       COALESCE(m.data_type, v2.data_type)        AS data_type,\n\t       v2.data_type AS shadow_data_type,\n\t       v2.source_data_type, v2.source_format,\n\t       COALESCE(NULLIF(m.transform_fn, ''), v2.transform_fn) AS transform_fn,\n\t       v2.is_nullable, v2.default_value, v2.status AS shadow_status\n\t  FROM cdc_system.mapping_rule_master m\n\t  LEFT JOIN cdc_system.mapping_rule_v2 v2 ON v2.id = m.mapping_v2_id`"
+  },
+  {
+    "id": "AUDIT-CMS-API-02",
+    "kind": "real",
+    "basis": "verified",
+    "claim": "Tại master_mapping_rule_handler.go, hàm Save kiểm tra req.TransformFn với allowedMasterTransformFns và biến allowedMasterTransformFns cho phép 4 hàm mới extjson_unwrap_plain, extjson_unwrap_num_str, extjson_relaxed, extjson_relaxed_num_str.",
+    "flow": "MasterMappingRuleHandler.Save & UpdateDataType -> allowedMasterTransformFns[tf]",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_mapping_rule_handler.go:174-187\nvar allowedMasterTransformFns = map[string]bool{\n\t\"\":                        true,\n\t\"mongo_date_ms\":           true,\n\t\"oid_to_hex\":              true,\n\t\"bigint_str\":              true,\n\t\"numeric_cast\":            true,\n\t\"lowercase\":               true,\n\t\"jsonb_passthrough\":       true,\n\t\"null_if_empty\":           true,\n\t\"extjson_unwrap_plain\":    true,\n\t\"extjson_unwrap_num_str\":  true,\n\t\"extjson_relaxed\":         true,\n\t\"extjson_relaxed_num_str\": true,\n}"
+  },
+  {
+    "id": "AUDIT-CMS-CLEAN-03",
+    "kind": "real",
+    "basis": "verified",
+    "claim": "Tại update_column_metadata.go, khi đổi DataType sang kiểu không phải JSON/JSONB (!isJSONOrJSONBType(newDT)) mà existing.TransformFn là hàm JSONB (isJSONBTransformFn), hệ thống tự động đặt updates[\"transform_fn\"] = nil.",
+    "flow": "UpdateColumnMetadataHandler.Handle -> !isJSONOrJSONBType(newDT) -> updates[\"transform_fn\"] = nil",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_column_metadata.go:68-72\n\t\tif cmd.TransformFn == nil && !isJSONOrJSONBType(newDT) && existing.TransformFn != nil && isJSONBTransformFn(*existing.TransformFn) {\n\t\t\tupdates[\"transform_fn\"] = nil\n\t\t\tresult[\"transform_fn\"] = \"\"\n\t\t}\n\t}"
+  },
+  {
+    "id": "AUDIT-WORKER-USENUM-04",
+    "kind": "real",
+    "basis": "verified",
+    "claim": "Tại transmuter_utils.go, nhánh case gjson.JSON của hàm gjsonValueToGo khởi tạo json.NewDecoder với dec.UseNumber() trước khi gọi dec.Decode(&v).",
+    "flow": "gjsonValueToGo -> case gjson.JSON -> dec.UseNumber() -> dec.Decode(&v)",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:31-40\n\tcase gjson.JSON:\n\t\tdec := json.NewDecoder(strings.NewReader(r.Raw))\n\t\tdec.UseNumber()\n\t\tvar v any\n\t\tif err := dec.Decode(&v); err == nil {\n\t\t\treturn v\n\t\t}\n\t\t_ = json.Unmarshal([]byte(r.Raw), &v)\n\t\treturn v\n\t}"
+  },
+  {
+    "id": "AUDIT-WORKER-TRANS-05",
+    "kind": "real",
+    "basis": "verified",
+    "claim": "Hàm coerceForColumn trong transmuter_utils.go kiểm tra isJSONColumnType(dataType) và trả về chuỗi trimmed nguyên vẹn nếu nó bắt đầu bằng '{', '[' hoặc được bọc bởi dấu nháy kép và json.Valid([]byte(trimmed)) là true.",
+    "flow": "extractColumns -> ApplyTransform -> coerceForColumn -> return trimmed",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:366-377\n\tif isJSONColumnType(dataType) || composite {\n\t\tif isJSONColumnType(dataType) {\n\t\t\tif s, ok := v.(string); ok {\n\t\t\t\tif trimmed := strings.TrimSpace(s); (strings.HasPrefix(trimmed, \"{\") || strings.HasPrefix(trimmed, \"[\") || (strings.HasPrefix(trimmed, \"\\\"\") && strings.HasSuffix(trimmed, \"\\\"\"))) && json.Valid([]byte(trimmed)) {\n\t\t\t\t\treturn trimmed\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif b, err := json.Marshal(v); err == nil {\n\t\t\treturn string(b)\n\t\t}\n\t}"
+  },
+  {
+    "id": "AUDIT-WEB-UI-06",
+    "kind": "real",
+    "basis": "verified",
+    "claim": "Tại MasterMappingFieldsPage.tsx, khi baseType là JSONB hoặc JSON, giao diện hiển thị Select chọn transform_fn và gọi handleTransformChange.",
+    "flow": "MasterMappingFieldsPage -> Select transform_fn -> handleTransformChange",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx:848-864\n            {(baseType === 'JSONB' || baseType === 'JSON') && (\n              <Select\n                size=\"small\"\n                value={record.transform_fn || ''}\n                style={{ width: 250 }}\n                placeholder=\"Chọn transform_fn cho JSONB\"\n                onChange={(val) => handleTransformChange(val)}\n                options={[\n                  { label: 'Mặc định (Canonical ExtJSON)', value: '' },\n                  { label: 'extjson_relaxed (Số phẳng: 123, giữ $oid/$date)', value: 'extjson_relaxed' },\n                  { label: 'extjson_relaxed_num_str (Số chuỗi: \"123\", giữ $oid/$date)', value: 'extjson_relaxed_num_str' },\n                  { label: 'extjson_unwrap_plain (Bóc hết, số phẳng: 123)', value: 'extjson_unwrap_plain' },\n                  { label: 'extjson_unwrap_num_str (Bóc hết, số chuỗi: \"123\")', value: 'extjson_unwrap_num_str' },\n                  { label: 'jsonb_passthrough (Giữ nguyên JSONB)', value: 'jsonb_passthrough' },\n                ]}\n              />\n            )}"
+  },
+  {
+    "id": "CTRL-TRUE-DG3-01",
+    "kind": "control_true",
+    "basis": "verified",
+    "claim": "Hàm ApplyTransform trong transform_registry.go trả về raw, nil khi tham số name là chuỗi rỗng.",
+    "flow": "ApplyTransform -> name == \"\" -> return raw, nil",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transform_registry.go:61-70\nfunc ApplyTransform(name string, raw any) (any, error) {\n\tif name == \"\" {\n\t\treturn raw, nil\n\t}\n\tfn, ok := transformRegistry[name]\n\tif !ok {\n\t\treturn nil, fmt.Errorf(\"%w: %s\", ErrTransformNotWhitelisted, name)\n\t}\n\treturn fn(raw)\n}"
+  },
+  {
+    "id": "CTRL-FALSE-DG3-01",
+    "kind": "control_false",
+    "basis": "verified",
+    "claim": "Hàm ApplyTransform trong transform_registry.go luôn gọi panic ngay lập tức khi tham số name là chuỗi rỗng.",
+    "flow": "ApplyTransform -> name == \"\"",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transform_registry.go:61-70\nfunc ApplyTransform(name string, raw any) (any, error) {\n\tif name == \"\" {\n\t\treturn raw, nil\n\t}\n\tfn, ok := transformRegistry[name]\n\tif !ok {\n\t\treturn nil, fmt.Errorf(\"%w: %s\", ErrTransformNotWhitelisted, name)\n\t}\n\treturn fn(raw)\n}"
+  },
+  {
+    "id": "CTRL-FALSE-DG3-02",
+    "kind": "control_false",
+    "basis": "verified",
+    "claim": "Tại master_mapping_rule_handler.go, biến allowedMasterTransformFns đặt giá trị false cho cả extjson_relaxed và extjson_unwrap_num_str.",
+    "flow": "allowedMasterTransformFns map",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_mapping_rule_handler.go:174-187\nvar allowedMasterTransformFns = map[string]bool{\n\t\"\":                        true,\n\t\"mongo_date_ms\":           true,\n\t\"oid_to_hex\":              true,\n\t\"bigint_str\":              true,\n\t\"numeric_cast\":            true,\n\t\"lowercase\":               true,\n\t\"jsonb_passthrough\":       true,\n\t\"null_if_empty\":           true,\n\t\"extjson_unwrap_plain\":    true,\n\t\"extjson_unwrap_num_str\":  true,\n\t\"extjson_relaxed\":         true,\n\t\"extjson_relaxed_num_str\": true,\n}"
+  }
+]

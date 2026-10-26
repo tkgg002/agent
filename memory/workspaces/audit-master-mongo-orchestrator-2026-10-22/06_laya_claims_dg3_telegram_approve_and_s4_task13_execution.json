@@ -1,0 +1,38 @@
+[
+  {
+    "id": "A1",
+    "kind": "target",
+    "claim": "Hàm formatTelegramChatID trong telegram_bridge.go định dạng giá trị float64 bằng strconv.FormatInt(int64(v), 10) để tránh ký hiệu khoa học.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:405-420\nfunc formatTelegramChatID(raw any) string {\n\tswitch v := raw.(type) {\n\tcase nil:\n\t\treturn \"\"\n\tcase string:\n\t\treturn strings.TrimSpace(v)\n\tcase json.Number:\n\t\treturn strings.TrimSpace(v.String())\n\tcase float64:\n\t\treturn strconv.FormatInt(int64(v), 10)"
+  },
+  {
+    "id": "A2",
+    "kind": "target",
+    "claim": "Trong triggerS5ToS3RePlan tại telegram_bridge.go, cờ hasAuditSubTasks được bật khi len(subTasks) > 0 và không chứa ESCALATE hay ISO-.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1123-1127\n\tvar missingIDs []string\n\tvar missingBullets []string\n\tupperKey := strings.ToUpper(qt.ExternalID)\n\thasAuditSubTasks := len(subTasks) > 0 && !strings.Contains(upperKey, \"ESCALATE\") && !strings.Contains(upperKey, \"ISO-\")"
+  },
+  {
+    "id": "A3",
+    "kind": "target",
+    "claim": "Bài kiểm thử TestTelegramChatIDScientificNotationAndTask13Execution trong server_test.go xác minh formatTelegramChatID(float64(-1004390214071)) trả về \"-1004390214071\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server_test.go:2086-2093\nfunc TestTelegramChatIDScientificNotationAndTask13Execution(t *testing.T) {\n\t// 1. Unit verification of formatTelegramChatID and telegramChatIDMatches for 13-digit negative Telegram supergroup IDs\n\tsupergroupFloat := float64(-1004390214071)\n\tformattedFloat := formatTelegramChatID(supergroupFloat)\n\tif formattedFloat != \"-1004390214071\" {\n\t\tt.Fatalf(\"expected formatTelegramChatID(float64(-1004390214071)) == \\\"-1004390214071\\\", got %q\", formattedFloat)\n\t}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Hàm formatTelegramChatID trong telegram_bridge.go luôn trả về chuỗi rỗng cho mọi giá trị float64 và int64.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:405-420\n\tcase float64:\n\t\treturn strconv.FormatInt(int64(v), 10)\n\tcase int64:\n\t\treturn strconv.FormatInt(v, 10)"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Hàm processIncomingTelegramCommand trong telegram_bridge.go xóa file .user-approved và từ chối chạy approve_and_run.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:601-607\n\t_ = os.MkdirAll(isoMeta.ArtifactDir, 0o755)\n\tnowStamp := []byte(time.Now().Format(time.RFC3339) + \"\\n\")\n\t_ = os.WriteFile(filepath.Join(isoMeta.ArtifactDir, \".user-approved\"), nowStamp, 0o644)\n\t_ = os.WriteFile(filepath.Join(isoMeta.ArtifactDir, \".audit-remediation-ready\"), nowStamp, 0o644)"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Hàm telegramChatIDMatches trong telegram_bridge.go trả về true khi cfgID rỗng hoặc incID rỗng hoặc strings.EqualFold(cfgID, incID).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:430-437\nfunc telegramChatIDMatches(configuredChatID, incomingChatID string) bool {\n\tcfgID := strings.TrimSpace(configuredChatID)\n\tincID := strings.TrimSpace(incomingChatID)\n\tif cfgID == \"\" || incID == \"\" {\n\t\treturn true\n\t}\n\treturn strings.EqualFold(cfgID, incID)\n}"
+  }
+]

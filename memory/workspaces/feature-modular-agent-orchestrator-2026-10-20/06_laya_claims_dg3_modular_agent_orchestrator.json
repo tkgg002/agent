@@ -3,25 +3,25 @@
     "id": "A-F1",
     "kind": "audit",
     "basis": "code",
-    "flow": "Kiểm chứng hiện trạng agy_guard.py: hàm handle_stop kiểm tra trạng thái PASS của cả dg1 và dg2 khi có chỉnh sửa 09_tasks_solution.",
-    "claim": "Trong handle_stop của agy_guard.py, khi sol_touched là True, vòng lặp kiểm tra cả hai cổng dg1 và dg2 phải đạt trạng thái PASS.",
-    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:666-670\n    sol_touched = touched(st, r\"09_tasks_solution\", u_idx)\n    if sol_touched:\n        for g in (\"dg1\", \"dg2\"):\n            if laya_gate_status(ws, g, ws_root) != \"PASS\":\n                miss.append(f\"{g.upper()}: laya_gate chưa PASS cho giải pháp/code demo\")"
+    "flow": "Kiểm chứng loadOrGenerateSubTasks trong task_inspector.go xác thực từng Sub-Task trên đĩa bằng VerifySubTaskCodeOnDisk thay vì gán cứng Status = done.",
+    "claim": "Trong loadOrGenerateSubTasks của task_inspector.go, vòng lặp gọi s.VerifySubTaskCodeOnDisk(context.Background(), items[i]) và gán items[i].Status = \"done\" khi verifiedOnDisk là true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:1058-1064\n\tfor i := range items {\n\t\tverifiedOnDisk, _ := s.VerifySubTaskCodeOnDisk(context.Background(), items[i])\n\t\tswitch stUpper {\n\t\tcase queue.StageDone, queue.StageInReview, queue.StageRunning:\n\t\t\tif verifiedOnDisk {\n\t\t\t\titems[i].Status = \"done\"\n\t\t\t} else if stUpper == queue.StageRunning && items[i].WaveIndex == 0 {"
   },
   {
     "id": "A-R1",
     "kind": "audit",
     "basis": "code",
-    "flow": "Kiểm chứng bộ tài liệu S1–S3 trong workspace feature-modular-agent-orchestrator-2026-10-20 đã khai báo đúng tier: T2 và suffix: modular_agent_orchestrator.",
-    "claim": "File 01_requirements_modular_agent_orchestrator.md khai báo tier: T2 và suffix: modular_agent_orchestrator.",
-    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feature-modular-agent-orchestrator-2026-10-20/01_requirements_modular_agent_orchestrator.md:3-5\ntier: T2\nsuffix: modular_agent_orchestrator\nworkspace: feature-modular-agent-orchestrator-2026-10-20"
+    "flow": "Kiểm chứng chặng S4 Implement trong server.go chặn cứng (Hard Gate BLOCK) khi số Sub-Tasks xác thực trên đĩa nhỏ hơn tổng số Sub-Tasks.",
+    "claim": "Trong case \"implement\" của server.go, khi len(subTasks) > 0 và verifiedSubTasks < len(subTasks), hệ thống tăng blocking++ và ghi log HARD GATE BLOCK.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1137-1140\n\t\tif len(subTasks) > 0 && verifiedSubTasks < len(subTasks) {\n\t\t\tblocking++\n\t\t\timplLogs = append(implLogs, fmt.Sprintf(\"HARD GATE BLOCK: only %d/%d Sub-Tasks verified on disk\", verifiedSubTasks, len(subTasks)))\n\t\t} else if len(subTasks) > 0 {"
   },
   {
     "id": "A-SCOPE",
     "kind": "audit",
     "basis": "code",
-    "flow": "Kiểm chứng giải pháp tuân thủ tuyệt đối kỷ luật Propose-Only (Rule #1, Rule #13) ở chặng S3, chờ User APPROVE trước khi sửa source code.",
-    "claim": "File 09_tasks_solution_modular_agent_orchestrator.md ghi rõ trạng thái PROPOSED — Chờ User APPROVE trước khi thực thi (Rule #1, Rule #13).",
-    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feature-modular-agent-orchestrator-2026-10-20/09_tasks_solution_modular_agent_orchestrator.md:3-4\n> **Trạng thái:** `PROPOSED` — Chờ User `APPROVE` trước khi thực thi (Rule #1, Rule #13).\n> **Workspace:** `feature-modular-agent-orchestrator-2026-10-20` | **Tier:** `T2` | **Stage:** `S3`"
+    "flow": "Kiểm chứng BuildMongoOCCBulkModels trong centralized-data-service/internal/service/master/transmuter_mongo.go bảo vệ OCC bằng _source_ts.",
+    "claim": "Hàm BuildMongoOCCBulkModels trong transmuter_mongo.go kiểm tra prevTs > incomingTs trên existingSourceTs để tăng occSkipped++ và continue.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_mongo.go:111-116\n\t\tif !isFullSync && existingSourceTs != nil {\n\t\t\tif prevTs, exists := existingSourceTs[keyStr]; exists && prevTs > incomingTs {\n\t\t\t\toccSkipped++\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}"
   },
   {
     "id": "K1",

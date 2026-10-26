@@ -2,8 +2,8 @@
 """Laya Universal Decision Gate (Mode A: Calibrated Claim Gate & Mode B: Agentic Debate Review).
 
 Commands:
-  laya_gate.py run      --stage dg1|dg2|dg3 --workspace <ws> --claims <claims.json> [--objective "..."]
-  laya_gate.py resolve  --workspace <ws> --stage dg1|dg2|dg3 --id <ID> --reason "... REF: path:line"
+  laya_gate.py run      --stage dg0|dg1|dg2|dg12|dg3 --workspace <ws> --claims <claims.json> [--objective "..."]
+  laya_gate.py resolve  --workspace <ws> --stage dg0|dg1|dg2|dg3|dg3review --id <ID> --reason "... REF: path:line"
   laya_gate.py review   --workspace <ws> --repo <repo_path> [--max-rounds 3] [--fencing <fencing.json>]
   laya_gate.py backtest --r1 <raw_r1.json> [--r23 <raw_r2_r3.json>]
 
@@ -631,8 +631,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Laya Decision Gate CLI (Mode A Claim & Mode B Debate Review)")
     sub = p.add_subparsers(dest="subcommand", required=True)
 
-    p_run = sub.add_parser("run", help="Run Mode A Calibrated Claim Gate (dg1, dg2, dg12, dg3)")
-    p_run.add_argument("--stage", required=True, choices=["dg1", "dg2", "dg12", "dg3"])
+    p_run = sub.add_parser("run", help="Run Mode A Calibrated Claim Gate (dg0, dg1, dg2, dg12, dg3)")
+    p_run.add_argument("--stage", required=True, choices=["dg0", "dg1", "dg2", "dg12", "dg3"])
     p_run.add_argument("--workspace", required=True)
     p_run.add_argument("--claims", required=True)
     p_run.add_argument("--objective", default="Kiểm định kỹ thuật theo chuẩn Master Workflow")
@@ -643,7 +643,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_res = sub.add_parser("resolve", help="Resolve a FLAG claim with REF: evidence into 04_decisions")
     p_res.add_argument("--workspace", required=True)
-    p_res.add_argument("--stage", required=True, choices=["dg1", "dg2", "dg3", "dg3review"])
+    p_res.add_argument("--stage", required=True, choices=["dg0", "dg1", "dg2", "dg3", "dg3review"])
     p_res.add_argument("--id", required=True)
     p_res.add_argument("--reason", required=True)
     p_res.add_argument("--ws-root", default=str(DEFAULT_WS_ROOT))

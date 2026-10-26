@@ -88,4 +88,81 @@ Sau khi nhận lệnh `APPROVE` của User cho kế hoạch khắc phục `S5 ->
 | `cmd/orchestrator/main.go` | Modified | `+5 / -1` | Đăng ký lệnh `orchestrator ui` / `orchestrator web` |
 | `README_START.md` | Modified | `+26 / -1` | Bổ sung hướng dẫn khởi chạy Chế độ 0 (`./bin/orchestrator ui --addr 127.0.0.1:8090`) |
 
+---
+
+## 5. Kết quả Thực thi Task 7 (`Zero-Mockup & Unified Cross-Screen Entity Graph` — Commit `ae7ffdc`)
+
+- **Commit:** `ae7ffdc` (`feat(webui): purge 100% mockup data and wire cross-screen entity graph linkage (Task 7)` — `10 files changed, 2209 insertions(+), 796 deletions(-)`)
+- **Biên lai Kiểm định (`06_evidence/`):** `EV-20261021T114444-7c71` (`unit`, `exit=0`), `EV-20261021T114502-b220` (`integration`, `exit=0`), `EV-20261021T114549-0bb7` (`runtime`, `exit=0`).
+- **Hội đồng `/laya_router` (`DG3`):** `06_laya_summary_dg3_20261021T114858.json` (`gate: PASS`).
+- **Tóm tắt 2 Trụ cột Hoàn tất:**
+  1. **Xóa bỏ 100% dữ liệu mockup & kẹp sàn giả (`MF-01..MF-08`):** Dọn sạch DB qua `PurgeMockSeedData`, đồng bộ trực tiếp `TASK-1..TASK-7` từ `08_tasks_*.md` và 27 vòng kiểm định thật từ `06_laya_summary_*.json`, suy diễn động 17 bước quy trình từ file thật trên đĩa, thực thi lệnh shell thật trên ô `Slot C` (`exec.CommandContext` + `ValidateCommandSafety` + `MaskSecrets`) và truy vấn FTS5 BM25 thật trên các ô Agent.
+  2. **Đồ thị Thực thể Thống nhất & Liên kết Điều hướng 2 Chiều Xuyên 3 Màn hình (`MF-09`):** Hợp nhất khóa ngoại xuyên suốt `Project -> WorkflowStep 1..17 -> TaskKey TASK-1..7 -> AgentSlot A..K -> AutopilotRound` kèm thanh điều hướng `#cross-screen-context-bar` cho phép lọc và nhảy tức thì qua lại giữa Màn hình 1 (`Wave 0..N`), Màn hình 2 (`Autopilot`) và Màn hình 3 (`Vibe System Agent Studio`).
+
+---
+
+## 6. Kết quả Thực thi Task 8 (`Unified 100vh Single-App IDE Shell + 4-Layer Per-Task Isolation + Live Autopilot Engine + Antigravity Runner` — Commit `2d9a0a2`)
+
+- **Commit:** `2d9a0a2` (`feat(webui,runner): unify 100vh IDE shell, 4-layer per-task isolation, live autopilot engine, and Antigravity runner` — `9 files changed, 3257 insertions(+), 1609 deletions(-)`)
+- **Biên lai Kiểm định (`06_evidence/`):** `EV-20261021T144834-d8fa` (`unit`, `exit=0`), `EV-20261021T144849-9628` (`integration`, `exit=0`), `EV-20261021T144945-7d7f` (`runtime`, `exit=0`), `EV-20261021T145011-5f4a` (`runtime`, `exit=0`), `EV-20261021T145047-5245` (`runtime`, `exit=0`).
+- **Hội đồng `/laya_router` (`DG3`):** `06_laya_summary_dg3_20261021T145755.json` (`gate: PASS`).
+- **Tóm tắt 4 Hạng mục Cốt lõi Hoàn tất:**
+  1. **Hợp nhất 1 Khung Ứng Dụng IDE `100vh` Duy Nhất (`SHELL-01`, `UX-01..UX-04`):** Xóa bỏ hoàn toàn thanh `.vibe-topbar` trùng lặp (`Vibe System Agent / ai-orchestrator`), gom về 1 Top Header + 1 Cột trái Quản lý Hàng đợi Task & 17 Bước quy trình + 3 Tab góc nhìn (`1. ⚡ Autopilot & Task Runner`, `2. ⛁ Wave 0..N Dependency DAG`, `3. ⌨ Multi-Agent Terminal Grid A..K`), bảng Wave ngang `grid-auto-flow: column` không rớt dòng và lưới 4 dải dọc thu gọn (`C, A, I, G`) + Bento (`E, K, B, H, D, F`) + thanh trạng thái `J`.
+  2. **Bộ Máy Thực Thi Tự Động `Per-Task Multi-Stage Autopilot Core Engine` (`CORE-01..02`):** Hiện thực `POST /api/tasks/action` (`select`, `plan`, `approve`, `implement`, `qa`, `autopilot`) và phạm vi hóa sơ đồ 6 hộp Autopilot theo đúng Task đang chọn (`active_task_key`).
+  3. **Cô lập Vật lý 4 Lớp cho từng Task (`ISO-01..02`):** Mỗi Task tự động được cấp nhánh Git riêng `task/<safeKey>`, thư mục worktree riêng `.orchestrator/worktrees/<safeKey>`, thư mục hồ sơ riêng `.orchestrator/tasks/<safeKey>/{01_requirements.md,09_tasks_solution.md,audit_report.md,terminal.log,diff.patch}`, thực thi lệnh trong `cmd.Dir = WorktreePath`, và sổ cái `autopilot_rounds` riêng.
+  4. **Tích hợp `AntigravityRunner` & Áp dụng thật `/agent` Governance Kernel (`AGY-01`, `KERNEL-01`):** Bổ sung [`internal/runner/antigravity.go`](file:///Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go) kết nối 3 tầng (`agy` CLI / `google.antigravity` Python SDK / `gemini` CLI / `claude` CLI) và nối `Gatekeeper` (`LoadCoreConstitutionPrompt`, `ValidateCommandSafety H5`, `ScanProductionFiles H4b+H3`, `EvaluateLiveGateBadges`) vào từng chặng Autopilot.
+
+---
+
+## 7. Kết quả Thực thi Task 9 (`2-Phase Gate-Stop Autopilot WF-01 + Target Repo & CLI/Model Setup + Sub-Task Wave Builder REPO-SUB-01 + 5-Tab Step Report & Code Demo Inspector REPORT-01 + 100% Strict Right-Window Scoping SCOPE-01 + Live /agent Kernel Active Inspector AGENT-VIS-01` — Commit `617e961`)
+
+- **Commit:** `617e961` (`feat(webui): enforce 2-phase gate-stop workflow, repo/CLI/subtask builder, 5-tab step report inspector, strict right-window scoping, and live /agent kernel binding` — `7 files changed, 3261 insertions(+), 341 deletions(-)`)
+- **Biên lai Kiểm định (`06_evidence/`):** `EV-20261021T170007-5ee9` (`unit`, `exit=0`), `EV-20261021T170010-bdb0` (`integration`, `exit=0`), `EV-20261021T170216-45ac` (`runtime`, `exit=0`), `EV-20261021T171044-fea1` (`runtime` `go run ./cmd/orchestrator daemon --once`, `exit=0`).
+- **Hội đồng `/laya_router` (`DG3`):** `06_laya_summary_dg3_20261021T170437.json` (`gate: PASS`).
+- **Tóm tắt 5 Hạng mục Hoàn tất:**
+  1. **`WF-01` (2-Phase Gate-Stop Autopilot — Chấm dứt chạy lướt Smoke-Test qua `APPROVE`):** Khi Task ở `READY`/`PLANNING` và bấm `▶ Run / Autopilot`, hệ thống chỉ chạy **Pha 1 (`S0 -> S1 -> S2 Quét sâu TargetRepo & FTS5 Lesson Match -> S3 Giải pháp + Code Demo + Chia Sub-Tasks -> DG1/DG2`)** rồi **DỪNG CỨNG TẠI `NEEDS_YOU`** chờ User đọc Report & Code Demo và bấm **`✓ APPROVE & Chạy S4–S5`** mới mở khóa **Pha 2 (`S4 Worktree Implementation -> S5 QA & DG3 -> DONE`)**. Đã khôi phục Task `"tích hợp Master MongoDB Destination"` về trạng thái `NEEDS_YOU` trên repo `/Users/trainguyen/Documents/work/data-hub/centralized-data-service` kèm 4 Sub-Tasks và Code Demo `MasterMongoDestination.UpsertMasterBatch`.
+  2. **`REPO-SUB-01` (Chọn `Target Repository` + `⚙ Setup CLI & Model` + Tạo/Chia nhỏ `Sub-Tasks`):** Tự động quét 24 repo trong `/Users/trainguyen/Documents/work` (`data-hub/centralized-data-service`, `data-hub/cdc-cms-service`, `data-hub/cdc-cms-web`, `ai-orchestrator`, `agent`...); thêm modal `⚙ Setup CLI & Model` (`POST /api/settings/cli`) cấu hình CLI (`antigravity`, `gemini`, `claude`, `codex`, `opencode`) và Model theo từng Role (`Planner S1-S3`, `Coder High S4`, `Coder Std S4`, `QA S5`, `Security`); thêm cơ chế tạo & tự động chia nhỏ Sub-Tasks (`POST /api/tasks/subtasks`).
+  3. **`REPORT-01` (Khung `5-Tab Step Report, Solution & Code Demo Inspector`):** Hiển thị trực tiếp 5 tab báo cáo (`📋 S1 Requirements & Sub-Tasks`, `🔍 S2 Repo Investigation (file:line)`, `💡 S3 Giải Pháp & Code Demo`, `🔧 S4 Worktree & Git Diff`, `🛡️ S5 Audit Report & DG3`) ngay trên cửa sổ phải, tự động chuyển tab tương ứng khi bấm vào bất kỳ bước nào trong 17 bước `S0..S6` hoặc 6 hộp Autopilot.
+  4. **`SCOPE-01` (Đồng bộ Tuyệt đối 100% Cửa Sổ Bên Phải Theo Task Đang Chọn):** Khi chọn `TASK-1`, `TASK-2` hoặc `"tích hợp Master MongoDB Destination"`, toàn bộ cửa sổ bên phải (6 hộp Autopilot, bảng Rounds, đồ thị Sub-Tasks Wave DAG, 17 bước quy trình, 5 tab Report/Code Demo, thẻ `/agent` Kernel và 11 ô Terminal `A..K`) đều lọc 100% theo đúng Task đó.
+  5. **`AGENT-VIS-01` (Hiển thị Trực quan Bộ Não `/agent` Kernel & `268` Bài học FTS5):** Đọc trực tiếp tổng số `268` bài học từ `/Users/trainguyen/Documents/work/agent/memory/global/lessons/INDEX.md` và hiển thị thẻ **`🛡️ /agent Kernel Active`** (`Active Role`, `Active Skills`, `Hooks H1..H7`, và danh sách bài học `Lxxx` khớp với Task đang chọn).
+
+---
+
+## 9. Báo cáo Hoàn thành Task 10 (`AGY-ARGON-01`, `DECOMP-DOMAIN-01`, `MULTI-REPO-SUBTASK-01` — Commit `196f8f7`)
+- **Commit Local Restore-Point:** `196f8f7` (`feat(webui,runner): add gemini-4-argon model & 2-tier multi-repo domain sub-task decomposer (TASK-M01..M10)` — `7 files changed, 1445 insertions(+), 459 deletions(-)`).
+- **Biên lai Kiểm định (`06_evidence/`):** `EV-20261021T221154-3e45` (`unit`, `exit=0`), `EV-20261021T221209-7341` (`integration`, `exit=0`), `EV-20261021T221221-20b6` (`runtime` `go run ./cmd/orchestrator daemon --once`, `exit=0`), `EV-20261021T221324-8111` (`runtime` `verify_live_8090_task10.py`, `exit=0`).
+- **Hội đồng `/laya_router` (`DG3`):** `06_laya_summary_dg3_20261021T221738.json` (`gate: PASS`).
+- **Tóm tắt 3 Hạng mục Hoàn tất:**
+  1. **`AGY-ARGON-01` (Model `gemini-4-argon` & `gemini-4-argon-thinking` trong Antigravity):** Đưa `antigravity/gemini-4-argon` (`gemini-4-argon (antigravity)`) và `antigravity/gemini-4-argon-thinking` lên vị trí mặc định số 1 trong `AntigravityRunner` (`internal/runner/antigravity.go`), `loadCLISettings` (`internal/webui/task_inspector.go`), Topbar Runner Selector, Modal `+ Giao việc mới`, và Modal `⚙ Setup CLI & Model`.
+  2. **`DECOMP-DOMAIN-01` (Phân rã Sub-Tasks 2 Tầng theo Nhóm Kiến Trúc & `Context file:line + Mô tả + Test/DoD`):** Xóa bỏ kiểu chia 4 bước quy trình `S1..S5` giả hiệu; xây dựng `FindMatchingAgentWorkspace` + `ParseMarkdownSubTasksFrom08` (Tầng 1: đồng bộ trực tiếp `feat-master-mongo-destination-2026-10-20/08_tasks_master_mongo.md` & `09_tasks_solution_master_mongo.md` thành **5 Nhóm & 10 Sub-Tasks `TASK-M01..TASK-M10`** kèm 3 khối Code Demo thực tế) và `DecomposeMultiRepoCodebaseSubTasks` (Tầng 2: quét đa repo sinh `TASK-<PREFIX>01..N` cho mọi Task lớn mới).
+  3. **`MULTI-REPO-SUBTASK-01` (Hỗ trợ Epic Đa-Repo & Cô lập `TargetRepo` Riêng Cho Từng Sub-Task):** Cho phép chọn nhiều `AffectedRepos` cho Task cha (`cdc-cms-service`, `cdc-cms-web`, `centralized-data-service`), gắn từng Sub-Task với đúng `TargetRepo` & `TargetRepoName` riêng (`TASK-M01, M02 -> cdc-cms-service`, `TASK-M03 -> cdc-cms-web`, `TASK-M04..M10 -> centralized-data-service`), hiển thị thanh lọc theo Repo (`#sri-repo-filter-bar`), thẻ Sub-Task theo Nhóm 1..5 và đồ thị **Wave 0..4 Dependency DAG** xuyên 3 repositories.
+
+---
+
+## 10. Báo cáo Hoàn thành Task 11 (`REAL-S4-EXEC-01`, `REAL-S5-QA-01`, `REAL-MONGO-M01-M10`)
+- **Biên lai Kiểm định (`06_evidence/`):** `EV-20261022T010017-5dee` (`unit`, `exit=0`), `EV-20261022T010321-738f` (`integration`, `exit=0`), `EV-20261022T010407-c3d1` (`runtime`, `exit=0`).
+- **Hội đồng `/laya_router` (`DG3`):** [`06_laya_summary_dg3_20261022T010557.json`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-modular-agent-orchestrator-2026-10-20/06_laya_summary_dg3_20261022T010557.json) (`trusted_rounds: ["r2"]`, `100% ACCEPT`, `gate: PASS`).
+- **Tóm tắt Kết quả Thực thi Xuyên 4 Repositories:**
+  1. **Trên `data-hub/cdc-cms-service` (`TASK-M01`, `TASK-M02`):** Mở rộng DTO, Handler (`CreateConnection`, `UpdateConnection`, `TestConnection`) và GORM Repository hỗ trợ `engine_type = "mongodb"`, default port `27017`, `mongodb://` URI (`authSource`, `replicaSet`) và ping MongoDB + lấy `buildInfo` version; pass unit tests trong `master_registry_handler_connections_test.go`.
+  2. **Trên `data-hub/cdc-cms-web` (`TASK-M03`):** Cập nhật `src/pages/MasterRegistry.tsx` thêm cột `Engine` (`MONGODB` / `POSTGRESQL`), lựa chọn `Engine Type` trong Modal Quản lý Kết nối Đích, tự động chuyển đổi port `5432` $\leftrightarrow$ `27017` và trường `Auth Source` / `Replica Set`; `npm run build` pass sạch lỗi (`493ms`).
+  3. **Trên `data-hub/centralized-data-service` (`TASK-M04` $\rightarrow$ `TASK-M10`):**
+     - `TASK-M04`: Bổ sung `masterMongoPool` và `GetMasterMongoClient` vào `ConnectionManager` (`connection_manager.go` + `connection_manager_mongo_test.go`).
+     - `TASK-M05`: Bổ sung `applyMongoCollectionAndIndexes` (`CreateCollection` + `Indexes().CreateMany` cho `_gpay_id` unique, `_source_id`, `_source_ts`) trong `MasterDDLGenerator`.
+     - `TASK-M06` & `TASK-M07`: Xây dựng `mongo_type_converter.go` (`CoerceToBSONValue`, `CoerceRecordToBSONDoc`) và `transmuter_mongo.go` (`BuildMongoOCCBulkModels`, `bulkUpsertMongoMaster`, `deleteFromMongoMasterBySourceAndGpayIDs`) tích hợp vào `TransmuterModule`.
+     - `TASK-M08` & `TASK-M09`: Xây dựng `recon_dest_mongo.go` tích hợp vào `ReconDestAgent` & `GetMasterAgent`, và mở rộng `recon_execute_heal_handler.go` hỗ trợ Self-Healing / Prune trên Master MongoDB.
+     - `TASK-M10`: Kiểm thử tích hợp & đa worker concurrency (`transmuter_mongo_test.go`, `recon_dest_mongo_test.go`).
+  4. **Trên `ai-orchestrator` (`REAL-S4-EXEC-01` & `REAL-S5-QA-01`):** Xóa bỏ gán giả `StageDone -> done`, bổ sung `VerifySubTaskCodeOnDisk`, gom `2288` dòng `git diff` thật từ 3 repo vào `diff.patch`, chạy test/build thật trên từng repo đích và xuất báo cáo `audit_report.md` 6 mục thật trên `http://127.0.0.1:8090`.
+
+---
+
+## 11. Báo cáo Hoàn thành Task 12 (`LIVE-PROCESS-HUD-01`, `ROLE-MODEL-ATTRIBUTION-01`, `CO-ARCHITECT-CHAT-01`, `TASK-INTAKE-DUAL-MODE-01`)
+- **Biên lai Kiểm định (`06_evidence/`):** `EV-20261022T100330-8ddd` (`unit`, `exit=0`), `EV-20261022T100421-1a06` (`integration`, `exit=0`), `EV-20261022T100437-6ff9` (`integration`, `exit=0`), `EV-20261022T100516-ee5e` (`runtime`, `exit=0`), `EV-20261022T100545-d1ef` (`runtime`, `exit=0`), `EV-20261022T100556-312d` (`runtime`, `exit=0`).
+- **Hội đồng `/laya_router` (`DG3`):** [`06_laya_summary_dg3_20261022T100829.json`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-modular-agent-orchestrator-2026-10-20/06_laya_summary_dg3_20261022T100829.json) (`gate: PASS`).
+- **Tóm tắt 4 Nâng cấp Lõi trên `http://127.0.0.1:8090`:**
+  1. **`LIVE-PROCESS-HUD-01` (`#live-telemetry-hud`):** Bổ sung bảng điều khiển Telemetry 4 ô thời gian thực ngay đầu màn hình Autopilot hiển thị: **(1) Đang chạy cái gì** (`Stage`, `Step M/17`, `Sub-Task TASK-M01..M10`), **(2) Ai & Model nào đang làm** (`RoleLabel`, `AgentSlot`, `SkillBadge`, `Model`), **(3) Đang chạy ở đâu** (`ActiveRepoName`, `Worktree/Branch`, `Context file:line`), và **(4) Chạy như thế nào & Tiến độ %** (`ActiveCommand`, `OverallProgressPct%` + thanh tiến độ riêng cho từng repo `cdc-cms-service`, `cdc-cms-web`, `centralized-data-service`).
+  2. **`ROLE-MODEL-ATTRIBUTION-01`:** Gắn huy hiệu `Role + Slot + Skill + Model` lên toàn bộ 17 bước workflow bên trái, 6 ô Autopilot stage cards, và 10 thẻ Sub-Tasks (`TASK-M01..TASK-M10`), kèm dropdown cho phép đổi trực tiếp `Role/Assignee` và `Model` của từng Sub-Task (`POST /api/tasks/subtasks` với `action: "update_role_model"`, lưu xuống `subtasks.json` và `08_tasks.md`).
+  3. **`CO-ARCHITECT-CHAT-01` (`#co-architect-studio` — `POST /api/tasks/chat`):** Tích hợp khung đối thoại đồng kiến trúc ngay trong `Step Report, Solution & Code Demo Inspector`, cho phép chọn `Role` (`BRAIN / MUSCLE / QA`) và `Model` để thảo luận (`discuss`), yêu cầu sửa trực tiếp giải pháp `09_tasks_solution.md` (`revise_solution`) trước khi bấm `✓ APPROVE`, hoặc thêm/cập nhật Sub-Tasks (`update_subtasks`).
+  4. **`TASK-INTAKE-DUAL-MODE-01` (Modal `+ Giao việc mới` 2 Chế độ):**
+     - **Option 1 (`🔗 Đồng bộ từ Jira / Linear / GitHub / GitLab`):** Quản lý và xác thực nhiều tài khoản quản lý công việc (`/api/trackers`, `/api/trackers/test`, mask token theo Rule #20), duyệt/tìm kiếm ticket (`/api/trackers/issues`) và chọn ticket để tự động nạp `ExternalID`, `Title`, `Description`, `BRD Markdown` và `AffectedRepos`.
+     - **Option 2 (`📝 Nhập Thủ Công: Title + Detailed Description + Copy/Upload Tài Liệu BRD`):** Tách bạch 3 ô nhập liệu gồm `Tiêu đề công việc`, `Mô tả chi tiết & Tiêu chí nghiệm thu`, và `Tài liệu BRD / PRD / Spec` (hỗ trợ copy-paste, upload file `.md/.txt/.json`, hoặc nạp mẫu BRD), lưu vào `brd_source.md` và `01_requirements.md`.
 

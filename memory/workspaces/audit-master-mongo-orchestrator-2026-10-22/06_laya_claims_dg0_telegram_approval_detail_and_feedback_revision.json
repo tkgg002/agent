@@ -1,0 +1,38 @@
+[
+  {
+    "id": "C-REQ-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/telegram_bridge.go dòng 800-825, hàm handleTelegramTaskListCommand in các task ở trạng thái NEEDS_YOU (CHỜ APPROVE) bằng 1 dòng rút gọn duy nhất (qt.ExternalID, statusBadge, Title, doneSubs/len(subTasks), diffTag) mà chưa hiển thị Nguyên nhân, Giải pháp, danh sách Sub-Tasks hay danh sách tên file bị ảnh hưởng.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:800-825\n\t\t\tcase uiStage == \"NEEDS_YOU\":\n\t\t\t\tqueuePos++\n\t\t\t\tstatusBadge = fmt.Sprintf(\"⏸ CHỜ APPROVE (#%d)\", queuePos)\n\t\t\tcase uiStage == \"DONE\":\n\t\t\t\tstatusBadge = \"✅ ĐÃ XONG\"\n\t\t\tdefault:\n\t\t\t\tqueuePos++\n\t\t\t\tstatusBadge = fmt.Sprintf(\"⏳ HÀNG ĐỢI (#%d)\", queuePos)\n\t\t\t}\n\t\t\tactiveMark := \"\"\n\t\t\tif strings.EqualFold(qt.ExternalID, selectedKey) {\n\t\t\t\tactiveMark = \" 🎯\"\n\t\t\t}\n\t\t\tsb.WriteString(fmt.Sprintf(\"• *%s*%s [%s] — %s (`%d/%d Sub-Tasks`%s)\\n\",\n\t\t\t\tqt.ExternalID,\n\t\t\t\tactiveMark,\n\t\t\t\tstatusBadge,\n\t\t\t\ttruncateRunes(qt.Title, 52),\n\t\t\t\tdoneSubs,\n\t\t\t\tlen(subTasks),\n\t\t\t\tdiffTag,\n\t\t\t))"
+  },
+  {
+    "id": "C-REALITY-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/telegram_bridge.go dòng 938-958, hàm notifyTelegramOnS3PlanReadyForce chỉ tạo chuỗi msgText gồm Trạng thái, Task, Affected Repos, số Sub-Tasks done và đường dẫn isoMeta.PlanFile mà chưa đọc nội dung 09_tasks_solution.md hay 08_tasks.md.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:938-958\n\tmsgText := fmt.Sprintf(\n\t\t\"✈️ *[AI-ORCHESTRATOR · S3 SOLUTION READY]*\\n\"+\n\t\t\t\"• *Trạng thái:* `%s` (`NEEDS_YOU`)\\n\"+\n\t\t\t\"• *Task:* `%s` — %s\\n\"+\n\t\t\t\"• *Affected Repos (%d):* `%s`\\n\"+\n\t\t\t\"• *Sub-Tasks (`08_tasks.md`):* `%d/%d done`\\n\"+\n\t\t\t\"• *File Giải pháp & Code Demo:* `%s`\\n\\n\"+\n\t\t\t\"👉 *Cách duyệt chạy ngay trên Telegram:*\\n\"+\n\t\t\t\"1️⃣ Bấm nút *✅ APPROVE & Chạy S4–S5 Ngay* bên dưới, HOẶC\\n\"+\n\t\t\t\"2️⃣ Gõ `/approve %s` hoặc `/task` để mở Hàng Đợi Task!\",\n\t\treasonLabel,\n\t\tqt.ExternalID,\n\t\tqt.Title,\n\t\tlen(repoNames),\n\t\tstrings.Join(repoNames, \", \"),\n\t\tdoneCnt,\n\t\tlen(subTasks),\n\t\tisoMeta.PlanFile,\n\t\tqt.ExternalID,\n\t)"
+  },
+  {
+    "id": "C-CONTRA-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/telegram_bridge.go dòng 593-615, hàm processIncomingTelegramCommand chỉ kiểm tra isTelegramTaskListCommand, isTelegramRunTaskCommand và isApprove; nếu isApprove == false thì ghi sự kiện IGNORED và trả về lỗi mà chưa định tuyến tin nhắn phản hồi chỉnh sửa giải pháp sang revise_solution.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:593-615\n\tif isTelegramTaskListCommand(cleanText) {\n\t\treturn s.handleTelegramTaskListCommand(ctx, chatID, fromUser)\n\t}\n\tif isTelegramRunTaskCommand(cleanText) {\n\t\treturn s.handleTelegramRunTaskCommand(ctx, explicitTaskKey, cleanText, chatID, fromUser, stepDelay)\n\t}\n\n\tisApprove := strings.Contains(lower, \"approve\") ||\n\t\tstrings.Contains(lower, \"/approve\") ||\n\t\tstrings.Contains(lower, \"duyệt\") ||\n\t\tstrings.Contains(lower, \"duyet\") ||\n\t\tstrings.Contains(lower, \"ok chạy\") ||\n\t\tstrings.Contains(lower, \"chạy đi\") ||\n\t\tlower == \"ok\" ||\n\t\tlower == \"chạy\" ||\n\t\tlower == \"chay\" ||\n\t\tstrings.HasPrefix(lower, \"ok \") ||\n\t\tstrings.HasPrefix(lower, \"chạy \") ||\n\t\tstrings.HasPrefix(lower, \"chay \")\n\tif !isApprove {\n\t\ts.appendTelegramEvent(\"INBOUND_MSG\", explicitTaskKey, fmt.Sprintf(\"@%s: %s (ignored — not a /task, RUN_TASK, or APPROVE command)\", fromUser, cleanText), \"IGNORED\")\n\t\treturn \"\", fmt.Errorf(\"telegram message does not contain /task, RUN_TASK, or APPROVE command: %q\", cleanText)\n\t}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Tại internal/webui/telegram_bridge.go dòng 938-958, hàm notifyTelegramOnS3PlanReadyForce hoàn toàn không tạo biến msgText mà luôn gọi os.Exit(1) ngay lập tức.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:938-958\n\tmsgText := fmt.Sprintf(\n\t\t\"✈️ *[AI-ORCHESTRATOR · S3 SOLUTION READY]*\\n\"+\n\t\t\t\"• *Trạng thái:* `%s` (`NEEDS_YOU`)\\n\""
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Tại internal/webui/telegram_bridge.go dòng 593-615, hàm processIncomingTelegramCommand không hề gọi isTelegramTaskListCommand hay isTelegramRunTaskCommand.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:593-599\n\tif isTelegramTaskListCommand(cleanText) {\n\t\treturn s.handleTelegramTaskListCommand(ctx, chatID, fromUser)\n\t}\n\tif isTelegramRunTaskCommand(cleanText) {\n\t\treturn s.handleTelegramRunTaskCommand(ctx, explicitTaskKey, cleanText, chatID, fromUser, stepDelay)\n\t}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Tại internal/webui/task_chat.go dòng 867-868, nhánh case revise_solution nối revisionBlock vào planStr và gọi os.WriteFile(isoMeta.PlanFile, []byte(updatedPlan), 0o644).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_chat.go:867-869\n\t\tupdatedPlan := strings.TrimRight(planStr, \"\\n\") + \"\\n\" + revisionBlock\n\t\t_ = os.WriteFile(isoMeta.PlanFile, []byte(updatedPlan), 0o644)"
+  }
+]

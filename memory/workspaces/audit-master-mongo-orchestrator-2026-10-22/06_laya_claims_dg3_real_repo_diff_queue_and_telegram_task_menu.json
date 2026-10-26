@@ -1,0 +1,38 @@
+[
+  {
+    "id": "A-DIFF-01",
+    "kind": "target",
+    "claim": "Tại centralized-export-service, class TransHisModel trong models/trans-his/trans-his.model.ts khai báo pgPool?: Pool, knexPg: Knex và isPostgres để thực thi truy vấn PostgreSQL trên bảng trans_his.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his/trans-his.model.ts:10-36\nclass TransHisModel {\n\tprivate readonly logger: LoggerInstance;\n\tprivate readonly dbConnection: any;\n\tprivate readonly pgPool?: Pool;\n\tprivate readonly knexPg: Knex;\n\tprivate readonly isPostgres: boolean;\n\tprivate readonly schema: Schema<TransHisEntity>;\n\tprivate readonly model: any;\n\tprivate readonly collectionName: string = DB_COLLECTION.TRANS_HIS__TRANS_HIS || (DB_COLLECTION as any).TRANS_HIS || \"trans-his\";\n\tprivate readonly tableName: string = \"trans_his\";\n\n\tpublic constructor(\n\t\tdbConnection: Connection | Pool | any,\n\t\tlogger: LoggerInstance,\n\t\tplugins = []\n\t) {\n\t\tthis.logger = logger;\n\t\tthis.dbConnection = dbConnection;\n\t\tthis.knexPg = knex({ client: \"pg\" });\n\t\tthis.isPostgres = Boolean(\n\t\t\tdbConnection &&\n\t\t\ttypeof (dbConnection as any).query === \"function\" &&\n\t\t\ttypeof (dbConnection as any).model !== \"function\"\n\t\t);\n\t\tif (this.isPostgres) {\n\t\t\tthis.pgPool = dbConnection as Pool;\n\t\t}"
+  },
+  {
+    "id": "A-QUEUE-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/server.go, struct WaveNodeDTO khai báo các trường QueuePosition, IsRunning, SubTasksDone, SubTasksTotal, RepoDiffFiles và RepoDiffSummary để quản lý hàng đợi theo Repo.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:69-79\n\tTargetRepo      string           `json:\"target_repo\"`\n\tAffectedRepos   []string         `json:\"affected_repos\"`\n\tSubTasks        []SubTaskDTO     `json:\"sub_tasks\"`\n\tIsolation       TaskIsolationDTO `json:\"isolation\"`\n\tQueuePosition   int              `json:\"queue_position\"`\n\tIsRunning       bool             `json:\"is_running\"`\n\tSubTasksDone    int              `json:\"sub_tasks_done\"`\n\tSubTasksTotal   int              `json:\"sub_tasks_total\"`\n\tRepoDiffFiles   int              `json:\"repo_diff_files\"`\n\tRepoDiffSummary string           `json:\"repo_diff_summary\"`\n}"
+  },
+  {
+    "id": "A-TG-01",
+    "kind": "target",
+    "claim": "Tại internal/webui/telegram_bridge.go, hàm processIncomingTelegramCommand kiểm tra isTelegramTaskListCommand(cleanText) để gọi handleTelegramTaskListCommand và isTelegramRunTaskCommand(cleanText) để gọi handleTelegramRunTaskCommand.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:589-599\nfunc (s *Server) processIncomingTelegramCommand(ctx context.Context, explicitTaskKey, text, chatID, fromUser string, stepDelay time.Duration) (string, error) {\n\tcleanText := strings.TrimSpace(text)\n\tlower := strings.ToLower(cleanText)\n\n\tif isTelegramTaskListCommand(cleanText) {\n\t\treturn s.handleTelegramTaskListCommand(ctx, chatID, fromUser)\n\t}\n\tif isTelegramRunTaskCommand(cleanText) {\n\t\treturn s.handleTelegramRunTaskCommand(ctx, explicitTaskKey, cleanText, chatID, fromUser, stepDelay)\n\t}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Class TransHisModel trong models/trans-his/trans-his.model.ts hoàn toàn không khai báo pgPool, knexPg hay isPostgres.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his/trans-his.model.ts:10-20\nclass TransHisModel {\n\tprivate readonly logger: LoggerInstance;\n\tprivate readonly dbConnection: any;\n\tprivate readonly pgPool?: Pool;\n\tprivate readonly knexPg: Knex;\n\tprivate readonly isPostgres: boolean;"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Hàm processIncomingTelegramCommand trong internal/webui/telegram_bridge.go hoàn toàn không gọi isTelegramTaskListCommand hay isTelegramRunTaskCommand.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:593-598\n\tif isTelegramTaskListCommand(cleanText) {\n\t\treturn s.handleTelegramTaskListCommand(ctx, chatID, fromUser)\n\t}\n\tif isTelegramRunTaskCommand(cleanText) {\n\t\treturn s.handleTelegramRunTaskCommand(ctx, explicitTaskKey, cleanText, chatID, fromUser, stepDelay)\n\t}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Hàm isTelegramRunTaskCommand trong internal/webui/telegram_bridge.go nhận diện các tiền tố run_task , /run_task , /run , run , chạy task và chay task .",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:579-587\nfunc isTelegramRunTaskCommand(text string) bool {\n\tlower := strings.ToLower(strings.TrimSpace(text))\n\treturn strings.HasPrefix(lower, \"run_task \") ||\n\t\tstrings.HasPrefix(lower, \"/run_task \") ||\n\t\tstrings.HasPrefix(lower, \"/run \") ||\n\t\tstrings.HasPrefix(lower, \"run \") ||\n\t\tstrings.HasPrefix(lower, \"chạy task \") ||\n\t\tstrings.HasPrefix(lower, \"chay task \")\n}"
+  }
+]

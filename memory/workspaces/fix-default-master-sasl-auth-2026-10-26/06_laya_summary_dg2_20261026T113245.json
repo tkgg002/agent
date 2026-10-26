@@ -1,0 +1,175 @@
+{
+  "mode": "claim",
+  "stage": "dg2",
+  "workspace": "fix-default-master-sasl-auth-2026-10-26",
+  "ts": "20261026T113245",
+  "trusted_rounds": [
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-default-master-sasl-auth-2026-10-26/06_laya_raw_dg1_20261026T113245.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In server_setup.go lines 99-101, NewWorkerServer returns a non-nil error ('nats streams: %w') whenever natsClient.EnsureStreams(cdcSubjects) returns a non-nil error.",
+      "decision": "FLAG",
+      "resolved": "Verified directly at REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:99-101.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.7093
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.5778
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.0091
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In centralized-data-service/pkgs/natsconn/nats_client.go lines 225-228, ensureSingleStream overwrites info.Config.Subjects with desired.Subjects whenever sameSubjects(info.Config.Subjects, desired.Subjects) is false.",
+      "decision": "FLAG",
+      "resolved": "Verified directly at REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/natsconn/nats_client.go:225-228.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5226
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2325
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.245
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In cdc-cms-service/pkgs/natsconn/nats_client.go lines 195-201, when js.StreamInfo(desired.Name) returns nats.ErrStreamNotFound and js.AddStream(desired) fails, ensureSingleStream immediately returns an error without retrying with a smaller MaxBytes.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4299
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.5124
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8393
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In nats_monitor_handler.go lines 157-173, GetOverview fetches /varz, /jsz?streams=true&config=true&consumers=true, and /connz?subs=detail concurrently, and does not fetch /subsz?subs=1.",
+      "decision": "FLAG",
+      "resolved": "Verified directly at REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:157-173.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "INCORRECT",
+          "confidence": 0.2337
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.261
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.459
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the demo for server_setup.go, an EnsureStreams error at startup is logged with logger.Warn instead of returning an error from NewWorkerServer.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.8024
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.0263
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.9576
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the demo, addStreamWithQuotaFallback retries js.AddStream with fallbackCaps (64 MiB, 16 MiB, -1) when the initial js.AddStream(desired) fails.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6975
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.7918
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.9617
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the demo for ensureSingleStream, existing subjects are merged via mergeSubjects(info.Config.Subjects, desired.Subjects) and MaxBytes is only updated when info.Config.MaxBytes <= 0 and desired.MaxBytes > 0.",
+      "decision": "FLAG",
+      "resolved": "Verified against REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/natsconn/nats_client.go:225-232.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.859
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1615
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.3104
+        }
+      }
+    }
+  ],
+  "gate": "PASS",
+  "summary_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-default-master-sasl-auth-2026-10-26/06_laya_summary_dg1_20261026T113245.json"
+}

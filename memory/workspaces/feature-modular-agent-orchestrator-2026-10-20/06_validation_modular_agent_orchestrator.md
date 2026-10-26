@@ -126,3 +126,123 @@
   Vibe Steps: 17 Active: ['Xây dựng'] Panes: ['C', 'A', 'I', 'G', 'E', 'K', 'B', 'H', 'D', 'F', 'J']
   ```
 
+---
+
+## 5. Nghiệm thu Task 7 (`Zero-Mockup & Unified Cross-Screen Entity Graph` — Commit `ae7ffdc`)
+
+- **Biên lai Kiểm thử & Runtime Vật lý (`06_evidence/EV-*.json` — khớp `src_fingerprint: 227d3a51b09c5dc9934168437878223d950891f2081f1713165c750e1c67517f`):**
+  - **Unit Tests (`kind=unit`):** `EV-20261021T114444-7c71` (`exit=0`) — `go test -v -count=1 -race ./internal/webui/... ./internal/queue/... ./internal/tui/...` (`PASS`).
+  - **Integration Tests (`kind=integration`):** `EV-20261021T114502-b220` (`exit=0`) — `go test -v -count=1 -race ./...` (19/19 packages `PASS`).
+  - **Runtime Execution (`kind=runtime`):** `EV-20261021T114549-0bb7` & `EV-20261021T115240-33df` (`exit=0`) — `go run ./cmd/orchestrator daemon --once` (`Total Autopilot Cost: $0.0000 across 29 round(s)`).
+- **Live HTTP/SSE & Cross-Screen Entity Graph Trace (`http://127.0.0.1:8090`):**
+  ```text
+  project_name: ai-orchestrator | branch: feat/modular-queue-agent-kernel | git_commit: 260738e
+  total_items: 7 | visible_items: 7 | status_counts: {'blocked': 0, 'done': 7, 'in_review': 0, 'needs_you': 0, 'ready': 0, 'running': 0, 'under_way': 0}
+  Wave 0 1/1 [('TASK-1', 'DONE', 'A', 16, 5)]
+  Wave 1 1/1 [('TASK-2', 'DONE', 'B', 16, 4)]
+  Wave 2 1/1 [('TASK-3', 'DONE', 'I', 16, 4)]
+  Wave 3 1/1 [('TASK-4', 'DONE', 'B', 16, 4)]
+  Wave 4 1/1 [('TASK-5', 'DONE', 'K', 16, 4)]
+  Wave 5 1/1 [('TASK-6', 'DONE', 'B', 16, 4)]
+  Wave 6 1/1 [('TASK-7', 'DONE', 'A', 16, 3)]
+  Pane C: Terminal (Shell thật) | active_task_key: TASK-1 | linked_task_keys: ['TASK-2', 'TASK-4', 'TASK-6']
+  Workflow steps sample: [(1, 'S1', 'done', ['TASK-1'..'TASK-7'], '01_requirements_modular_agent_orchestrator.md'), ...]
+  ```
+- **Decision Gate `/laya_router` (`DG3`) sau Commit cuối `ae7ffdc`:**
+  - Summary: [`06_laya_summary_dg3_20261021T114858.json`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-modular-agent-orchestrator-2026-10-20/06_laya_summary_dg3_20261021T114858.json) | Gate: **`PASS`** 🟢
+
+---
+
+## 6. Nghiệm thu Task 8 (`Unified 100vh Single-App IDE Shell + 4-Layer Per-Task Isolation + Live Autopilot Engine + Antigravity Runner` — Commit `2d9a0a2`)
+
+- **Biên lai Kiểm thử & Runtime Vật lý (`06_evidence/EV-*.json` — khớp `src_fingerprint: ec2e5df0dd39a003fa5c24735e81c6b17347f5d2fd5399c72f7958b33146a9c6`):**
+  - **Unit Tests (`kind=unit`):** `EV-20261021T144834-d8fa` (`exit=0`) — `go test -v -count=1 ./internal/runner/... ./internal/webui/...` (`PASS`: `TestAntigravityRunner_DiscoverAndResolveCommand`, `TestAntigravityRunner_Complete_StreamsTokensAndForwardsModel`, `TestWebUIServer_PerTaskIsolationAndLifecycleAutopilot`).
+  - **Integration Tests (`kind=integration`):** `EV-20261021T144849-9628` (`exit=0`) — `go test -v -count=1 -race ./...` (toàn bộ 19/19 packages `PASS`).
+  - **Runtime Execution (`kind=runtime`):**
+    - `EV-20261021T144945-7d7f` (`exit=0`) — `./bin/orchestrator daemon --once --workspace feature-modular-agent-orchestrator-2026-10-20` (`PASS`).
+    - `EV-20261021T145011-5f4a` (`exit=0`) — `curl -sS http://127.0.0.1:8090/api/dashboard` (`PASS`, phát hiện task `TASK-8` ở trạng thái `READY: 1`, `active_task_key: "TASK-8"`, `available_runners: ["antigravity", "gemini", "claude"]`).
+    - `EV-20261021T145047-5245` (`exit=0`) — `curl -sS -X POST http://127.0.0.1:8090/api/pipeline/trigger -d '{}'` (`PASS`, chạy trọn vẹn 4 chặng Autopilot trên `TASK-8`, tạo worktree `.orchestrator/worktrees/TASK-8` trên nhánh `task/TASK-8` + 5 file hồ sơ trong `.orchestrator/tasks/TASK-8/`, đưa `queue_summary` về `{"DONE": 9, "READY": 0}`).
+- **Decision Gate `/laya_router` (`DG3`) sau Commit cuối `2d9a0a2`:**
+  - Summary: [`06_laya_summary_dg3_20261021T145755.json`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-modular-agent-orchestrator-2026-10-20/06_laya_summary_dg3_20261021T145755.json) | Gate: **`PASS`** 🟢
+
+---
+
+## 7. Nghiệm thu Task 9 (`2-Phase Gate-Stop Autopilot WF-01 + Target Repo & CLI/Model Setup + Sub-Task Wave Builder REPO-SUB-01 + 5-Tab Step Report & Code Demo Inspector REPORT-01 + 100% Strict Right-Window Scoping SCOPE-01 + Live /agent Kernel Active Inspector AGENT-VIS-01` — Commit `617e961`)
+
+- **Biên lai Kiểm thử & Runtime Vật lý (`06_evidence/EV-*.json` — khớp `src_fingerprint` sau sửa code cuối):**
+  - **Unit Tests (`kind=unit`):** `EV-20261021T170007-5ee9` (`exit=0`) — `go test -v -count=1 ./internal/webui/...` (`PASS`: `TestWebUIServer_StaticIndexAndThreeScreensDashboard`, `TestWebUIServer_CreateTaskTriggerCycleAndAgentMessage`, `TestWebUIServer_SSEStream`, `TestWebUIServer_PerTaskIsolationAndLifecycleAutopilot`).
+  - **Integration Tests (`kind=integration`):** `EV-20261021T170010-bdb0` (`exit=0`) — `go test -count=1 -race ./...` (toàn bộ 19/19 packages `PASS`).
+  - **CLI Daemon Runtime Check (`kind=runtime`):** `EV-20261021T171044-fea1` (`exit=0`) — `go run ./cmd/orchestrator daemon --once` (`PASS`, `Cycle complete: Scout LLM tokens=0 | Sorter triaged=0 | Planner default=opus | Coder high=opus / std=sonnet`).
+  - **Live Web UI Runtime Execution trên `http://127.0.0.1:8090` (`kind=runtime`):** `EV-20261021T170216-45ac` (`exit=0`) — `python3 verify_live_8090.py`:
+    - `active_task_key`: `"tích hợp Master MongoDB Destination"` | `stage`: `NEEDS_YOU`
+    - `active_target_repo`: `/Users/trainguyen/Documents/work/data-hub/centralized-data-service`
+    - `active_sub_tasks`: `4` (`Wave 0..2`)
+    - `active_step_reports`: `5` (`S1`, `S2`, `S3` kèm Code Demo `MasterMongoDestination.UpsertMasterBatch` `2457` bytes, `S4`, `S5`)
+    - `active_agent_kernel.total_lessons`: `268` | `matched_lessons`: `5`
+    - `available_repos`: `24` repositories (bao gồm `data-hub/centralized-data-service`, `data-hub/cdc-cms-service`, `data-hub/cdc-cms-web`, `ai-orchestrator`, `agent`)
+    - Kiểm chứng chuyển đổi qua lại giữa `"tích hợp Master MongoDB Destination"`, `"TASK-1"` và `"TASK-2"` xác nhận 100% cửa sổ bên phải đồng bộ tuyệt đối theo Task đang chọn, và quay lại mặc định là `"tích hợp Master MongoDB Destination"` ở trạng thái `NEEDS_YOU` chờ User bấm `✓ APPROVE & Chạy S4–S5`.
+- **Decision Gate `/laya_router` (`DG3`) sau Commit cuối `617e961`:**
+  - Summary: [`06_laya_summary_dg3_20261021T170437.json`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-modular-agent-orchestrator-2026-10-20/06_laya_summary_dg3_20261021T170437.json) | Gate: **`PASS`** 🟢
+
+---
+
+## 8. Nghiệm thu Task 10 (`Antigravity gemini-4-argon Model Support AGY-ARGON-01 + 2-Tier Domain & Codebase-Traceable Sub-Task Decomposition TASK-M01..TASK-M10 DECOMP-DOMAIN-01 + Multi-Repo Parent Epic & Per-Sub-Task Repository Isolation MULTI-REPO-SUBTASK-01` — Commit `196f8f7`)
+
+- **Biên lai Kiểm thử & Runtime Vật lý (`06_evidence/EV-*.json` — khớp `src_fingerprint` sau sửa code cuối):**
+  - **Unit Tests (`kind=unit`):** `EV-20261021T221154-3e45` (`exit=0`) — `go test -v -count=1 ./internal/webui/... ./internal/runner/...` (`PASS`: `TestWebUIServer_StaticIndexAndThreeScreensDashboard`, `TestWebUIServer_CreateTaskTriggerCycleAndAgentMessage`, `TestWebUIServer_SSEStream`, `TestWebUIServer_PerTaskIsolationAndLifecycleAutopilot`, `TestTask10_Gemini4ArgonAndMultiRepoDomainSubTasks`, `TestAntigravityRunner_*`).
+  - **Integration Tests (`kind=integration`):** `EV-20261021T221209-7341` (`exit=0`) — `go test -count=1 -race ./...` (toàn bộ 19/19 packages `PASS`).
+  - **CLI Daemon Runtime Check (`kind=runtime`):** `EV-20261021T221221-20b6` (`exit=0`) — `go run ./cmd/orchestrator daemon --once` (`PASS`, `Cycle complete: Scout LLM tokens=0 | Sorter triaged=0 | Planner default=opus | Coder high=opus / std=sonnet`).
+  - **Live Web UI Runtime Execution trên `http://127.0.0.1:8090` (`kind=runtime`):** `EV-20261021T221324-8111` (`exit=0`) — `python3 verify_live_8090_task10.py`:
+    - `cli_settings.planner_model`: `"gemini-4-argon (antigravity)"` | `coder_high_model`: `"gemini-4-argon (antigravity)"`
+    - `active_affected_repos` (`3` repos): `["/Users/trainguyen/Documents/work/data-hub/cdc-cms-service", "/Users/trainguyen/Documents/work/data-hub/cdc-cms-web", "/Users/trainguyen/Documents/work/data-hub/centralized-data-service"]`
+    - `active_sub_tasks` (`10` domain sub-tasks `TASK-M01..TASK-M10` chia theo `Nhóm 1..5` & `Wave 0..4`):
+      - `cdc-cms-service`: `2` sub-tasks (`TASK-M01`, `TASK-M02` — `Wave 0`)
+      - `cdc-cms-web`: `1` sub-task (`TASK-M03` — `Wave 0`)
+      - `centralized-data-service`: `7` sub-tasks (`TASK-M04`, `TASK-M05` — `Wave 1`; `TASK-M06`, `TASK-M07` — `Wave 2`; `TASK-M08`, `TASK-M09` — `Wave 3`; `TASK-M10` — `Wave 4`)
+    - `active_step_reports` (`S3`): Đồng bộ 3 khối Code Demo thực tế từ `09_tasks_solution_master_mongo.md` (`len=2570`: `ConnectionManager.GetMasterMongoClient`, `TransmuterModule.bulkUpsertMasterMongo`, `CreateConnection & TestConnection`).
+- **Decision Gate `/laya_router` (`DG3`) sau Commit cuối `196f8f7`:**
+  - Summary: [`06_laya_summary_dg3_20261021T221738.json`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-modular-agent-orchestrator-2026-10-20/06_laya_summary_dg3_20261021T221738.json) | Gate: **`PASS`** 🟢
+
+---
+
+## 9. Bằng chứng Kiểm định Vật lý Task 11 (`REAL-S4-EXEC-01`, `REAL-S5-QA-01`, `REAL-MONGO-M01-M10`)
+
+- **Biên lai `EV-20261022T010017-5dee` (`kind: unit`, `exit=0` — Kiểm thử & Build thực tế trên cả 3 repo `data-hub`):**
+  - `cdc-cms-service`: `go test -v ./internal/api/master/...` $\rightarrow$ `PASS` (`TestNormalizeMasterEngineTypeAndBuildDSN`, `TestMasterConnectionHandler_CreateAndTestMongoConnection` — `TASK-M01`, `TASK-M02`).
+  - `cdc-cms-web`: `npm run build` (`tsc -b && vite build`) $\rightarrow$ `built in 493ms`, `exit=0` (`MasterRegistry-RtrHjzKy.js` — `TASK-M03`).
+  - `centralized-data-service`:
+    - `TestConnectionManager_MasterMongoPool`: `PASS` (`TASK-M04`)
+    - `TestCoerceToBSONValue_AllTypes`, `TestBuildMongoOCCBulkModels_DeduplicationAndOCCPipeline`, `TestTransmuteMongoMaster_MultiWorkerConcurrentOCC`: `PASS` (`TASK-M05`, `TASK-M06`, `TASK-M07`, `TASK-M10`)
+    - `TestReconDestAgentMongo_IsMongoAndWindowHash` & `go build ./internal/handler/recon/...`: `PASS` (`TASK-M08`, `TASK-M09`, `TASK-M10`).
+- **Biên lai `EV-20261022T010321-738f` (`kind: integration`, `exit=0` — Kiểm thử `VerifySubTaskCodeOnDisk` & Build `./bin/orchestrator`):**
+  - `TestWebUIServer_StaticIndexAndThreeScreensDashboard`: `PASS (0.75s)`
+  - `TestTask10_Gemini4ArgonAndMultiRepoDomainSubTasks` (kèm kiểm chứng `VerifySubTaskCodeOnDisk` cho cả 10 Sub-Tasks `TASK-M01..TASK-M10` và negative control `TASK-FAKE-99`): `PASS (1.96s)`
+- **Biên lai `EV-20261022T010407-c3d1` (`kind: runtime`, `exit=0` — Chạy `go run ./cmd/orchestrator daemon --once` & `POST /api/tasks/action` `approve_and_run` trực tiếp trên `http://127.0.0.1:8090`):**
+  - `ActiveTaskKey`: `tích hợp Master MongoDB Destination`
+  - `Stage`: `DONE`
+  - `SubTasksDone`: `10/10` (`TASK-M01..TASK-M10` đều đạt `VERIFIED` từ code thật trên đĩa của 3 repo `cdc-cms-service`, `cdc-cms-web`, `centralized-data-service`)
+  - `DiffLines`: `2288` dòng diff thật trong `diff.patch`
+  - `AuditLines`: `105` dòng báo cáo kiểm toán 6 mục S5 thật trong `audit_report.md`
+- **Decision Gate `/laya_router` (`DG3`) sau lần sửa code cuối:**
+  - Summary: [`06_laya_summary_dg3_20261022T010557.json`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-modular-agent-orchestrator-2026-10-20/06_laya_summary_dg3_20261022T010557.json) (`trusted_rounds: ["r2"]`, `100% ACCEPT` cho `A-F1`, `A-R1`, `A-SCOPE`) | Gate: **`PASS`** 🟢
+
+---
+
+## 10. Bằng chứng Kiểm định Vật lý Task 12 (`LIVE-PROCESS-HUD-01`, `ROLE-MODEL-ATTRIBUTION-01`, `CO-ARCHITECT-CHAT-01`, `TASK-INTAKE-DUAL-MODE-01`)
+
+- **Biên lai `EV-20261022T100330-8ddd` (`kind: unit`, `exit=0`):**
+  - `go test -v ./internal/agentgate/... ./internal/queue/... ./internal/sorter/...` $\rightarrow$ `PASS` (`TestGatekeeperConstitutionAndProductionScan`, `TestStoreQueueLifecycleAndAutopilotLedger`, `TestSorterTriageAndMemoryFTS5HotspotBoost`).
+- **Biên lai `EV-20261022T100421-1a06` & `EV-20261022T100437-6ff9` (`kind: integration`, `exit=0`):**
+  - `go test -count=1 -v -run TestLiveTelemetryHUDRoleModelCoArchitectAndDualModeIntake ./internal/webui/...` $\rightarrow$ `PASS (3.98s)`:
+    - Kiểm chứng `Option 2` (`intake_mode: "manual"`, `title`, `description`, `brd_content`, `brd_file_name`) tạo `brd_source.md` và cập nhật `01_requirements.md`.
+    - Kiểm chứng `LiveExecution` (`LIVE-PROCESS-HUD-01`) trả về đầy đủ `ActiveTaskKey`, `ActiveStepNum`, `ActiveRole`, `ActiveModel`, `OverallProgressPct` và `RepoProgress` cho cả 3 repo (`cdc-cms-service`, `cdc-cms-web`, `centralized-data-service`).
+    - Kiểm chứng `ROLE-MODEL-ATTRIBUTION-01`: cả 17 `WorkflowSteps`, 6 `AutopilotStages`, và 10 `ActiveSubTasks` đều có `RoleLabel`, `AgentSlot`, `SkillBadge`, `Model`; gọi `POST /api/tasks/subtasks` (`action: "update_role_model"`) đổi `TASK-M03` sang `Reviewer` (`Slot H`) + `claude-opus-4-6` thành công.
+    - Kiểm chứng `CO-ARCHITECT-CHAT-01`: gọi `POST /api/tasks/chat` (`action: "revise_solution"`) bổ sung cơ chế DLQ vào `09_tasks_solution.md` và chặn lệnh nguy hiểm `git push` với `403 Forbidden`.
+    - Kiểm chứng `Option 1` (`TASK-INTAKE-DUAL-MODE-01`): `POST /api/trackers` mask token (`ATATT3xFfGF0...` $\rightarrow$ `ata***21`) theo Rule #20 và `GET /api/trackers/issues` trả về ticket `DH-401` kèm `BRDMarkdown` và `AffectedRepos`.
+  - `go test -count=1 -v -run TestTask10_Gemini4ArgonAndMultiRepoDomainSubTasks ./internal/webui/...` $\rightarrow$ `PASS (3.53s)`.
+- **Biên lai `EV-20261022T100516-ee5e`, `EV-20261022T100545-d1ef`, `EV-20261022T100556-312d` (`kind: runtime`, `exit=0`):**
+  - `go run ./cmd/orchestrator daemon --once --workspace feature-modular-agent-orchestrator-2026-10-20` $\rightarrow$ `PASS` (`152 rounds`, `0` lỗi).
+  - Khởi động daemon `./bin/orchestrator ui --addr 127.0.0.1:8090` và kiểm chứng trực tiếp `/api/trackers` (`3` kết nối Jira/Linear/GitHub với token đã mask) và `/api/trackers/issues` (`DH-401`, `DH-405`, `DH-412`, `PLAT-208`, `CDS-89` kèm `brd_markdown`).
+- **Decision Gate `/laya_router` (`DG3`) sau lần sửa code cuối:**
+  - Summary: [`06_laya_summary_dg3_20261022T100829.json`](file:///Users/trainguyen/Documents/work/agent/memory/workspaces/feature-modular-agent-orchestrator-2026-10-20/06_laya_summary_dg3_20261022T100829.json) | Gate: **`PASS`** 🟢
+

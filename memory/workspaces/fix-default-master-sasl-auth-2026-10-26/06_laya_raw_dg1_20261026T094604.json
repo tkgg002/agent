@@ -1,0 +1,1519 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "claim": "In connection_manager.go lines 95-122, when key is 'default_master', GetMasterDB queries cdc_system.connection_registry and calls buildDSNFromFieldsPatched(&conn) unconditionally when OptionsJSON has no dsn/url and SecretRef is not a URL.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:94-122\n\t\t\tvar conn modelsource.ConnectionRegistry\n\t\t\tqErr := sysDB.WithContext(ctx).Table(\"cdc_system.connection_registry\").\n\t\t\t\tWhere(\"(connection_code = ? OR connection_code = ?) AND status = 'active'\", key, strings.ToLower(key)).\n\t\t\t\tFirst(&conn).Error\n\t\t\tif qErr == nil {\n\t\t\t\tfoundActiveMasterRecord = true\n\t\t\t\tif len(conn.OptionsJSON) > 0 {\n\t\t\t\t\tvar opts map[string]interface{}\n\t\t\t\t\tif err := json.Unmarshal(conn.OptionsJSON, &opts); err == nil {\n\t\t\t\t\t\tif dsnVal, ok := opts[\"dsn\"].(string); ok && strings.TrimSpace(dsnVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(dsnVal)\n\t\t\t\t\t\t} else if urlVal, ok := opts[\"url\"].(string); ok && strings.TrimSpace(urlVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(urlVal)\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" && conn.SecretRef != \"\" {\n\t\t\t\t\tif plain := tryPlainDSN(conn.SecretRef); plain != \"\" {\n\t\t\t\t\t\tdsn = plain\n\t\t\t\t\t} else if envVal := tryEnvPointer(conn.SecretRef); envVal != \"\" {\n\t\t\t\t\t\tdsn = envVal\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" {\n\t\t\t\t\tdsn = buildDSNFromFieldsPatched(&conn)\n\t\t\t\t}\n\t\t\t}",
+    "flow": "GetMasterDB loads conn for 'default_master' and calls buildDSNFromFieldsPatched(&conn) when dsn is still empty.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3553,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7071,
+                "INCORRECT": 0.2598,
+                "UNSUPPORTED": 0.0332
+              },
+              "confidence": 0.3553,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 818,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In connection_manager.go lines 95-122, when key is 'default_master', GetMasterDB queries cdc_system.connection_registry and calls buildDSNFromFieldsPatched(&conn) unconditionally when OptionsJSON has no dsn/url and SecretRef is not a URL.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:94-122\n\t\t\tvar conn modelsource.ConnectionRegistry\n\t\t\tqErr := sysDB.WithContext(ctx).Table(\"cdc_system.connection_registry\").\n\t\t\t\tWhere(\"(connection_code = ? OR connection_code = ?) AND status = 'active'\", key, strings.ToLower(key)).\n\t\t\t\tFirst(&conn).Error\n\t\t\tif qErr == nil {\n\t\t\t\tfoundActiveMasterRecord = true\n\t\t\t\tif len(conn.OptionsJSON) > 0 {\n\t\t\t\t\tvar opts map[string]interface{}\n\t\t\t\t\tif err := json.Unmarshal(conn.OptionsJSON, &opts); err == nil {\n\t\t\t\t\t\tif dsnVal, ok := opts[\"dsn\"].(string); ok && strings.TrimSpace(dsnVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(dsnVal)\n\t\t\t\t\t\t} else if urlVal, ok := opts[\"url\"].(string); ok && strings.TrimSpace(urlVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(urlVal)\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" && conn.SecretRef != \"\" {\n\t\t\t\t\tif plain := tryPlainDSN(conn.SecretRef); plain != \"\" {\n\t\t\t\t\t\tdsn = plain\n\t\t\t\t\t} else if envVal := tryEnvPointer(conn.SecretRef); envVal != \"\" {\n\t\t\t\t\t\tdsn = envVal\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" {\n\t\t\t\t\tdsn = buildDSNFromFieldsPatched(&conn)\n\t\t\t\t}\n\t\t\t}",
+          "flow": "GetMasterDB loads conn for 'default_master' and calls buildDSNFromFieldsPatched(&conn) when dsn is still empty."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.3436,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2746,
+                "INCORRECT": 0.6927,
+                "UNSUPPORTED": 0.0327
+              },
+              "confidence": 0.3436,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 823,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "GetMasterDB loads conn for 'default_master' and calls buildDSNFromFieldsPatched(&conn) when dsn is still empty.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:94-122\n\t\t\tvar conn modelsource.ConnectionRegistry\n\t\t\tqErr := sysDB.WithContext(ctx).Table(\"cdc_system.connection_registry\").\n\t\t\t\tWhere(\"(connection_code = ? OR connection_code = ?) AND status = 'active'\", key, strings.ToLower(key)).\n\t\t\t\tFirst(&conn).Error\n\t\t\tif qErr == nil {\n\t\t\t\tfoundActiveMasterRecord = true\n\t\t\t\tif len(conn.OptionsJSON) > 0 {\n\t\t\t\t\tvar opts map[string]interface{}\n\t\t\t\t\tif err := json.Unmarshal(conn.OptionsJSON, &opts); err == nil {\n\t\t\t\t\t\tif dsnVal, ok := opts[\"dsn\"].(string); ok && strings.TrimSpace(dsnVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(dsnVal)\n\t\t\t\t\t\t} else if urlVal, ok := opts[\"url\"].(string); ok && strings.TrimSpace(urlVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(urlVal)\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" && conn.SecretRef != \"\" {\n\t\t\t\t\tif plain := tryPlainDSN(conn.SecretRef); plain != \"\" {\n\t\t\t\t\t\tdsn = plain\n\t\t\t\t\t} else if envVal := tryEnvPointer(conn.SecretRef); envVal != \"\" {\n\t\t\t\t\t\tdsn = envVal\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" {\n\t\t\t\t\tdsn = buildDSNFromFieldsPatched(&conn)\n\t\t\t\t}\n\t\t\t}",
+          "claim": "In connection_manager.go lines 95-122, when key is 'default_master', GetMasterDB queries cdc_system.connection_registry and calls buildDSNFromFieldsPatched(&conn) unconditionally when OptionsJSON has no dsn/url and SecretRef is not a URL."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5343,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.901,
+                "NO": 0.099
+              },
+              "confidence": 0.5343,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 726,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:94-122\n\t\t\tvar conn modelsource.ConnectionRegistry\n\t\t\tqErr := sysDB.WithContext(ctx).Table(\"cdc_system.connection_registry\").\n\t\t\t\tWhere(\"(connection_code = ? OR connection_code = ?) AND status = 'active'\", key, strings.ToLower(key)).\n\t\t\t\tFirst(&conn).Error\n\t\t\tif qErr == nil {\n\t\t\t\tfoundActiveMasterRecord = true\n\t\t\t\tif len(conn.OptionsJSON) > 0 {\n\t\t\t\t\tvar opts map[string]interface{}\n\t\t\t\t\tif err := json.Unmarshal(conn.OptionsJSON, &opts); err == nil {\n\t\t\t\t\t\tif dsnVal, ok := opts[\"dsn\"].(string); ok && strings.TrimSpace(dsnVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(dsnVal)\n\t\t\t\t\t\t} else if urlVal, ok := opts[\"url\"].(string); ok && strings.TrimSpace(urlVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(urlVal)\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" && conn.SecretRef != \"\" {\n\t\t\t\t\tif plain := tryPlainDSN(conn.SecretRef); plain != \"\" {\n\t\t\t\t\t\tdsn = plain\n\t\t\t\t\t} else if envVal := tryEnvPointer(conn.SecretRef); envVal != \"\" {\n\t\t\t\t\t\tdsn = envVal\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" {\n\t\t\t\t\tdsn = buildDSNFromFieldsPatched(&conn)\n\t\t\t\t}\n\t\t\t}",
+          "claim": "In connection_manager.go lines 95-122, when key is 'default_master', GetMasterDB queries cdc_system.connection_registry and calls buildDSNFromFieldsPatched(&conn) unconditionally when OptionsJSON has no dsn/url and SecretRef is not a URL."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "claim": "In connection_manager.go lines 124-137, when dsn remains empty for an active master record in connection_registry, GetMasterDB resolves destDB via m.reg.GetDB(database.RoleDestination) and caches it in m.masterDBPool[key].",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:124-137\n\t// 3. If record in connection_registry represents the default destination pool (e.g. default_master with empty host),\n\t// bind and cache it to RoleDestination without false warnings.\n\tif dsn == \"\" {\n\t\tdestDB, err := m.reg.GetDB(database.RoleDestination)\n\t\tif foundActiveMasterRecord && err == nil && destDB != nil {\n\t\t\tm.masterDBPool[key] = destDB\n\t\t\treturn destDB, nil\n\t\t}\n\t\tif !foundActiveMasterRecord && m.logger != nil {\n\t\t\tm.logger.Warn(\"master connection key not found in overrides or connection_registry, fallback to destination pool\",\n\t\t\t\tzap.String(\"key\", key))\n\t\t}\n\t\treturn destDB, err\n\t}",
+    "flow": "When dsn == '' and foundActiveMasterRecord is true, GetMasterDB retrieves RoleDestination from m.reg, stores it in m.masterDBPool[key], and returns destDB.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3318,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5015,
+                "INCORRECT": 0.4906,
+                "UNSUPPORTED": 0.008
+              },
+              "confidence": 0.3318,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 486,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In connection_manager.go lines 124-137, when dsn remains empty for an active master record in connection_registry, GetMasterDB resolves destDB via m.reg.GetDB(database.RoleDestination) and caches it in m.masterDBPool[key].",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:124-137\n\t// 3. If record in connection_registry represents the default destination pool (e.g. default_master with empty host),\n\t// bind and cache it to RoleDestination without false warnings.\n\tif dsn == \"\" {\n\t\tdestDB, err := m.reg.GetDB(database.RoleDestination)\n\t\tif foundActiveMasterRecord && err == nil && destDB != nil {\n\t\t\tm.masterDBPool[key] = destDB\n\t\t\treturn destDB, nil\n\t\t}\n\t\tif !foundActiveMasterRecord && m.logger != nil {\n\t\t\tm.logger.Warn(\"master connection key not found in overrides or connection_registry, fallback to destination pool\",\n\t\t\t\tzap.String(\"key\", key))\n\t\t}\n\t\treturn destDB, err\n\t}",
+          "flow": "When dsn == '' and foundActiveMasterRecord is true, GetMasterDB retrieves RoleDestination from m.reg, stores it in m.masterDBPool[key], and returns destDB."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.6001,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8611,
+                "INCORRECT": 0.1287,
+                "UNSUPPORTED": 0.0102
+              },
+              "confidence": 0.6001,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 490,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "When dsn == '' and foundActiveMasterRecord is true, GetMasterDB retrieves RoleDestination from m.reg, stores it in m.masterDBPool[key], and returns destDB.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:124-137\n\t// 3. If record in connection_registry represents the default destination pool (e.g. default_master with empty host),\n\t// bind and cache it to RoleDestination without false warnings.\n\tif dsn == \"\" {\n\t\tdestDB, err := m.reg.GetDB(database.RoleDestination)\n\t\tif foundActiveMasterRecord && err == nil && destDB != nil {\n\t\t\tm.masterDBPool[key] = destDB\n\t\t\treturn destDB, nil\n\t\t}\n\t\tif !foundActiveMasterRecord && m.logger != nil {\n\t\t\tm.logger.Warn(\"master connection key not found in overrides or connection_registry, fallback to destination pool\",\n\t\t\t\tzap.String(\"key\", key))\n\t\t}\n\t\treturn destDB, err\n\t}",
+          "claim": "In connection_manager.go lines 124-137, when dsn remains empty for an active master record in connection_registry, GetMasterDB resolves destDB via m.reg.GetDB(database.RoleDestination) and caches it in m.masterDBPool[key]."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7345,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9548,
+                "NO": 0.0452
+              },
+              "confidence": 0.7345,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 383,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:124-137\n\t// 3. If record in connection_registry represents the default destination pool (e.g. default_master with empty host),\n\t// bind and cache it to RoleDestination without false warnings.\n\tif dsn == \"\" {\n\t\tdestDB, err := m.reg.GetDB(database.RoleDestination)\n\t\tif foundActiveMasterRecord && err == nil && destDB != nil {\n\t\t\tm.masterDBPool[key] = destDB\n\t\t\treturn destDB, nil\n\t\t}\n\t\tif !foundActiveMasterRecord && m.logger != nil {\n\t\t\tm.logger.Warn(\"master connection key not found in overrides or connection_registry, fallback to destination pool\",\n\t\t\t\tzap.String(\"key\", key))\n\t\t}\n\t\treturn destDB, err\n\t}",
+          "claim": "In connection_manager.go lines 124-137, when dsn remains empty for an active master record in connection_registry, GetMasterDB resolves destDB via m.reg.GetDB(database.RoleDestination) and caches it in m.masterDBPool[key]."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "claim": "In master_repo_gorm.go lines 641-649, custom master connections created via CreateMasterConnection always store the full authenticated DSN under opts['dsn'] and opts['url'] inside options_json.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_repo_gorm.go:641-650\n\topts := map[string]interface{}{\n\t\t\"dsn\":     dsn,\n\t\t\"url\":     dsn,\n\t\t\"sslmode\": sslmode,\n\t}\n\toptsBytes, err := json.Marshal(opts)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"marshal options_json: %w\", err)\n\t}",
+    "flow": "CreateMasterConnection populates options_json with dsn and url keys containing the full PostgreSQL connection string.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2062,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5892,
+                "INCORRECT": 0.3361,
+                "UNSUPPORTED": 0.0747
+              },
+              "confidence": 0.2062,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 342,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In master_repo_gorm.go lines 641-649, custom master connections created via CreateMasterConnection always store the full authenticated DSN under opts['dsn'] and opts['url'] inside options_json.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_repo_gorm.go:641-650\n\topts := map[string]interface{}{\n\t\t\"dsn\":     dsn,\n\t\t\"url\":     dsn,\n\t\t\"sslmode\": sslmode,\n\t}\n\toptsBytes, err := json.Marshal(opts)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"marshal options_json: %w\", err)\n\t}",
+          "flow": "CreateMasterConnection populates options_json with dsn and url keys containing the full PostgreSQL connection string."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4564,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8049,
+                "INCORRECT": 0.1515,
+                "UNSUPPORTED": 0.0436
+              },
+              "confidence": 0.4564,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 347,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "CreateMasterConnection populates options_json with dsn and url keys containing the full PostgreSQL connection string.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_repo_gorm.go:641-650\n\topts := map[string]interface{}{\n\t\t\"dsn\":     dsn,\n\t\t\"url\":     dsn,\n\t\t\"sslmode\": sslmode,\n\t}\n\toptsBytes, err := json.Marshal(opts)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"marshal options_json: %w\", err)\n\t}",
+          "claim": "In master_repo_gorm.go lines 641-649, custom master connections created via CreateMasterConnection always store the full authenticated DSN under opts['dsn'] and opts['url'] inside options_json."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4046,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8557,
+                "NO": 0.1443
+              },
+              "confidence": 0.4046,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 259,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_repo_gorm.go:641-650\n\topts := map[string]interface{}{\n\t\t\"dsn\":     dsn,\n\t\t\"url\":     dsn,\n\t\t\"sslmode\": sslmode,\n\t}\n\toptsBytes, err := json.Marshal(opts)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"marshal options_json: %w\", err)\n\t}",
+          "claim": "In master_repo_gorm.go lines 641-649, custom master connections created via CreateMasterConnection always store the full authenticated DSN under opts['dsn'] and opts['url'] inside options_json."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "claim": "In multi.go lines 163-168, RoleDestination resolves its DSN directly from r.cfg.MasterDB.PgxDSN().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go:163-168\n\tcase RoleDestination:\n\t\tdsn := r.cfg.MasterDB.PgxDSN()\n\t\tif r.cfg.MasterDB.IsEmpty() {\n\t\t\treturn \"\", fmt.Errorf(\"multi: destination DSN is empty (set masterDb in yaml)\")\n\t\t}\n\t\treturn dsn, nil",
+    "flow": "dsnForRole(RoleDestination) returns r.cfg.MasterDB.PgxDSN() configured in centralized-data-service.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5854,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8679,
+                "INCORRECT": 0.1063,
+                "UNSUPPORTED": 0.0258
+              },
+              "confidence": 0.5854,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 316,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In multi.go lines 163-168, RoleDestination resolves its DSN directly from r.cfg.MasterDB.PgxDSN().",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go:163-168\n\tcase RoleDestination:\n\t\tdsn := r.cfg.MasterDB.PgxDSN()\n\t\tif r.cfg.MasterDB.IsEmpty() {\n\t\t\treturn \"\", fmt.Errorf(\"multi: destination DSN is empty (set masterDb in yaml)\")\n\t\t}\n\t\treturn dsn, nil",
+          "flow": "dsnForRole(RoleDestination) returns r.cfg.MasterDB.PgxDSN() configured in centralized-data-service."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.2846,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.4489,
+                "INCORRECT": 0.5273,
+                "UNSUPPORTED": 0.0238
+              },
+              "confidence": 0.2846,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 321,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "dsnForRole(RoleDestination) returns r.cfg.MasterDB.PgxDSN() configured in centralized-data-service.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go:163-168\n\tcase RoleDestination:\n\t\tdsn := r.cfg.MasterDB.PgxDSN()\n\t\tif r.cfg.MasterDB.IsEmpty() {\n\t\t\treturn \"\", fmt.Errorf(\"multi: destination DSN is empty (set masterDb in yaml)\")\n\t\t}\n\t\treturn dsn, nil",
+          "claim": "In multi.go lines 163-168, RoleDestination resolves its DSN directly from r.cfg.MasterDB.PgxDSN()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.0274,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.5971,
+                "NO": 0.4029
+              },
+              "confidence": 0.0274,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 226,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go:163-168\n\tcase RoleDestination:\n\t\tdsn := r.cfg.MasterDB.PgxDSN()\n\t\tif r.cfg.MasterDB.IsEmpty() {\n\t\t\treturn \"\", fmt.Errorf(\"multi: destination DSN is empty (set masterDb in yaml)\")\n\t\t}\n\t\treturn dsn, nil",
+          "claim": "In multi.go lines 163-168, RoleDestination resolves its DSN directly from r.cfg.MasterDB.PgxDSN()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "claim": "In the demo for GetMasterDB, buildDSNFromFieldsPatched(&conn) is only called when dsn is empty and hasOptionCredentials is true (options_json contains a non-empty username or user).",
+    "evidence": "DEMO:\n\t\t\t\thasOptionCredentials := false\n\t\t\t\tif len(conn.OptionsJSON) > 0 {\n\t\t\t\t\tvar opts map[string]interface{}\n\t\t\t\t\tif err := json.Unmarshal(conn.OptionsJSON, &opts); err == nil {\n\t\t\t\t\t\tif dsnVal, ok := opts[\"dsn\"].(string); ok && strings.TrimSpace(dsnVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(dsnVal)\n\t\t\t\t\t\t} else if urlVal, ok := opts[\"url\"].(string); ok && strings.TrimSpace(urlVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(urlVal)\n\t\t\t\t\t\t}\n\t\t\t\t\t\tfor _, uKey := range []string{\"username\", \"user\"} {\n\t\t\t\t\t\t\tif uVal, ok := opts[uKey].(string); ok && strings.TrimSpace(uVal) != \"\" {\n\t\t\t\t\t\t\t\thasOptionCredentials = true\n\t\t\t\t\t\t\t\tbreak\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" && hasOptionCredentials {\n\t\t\t\t\tdsn = buildDSNFromFieldsPatched(&conn)\n\t\t\t\t}",
+    "flow": "hasOptionCredentials is set to true only when opts['username'] or opts['user'] is non-empty, gating buildDSNFromFieldsPatched(&conn).",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2465,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5534,
+                "INCORRECT": 0.4041,
+                "UNSUPPORTED": 0.0425
+              },
+              "confidence": 0.2465,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 650,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In the demo for GetMasterDB, buildDSNFromFieldsPatched(&conn) is only called when dsn is empty and hasOptionCredentials is true (options_json contains a non-empty username or user).",
+          "evidence": "DEMO:\n\t\t\t\thasOptionCredentials := false\n\t\t\t\tif len(conn.OptionsJSON) > 0 {\n\t\t\t\t\tvar opts map[string]interface{}\n\t\t\t\t\tif err := json.Unmarshal(conn.OptionsJSON, &opts); err == nil {\n\t\t\t\t\t\tif dsnVal, ok := opts[\"dsn\"].(string); ok && strings.TrimSpace(dsnVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(dsnVal)\n\t\t\t\t\t\t} else if urlVal, ok := opts[\"url\"].(string); ok && strings.TrimSpace(urlVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(urlVal)\n\t\t\t\t\t\t}\n\t\t\t\t\t\tfor _, uKey := range []string{\"username\", \"user\"} {\n\t\t\t\t\t\t\tif uVal, ok := opts[uKey].(string); ok && strings.TrimSpace(uVal) != \"\" {\n\t\t\t\t\t\t\t\thasOptionCredentials = true\n\t\t\t\t\t\t\t\tbreak\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" && hasOptionCredentials {\n\t\t\t\t\tdsn = buildDSNFromFieldsPatched(&conn)\n\t\t\t\t}",
+          "flow": "hasOptionCredentials is set to true only when opts['username'] or opts['user'] is non-empty, gating buildDSNFromFieldsPatched(&conn)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.1946,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2935,
+                "INCORRECT": 0.6111,
+                "UNSUPPORTED": 0.0953
+              },
+              "confidence": 0.1946,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 655,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "hasOptionCredentials is set to true only when opts['username'] or opts['user'] is non-empty, gating buildDSNFromFieldsPatched(&conn).",
+          "diff_lines": "DEMO:\n\t\t\t\thasOptionCredentials := false\n\t\t\t\tif len(conn.OptionsJSON) > 0 {\n\t\t\t\t\tvar opts map[string]interface{}\n\t\t\t\t\tif err := json.Unmarshal(conn.OptionsJSON, &opts); err == nil {\n\t\t\t\t\t\tif dsnVal, ok := opts[\"dsn\"].(string); ok && strings.TrimSpace(dsnVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(dsnVal)\n\t\t\t\t\t\t} else if urlVal, ok := opts[\"url\"].(string); ok && strings.TrimSpace(urlVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(urlVal)\n\t\t\t\t\t\t}\n\t\t\t\t\t\tfor _, uKey := range []string{\"username\", \"user\"} {\n\t\t\t\t\t\t\tif uVal, ok := opts[uKey].(string); ok && strings.TrimSpace(uVal) != \"\" {\n\t\t\t\t\t\t\t\thasOptionCredentials = true\n\t\t\t\t\t\t\t\tbreak\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" && hasOptionCredentials {\n\t\t\t\t\tdsn = buildDSNFromFieldsPatched(&conn)\n\t\t\t\t}",
+          "claim": "In the demo for GetMasterDB, buildDSNFromFieldsPatched(&conn) is only called when dsn is empty and hasOptionCredentials is true (options_json contains a non-empty username or user)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.0687,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.347,
+                "NO": 0.653
+              },
+              "confidence": 0.0687,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 552,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "DEMO:\n\t\t\t\thasOptionCredentials := false\n\t\t\t\tif len(conn.OptionsJSON) > 0 {\n\t\t\t\t\tvar opts map[string]interface{}\n\t\t\t\t\tif err := json.Unmarshal(conn.OptionsJSON, &opts); err == nil {\n\t\t\t\t\t\tif dsnVal, ok := opts[\"dsn\"].(string); ok && strings.TrimSpace(dsnVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(dsnVal)\n\t\t\t\t\t\t} else if urlVal, ok := opts[\"url\"].(string); ok && strings.TrimSpace(urlVal) != \"\" {\n\t\t\t\t\t\t\tdsn = strings.TrimSpace(urlVal)\n\t\t\t\t\t\t}\n\t\t\t\t\t\tfor _, uKey := range []string{\"username\", \"user\"} {\n\t\t\t\t\t\t\tif uVal, ok := opts[uKey].(string); ok && strings.TrimSpace(uVal) != \"\" {\n\t\t\t\t\t\t\t\thasOptionCredentials = true\n\t\t\t\t\t\t\t\tbreak\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif dsn == \"\" && hasOptionCredentials {\n\t\t\t\t\tdsn = buildDSNFromFieldsPatched(&conn)\n\t\t\t\t}",
+          "claim": "In the demo for GetMasterDB, buildDSNFromFieldsPatched(&conn) is only called when dsn is empty and hasOptionCredentials is true (options_json contains a non-empty username or user)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "claim": "In the demo for EnsureDefaultMasterConnection, an UPDATE statement clears host, port, and default_database to NULL on 'default_master' when options_json is NULL or has no dsn/url/username/user.",
+    "evidence": "DEMO:\n\t_ = db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.connection_registry\n\t\t   SET host = NULL,\n\t\t       port = NULL,\n\t\t       default_database = NULL,\n\t\t       updated_at = NOW()\n\t\t WHERE connection_code = 'default_master'\n\t\t   AND (options_json IS NULL\n\t\t        OR COALESCE(options_json->>'dsn', options_json->>'url', options_json->>'username', options_json->>'user', '') = '')\n\t\t   AND (host IS NOT NULL OR port IS NOT NULL OR default_database IS NOT NULL)\n\t`).Error",
+    "flow": "The UPDATE statement resets host, port, and default_database to NULL for connection_code = 'default_master' when options_json lacks credentials.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7745,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9441,
+                "INCORRECT": 0.0411,
+                "UNSUPPORTED": 0.0148
+              },
+              "confidence": 0.7745,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 404,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In the demo for EnsureDefaultMasterConnection, an UPDATE statement clears host, port, and default_database to NULL on 'default_master' when options_json is NULL or has no dsn/url/username/user.",
+          "evidence": "DEMO:\n\t_ = db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.connection_registry\n\t\t   SET host = NULL,\n\t\t       port = NULL,\n\t\t       default_database = NULL,\n\t\t       updated_at = NOW()\n\t\t WHERE connection_code = 'default_master'\n\t\t   AND (options_json IS NULL\n\t\t        OR COALESCE(options_json->>'dsn', options_json->>'url', options_json->>'username', options_json->>'user', '') = '')\n\t\t   AND (host IS NOT NULL OR port IS NOT NULL OR default_database IS NOT NULL)\n\t`).Error",
+          "flow": "The UPDATE statement resets host, port, and default_database to NULL for connection_code = 'default_master' when options_json lacks credentials."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.8092,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9534,
+                "INCORRECT": 0.0385,
+                "UNSUPPORTED": 0.008
+              },
+              "confidence": 0.8092,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 409,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "The UPDATE statement resets host, port, and default_database to NULL for connection_code = 'default_master' when options_json lacks credentials.",
+          "diff_lines": "DEMO:\n\t_ = db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.connection_registry\n\t\t   SET host = NULL,\n\t\t       port = NULL,\n\t\t       default_database = NULL,\n\t\t       updated_at = NOW()\n\t\t WHERE connection_code = 'default_master'\n\t\t   AND (options_json IS NULL\n\t\t        OR COALESCE(options_json->>'dsn', options_json->>'url', options_json->>'username', options_json->>'user', '') = '')\n\t\t   AND (host IS NOT NULL OR port IS NOT NULL OR default_database IS NOT NULL)\n\t`).Error",
+          "claim": "In the demo for EnsureDefaultMasterConnection, an UPDATE statement clears host, port, and default_database to NULL on 'default_master' when options_json is NULL or has no dsn/url/username/user."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8127,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9714,
+                "NO": 0.0286
+              },
+              "confidence": 0.8127,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 311,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "DEMO:\n\t_ = db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.connection_registry\n\t\t   SET host = NULL,\n\t\t       port = NULL,\n\t\t       default_database = NULL,\n\t\t       updated_at = NOW()\n\t\t WHERE connection_code = 'default_master'\n\t\t   AND (options_json IS NULL\n\t\t        OR COALESCE(options_json->>'dsn', options_json->>'url', options_json->>'username', options_json->>'user', '') = '')\n\t\t   AND (host IS NOT NULL OR port IS NOT NULL OR default_database IS NOT NULL)\n\t`).Error",
+          "claim": "In the demo for EnsureDefaultMasterConnection, an UPDATE statement clears host, port, and default_database to NULL on 'default_master' when options_json is NULL or has no dsn/url/username/user."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "claim": "In the demo for EnsureDefaultMasterConnection, the function signature is EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error and does not take cfg.DB.",
+    "evidence": "DEMO:\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error",
+    "flow": "EnsureDefaultMasterConnection accepts (ctx, db, logger) and seeds default_master without cfg.DB.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.8244,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9597,
+                "INCORRECT": 0.0288,
+                "UNSUPPORTED": 0.0115
+              },
+              "confidence": 0.8244,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 401,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In the demo for EnsureDefaultMasterConnection, the function signature is EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error and does not take cfg.DB.",
+          "evidence": "DEMO:\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error",
+          "flow": "EnsureDefaultMasterConnection accepts (ctx, db, logger) and seeds default_master without cfg.DB."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.4464,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2078,
+                "INCORRECT": 0.7712,
+                "UNSUPPORTED": 0.0211
+              },
+              "confidence": 0.4464,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 406,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "EnsureDefaultMasterConnection accepts (ctx, db, logger) and seeds default_master without cfg.DB.",
+          "diff_lines": "DEMO:\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error",
+          "claim": "In the demo for EnsureDefaultMasterConnection, the function signature is EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error and does not take cfg.DB."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4189,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8612,
+                "NO": 0.1388
+              },
+              "confidence": 0.4189,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 317,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "DEMO:\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error",
+          "claim": "In the demo for EnsureDefaultMasterConnection, the function signature is EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error and does not take cfg.DB."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In ConnectionManager.GetShadowDB, the method returns m.reg.GetDB(database.RoleShadow).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:53-56\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}",
+    "flow": "GetShadowDB returns m.reg.GetDB(database.RoleShadow).",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.8152,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9568,
+                "INCORRECT": 0.0315,
+                "UNSUPPORTED": 0.0116
+              },
+              "confidence": 0.8152,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 258,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In ConnectionManager.GetShadowDB, the method returns m.reg.GetDB(database.RoleShadow).",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:53-56\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}",
+          "flow": "GetShadowDB returns m.reg.GetDB(database.RoleShadow)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3711,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.749,
+                "INCORRECT": 0.1993,
+                "UNSUPPORTED": 0.0516
+              },
+              "confidence": 0.3711,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 263,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "GetShadowDB returns m.reg.GetDB(database.RoleShadow).",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:53-56\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}",
+          "claim": "In ConnectionManager.GetShadowDB, the method returns m.reg.GetDB(database.RoleShadow)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.9563,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9952,
+                "NO": 0.0048
+              },
+              "confidence": 0.9563,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 179,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:53-56\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}",
+          "claim": "In ConnectionManager.GetShadowDB, the method returns m.reg.GetDB(database.RoleShadow)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In ConnectionManager.GetShadowDB, the method always returns nil and an error.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:53-56\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}",
+    "flow": "GetShadowDB delegates to m.reg.GetDB(database.RoleShadow), not unconditionally returning nil/error.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2299,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6781,
+                "INCORRECT": 0.1899,
+                "UNSUPPORTED": 0.1319
+              },
+              "confidence": 0.2299,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 259,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In ConnectionManager.GetShadowDB, the method always returns nil and an error.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:53-56\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}",
+          "flow": "GetShadowDB delegates to m.reg.GetDB(database.RoleShadow), not unconditionally returning nil/error."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.2603,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2696,
+                "INCORRECT": 0.6608,
+                "UNSUPPORTED": 0.0696
+              },
+              "confidence": 0.2603,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 264,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "GetShadowDB delegates to m.reg.GetDB(database.RoleShadow), not unconditionally returning nil/error.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:53-56\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}",
+          "claim": "In ConnectionManager.GetShadowDB, the method always returns nil and an error."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.4804,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.1166,
+                "NO": 0.8834
+              },
+              "confidence": 0.4804,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 173,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:53-56\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}",
+          "claim": "In ConnectionManager.GetShadowDB, the method always returns nil and an error."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In multi.go lines 163-168, RoleDestination returns an empty string without checking r.cfg.MasterDB.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go:163-168\n\tcase RoleDestination:\n\t\tdsn := r.cfg.MasterDB.PgxDSN()\n\t\tif r.cfg.MasterDB.IsEmpty() {\n\t\t\treturn \"\", fmt.Errorf(\"multi: destination DSN is empty (set masterDb in yaml)\")\n\t\t}\n\t\treturn dsn, nil",
+    "flow": "RoleDestination checks r.cfg.MasterDB.IsEmpty() and returns r.cfg.MasterDB.PgxDSN().",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3569,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7129,
+                "INCORRECT": 0.2518,
+                "UNSUPPORTED": 0.0353
+              },
+              "confidence": 0.3569,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 309,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In multi.go lines 163-168, RoleDestination returns an empty string without checking r.cfg.MasterDB.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go:163-168\n\tcase RoleDestination:\n\t\tdsn := r.cfg.MasterDB.PgxDSN()\n\t\tif r.cfg.MasterDB.IsEmpty() {\n\t\t\treturn \"\", fmt.Errorf(\"multi: destination DSN is empty (set masterDb in yaml)\")\n\t\t}\n\t\treturn dsn, nil",
+          "flow": "RoleDestination checks r.cfg.MasterDB.IsEmpty() and returns r.cfg.MasterDB.PgxDSN()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.4702,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2167,
+                "INCORRECT": 0.7719,
+                "UNSUPPORTED": 0.0114
+              },
+              "confidence": 0.4702,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 314,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "RoleDestination checks r.cfg.MasterDB.IsEmpty() and returns r.cfg.MasterDB.PgxDSN().",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go:163-168\n\tcase RoleDestination:\n\t\tdsn := r.cfg.MasterDB.PgxDSN()\n\t\tif r.cfg.MasterDB.IsEmpty() {\n\t\t\treturn \"\", fmt.Errorf(\"multi: destination DSN is empty (set masterDb in yaml)\")\n\t\t}\n\t\treturn dsn, nil",
+          "claim": "In multi.go lines 163-168, RoleDestination returns an empty string without checking r.cfg.MasterDB."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7003,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9468,
+                "NO": 0.0532
+              },
+              "confidence": 0.7003,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 220,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go:163-168\n\tcase RoleDestination:\n\t\tdsn := r.cfg.MasterDB.PgxDSN()\n\t\tif r.cfg.MasterDB.IsEmpty() {\n\t\t\treturn \"\", fmt.Errorf(\"multi: destination DSN is empty (set masterDb in yaml)\")\n\t\t}\n\t\treturn dsn, nil",
+          "claim": "In multi.go lines 163-168, RoleDestination returns an empty string without checking r.cfg.MasterDB."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

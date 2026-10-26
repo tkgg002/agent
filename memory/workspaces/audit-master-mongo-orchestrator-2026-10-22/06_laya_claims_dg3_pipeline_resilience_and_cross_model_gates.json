@@ -1,0 +1,47 @@
+[
+  {
+    "id": "A-PIPE-01",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Kiểm tra loadCLISettings trong task_inspector.go dòng 678-698",
+    "claim": "Trong task_inspector.go dòng 678-698, hàm loadCLISettings khởi tạo QAAuditorModel là \"claude-opus-4-6 (antigravity)\", LayaGateModel là \"claude-sonnet-4-6 (antigravity)\", SecurityModel là \"codex-5.3 (antigravity)\", MaxSelfHealRetries là 3 và gọi EvaluateCrossModelDiversity(&def).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:678-698\nfunc (s *Server) loadCLISettings() CLISettingsDTO {\n\tagentRoot := \"/Users/trainguyen/Documents/work/agent\"\n\tif s.Gatekeeper != nil && s.Gatekeeper.AgentCoreDir != \"\" {\n\t\tagentRoot = s.Gatekeeper.AgentCoreDir\n\t}\n\tdef := CLISettingsDTO{\n\t\tDefaultRunner:      s.activeRunner,\n\t\tPlannerModel:       \"gemini-4-argon (antigravity)\",\n\t\tCoderHighModel:     \"gemini-4-argon (antigravity)\",\n\t\tCoderStdModel:      \"gemini-2.5-flash (antigravity)\",\n\t\tQAAuditorModel:     \"claude-opus-4-6 (antigravity)\",\n\t\tLayaGateModel:      \"claude-sonnet-4-6 (antigravity)\",\n\t\tSecurityModel:      \"codex-5.3 (antigravity)\",\n\t\tMaxSelfHealRetries: 3,\n\t\tAgentKernelRoot:    agentRoot,\n\t\tEnforceApproveGate: true,\n\t}\n\tif def.DefaultRunner == \"\" {\n\t\tdef.DefaultRunner = \"antigravity\"\n\t}\n\tEvaluateCrossModelDiversity(&def)"
+  },
+  {
+    "id": "A-PIPE-02",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Kiểm tra Stage implement (Slot C Worktree + Multi-Repo Wave & Sync Gate) trong server.go dòng 2760-2767",
+    "claim": "Trong server.go dòng 2760-2767, Stage \"implement\" khai báo 3 thẻ AutopilotSubCardDTO gồm \"Worktree Attached (Slot C)\" (AgentSlot \"Slot C\"), \"Implement (S4)\" và \"Multi-Repo Wave & Sync Gate\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:2760-2767\n\t\t{\n\t\t\tID:         \"implement\",\n\t\t\tRoundBadge: fmt.Sprintf(\"Slot C Worktree · ⟲ %d build runs (%s)\", implRuns, activeTask.ExternalID),\n\t\t\tCards: []AutopilotSubCardDTO{\n\t\t\t\t{Title: \"Worktree Attached (Slot C)\", Subtitle: gitRef, Meta: activeIso.WorktreePath, Status: worktreeSlotCStatus, RoleLabel: \"🌿 Worktree Provisioned\", AgentSlot: \"Slot C\", SkillBadge: \"git worktree\", Model: cliCfg.CoderHighModel},\n\t\t\t\t{Title: \"Implement (S4)\", Subtitle: implSubtitle, Meta: fmt.Sprintf(\"%d min · $%.2f · Zero-Mockup H4b\", implMin, implCost), Status: implStatus, RoleLabel: \"🛠️ MUSCLE · Coder\", AgentSlot: \"Slot B / D / E\", SkillBadge: \"/muscle-execute\", Model: cliCfg.CoderHighModel},\n\t\t\t\t{Title: \"Multi-Repo Wave & Sync Gate\", Subtitle: fmt.Sprintf(\"%d/%d Sub-Tasks DONE\", doneSubTasks, len(activeSubTasks)), Meta: \"Contract Sync · Atomic Rollback Ready\", Status: implStatus, RoleLabel: \"⚡ Multi-Repo Wave\", AgentSlot: \"Slot E / F\", SkillBadge: \"/muscle-execute\", Model: cliCfg.CoderHighModel},\n\t\t\t},\n\t\t},"
+  },
+  {
+    "id": "A-PIPE-03",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Kiểm tra Stage qa (5A Hard Gate Zero-LLM + 5B Semantic Audit & DG3) và Stage pr (Finalize & Diff Review) trong server.go dòng 2768-2783",
+    "claim": "Trong server.go dòng 2768-2783, Stage \"qa\" có 2 thẻ \"5A. Hard Gate (Zero-LLM)\" (Model \"system-compiler (0 LLM)\") và \"5B. Semantic Audit & DG3\", còn Stage \"pr\" có thẻ \"Finalize & Diff Review\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:2768-2783\n\t\t{\n\t\t\tID:         \"qa\",\n\t\t\tRoundBadge: fmt.Sprintf(\"Retry %d/%d (Max %d) · ⟲ %d QA/DG3 runs\", selfHeal.RetryCount, maxRetries, maxRetries, qaRuns),\n\t\t\tCards: []AutopilotSubCardDTO{\n\t\t\t\t{Title: \"5A. Hard Gate (Zero-LLM)\", Subtitle: \"go vet · lint · go test -race · build\", Meta: \"0 LLM calls if fail -> MUSCLE S4\", Status: qaStatus, RoleLabel: \"⚙️ Deterministic Gate\", AgentSlot: \"Zero-LLM\", SkillBadge: \"go vet / test -race\", Model: \"system-compiler (0 LLM)\"},\n\t\t\t\t{Title: \"5B. Semantic Audit & DG3\", Subtitle: fmt.Sprintf(\"%s · Retry %d/%d (Max %d)\", qaSubtitle, selfHeal.RetryCount, maxRetries, maxRetries), Meta: fmt.Sprintf(\"%d min · $%.2f · Tier-1 S5->S4 / Tier-2 S5->S3 Re-Locks Human Gate\", qaMin, qaCost), Status: qaStatus, RoleLabel: \"🧪 Cross-Model QA & DG3\", AgentSlot: \"Slot K / H / I\", SkillBadge: \"/qa-agent · /laya-router\", Model: fmt.Sprintf(\"%s + %s\", cliCfg.QAAuditorModel, cliCfg.LayaGateModel)},\n\t\t\t},\n\t\t},\n\t\t{\n\t\t\tID:         \"pr\",\n\t\t\tRoundBadge: \"Deliverable & Merge Gate\",\n\t\t\tCards: []AutopilotSubCardDTO{\n\t\t\t\t{Title: \"Finalize & Diff Review\", Subtitle: gitRef, Meta: \"Deliverable Ready · No-Push (H5)\", Status: prStatus, RoleLabel: \"📦 Diff Review & Merge Gate\", AgentSlot: \"Slot C / F\", SkillBadge: \"/session-wrapup\", Model: cliCfg.CoderHighModel},\n\t\t\t},\n\t\t},"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "flow": "Control false: phát biểu sai giá trị mặc định của MaxSelfHealRetries trong loadCLISettings tại task_inspector.go dòng 678-698",
+    "claim": "Trong task_inspector.go dòng 678-698, trường MaxSelfHealRetries mặc định trong def được gán bằng 99.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:678-698\nfunc (s *Server) loadCLISettings() CLISettingsDTO {\n\tagentRoot := \"/Users/trainguyen/Documents/work/agent\"\n\tif s.Gatekeeper != nil && s.Gatekeeper.AgentCoreDir != \"\" {\n\t\tagentRoot = s.Gatekeeper.AgentCoreDir\n\t}\n\tdef := CLISettingsDTO{\n\t\tDefaultRunner:      s.activeRunner,\n\t\tPlannerModel:       \"gemini-4-argon (antigravity)\",\n\t\tCoderHighModel:     \"gemini-4-argon (antigravity)\",\n\t\tCoderStdModel:      \"gemini-2.5-flash (antigravity)\",\n\t\tQAAuditorModel:     \"claude-opus-4-6 (antigravity)\",\n\t\tLayaGateModel:      \"claude-sonnet-4-6 (antigravity)\",\n\t\tSecurityModel:      \"codex-5.3 (antigravity)\",\n\t\tMaxSelfHealRetries: 3,\n\t\tAgentKernelRoot:    agentRoot,\n\t\tEnforceApproveGate: true,\n\t}\n\tif def.DefaultRunner == \"\" {\n\t\tdef.DefaultRunner = \"antigravity\"\n\t}\n\tEvaluateCrossModelDiversity(&def)"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "flow": "Control false: phát biểu sai đường dẫn trả về của cliSettingsPath trong task_inspector.go dòng 629-635",
+    "claim": "Trong task_inspector.go dòng 629-635, hàm cliSettingsPath trả về đường dẫn kết nối tới bảng PostgreSQL thay vì file JSON.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:629-635\nfunc (s *Server) cliSettingsPath() string {\n\trootDir := s.Root\n\tif strings.TrimSpace(rootDir) == \"\" {\n\t\trootDir = \".\"\n\t}\n\treturn filepath.Join(rootDir, \".orchestrator\", \"cli_settings.json\")\n}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "flow": "Control true: xác nhận chính xác đường dẫn trả về của cliSettingsPath trong task_inspector.go dòng 629-635",
+    "claim": "Trong task_inspector.go dòng 629-635, hàm cliSettingsPath trả về filepath.Join(rootDir, \".orchestrator\", \"cli_settings.json\").",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:629-635\nfunc (s *Server) cliSettingsPath() string {\n\trootDir := s.Root\n\tif strings.TrimSpace(rootDir) == \"\" {\n\t\trootDir = \".\"\n\t}\n\treturn filepath.Join(rootDir, \".orchestrator\", \"cli_settings.json\")\n}"
+  }
+]

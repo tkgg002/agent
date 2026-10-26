@@ -1,0 +1,58 @@
+[
+  {
+    "id": "A-DIFF-1",
+    "kind": "audit",
+    "claim": "In transmuter_utils.go, resolveConflictTarget reads the primary key strictly from binding.TransformSpec (parsePKFromSpec) and isMasterPKMappedFromSourcePK verifies via mapping_rule_master that TargetColumn == pkCol maps from binding.SourcePK or _source_id without fallback chains.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:736-776\nfunc resolveConflictTarget(binding *masterBindingRuntime, colTypes map[string]string) string {\n\tif binding != nil && len(binding.TransformSpec) > 0 {\n\t\tpk := parsePKFromSpec(binding.TransformSpec)\n\t\tif pk != \"\" && pk != \"_gpay_id\" && ddlIdentRe.MatchString(pk) {\n\t\t\tif colTypes == nil {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t\tif _, ok := colTypes[pk]; ok {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t}\n\t}\n\treturn \"_gpay_id\"\n}\n\n// isMasterPKMappedFromSourcePK verifies via mapping_rule_master that the Master PK column\n// resolved from transform_spec.pk maps from the source primary key (binding.SourcePK or _source_id).\nfunc isMasterPKMappedFromSourcePK(binding *masterBindingRuntime, rules []mappingRuleRow, pkCol string) bool {\n\tif binding == nil || pkCol == \"\" || pkCol == \"_gpay_id\" || binding.TransformType == \"flatten\" {\n\t\treturn false\n\t}\n\tfor _, r := range rules {\n\t\tif r.TargetColumn == pkCol {\n\t\t\tsrcField := strings.TrimSpace(r.SourceField)\n\t\t\tif srcField == \"\" {\n\t\t\t\tsrcField = r.TargetColumn\n\t\t\t}\n\t\t\tif srcField == \"_source_id\" {\n\t\t\t\treturn true\n\t\t\t}\n\t\t\tif binding.SourcePK != \"\" {\n\t\t\t\treturn srcField == binding.SourcePK\n\t\t\t}\n\t\t\treturn srcField == pkCol\n\t\t}\n\t}\n\tif len(rules) == 0 {\n\t\treturn binding.SourcePK == \"\" || pkCol == binding.SourcePK\n\t}\n\treturn false\n}",
+    "flow": "resolveConflictTarget extracts pk from TransformSpec JSON, and isMasterPKMappedFromSourcePK checks mapping_rule_master for r.TargetColumn == pkCol."
+  },
+  {
+    "id": "A-DIFF-2",
+    "kind": "audit",
+    "claim": "In MasterBindingRepo.ListMasterTargetsByShadowIdentity, the SQL query joins cdc_system.connection_registry scr ON scr.id = sb.shadow_connection_id and matches (@shadow_connection_key = '' OR scr.connection_code = @shadow_connection_key) without referencing non-existent mb.shadow_connection_id.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go:93-120\nfunc (r *MasterBindingRepo) ListMasterTargetsByShadowIdentity(ctx context.Context, shadowTable, shadowSchema, shadowConnectionKey, shadowBindingCode string) ([]MasterTargetIdentity, error) {\n\tvar result []MasterTargetIdentity\n\terr := r.db.WithContext(ctx).Raw(\n\t\t`SELECT mb.id,\n\t\t        COALESCE(NULLIF(mb.master_schema, ''), 'public') || '.' || mb.master_table AS master_fqn,\n\t\t        COALESCE(mcr.connection_code, '') AS master_connection_key\n\t\t   FROM cdc_system.master_binding mb\n\t\t   JOIN cdc_system.shadow_binding sb ON sb.id = mb.shadow_binding_id\n\t\t   LEFT JOIN cdc_system.connection_registry mcr ON mcr.id = mb.master_connection_id\n\t\t   LEFT JOIN cdc_system.connection_registry scr ON scr.id = sb.shadow_connection_id\n\t\t  WHERE mb.is_active = true\n\t\t    AND mb.schema_status = 'approved'\n\t\t    AND (\n\t\t      (@binding_code <> '' AND sb.binding_code = @binding_code)\n\t\t      OR\n\t\t      (@binding_code = '' AND sb.shadow_table = @shadow_table \n\t\t        AND COALESCE(sb.shadow_schema, '') = COALESCE(NULLIF(@shadow_schema, ''), COALESCE(sb.shadow_schema, '')) \n\t\t        AND (@shadow_connection_key = '' OR scr.connection_code = @shadow_connection_key))\n\t\t    )`,\n\t\tmap[string]interface{}{\n\t\t\t\"binding_code\":          shadowBindingCode,\n\t\t\t\"shadow_table\":          shadowTable,\n\t\t\t\"shadow_schema\":         shadowSchema,\n\t\t\t\"shadow_connection_key\": shadowConnectionKey,\n\t\t},\n\t).Scan(&result).Error\n\treturn result, err\n}",
+    "flow": "ListMasterTargetsByShadowIdentity joins connection_registry scr on sb.shadow_connection_id and filters by binding_code or shadow_table + shadow_schema + scr.connection_code."
+  },
+  {
+    "id": "A-DIFF-3",
+    "kind": "audit",
+    "claim": "In ExecuteHealHandler.publishTransmuteShadowForSegA, shadowBindingCode, shadowSchema, and shadowConnKey are resolved via h.reconCore.ResolveShadowBindingIdentity, and resolveMasterPKFromSpec reads PK strictly from ref.TransformSpec.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:359-376\n\tvar shadowBindingCode, shadowConnKey string\n\tif h.reconCore != nil {\n\t\tshadowBindingCode, shadowSchema, shadowConnKey = h.reconCore.ResolveShadowBindingIdentity(ctx, shadowSchema, shadowTable)\n\t}\n\tfor start := 0; start < len(cleanIDs); start += healChunkSize {\n\t\tend := start + healChunkSize\n\t\tif end > len(cleanIDs) {\n\t\t\tend = len(cleanIDs)\n\t\t}\n\t\tchunk := cleanIDs[start:end]\n\t\ttPayload := map[string]any{\n\t\t\t\"shadow_binding_code\":   shadowBindingCode,\n\t\t\t\"shadow_table\":          shadowTable,\n\t\t\t\"shadow_schema\":         shadowSchema,\n\t\t\t\"shadow_connection_key\": shadowConnKey,\n\t\t\t\"_source_ids\":           chunk,\n\t\t\t\"triggered_by\":          triggeredBy,\n\t\t}\n\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:698-710\nfunc (h *ExecuteHealHandler) resolveMasterPKFromSpec(ctx context.Context, masterDB *gorm.DB, ref *servicerecon.MasterBindingRef) (string, string) {\n\tif ref == nil || strings.TrimSpace(ref.TransformSpec) == \"\" {\n\t\treturn \"\", \"\"\n\t}\n\tvar spec struct {\n\t\tPK string `json:\"pk\"`\n\t}\n\tif err := json.Unmarshal([]byte(ref.TransformSpec), &spec); err != nil {\n\t\treturn \"\", \"\"\n\t}\n\tpkCol := strings.TrimSpace(spec.PK)\n\tif pkCol == \"\" || pkCol == \"_gpay_id\" {\n\t\treturn \"\", \"\"",
+    "flow": "publishTransmuteShadowForSegA calls ResolveShadowBindingIdentity to populate shadow_binding_code and shadow_connection_key; resolveMasterPKFromSpec unmarshals ref.TransformSpec to extract spec.PK."
+  },
+  {
+    "id": "A-DIFF-4",
+    "kind": "audit",
+    "claim": "In CreateMasterCommand.Validate, if Spec is provided and contains a pk key whose value is not a non-empty string, Validate returns invalid_spec_pk_required.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/create_master.go:65-75\n\t\tvar parsed map[string]interface{}\n\t\tif err := json.Unmarshal(c.Spec, &parsed); err != nil || parsed == nil {\n\t\t\treturn errors.New(\"invalid_spec_json\")\n\t\t}\n\t\tif rawPK, exists := parsed[\"pk\"]; exists {\n\t\t\tpkStr, ok := rawPK.(string)\n\t\t\tif !ok || strings.TrimSpace(pkStr) == \"\" {\n\t\t\t\treturn errors.New(\"invalid_spec_pk_required\")\n\t\t\t}\n\t\t}",
+    "flow": "CreateMasterCommand.Validate unmarshals c.Spec and returns invalid_spec_pk_required when parsed[\"pk\"] is not a non-empty string."
+  },
+  {
+    "id": "A-DIFF-5",
+    "kind": "audit",
+    "claim": "In ProvisioningOrchestrator.seedMasterBindingForAdvance, sor.primary_key_field is read via COALESCE(btrim(sor.primary_key_field), '') without a hardcoded '_id' fallback, and an explicit error is returned if src.PrimaryKeyField is empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/governance/provisioning_orchestrator.go:379-400\n\tif err := o.db.WithContext(ctx).Raw(\n\t\t`SELECT sor.source_object_name,\n\t\t        sor.source_connection_id,\n\t\t        cr.connection_code AS source_connection_code,\n\t\t        COALESCE(btrim(sor.primary_key_field), '') AS primary_key_field,\n\t\t        sb.id              AS shadow_binding_id\n\t\t   FROM cdc_system.source_object_registry sor\n\t\t   JOIN cdc_system.connection_registry cr\n\t\t     ON cr.id = sor.source_connection_id\n\t\t   LEFT JOIN cdc_system.shadow_binding sb\n\t\t     ON sb.source_object_id = sor.id\n\t\t    AND sb.is_active = true\n\t\t  WHERE sor.id = ?`, sourceID).Scan(&src).Error; err != nil {\n\t\treturn \"\", fmt.Errorf(\"source lookup: %w\", err)\n\t}\n\tif src.SourceObjectName == \"\" {\n\t\treturn \"\", ErrProvisioningSourceNotFound\n\t}\n\tif src.PrimaryKeyField == \"\" {\n\t\treturn \"\", fmt.Errorf(\"source_object %d (%s) has empty primary_key_field in source_object_registry\", sourceID, src.SourceObjectName)\n\t}",
+    "flow": "seedMasterBindingForAdvance trims sor.primary_key_field without defaulting to '_id' and returns an error when src.PrimaryKeyField == ''."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB, when len(out) == 0 and effectiveIDType == gpay, the function returns nil, nil instead of returning inputIDs.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:901-908\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+    "flow": "resolveSourceIDsForSegmentB checks if len(out) == 0; if effectiveIDType == gpay, it returns nil, nil."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB, when len(out) == 0 and effectiveIDType == gpay, the function always panics instead of returning.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:901-908\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+    "flow": "resolveSourceIDsForSegmentB returns nil, nil when len(out) == 0 and effectiveIDType == gpay; it never panics."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In TransmuterModule.lookupShadowGpayIDs, the SQL query filters WHERE _deleted = true and ignores all active rows.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1513-1527\n\t\tvar rows []struct {\n\t\t\tSourceID string `gorm:\"column:_source_id\"`\n\t\t\tGpayID   int64  `gorm:\"column:_gpay_id\"`\n\t\t}\n\t\tquery := fmt.Sprintf(`SELECT _source_id, %s FROM %s WHERE _source_id IN (?) ORDER BY COALESCE(_deleted, false) ASC, %s DESC`, pkSelect, shadowQT, pkIdent)\n\t\tif errQ := shadowDB.WithContext(ctx).Raw(query, uniqueIDs[i:end]).Scan(&rows).Error; errQ == nil {\n\t\t\tfor _, r := range rows {\n\t\t\t\tif r.SourceID != \"\" && r.GpayID > 0 {\n\t\t\t\t\tif _, exists := res[r.SourceID]; !exists {\n\t\t\t\t\t\tres[r.SourceID] = r.GpayID\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}",
+    "flow": "lookupShadowGpayIDs queries WHERE _source_id IN (?) ORDER BY COALESCE(_deleted, false) ASC, _gpay_id DESC, prioritizing non-deleted rows first."
+  }
+]

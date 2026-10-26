@@ -1,0 +1,79 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Nguyên nhân khi bấm nút APPROVE Giải Pháp & Chạy S4-S5 không có tin nhắn trả lời trong #co-architect-chat-messages",
+    "claim": "Trong server.go dòng 1008-1015, khi action là approve_and_run thì hàm lần lượt chạy approve, implement, qa mà chưa gọi saveTaskChatHistory để thêm tin nhắn phản hồi vào chat_history.json.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1008-1015\n\tif action == \"approve_and_run\" {\n\t\tfor _, st := range []string{\"approve\", \"implement\", \"qa\"} {\n\t\t\tif err := s.runSingleStage(ctx, qt.ExternalID, st, activeRunner); err != nil {\n\t\t\t\treturn err\n\t\t\t}\n\t\t}\n\t\treturn nil\n\t}"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Nguyên nhân gán sai đường dẫn TargetFiles trong ingestAuditReportAndRemediation",
+    "claim": "Trong task_chat.go dòng 1010-1018, khi thuộc centralized-data-service thì targetFiles đang bị gán là internal/worker/transmuter_mongo.go hoặc internal/worker/recon_dest_mongo.go.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_chat.go:1010-1018\n\t\t\tcase strings.Contains(combinedLower, \"centralized-data-service\"):\n\t\t\t\trepoHint = \"centralized-data-service\"\n\t\t\t\tif strings.Contains(combinedLower, \"transmuter_mongo.go\") {\n\t\t\t\t\ttargetFiles = \"internal/worker/transmuter_mongo.go\"\n\t\t\t\t\tcontextLine = \"centralized-data-service/internal/worker/transmuter_mongo.go:126-228\"\n\t\t\t\t} else {\n\t\t\t\t\ttargetFiles = \"internal/service/master/master_ddl_generator.go, internal/worker/recon_dest_mongo.go, internal/api/handlers/recon_execute_heal_handler.go\"\n\t\t\t\t\tcontextLine = \"centralized-data-service/internal/service/master/master_ddl_generator.go:511-543, internal/worker/recon_dest_mongo.go:99-108\"\n\t\t\t\t}"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Nhật ký TASK-11/terminal.log dòng 46-48 lúc 13:25:27",
+    "claim": "Trong TASK-11/terminal.log dòng 46-48, lúc 13:25:27 khi bấm APPROVE thì S4 Implement bị chặn HARD GATE BLOCK do chỉ có 9/14 Sub-Tasks verified on disk.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/.orchestrator/tasks/TASK-11/terminal.log:46-48\n[13:25:27] [TASK-11] [Human Gate · You] Đã APPROVE task TASK-11 -> Mở khóa S4 Implement trên nhánh task/TASK-11\n[13:25:27] [TASK-11] [S4 Implement · B] TASK-11 (task/TASK-11): [centralized-data-service] H4b Zero-Mockup & H3 Secret Scan (isolated artifact): PASS | [cdc-cms-service] H4b Zero-Mockup & H3 Secret Scan (isolated artifact): PASS | [cdc-cms-web] H4b Zero-Mockup & H3 Secret Scan (isolated artifact): PASS | HARD GATE BLOCK: only 9/14 Sub-Tasks verified on disk | Multi-repo diff captured (3 repos, 1221 changed lines/files) | TASK-M01=VERIFIED(cdc-cms-service:internal/api/master/master_registry_handler_connections.go (in diff.patch)), TASK-M02=VERIFIED(cdc-cms-service:internal/api/master/master_registry_handler_connections.go (in diff.patch)), TASK-M03=VERIFIED(cdc-cms-web:src/pages/MasterRegistry.tsx (in diff.patch)), TASK-M04=VERIFIED(centralized-data-service:internal/service/source/connection_manager.go (in diff.patch)), TASK-M05=VERIFIED(centralized-data-service:internal/service/master/master_ddl_generator.go (in diff.patch)), TASK-M06=VERIFIED(centralized-data-service:internal/service/master/ (dir hunk in diff.patch)), TASK-M07=VERIFIED(centralized-data-service:internal/service/master/transmuter.go (in diff.patch)), TASK-M08=MISSING(unverified on disk: centralized-data-service:internal/service/recon/recon_tier_b.go), TASK-M09=VERIFIED(centralized-data-service:internal/handler/recon/recon_execute_heal_handler.go (in diff.patch)), TASK-M10=MISSING(unverified on disk: centralized-data-service:test/), TASK-A04=MISSING(missing on disk and not in diff.patch: centralized-data-service:internal/worker/transmuter_mongo.go), TASK-A05=MISSING(missing on disk and not in diff.patch: centralized-data-service:internal/worker/recon_dest_mongo.go), TASK-A06=MISSING(missing on disk and not in diff.patch: cdc-cms-service:internal/repository/master_repo_gorm.go), TASK-A07=VERIFIED(ai-orchestrator:internal/webui/task_chat.go (?? internal/webui/task_chat.go); ai-orchestrator:internal/webui/task_inspector.go (M internal/webui/task_inspector.go); ai-orchestrator:internal/webui/server.go (M internal/webui/server.go); ai-orchestrator:internal/webui/seed_data.go (M internal/webui/seed_data.go))\n[13:25:27] [TASK-11] [S5 QA & DG3 · K] TASK-11 Verdict=BLOCK | [centralized-data-service] Isolated Artifact & Boundary Check: PASS · [cdc-cms-service] Isolated Artifact & Boundary Check: PASS · [cdc-cms-web] Isolated Artifact & Boundary Check: PASS · Sub-Task Gate BLOCK: 9/14 verified on disk · Gates: S0-Constitution=PASS, DG1+DG2=PASS, H4b-ZeroMock=PASS, H5-NoGitPush=PASS, FTS5-BM25=PASS(278 new)"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Cơ chế lưu lịch sử chat saveTaskChatHistory trong task_chat.go",
+    "claim": "Trong task_chat.go dòng 600-610, hàm saveTaskChatHistory ghi mảng CoArchitectChatMessageDTO dưới dạng JSON vào đường dẫn trả về từ taskChatHistoryPath.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_chat.go:600-610\nfunc (s *Server) saveTaskChatHistory(taskKey string, history []CoArchitectChatMessageDTO) error {\n\tp := s.taskChatHistoryPath(taskKey)\n\tif err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {\n\t\treturn err\n\t}\n\traw, err := json.MarshalIndent(history, \"\", \"  \")\n\tif err != nil {\n\t\treturn err\n\t}\n\treturn os.WriteFile(p, raw, 0o644)\n}"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Code Demo trong 09_tasks_solution_co_architect_approve_run_reply.md dòng 112-123",
+    "claim": "Trong 09_tasks_solution_co_architect_approve_run_reply.md dòng 112-123, Code Demo ghi auditContent ra cả isoMeta.AuditFile lẫn auditReportNamed, và nếu blocking > 0 thì gọi triggerS5ToS3RePlan, ngược lại gọi appendLifecycleExecutionChatReply.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_co_architect_approve_run_reply.md:112-123\n```go\n// Trong internal/webui/server.go (cuối case \"qa\"):\nauditReportNamed := filepath.Join(isoMeta.ArtifactDir, fmt.Sprintf(\"audit_report_%s.md\", sanitizeTaskKeyPath(qt.ExternalID)))\n_ = os.WriteFile(isoMeta.AuditFile, []byte(auditContent), 0o644)\n_ = os.WriteFile(auditReportNamed, []byte(auditContent), 0o644)\n\nif blocking > 0 {\n\ts.triggerS5ToS3RePlan(ctx, *qt, isoMeta, subTasks, verifiedSubTasks, blocking, qaLogs, routedModel)\n} else {\n\ts.appendLifecycleExecutionChatReply(*qt, isoMeta, subTasks, verifiedSubTasks, blocking, verdict, finalStage, routedModel, qaLogs)\n}\n```"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Bảo toàn Negative Gate Check SA-01 trong server_test.go dòng 466-484",
+    "claim": "Trong server_test.go dòng 466-484, bài test kiểm tra khi gọi approve_and_run trên TASK-ISO-A trước khi có diff.patch thì ActiveTaskStage phải giữ ở NEEDS_YOU.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server_test.go:466-484\n\t// 4a. SA-01 & SA-02 Negative Gate Check: Even though 09_tasks_solution.md exists for TASK-ISO-A,\n\t// calling approve_and_run BEFORE any diff.patch or worktree code exists MUST hard-block at NEEDS_YOU (0% Paper-Verification)!\n\tapproveBlockReq, _ := json.Marshal(map[string]string{\n\t\t\"task_key\": \"TASK-ISO-A\",\n\t\t\"action\":   \"approve_and_run\",\n\t\t\"runner\":   \"antigravity\",\n\t})\n\tapproveBlockRes, err := http.Post(ts.URL+\"/api/tasks/action\", \"application/json\", bytes.NewReader(approveBlockReq))\n\tif err != nil {\n\t\tt.Fatalf(\"POST /api/tasks/action approve_and_run (negative gate check): %v\", err)\n\t}\n\tdefer approveBlockRes.Body.Close()\n\tvar afterBlocked DashboardResponse\n\tif err := json.NewDecoder(approveBlockRes.Body).Decode(&afterBlocked); err != nil {\n\t\tt.Fatalf(\"decode afterBlocked: %v\", err)\n\t}\n\tif afterBlocked.ActiveTaskStage != \"NEEDS_YOU\" {\n\t\tt.Fatalf(\"SA-01 violation: expected approve_and_run without diff/code on disk to HARD-BLOCK at NEEDS_YOU even when 09_tasks_solution.md exists, got %q\", afterBlocked.ActiveTaskStage)\n\t}"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Nút btn-cas-approve trong index.html dòng 390-392",
+    "claim": "Trong index.html dòng 390-392, nút btn-cas-approve gọi runTaskAction('', 'approve_and_run').",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/index.html:390-392\n                    <button type=\"button\" class=\"btn-cas-approve\" onclick=\"runTaskAction('', 'approve_and_run')\" title=\"Duyệt phương án S3 hiện tại và chạy tiếp S4–S5\">\n                      ✓ APPROVE Giải Pháp &amp; Chạy S4–S5\n                    </button>"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "flow": "Control false: khai báo sai kết quả trong TASK-11/terminal.log dòng 46-48",
+    "claim": "Trong TASK-11/terminal.log dòng 46-48, lúc 13:25:27 bước S5 QA đạt Verdict=PASS và 14/14 Sub-Tasks verified.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/.orchestrator/tasks/TASK-11/terminal.log:46-48\n[13:25:27] [TASK-11] [Human Gate · You] Đã APPROVE task TASK-11 -> Mở khóa S4 Implement trên nhánh task/TASK-11\n[13:25:27] [TASK-11] [S4 Implement · B] TASK-11 (task/TASK-11): [centralized-data-service] H4b Zero-Mockup & H3 Secret Scan (isolated artifact): PASS | [cdc-cms-service] H4b Zero-Mockup & H3 Secret Scan (isolated artifact): PASS | [cdc-cms-web] H4b Zero-Mockup & H3 Secret Scan (isolated artifact): PASS | HARD GATE BLOCK: only 9/14 Sub-Tasks verified on disk | Multi-repo diff captured (3 repos, 1221 changed lines/files) | TASK-M01=VERIFIED(cdc-cms-service:internal/api/master/master_registry_handler_connections.go (in diff.patch)), TASK-M02=VERIFIED(cdc-cms-service:internal/api/master/master_registry_handler_connections.go (in diff.patch)), TASK-M03=VERIFIED(cdc-cms-web:src/pages/MasterRegistry.tsx (in diff.patch)), TASK-M04=VERIFIED(centralized-data-service:internal/service/source/connection_manager.go (in diff.patch)), TASK-M05=VERIFIED(centralized-data-service:internal/service/master/master_ddl_generator.go (in diff.patch)), TASK-M06=VERIFIED(centralized-data-service:internal/service/master/ (dir hunk in diff.patch)), TASK-M07=VERIFIED(centralized-data-service:internal/service/master/transmuter.go (in diff.patch)), TASK-M08=MISSING(unverified on disk: centralized-data-service:internal/service/recon/recon_tier_b.go), TASK-M09=VERIFIED(centralized-data-service:internal/handler/recon/recon_execute_heal_handler.go (in diff.patch)), TASK-M10=MISSING(unverified on disk: centralized-data-service:test/), TASK-A04=MISSING(missing on disk and not in diff.patch: centralized-data-service:internal/worker/transmuter_mongo.go), TASK-A05=MISSING(missing on disk and not in diff.patch: centralized-data-service:internal/worker/recon_dest_mongo.go), TASK-A06=MISSING(missing on disk and not in diff.patch: cdc-cms-service:internal/repository/master_repo_gorm.go), TASK-A07=VERIFIED(ai-orchestrator:internal/webui/task_chat.go (?? internal/webui/task_chat.go); ai-orchestrator:internal/webui/task_inspector.go (M internal/webui/task_inspector.go); ai-orchestrator:internal/webui/server.go (M internal/webui/server.go); ai-orchestrator:internal/webui/seed_data.go (M internal/webui/seed_data.go))\n[13:25:27] [TASK-11] [S5 QA & DG3 · K] TASK-11 Verdict=BLOCK | [centralized-data-service] Isolated Artifact & Boundary Check: PASS · [cdc-cms-service] Isolated Artifact & Boundary Check: PASS · [cdc-cms-web] Isolated Artifact & Boundary Check: PASS · Sub-Task Gate BLOCK: 9/14 verified on disk · Gates: S0-Constitution=PASS, DG1+DG2=PASS, H4b-ZeroMock=PASS, H5-NoGitPush=PASS, FTS5-BM25=PASS(278 new)"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "flow": "Control false: khai báo sai thuộc tính onclick của btn-cas-approve trong index.html dòng 390-392",
+    "claim": "Trong index.html dòng 390-392, nút btn-cas-approve có thuộc tính onclick là deleteAllTasks().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/index.html:390-392\n                    <button type=\"button\" class=\"btn-cas-approve\" onclick=\"runTaskAction('', 'approve_and_run')\" title=\"Duyệt phương án S3 hiện tại và chạy tiếp S4–S5\">\n                      ✓ APPROVE Giải Pháp &amp; Chạy S4–S5\n                    </button>"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "flow": "Control true: xác nhận chính xác thuộc tính onclick của btn-cas-approve trong index.html dòng 390-392",
+    "claim": "Trong index.html dòng 390-392, nút btn-cas-approve có thuộc tính onclick là runTaskAction('', 'approve_and_run').",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/index.html:390-392\n                    <button type=\"button\" class=\"btn-cas-approve\" onclick=\"runTaskAction('', 'approve_and_run')\" title=\"Duyệt phương án S3 hiện tại và chạy tiếp S4–S5\">\n                      ✓ APPROVE Giải Pháp &amp; Chạy S4–S5\n                    </button>"
+  }
+]

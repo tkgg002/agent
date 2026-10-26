@@ -1,0 +1,1063 @@
+[
+  {
+    "id": "A-DIFF-01",
+    "kind": "target",
+    "basis": "code",
+    "claim": "Tại internal/webui/telegram_bridge.go dòng 1006-1095, hàm extractTaskApprovalDossier và buildTelegramApprovalRequiredMessage trích xuất đầy đủ Nguyên nhân gốc rễ, Giải pháp kỹ thuật & Code Demo, danh sách Sub-Tasks dự kiến chạy và danh sách tên các file bị ảnh hưởng từ 09_tasks_solution.md, 13_analysis.md, 08_tasks.md và inspectTaskRepoDiffFilesAndSummary.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1006-1095\n}\n\nfunc (s *Server) extractTaskApprovalDossier(ctx context.Context, qt queue.QueuedTask, isoMeta TaskIsolationDTO, subTasks []SubTaskDTO) TelegramApprovalDossier {\n\taffectedRepos := s.ResolveTaskAffectedRepos(qt)\n\tvar repoNames []string\n\tfor _, rp := range affectedRepos {\n\t\trepoNames = append(repoNames, filepath.Base(rp))\n\t}\n\tif len(repoNames) == 0 {\n\t\trepoNames = []string{\"ai-orchestrator\"}\n\t}\n\n\tplanBytes, _ := os.ReadFile(isoMeta.PlanFile)\n\tanalysisPath := filepath.Join(isoMeta.ArtifactDir, \"13_analysis.md\")\n\tanalysisBytes, _ := os.ReadFile(analysisPath)\n\ttasks08Path := filepath.Join(isoMeta.ArtifactDir, \"08_tasks.md\")\n\n\trcLines, solLines, revLines, codeDemo := extractMarkdownRootCauseAndSolution(string(planBytes), string(analysisBytes))\n\tif len(rcLines) == 0 {\n\t\tfor i, st := range subTasks {\n\t\t\tif i >= 4 {\n\t\t\t\tbreak\n\t\t\t}\n\t\t\trcLines = append(rcLines, fmt.Sprintf(\"- Điểm chạm `%s` (`%s`): %s\", st.ContextFileLine, st.TargetRepoName, st.Title))\n\t\t}\n\t}\n\tif len(solLines) == 0 {\n\t\tfor i, st := range subTasks {\n\t\t\tif i >= 5 {\n\t\t\t\tbreak\n\t\t\t}\n\t\t\tsolLines = append(solLines, fmt.Sprintf(\"- [%s · %s] %s (DoD: %s)\", st.SubTaskID, st.TargetRepoName, st.Title, st.TestDoD))\n\t\t}\n\t}\n\n\tvar subTaskLines []string\n\tfor idx, st := range subTasks {\n\t\tstateIcon := \"⏳\"\n\t\tif strings.EqualFold(st.Status, \"done\") {\n\t\t\tstateIcon = \"✅\"\n\t\t}\n\t\ttargetFile := strings.TrimSpace(st.TargetFiles)\n\t\tif targetFile == \"\" {\n\t\t\ttargetFile = strings.TrimSpace(st.ContextFileLine)\n\t\t}\n\t\tsubTaskLines = append(subTaskLines, fmt.Sprintf(\n\t\t\t\"%d. %s `[%s]` (%s) %s — 📄 `%s`\",\n\t\t\tidx+1,\n\t\t\tstateIcon,\n\t\t\tst.SubTaskID,\n\t\t\tst.TargetRepoName,\n\t\t\ttruncateRunes(st.Title, 95),\n\t\t\ttruncateRunes(targetFile, 75),\n\t\t))\n\t}\n\n\tchangedFiles, diffSummary := s.inspectTaskRepoDiffFilesAndSummary(ctx, qt, isoMeta, affectedRepos, subTasks)\n\n\treturn TelegramApprovalDossier{\n\t\tTaskID:          qt.ID,\n\t\tTaskKey:         qt.ExternalID,\n\t\tTitle:           qt.Title,\n\t\tPlanFilePath:    isoMeta.PlanFile,\n\t\tTasks08FilePath: tasks08Path,\n\t\tDiffFilePath:    isoMeta.DiffFile,\n\t\tAffectedRepos:   repoNames,\n\t\tRootCauseLines:  rcLines,\n\t\tSolutionLines:   solLines,\n\t\tUserRevisions:   revLines,\n\t\tCodeDemoSnippet: codeDemo,\n\t\tSubTaskLines:    subTaskLines,\n\t\tChangedFiles:    changedFiles,\n\t\tDiffSummary:     diffSummary,\n\t}\n}\n\nfunc (s *Server) buildTelegramApprovalRequiredMessage(ctx context.Context, qt queue.QueuedTask, isoMeta TaskIsolationDTO, subTasks []SubTaskDTO, reasonLabel string) (string, [][]map[string]string) {\n\td := s.extractTaskApprovalDossier(ctx, qt, isoMeta, subTasks)\n\tdoneCnt := 0\n\tfor _, st := range subTasks {\n\t\tif strings.EqualFold(st.Status, \"done\") {\n\t\t\tdoneCnt++\n\t\t}\n\t}\n\n\tvar sb strings.Builder\n\tsb.WriteString(fmt.Sprintf(\"⏸ *[APPROVAL REQUIRED · HỒ SƠ DUYỆT GIẢI PHÁP S3 (#%d)]*\\n\", d.TaskID))\n\tsb.WriteString(fmt.Sprintf(\"• *Trạng thái:* `%s` (`⏸ CHỜ APPROVE`)\\n\", reasonLabel))\n\tsb.WriteString(fmt.Sprintf(\"• *Task:* `%s` (#%d) — %s\\n\", d.TaskKey, d.TaskID, d.Title))\n\tsb.WriteString(fmt.Sprintf(\"• *Affected Repos (%d):* `%s`\\n\", len(d.AffectedRepos), strings.Join(d.AffectedRepos, \", \")))",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3876,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7644,
+                "INCORRECT": 0.1816,
+                "UNSUPPORTED": 0.054
+              },
+              "confidence": 0.3876,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1006-1095, hàm extractTaskApprovalDossier và buildTelegramApprovalRequiredMessage trích xuất đầy đủ Nguyên nhân gốc rễ, Giải pháp kỹ thuật & Code Demo, danh sách Sub-Tasks dự kiến chạy và danh sách tên các file bị ảnh hưởng từ 09_tasks_solution.md, 13_analysis.md, 08_tasks.md và inspectTaskRepoDiffFilesAndSummary.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1006-1095\n}\n\nfunc (s *Server) extractTaskApprovalDossier(ctx context.Context, qt queue.QueuedTask, isoMeta TaskIsolationDTO, subTasks []SubTaskDTO) TelegramApprovalDossier {\n\taffectedRepos := s.ResolveTaskAffectedRepos(qt)\n\tvar repoNames []string\n\tfor _, rp := range affectedRepos {\n\t\trepoNames = append(repoNames, filepath.Base(rp))\n\t}\n\tif len(repoNames) == 0 {\n\t\trepoNames = []string{\"ai-orchestrator\"}\n\t}\n\n\tplanBytes, _ := os.ReadFile(isoMeta.PlanFile)\n\tanalysisPath := filepath.Join(isoMeta.ArtifactDir, \"13_analysis.md\")\n\tanalysisBytes, _ := os.ReadFile(analysisPath)\n\ttasks08Path := filepath.Join(isoMeta.ArtifactDir, \"08_tasks.md\")\n\n\trcLines, solLines, revLines, codeDemo := extractMarkdownRootCauseAndSolution(string(planBytes), string(analysisBytes))\n\tif len(rcLines) == 0 {\n\t\tfor i, st := range subTasks {\n\t\t\tif i >= 4 {\n\t\t\t\tbreak\n\t\t\t}\n\t\t\trcLines = append(rcLines, fmt.Sprintf(\"- Điểm chạm `%s` (`%s`): %s\", st.ContextFileLine, st.TargetRepoName, st.Title))\n\t\t}\n\t}\n\tif len(solLines) == 0 {\n\t\tfor i, st := range subTasks {\n\t\t\tif i >= 5 {\n\t\t\t\tbreak\n\t\t\t}\n\t\t\tsolLines = append(solLines, fmt.Sprintf(\"- [%s · %s] %s (DoD: %s)\", st.SubTaskID, st.TargetRepoName, st.Title, st.TestDoD))\n\t\t}\n\t}\n\n\tvar subTaskLines []string\n\tfor idx, st := range subTasks {\n\t\tstateIcon := \"⏳\"\n\t\tif strings.EqualFold(st.Status, \"done\") {\n\t\t\tstateIcon = \"✅\"\n\t\t}\n\t\ttargetFile := strings.TrimSpace(st.TargetFiles)\n\t\tif targetFile == \"\" {\n\t\t\ttargetFile = strings.TrimSpace(st.ContextFileLine)\n\t\t}\n\t\tsubTaskLines = append(subTaskLines, fmt.Sprintf(\n\t\t\t\"%d. %s `[%s]` (%s) %s — 📄 `%s`\",\n\t\t\tidx+1,\n\t\t\tstateIcon,\n\t\t\tst.SubTaskID,\n\t\t\tst.TargetRepoName,\n\t\t\ttruncateRunes(st.Title, 95),\n\t\t\ttruncateRunes(targetFile, 75),\n\t\t))\n\t}\n\n\tchangedFiles, diffSummary := s.inspectTaskRepoDiffFilesAndSummary(ctx, qt, isoMeta, affectedRepos, subTasks)\n\n\treturn TelegramApprovalDossier{\n\t\tTaskID:          qt.ID,\n\t\tTaskKey:         qt.ExternalID,\n\t\tTitle:           qt.Title,\n\t\tPlanFilePath:    isoMeta.PlanFile,\n\t\tTasks08FilePath: tasks08Path,\n\t\tDiffFilePath:    isoMeta.DiffFile,\n\t\tAffectedRepos:   repoNames,\n\t\tRootCauseLines:  rcLines,\n\t\tSolutionLines:   solLines,\n\t\tUserRevisions:   revLines,\n\t\tCodeDemoSnippet: codeDemo,\n\t\tSubTaskLines:    subTaskLines,\n\t\tChangedFiles:    changedFiles,\n\t\tDiffSummary:     diffSummary,\n\t}\n}\n\nfunc (s *Server) buildTelegramApprovalRequiredMessage(ctx context.Context, qt queue.QueuedTask, isoMeta TaskIsolationDTO, subTasks []SubTaskDTO, reasonLabel string) (string, [][]map[string]string) {\n\td := s.extractTaskApprovalDossier(ctx, qt, isoMeta, subTasks)\n\tdoneCnt := 0\n\tfor _, st := range subTasks {\n\t\tif strings.EqualFold(st.Status, \"done\") {\n\t\t\tdoneCnt++\n\t\t}\n\t}\n\n\tvar sb strings.Builder\n\tsb.WriteString(fmt.Sprintf(\"⏸ *[APPROVAL REQUIRED · HỒ SƠ DUYỆT GIẢI PHÁP S3 (#%d)]*\\n\", d.TaskID))\n\tsb.WriteString(fmt.Sprintf(\"• *Trạng thái:* `%s` (`⏸ CHỜ APPROVE`)\\n\", reasonLabel))\n\tsb.WriteString(fmt.Sprintf(\"• *Task:* `%s` (#%d) — %s\\n\", d.TaskKey, d.TaskID, d.Title))\n\tsb.WriteString(fmt.Sprintf(\"• *Affected Repos (%d):* `%s`\\n\", len(d.AffectedRepos), strings.Join(d.AffectedRepos, \", \")))",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1246,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5637,
+                "INCORRECT": 0.2922,
+                "UNSUPPORTED": 0.1441
+              },
+              "confidence": 0.1246,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1006-1095\n}\n\nfunc (s *Server) extractTaskApprovalDossier(ctx context.Context, qt queue.QueuedTask, isoMeta TaskIsolationDTO, subTasks []SubTaskDTO) TelegramApprovalDossier {\n\taffectedRepos := s.ResolveTaskAffectedRepos(qt)\n\tvar repoNames []string\n\tfor _, rp := range affectedRepos {\n\t\trepoNames = append(repoNames, filepath.Base(rp))\n\t}\n\tif len(repoNames) == 0 {\n\t\trepoNames = []string{\"ai-orchestrator\"}\n\t}\n\n\tplanBytes, _ := os.ReadFile(isoMeta.PlanFile)\n\tanalysisPath := filepath.Join(isoMeta.ArtifactDir, \"13_analysis.md\")\n\tanalysisBytes, _ := os.ReadFile(analysisPath)\n\ttasks08Path := filepath.Join(isoMeta.ArtifactDir, \"08_tasks.md\")\n\n\trcLines, solLines, revLines, codeDemo := extractMarkdownRootCauseAndSolution(string(planBytes), string(analysisBytes))\n\tif len(rcLines) == 0 {\n\t\tfor i, st := range subTasks {\n\t\t\tif i >= 4 {\n\t\t\t\tbreak\n\t\t\t}\n\t\t\trcLines = append(rcLines, fmt.Sprintf(\"- Điểm chạm `%s` (`%s`): %s\", st.ContextFileLine, st.TargetRepoName, st.Title))\n\t\t}\n\t}\n\tif len(solLines) == 0 {\n\t\tfor i, st := range subTasks {\n\t\t\tif i >= 5 {\n\t\t\t\tbreak\n\t\t\t}\n\t\t\tsolLines = append(solLines, fmt.Sprintf(\"- [%s · %s] %s (DoD: %s)\", st.SubTaskID, st.TargetRepoName, st.Title, st.TestDoD))\n\t\t}\n\t}\n\n\tvar subTaskLines []string\n\tfor idx, st := range subTasks {\n\t\tstateIcon := \"⏳\"\n\t\tif strings.EqualFold(st.Status, \"done\") {\n\t\t\tstateIcon = \"✅\"\n\t\t}\n\t\ttargetFile := strings.TrimSpace(st.TargetFiles)\n\t\tif targetFile == \"\" {\n\t\t\ttargetFile = strings.TrimSpace(st.ContextFileLine)\n\t\t}\n\t\tsubTaskLines = append(subTaskLines, fmt.Sprintf(\n\t\t\t\"%d. %s `[%s]` (%s) %s — 📄 `%s`\",\n\t\t\tidx+1,\n\t\t\tstateIcon,\n\t\t\tst.SubTaskID,\n\t\t\tst.TargetRepoName,\n\t\t\ttruncateRunes(st.Title, 95),\n\t\t\ttruncateRunes(targetFile, 75),\n\t\t))\n\t}\n\n\tchangedFiles, diffSummary := s.inspectTaskRepoDiffFilesAndSummary(ctx, qt, isoMeta, affectedRepos, subTasks)\n\n\treturn TelegramApprovalDossier{\n\t\tTaskID:          qt.ID,\n\t\tTaskKey:         qt.ExternalID,\n\t\tTitle:           qt.Title,\n\t\tPlanFilePath:    isoMeta.PlanFile,\n\t\tTasks08FilePath: tasks08Path,\n\t\tDiffFilePath:    isoMeta.DiffFile,\n\t\tAffectedRepos:   repoNames,\n\t\tRootCauseLines:  rcLines,\n\t\tSolutionLines:   solLines,\n\t\tUserRevisions:   revLines,\n\t\tCodeDemoSnippet: codeDemo,\n\t\tSubTaskLines:    subTaskLines,\n\t\tChangedFiles:    changedFiles,\n\t\tDiffSummary:     diffSummary,\n\t}\n}\n\nfunc (s *Server) buildTelegramApprovalRequiredMessage(ctx context.Context, qt queue.QueuedTask, isoMeta TaskIsolationDTO, subTasks []SubTaskDTO, reasonLabel string) (string, [][]map[string]string) {\n\td := s.extractTaskApprovalDossier(ctx, qt, isoMeta, subTasks)\n\tdoneCnt := 0\n\tfor _, st := range subTasks {\n\t\tif strings.EqualFold(st.Status, \"done\") {\n\t\t\tdoneCnt++\n\t\t}\n\t}\n\n\tvar sb strings.Builder\n\tsb.WriteString(fmt.Sprintf(\"⏸ *[APPROVAL REQUIRED · HỒ SƠ DUYỆT GIẢI PHÁP S3 (#%d)]*\\n\", d.TaskID))\n\tsb.WriteString(fmt.Sprintf(\"• *Trạng thái:* `%s` (`⏸ CHỜ APPROVE`)\\n\", reasonLabel))\n\tsb.WriteString(fmt.Sprintf(\"• *Task:* `%s` (#%d) — %s\\n\", d.TaskKey, d.TaskID, d.Title))\n\tsb.WriteString(fmt.Sprintf(\"• *Affected Repos (%d):* `%s`\\n\", len(d.AffectedRepos), strings.Join(d.AffectedRepos, \", \")))",
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1006-1095, hàm extractTaskApprovalDossier và buildTelegramApprovalRequiredMessage trích xuất đầy đủ Nguyên nhân gốc rễ, Giải pháp kỹ thuật & Code Demo, danh sách Sub-Tasks dự kiến chạy và danh sách tên các file bị ảnh hưởng từ 09_tasks_solution.md, 13_analysis.md, 08_tasks.md và inspectTaskRepoDiffFilesAndSummary."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5565,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9079,
+                "NO": 0.0921
+              },
+              "confidence": 0.5565,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1006-1095\n}\n\nfunc (s *Server) extractTaskApprovalDossier(ctx context.Context, qt queue.QueuedTask, isoMeta TaskIsolationDTO, subTasks []SubTaskDTO) TelegramApprovalDossier {\n\taffectedRepos := s.ResolveTaskAffectedRepos(qt)\n\tvar repoNames []string\n\tfor _, rp := range affectedRepos {\n\t\trepoNames = append(repoNames, filepath.Base(rp))\n\t}\n\tif len(repoNames) == 0 {\n\t\trepoNames = []string{\"ai-orchestrator\"}\n\t}\n\n\tplanBytes, _ := os.ReadFile(isoMeta.PlanFile)\n\tanalysisPath := filepath.Join(isoMeta.ArtifactDir, \"13_analysis.md\")\n\tanalysisBytes, _ := os.ReadFile(analysisPath)\n\ttasks08Path := filepath.Join(isoMeta.ArtifactDir, \"08_tasks.md\")\n\n\trcLines, solLines, revLines, codeDemo := extractMarkdownRootCauseAndSolution(string(planBytes), string(analysisBytes))\n\tif len(rcLines) == 0 {\n\t\tfor i, st := range subTasks {\n\t\t\tif i >= 4 {\n\t\t\t\tbreak\n\t\t\t}\n\t\t\trcLines = append(rcLines, fmt.Sprintf(\"- Điểm chạm `%s` (`%s`): %s\", st.ContextFileLine, st.TargetRepoName, st.Title))\n\t\t}\n\t}\n\tif len(solLines) == 0 {\n\t\tfor i, st := range subTasks {\n\t\t\tif i >= 5 {\n\t\t\t\tbreak\n\t\t\t}\n\t\t\tsolLines = append(solLines, fmt.Sprintf(\"- [%s · %s] %s (DoD: %s)\", st.SubTaskID, st.TargetRepoName, st.Title, st.TestDoD))\n\t\t}\n\t}\n\n\tvar subTaskLines []string\n\tfor idx, st := range subTasks {\n\t\tstateIcon := \"⏳\"\n\t\tif strings.EqualFold(st.Status, \"done\") {\n\t\t\tstateIcon = \"✅\"\n\t\t}\n\t\ttargetFile := strings.TrimSpace(st.TargetFiles)\n\t\tif targetFile == \"\" {\n\t\t\ttargetFile = strings.TrimSpace(st.ContextFileLine)\n\t\t}\n\t\tsubTaskLines = append(subTaskLines, fmt.Sprintf(\n\t\t\t\"%d. %s `[%s]` (%s) %s — 📄 `%s`\",\n\t\t\tidx+1,\n\t\t\tstateIcon,\n\t\t\tst.SubTaskID,\n\t\t\tst.TargetRepoName,\n\t\t\ttruncateRunes(st.Title, 95),\n\t\t\ttruncateRunes(targetFile, 75),\n\t\t))\n\t}\n\n\tchangedFiles, diffSummary := s.inspectTaskRepoDiffFilesAndSummary(ctx, qt, isoMeta, affectedRepos, subTasks)\n\n\treturn TelegramApprovalDossier{\n\t\tTaskID:          qt.ID,\n\t\tTaskKey:         qt.ExternalID,\n\t\tTitle:           qt.Title,\n\t\tPlanFilePath:    isoMeta.PlanFile,\n\t\tTasks08FilePath: tasks08Path,\n\t\tDiffFilePath:    isoMeta.DiffFile,\n\t\tAffectedRepos:   repoNames,\n\t\tRootCauseLines:  rcLines,\n\t\tSolutionLines:   solLines,\n\t\tUserRevisions:   revLines,\n\t\tCodeDemoSnippet: codeDemo,\n\t\tSubTaskLines:    subTaskLines,\n\t\tChangedFiles:    changedFiles,\n\t\tDiffSummary:     diffSummary,\n\t}\n}\n\nfunc (s *Server) buildTelegramApprovalRequiredMessage(ctx context.Context, qt queue.QueuedTask, isoMeta TaskIsolationDTO, subTasks []SubTaskDTO, reasonLabel string) (string, [][]map[string]string) {\n\td := s.extractTaskApprovalDossier(ctx, qt, isoMeta, subTasks)\n\tdoneCnt := 0\n\tfor _, st := range subTasks {\n\t\tif strings.EqualFold(st.Status, \"done\") {\n\t\t\tdoneCnt++\n\t\t}\n\t}\n\n\tvar sb strings.Builder\n\tsb.WriteString(fmt.Sprintf(\"⏸ *[APPROVAL REQUIRED · HỒ SƠ DUYỆT GIẢI PHÁP S3 (#%d)]*\\n\", d.TaskID))\n\tsb.WriteString(fmt.Sprintf(\"• *Trạng thái:* `%s` (`⏸ CHỜ APPROVE`)\\n\", reasonLabel))\n\tsb.WriteString(fmt.Sprintf(\"• *Task:* `%s` (#%d) — %s\\n\", d.TaskKey, d.TaskID, d.Title))\n\tsb.WriteString(fmt.Sprintf(\"• *Affected Repos (%d):* `%s`\\n\", len(d.AffectedRepos), strings.Join(d.AffectedRepos, \", \")))",
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1006-1095, hàm extractTaskApprovalDossier và buildTelegramApprovalRequiredMessage trích xuất đầy đủ Nguyên nhân gốc rễ, Giải pháp kỹ thuật & Code Demo, danh sách Sub-Tasks dự kiến chạy và danh sách tên các file bị ảnh hưởng từ 09_tasks_solution.md, 13_analysis.md, 08_tasks.md và inspectTaskRepoDiffFilesAndSummary."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "A-DIFF-02",
+    "kind": "target",
+    "basis": "code",
+    "claim": "Tại internal/webui/telegram_bridge.go dòng 1335-1388, hàm handleTelegramTaskListCommand bung trực tiếp khối chi tiết cần duyệt (Plan path, Nguyên nhân, Giải pháp, danh sách Sub-Tasks, danh sách files bị ảnh hưởng) ngay bên dưới mọi task ở trạng thái NEEDS_YOU.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1335-1388\n\t\t\t))\n\n\t\t\t// Expand full approval details directly beneath any task in `⏸ CHỜ APPROVE`!\n\t\t\tif uiStage == \"NEEDS_YOU\" {\n\t\t\t\tdossier := s.extractTaskApprovalDossier(ctx, qt, iso, subTasks)\n\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📄 *Plan cần duyệt:* `%s`\\n\", dossier.PlanFilePath))\n\t\t\t\tif len(dossier.UserRevisions) > 0 {\n\t\t\t\t\tsb.WriteString(\"  ✏️ *Phản hồi đã cập nhật vào Plan:*\\n\")\n\t\t\t\t\tfor _, rev := range dossier.UserRevisions {\n\t\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(rev, 160) + \"\\n\")\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tsb.WriteString(\"  🔍 *Nguyên nhân gốc rễ:*\\n\")\n\t\t\t\tmaxRC := len(dossier.RootCauseLines)\n\t\t\t\tif maxRC > 3 {\n\t\t\t\t\tmaxRC = 3\n\t\t\t\t}\n\t\t\t\tfor i := 0; i < maxRC; i++ {\n\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(dossier.RootCauseLines[i], 165) + \"\\n\")\n\t\t\t\t}\n\t\t\t\tsb.WriteString(\"  💡 *Giải pháp S3:*\\n\")\n\t\t\t\tmaxSol := len(dossier.SolutionLines)\n\t\t\t\tif maxSol > 4 {\n\t\t\t\t\tmaxSol = 4\n\t\t\t\t}\n\t\t\t\tfor i := 0; i < maxSol; i++ {\n\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(dossier.SolutionLines[i], 165) + \"\\n\")\n\t\t\t\t}\n\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📋 *%d Sub-Tasks dự kiến chạy:*\\n\", len(dossier.SubTaskLines)))\n\t\t\t\tfor _, stLn := range dossier.SubTaskLines {\n\t\t\t\t\tsb.WriteString(\"    \" + stLn + \"\\n\")\n\t\t\t\t}\n\t\t\t\tif len(dossier.ChangedFiles) > 0 {\n\t\t\t\t\tvar filePreview []string\n\t\t\t\t\tmaxF := len(dossier.ChangedFiles)\n\t\t\t\t\tif maxF > 10 {\n\t\t\t\t\t\tmaxF = 10\n\t\t\t\t\t}\n\t\t\t\t\tfor i := 0; i < maxF; i++ {\n\t\t\t\t\t\tfilePreview = append(filePreview, fmt.Sprintf(\"`%s`\", dossier.ChangedFiles[i]))\n\t\t\t\t\t}\n\t\t\t\t\textraFiles := \"\"\n\t\t\t\t\tif len(dossier.ChangedFiles) > maxF {\n\t\t\t\t\t\textraFiles = fmt.Sprintf(\" (+%d files — bấm *👁 Xem Plan (#%d)* để xem đủ)\", len(dossier.ChangedFiles)-maxF, qt.ID)\n\t\t\t\t\t}\n\t\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📝 *%d files bị ảnh hưởng:* %s%s\\n\", len(dossier.ChangedFiles), strings.Join(filePreview, \", \"), extraFiles))\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\tsb.WriteString(\"\\n👇 *Dùng các nút bên dưới để Xem Đủ Plan, Phản hồi Sửa Giải Pháp, Approve hoặc Chạy Task:*\")\n\n\tdeliveryStatus := s.sendTelegramChunkedMessageWithCustomKeyboard(ctx, cfg, sb.String(), rows)\n\ts.appendTelegramEvent(\"OUTBOUND_TASK_LIST\", selectedKey, fmt.Sprintf(\"📋 @%s gửi '/task' -> Đã gửi danh sách %d tasks (%d repos, mở rộng chi tiết %d task chờ APPROVE) (%s)\", fromUser, len(allTasks), len(groups), needsYouCnt, deliveryStatus), deliveryStatus)",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1996,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5495,
+                "INCORRECT": 0.3826,
+                "UNSUPPORTED": 0.0679
+              },
+              "confidence": 0.1996,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1335-1388, hàm handleTelegramTaskListCommand bung trực tiếp khối chi tiết cần duyệt (Plan path, Nguyên nhân, Giải pháp, danh sách Sub-Tasks, danh sách files bị ảnh hưởng) ngay bên dưới mọi task ở trạng thái NEEDS_YOU.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1335-1388\n\t\t\t))\n\n\t\t\t// Expand full approval details directly beneath any task in `⏸ CHỜ APPROVE`!\n\t\t\tif uiStage == \"NEEDS_YOU\" {\n\t\t\t\tdossier := s.extractTaskApprovalDossier(ctx, qt, iso, subTasks)\n\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📄 *Plan cần duyệt:* `%s`\\n\", dossier.PlanFilePath))\n\t\t\t\tif len(dossier.UserRevisions) > 0 {\n\t\t\t\t\tsb.WriteString(\"  ✏️ *Phản hồi đã cập nhật vào Plan:*\\n\")\n\t\t\t\t\tfor _, rev := range dossier.UserRevisions {\n\t\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(rev, 160) + \"\\n\")\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tsb.WriteString(\"  🔍 *Nguyên nhân gốc rễ:*\\n\")\n\t\t\t\tmaxRC := len(dossier.RootCauseLines)\n\t\t\t\tif maxRC > 3 {\n\t\t\t\t\tmaxRC = 3\n\t\t\t\t}\n\t\t\t\tfor i := 0; i < maxRC; i++ {\n\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(dossier.RootCauseLines[i], 165) + \"\\n\")\n\t\t\t\t}\n\t\t\t\tsb.WriteString(\"  💡 *Giải pháp S3:*\\n\")\n\t\t\t\tmaxSol := len(dossier.SolutionLines)\n\t\t\t\tif maxSol > 4 {\n\t\t\t\t\tmaxSol = 4\n\t\t\t\t}\n\t\t\t\tfor i := 0; i < maxSol; i++ {\n\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(dossier.SolutionLines[i], 165) + \"\\n\")\n\t\t\t\t}\n\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📋 *%d Sub-Tasks dự kiến chạy:*\\n\", len(dossier.SubTaskLines)))\n\t\t\t\tfor _, stLn := range dossier.SubTaskLines {\n\t\t\t\t\tsb.WriteString(\"    \" + stLn + \"\\n\")\n\t\t\t\t}\n\t\t\t\tif len(dossier.ChangedFiles) > 0 {\n\t\t\t\t\tvar filePreview []string\n\t\t\t\t\tmaxF := len(dossier.ChangedFiles)\n\t\t\t\t\tif maxF > 10 {\n\t\t\t\t\t\tmaxF = 10\n\t\t\t\t\t}\n\t\t\t\t\tfor i := 0; i < maxF; i++ {\n\t\t\t\t\t\tfilePreview = append(filePreview, fmt.Sprintf(\"`%s`\", dossier.ChangedFiles[i]))\n\t\t\t\t\t}\n\t\t\t\t\textraFiles := \"\"\n\t\t\t\t\tif len(dossier.ChangedFiles) > maxF {\n\t\t\t\t\t\textraFiles = fmt.Sprintf(\" (+%d files — bấm *👁 Xem Plan (#%d)* để xem đủ)\", len(dossier.ChangedFiles)-maxF, qt.ID)\n\t\t\t\t\t}\n\t\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📝 *%d files bị ảnh hưởng:* %s%s\\n\", len(dossier.ChangedFiles), strings.Join(filePreview, \", \"), extraFiles))\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\tsb.WriteString(\"\\n👇 *Dùng các nút bên dưới để Xem Đủ Plan, Phản hồi Sửa Giải Pháp, Approve hoặc Chạy Task:*\")\n\n\tdeliveryStatus := s.sendTelegramChunkedMessageWithCustomKeyboard(ctx, cfg, sb.String(), rows)\n\ts.appendTelegramEvent(\"OUTBOUND_TASK_LIST\", selectedKey, fmt.Sprintf(\"📋 @%s gửi '/task' -> Đã gửi danh sách %d tasks (%d repos, mở rộng chi tiết %d task chờ APPROVE) (%s)\", fromUser, len(allTasks), len(groups), needsYouCnt, deliveryStatus), deliveryStatus)",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0942,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4744,
+                "INCORRECT": 0.387,
+                "UNSUPPORTED": 0.1386
+              },
+              "confidence": 0.0942,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1335-1388\n\t\t\t))\n\n\t\t\t// Expand full approval details directly beneath any task in `⏸ CHỜ APPROVE`!\n\t\t\tif uiStage == \"NEEDS_YOU\" {\n\t\t\t\tdossier := s.extractTaskApprovalDossier(ctx, qt, iso, subTasks)\n\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📄 *Plan cần duyệt:* `%s`\\n\", dossier.PlanFilePath))\n\t\t\t\tif len(dossier.UserRevisions) > 0 {\n\t\t\t\t\tsb.WriteString(\"  ✏️ *Phản hồi đã cập nhật vào Plan:*\\n\")\n\t\t\t\t\tfor _, rev := range dossier.UserRevisions {\n\t\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(rev, 160) + \"\\n\")\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tsb.WriteString(\"  🔍 *Nguyên nhân gốc rễ:*\\n\")\n\t\t\t\tmaxRC := len(dossier.RootCauseLines)\n\t\t\t\tif maxRC > 3 {\n\t\t\t\t\tmaxRC = 3\n\t\t\t\t}\n\t\t\t\tfor i := 0; i < maxRC; i++ {\n\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(dossier.RootCauseLines[i], 165) + \"\\n\")\n\t\t\t\t}\n\t\t\t\tsb.WriteString(\"  💡 *Giải pháp S3:*\\n\")\n\t\t\t\tmaxSol := len(dossier.SolutionLines)\n\t\t\t\tif maxSol > 4 {\n\t\t\t\t\tmaxSol = 4\n\t\t\t\t}\n\t\t\t\tfor i := 0; i < maxSol; i++ {\n\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(dossier.SolutionLines[i], 165) + \"\\n\")\n\t\t\t\t}\n\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📋 *%d Sub-Tasks dự kiến chạy:*\\n\", len(dossier.SubTaskLines)))\n\t\t\t\tfor _, stLn := range dossier.SubTaskLines {\n\t\t\t\t\tsb.WriteString(\"    \" + stLn + \"\\n\")\n\t\t\t\t}\n\t\t\t\tif len(dossier.ChangedFiles) > 0 {\n\t\t\t\t\tvar filePreview []string\n\t\t\t\t\tmaxF := len(dossier.ChangedFiles)\n\t\t\t\t\tif maxF > 10 {\n\t\t\t\t\t\tmaxF = 10\n\t\t\t\t\t}\n\t\t\t\t\tfor i := 0; i < maxF; i++ {\n\t\t\t\t\t\tfilePreview = append(filePreview, fmt.Sprintf(\"`%s`\", dossier.ChangedFiles[i]))\n\t\t\t\t\t}\n\t\t\t\t\textraFiles := \"\"\n\t\t\t\t\tif len(dossier.ChangedFiles) > maxF {\n\t\t\t\t\t\textraFiles = fmt.Sprintf(\" (+%d files — bấm *👁 Xem Plan (#%d)* để xem đủ)\", len(dossier.ChangedFiles)-maxF, qt.ID)\n\t\t\t\t\t}\n\t\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📝 *%d files bị ảnh hưởng:* %s%s\\n\", len(dossier.ChangedFiles), strings.Join(filePreview, \", \"), extraFiles))\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\tsb.WriteString(\"\\n👇 *Dùng các nút bên dưới để Xem Đủ Plan, Phản hồi Sửa Giải Pháp, Approve hoặc Chạy Task:*\")\n\n\tdeliveryStatus := s.sendTelegramChunkedMessageWithCustomKeyboard(ctx, cfg, sb.String(), rows)\n\ts.appendTelegramEvent(\"OUTBOUND_TASK_LIST\", selectedKey, fmt.Sprintf(\"📋 @%s gửi '/task' -> Đã gửi danh sách %d tasks (%d repos, mở rộng chi tiết %d task chờ APPROVE) (%s)\", fromUser, len(allTasks), len(groups), needsYouCnt, deliveryStatus), deliveryStatus)",
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1335-1388, hàm handleTelegramTaskListCommand bung trực tiếp khối chi tiết cần duyệt (Plan path, Nguyên nhân, Giải pháp, danh sách Sub-Tasks, danh sách files bị ảnh hưởng) ngay bên dưới mọi task ở trạng thái NEEDS_YOU."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5755,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9135,
+                "NO": 0.0865
+              },
+              "confidence": 0.5755,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1335-1388\n\t\t\t))\n\n\t\t\t// Expand full approval details directly beneath any task in `⏸ CHỜ APPROVE`!\n\t\t\tif uiStage == \"NEEDS_YOU\" {\n\t\t\t\tdossier := s.extractTaskApprovalDossier(ctx, qt, iso, subTasks)\n\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📄 *Plan cần duyệt:* `%s`\\n\", dossier.PlanFilePath))\n\t\t\t\tif len(dossier.UserRevisions) > 0 {\n\t\t\t\t\tsb.WriteString(\"  ✏️ *Phản hồi đã cập nhật vào Plan:*\\n\")\n\t\t\t\t\tfor _, rev := range dossier.UserRevisions {\n\t\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(rev, 160) + \"\\n\")\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tsb.WriteString(\"  🔍 *Nguyên nhân gốc rễ:*\\n\")\n\t\t\t\tmaxRC := len(dossier.RootCauseLines)\n\t\t\t\tif maxRC > 3 {\n\t\t\t\t\tmaxRC = 3\n\t\t\t\t}\n\t\t\t\tfor i := 0; i < maxRC; i++ {\n\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(dossier.RootCauseLines[i], 165) + \"\\n\")\n\t\t\t\t}\n\t\t\t\tsb.WriteString(\"  💡 *Giải pháp S3:*\\n\")\n\t\t\t\tmaxSol := len(dossier.SolutionLines)\n\t\t\t\tif maxSol > 4 {\n\t\t\t\t\tmaxSol = 4\n\t\t\t\t}\n\t\t\t\tfor i := 0; i < maxSol; i++ {\n\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(dossier.SolutionLines[i], 165) + \"\\n\")\n\t\t\t\t}\n\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📋 *%d Sub-Tasks dự kiến chạy:*\\n\", len(dossier.SubTaskLines)))\n\t\t\t\tfor _, stLn := range dossier.SubTaskLines {\n\t\t\t\t\tsb.WriteString(\"    \" + stLn + \"\\n\")\n\t\t\t\t}\n\t\t\t\tif len(dossier.ChangedFiles) > 0 {\n\t\t\t\t\tvar filePreview []string\n\t\t\t\t\tmaxF := len(dossier.ChangedFiles)\n\t\t\t\t\tif maxF > 10 {\n\t\t\t\t\t\tmaxF = 10\n\t\t\t\t\t}\n\t\t\t\t\tfor i := 0; i < maxF; i++ {\n\t\t\t\t\t\tfilePreview = append(filePreview, fmt.Sprintf(\"`%s`\", dossier.ChangedFiles[i]))\n\t\t\t\t\t}\n\t\t\t\t\textraFiles := \"\"\n\t\t\t\t\tif len(dossier.ChangedFiles) > maxF {\n\t\t\t\t\t\textraFiles = fmt.Sprintf(\" (+%d files — bấm *👁 Xem Plan (#%d)* để xem đủ)\", len(dossier.ChangedFiles)-maxF, qt.ID)\n\t\t\t\t\t}\n\t\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📝 *%d files bị ảnh hưởng:* %s%s\\n\", len(dossier.ChangedFiles), strings.Join(filePreview, \", \"), extraFiles))\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\tsb.WriteString(\"\\n👇 *Dùng các nút bên dưới để Xem Đủ Plan, Phản hồi Sửa Giải Pháp, Approve hoặc Chạy Task:*\")\n\n\tdeliveryStatus := s.sendTelegramChunkedMessageWithCustomKeyboard(ctx, cfg, sb.String(), rows)\n\ts.appendTelegramEvent(\"OUTBOUND_TASK_LIST\", selectedKey, fmt.Sprintf(\"📋 @%s gửi '/task' -> Đã gửi danh sách %d tasks (%d repos, mở rộng chi tiết %d task chờ APPROVE) (%s)\", fromUser, len(allTasks), len(groups), needsYouCnt, deliveryStatus), deliveryStatus)",
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1335-1388, hàm handleTelegramTaskListCommand bung trực tiếp khối chi tiết cần duyệt (Plan path, Nguyên nhân, Giải pháp, danh sách Sub-Tasks, danh sách files bị ảnh hưởng) ngay bên dưới mọi task ở trạng thái NEEDS_YOU."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "A-DIFF-03",
+    "kind": "target",
+    "basis": "code",
+    "claim": "Tại internal/webui/telegram_bridge.go dòng 1492-1582, hàm handleTelegramReviseSolutionCommand xử lý phản hồi sửa giải pháp của người dùng trên Telegram, cập nhật trực tiếp 09_tasks_solution.md, 08_tasks.md, chat_history.json và gửi lại bản Hồ Sơ Duyệt Giải Pháp S3 mới.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1492-1582\n// handleTelegramReviseSolutionCommand applies the user's feedback from Telegram directly into 09_tasks_solution.md (and 08_tasks.md if applicable),\n// records the Co-Architect Studio revision history, keeps the task at NEEDS_YOU (⏸ CHỜ APPROVE), and sends the updated Approval Dossier back to Telegram!\nfunc (s *Server) handleTelegramReviseSolutionCommand(ctx context.Context, targetRef, feedbackText, chatID, fromUser string) (string, error) {\n\tfeedbackText = scout.MaskSecrets(strings.TrimSpace(feedbackText))\n\tif feedbackText == \"\" {\n\t\treturn \"\", fmt.Errorf(\"empty feedback text for solution revision\")\n\t}\n\tif strings.TrimSpace(targetRef) == \"\" {\n\t\tcfg := s.loadTelegramPersistedConfig()\n\t\tif cfg.PendingRevisionTaskKey != \"\" {\n\t\t\ttargetRef = cfg.PendingRevisionTaskKey\n\t\t} else {\n\t\t\ttargetRef = cfg.LastNotifiedTask\n\t\t}\n\t}\n\tqt, err := s.findQueuedTask(ctx, targetRef)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\ttargetKey := qt.ExternalID\n\n\ts.mu.Lock()\n\ts.selectedTaskKey = targetKey\n\ts.mu.Unlock()\n\n\tisoMeta, _ := s.ensureTaskIsolation(ctx, *qt)\n\tsubTasks := s.loadOrGenerateSubTasks(*qt)\n\n\t// Revoke any previous approval marker because the user is revising the solution before approving\n\t_ = os.Remove(filepath.Join(isoMeta.ArtifactDir, \".user-approved\"))\n\tif s.QueueStore != nil && !strings.EqualFold(qt.Stage, queue.StageNeedsYou) {\n\t\t_ = s.QueueStore.UpdateStage(ctx, qt.ID, queue.StageNeedsYou, qt.AssignedModel, isoMeta.WorktreePath)\n\t\tqt.Stage = queue.StageNeedsYou\n\t}\n\n\tsubTasks = s.applyTelegramSolutionFeedbackToPlan(*qt, isoMeta, subTasks, feedbackText, fromUser)\n\n\t// Clear PendingRevisionTaskKey once applied so subsequent commands work normally\n\tcfg := s.loadTelegramPersistedConfig()\n\tcfg.PendingRevisionTaskKey = \"\"\n\tcfg.LastNotifiedTask = targetKey\n\tif strings.TrimSpace(chatID) != \"\" && strings.TrimSpace(cfg.ChatID) == \"\" {\n\t\tcfg.ChatID = strings.TrimSpace(chatID)\n\t}\n\t_ = s.saveTelegramPersistedConfig(cfg)\n\n\t// Record User + BRAIN (Slot A) revision messages in Co-Architect Studio chat_history.json\n\thistory := s.loadOrInitTaskChatHistory(*qt, subTasks, isoMeta)\n\tnowClock := time.Now().Format(\"15:04:05\")\n\thistory = append(history,\n\t\tCoArchitectChatMessageDTO{\n\t\t\tID:            fmt.Sprintf(\"msg-tg-revise-user-%d\", time.Now().UnixNano()),\n\t\t\tTaskKey:       targetKey,\n\t\t\tSender:        \"user\",\n\t\t\tAgentRole:     fmt.Sprintf(\"✈️ Telegram (@%s)\", fromUser),\n\t\t\tAgentSlot:     \"Telegram S3 Feedback\",\n\t\t\tSkill:         \"/brain-delegate\",\n\t\t\tModel:         qt.AssignedModel,\n\t\t\tActionMode:    \"revise_solution\",\n\t\t\tMessage:       fmt.Sprintf(\"✏️ **[Telegram Feedback / Sửa Giải Pháp S3]** %s\", feedbackText),\n\t\t\tAppliedToPlan: true,\n\t\t\tTargetFile:    isoMeta.PlanFile,\n\t\t\tTimestamp:     nowClock,\n\t\t},\n\t\tCoArchitectChatMessageDTO{\n\t\t\tID:            fmt.Sprintf(\"msg-tg-revise-agent-%d\", time.Now().UnixNano()+1),\n\t\t\tTaskKey:       targetKey,\n\t\t\tSender:        \"agent\",\n\t\t\tAgentRole:     \"🧠 BRAIN · Architect\",\n\t\t\tAgentSlot:     \"Slot A\",\n\t\t\tSkill:         \"/brain-delegate · /laya-router\",\n\t\t\tModel:         qt.AssignedModel,\n\t\t\tActionMode:    \"revise_solution\",\n\t\t\tMessage:       fmt.Sprintf(\"✍️ **[Đã cập nhật `09_tasks_solution.md` & `08_tasks.md` theo phản hồi Telegram của `@%s`]**\\n- **Nội dung điều chỉnh:** %s\\n- **File đã lưu:** `%s` (`%d Sub-Tasks`)\\n- **Trạng thái:** Giữ tại `NEEDS_YOU` (`⏸ CHỜ APPROVE`) chờ bạn duyệt bản giải pháp mới.\", fromUser, feedbackText, isoMeta.PlanFile, len(subTasks)),\n\t\t\tAppliedToPlan: true,\n\t\t\tTargetFile:    isoMeta.PlanFile,\n\t\t\tTimestamp:     nowClock,\n\t\t},\n\t)\n\t_ = s.saveTaskChatHistory(targetKey, history)\n\n\ts.appendTaskLog(targetKey, fmt.Sprintf(\"[✏️ Telegram S3 Revise] @%s gửi phản hồi sửa giải pháp cho %s -> Đã cập nhật %s: %s\", fromUser, targetKey, isoMeta.PlanFile, feedbackText))\n\ts.appendPaneLog(\"A\", fmt.Sprintf(\"[✏️ Telegram -> Slot A] @%s cập nhật giải pháp %s: %s\", fromUser, targetKey, feedbackText))\n\n\tmsgText, rows := s.buildTelegramApprovalRequiredMessage(ctx, *qt, isoMeta, subTasks, fmt.Sprintf(\"ĐÃ CẬP NHẬT GIẢI PHÁP THEO PHẢN HỒI CỦA @%s\", fromUser))\n\tdeliveryStatus := s.sendTelegramChunkedMessageWithCustomKeyboard(ctx, cfg, msgText, rows)\n\ts.appendTelegramEvent(\"INBOUND_REVISE\", targetKey, fmt.Sprintf(\"✏️ @%s phản hồi sửa giải pháp %s (#%d): %q -> Đã cập nhật 09_tasks_solution.md & gửi lại Plan (%s)\", fromUser, targetKey, qt.ID, truncateRunes(feedbackText, 80), deliveryStatus), deliveryStatus)\n\ts.broadcast(\"telegram_solution_revised\")\n\treturn targetKey, nil\n}\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.2268,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3322,
+                "INCORRECT": 0.6025,
+                "UNSUPPORTED": 0.0652
+              },
+              "confidence": 0.2268,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1492-1582, hàm handleTelegramReviseSolutionCommand xử lý phản hồi sửa giải pháp của người dùng trên Telegram, cập nhật trực tiếp 09_tasks_solution.md, 08_tasks.md, chat_history.json và gửi lại bản Hồ Sơ Duyệt Giải Pháp S3 mới.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1492-1582\n// handleTelegramReviseSolutionCommand applies the user's feedback from Telegram directly into 09_tasks_solution.md (and 08_tasks.md if applicable),\n// records the Co-Architect Studio revision history, keeps the task at NEEDS_YOU (⏸ CHỜ APPROVE), and sends the updated Approval Dossier back to Telegram!\nfunc (s *Server) handleTelegramReviseSolutionCommand(ctx context.Context, targetRef, feedbackText, chatID, fromUser string) (string, error) {\n\tfeedbackText = scout.MaskSecrets(strings.TrimSpace(feedbackText))\n\tif feedbackText == \"\" {\n\t\treturn \"\", fmt.Errorf(\"empty feedback text for solution revision\")\n\t}\n\tif strings.TrimSpace(targetRef) == \"\" {\n\t\tcfg := s.loadTelegramPersistedConfig()\n\t\tif cfg.PendingRevisionTaskKey != \"\" {\n\t\t\ttargetRef = cfg.PendingRevisionTaskKey\n\t\t} else {\n\t\t\ttargetRef = cfg.LastNotifiedTask\n\t\t}\n\t}\n\tqt, err := s.findQueuedTask(ctx, targetRef)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\ttargetKey := qt.ExternalID\n\n\ts.mu.Lock()\n\ts.selectedTaskKey = targetKey\n\ts.mu.Unlock()\n\n\tisoMeta, _ := s.ensureTaskIsolation(ctx, *qt)\n\tsubTasks := s.loadOrGenerateSubTasks(*qt)\n\n\t// Revoke any previous approval marker because the user is revising the solution before approving\n\t_ = os.Remove(filepath.Join(isoMeta.ArtifactDir, \".user-approved\"))\n\tif s.QueueStore != nil && !strings.EqualFold(qt.Stage, queue.StageNeedsYou) {\n\t\t_ = s.QueueStore.UpdateStage(ctx, qt.ID, queue.StageNeedsYou, qt.AssignedModel, isoMeta.WorktreePath)\n\t\tqt.Stage = queue.StageNeedsYou\n\t}\n\n\tsubTasks = s.applyTelegramSolutionFeedbackToPlan(*qt, isoMeta, subTasks, feedbackText, fromUser)\n\n\t// Clear PendingRevisionTaskKey once applied so subsequent commands work normally\n\tcfg := s.loadTelegramPersistedConfig()\n\tcfg.PendingRevisionTaskKey = \"\"\n\tcfg.LastNotifiedTask = targetKey\n\tif strings.TrimSpace(chatID) != \"\" && strings.TrimSpace(cfg.ChatID) == \"\" {\n\t\tcfg.ChatID = strings.TrimSpace(chatID)\n\t}\n\t_ = s.saveTelegramPersistedConfig(cfg)\n\n\t// Record User + BRAIN (Slot A) revision messages in Co-Architect Studio chat_history.json\n\thistory := s.loadOrInitTaskChatHistory(*qt, subTasks, isoMeta)\n\tnowClock := time.Now().Format(\"15:04:05\")\n\thistory = append(history,\n\t\tCoArchitectChatMessageDTO{\n\t\t\tID:            fmt.Sprintf(\"msg-tg-revise-user-%d\", time.Now().UnixNano()),\n\t\t\tTaskKey:       targetKey,\n\t\t\tSender:        \"user\",\n\t\t\tAgentRole:     fmt.Sprintf(\"✈️ Telegram (@%s)\", fromUser),\n\t\t\tAgentSlot:     \"Telegram S3 Feedback\",\n\t\t\tSkill:         \"/brain-delegate\",\n\t\t\tModel:         qt.AssignedModel,\n\t\t\tActionMode:    \"revise_solution\",\n\t\t\tMessage:       fmt.Sprintf(\"✏️ **[Telegram Feedback / Sửa Giải Pháp S3]** %s\", feedbackText),\n\t\t\tAppliedToPlan: true,\n\t\t\tTargetFile:    isoMeta.PlanFile,\n\t\t\tTimestamp:     nowClock,\n\t\t},\n\t\tCoArchitectChatMessageDTO{\n\t\t\tID:            fmt.Sprintf(\"msg-tg-revise-agent-%d\", time.Now().UnixNano()+1),\n\t\t\tTaskKey:       targetKey,\n\t\t\tSender:        \"agent\",\n\t\t\tAgentRole:     \"🧠 BRAIN · Architect\",\n\t\t\tAgentSlot:     \"Slot A\",\n\t\t\tSkill:         \"/brain-delegate · /laya-router\",\n\t\t\tModel:         qt.AssignedModel,\n\t\t\tActionMode:    \"revise_solution\",\n\t\t\tMessage:       fmt.Sprintf(\"✍️ **[Đã cập nhật `09_tasks_solution.md` & `08_tasks.md` theo phản hồi Telegram của `@%s`]**\\n- **Nội dung điều chỉnh:** %s\\n- **File đã lưu:** `%s` (`%d Sub-Tasks`)\\n- **Trạng thái:** Giữ tại `NEEDS_YOU` (`⏸ CHỜ APPROVE`) chờ bạn duyệt bản giải pháp mới.\", fromUser, feedbackText, isoMeta.PlanFile, len(subTasks)),\n\t\t\tAppliedToPlan: true,\n\t\t\tTargetFile:    isoMeta.PlanFile,\n\t\t\tTimestamp:     nowClock,\n\t\t},\n\t)\n\t_ = s.saveTaskChatHistory(targetKey, history)\n\n\ts.appendTaskLog(targetKey, fmt.Sprintf(\"[✏️ Telegram S3 Revise] @%s gửi phản hồi sửa giải pháp cho %s -> Đã cập nhật %s: %s\", fromUser, targetKey, isoMeta.PlanFile, feedbackText))\n\ts.appendPaneLog(\"A\", fmt.Sprintf(\"[✏️ Telegram -> Slot A] @%s cập nhật giải pháp %s: %s\", fromUser, targetKey, feedbackText))\n\n\tmsgText, rows := s.buildTelegramApprovalRequiredMessage(ctx, *qt, isoMeta, subTasks, fmt.Sprintf(\"ĐÃ CẬP NHẬT GIẢI PHÁP THEO PHẢN HỒI CỦA @%s\", fromUser))\n\tdeliveryStatus := s.sendTelegramChunkedMessageWithCustomKeyboard(ctx, cfg, msgText, rows)\n\ts.appendTelegramEvent(\"INBOUND_REVISE\", targetKey, fmt.Sprintf(\"✏️ @%s phản hồi sửa giải pháp %s (#%d): %q -> Đã cập nhật 09_tasks_solution.md & gửi lại Plan (%s)\", fromUser, targetKey, qt.ID, truncateRunes(feedbackText, 80), deliveryStatus), deliveryStatus)\n\ts.broadcast(\"telegram_solution_revised\")\n\treturn targetKey, nil\n}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.205,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.63,
+                "INCORRECT": 0.2715,
+                "UNSUPPORTED": 0.0985
+              },
+              "confidence": 0.205,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1492-1582\n// handleTelegramReviseSolutionCommand applies the user's feedback from Telegram directly into 09_tasks_solution.md (and 08_tasks.md if applicable),\n// records the Co-Architect Studio revision history, keeps the task at NEEDS_YOU (⏸ CHỜ APPROVE), and sends the updated Approval Dossier back to Telegram!\nfunc (s *Server) handleTelegramReviseSolutionCommand(ctx context.Context, targetRef, feedbackText, chatID, fromUser string) (string, error) {\n\tfeedbackText = scout.MaskSecrets(strings.TrimSpace(feedbackText))\n\tif feedbackText == \"\" {\n\t\treturn \"\", fmt.Errorf(\"empty feedback text for solution revision\")\n\t}\n\tif strings.TrimSpace(targetRef) == \"\" {\n\t\tcfg := s.loadTelegramPersistedConfig()\n\t\tif cfg.PendingRevisionTaskKey != \"\" {\n\t\t\ttargetRef = cfg.PendingRevisionTaskKey\n\t\t} else {\n\t\t\ttargetRef = cfg.LastNotifiedTask\n\t\t}\n\t}\n\tqt, err := s.findQueuedTask(ctx, targetRef)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\ttargetKey := qt.ExternalID\n\n\ts.mu.Lock()\n\ts.selectedTaskKey = targetKey\n\ts.mu.Unlock()\n\n\tisoMeta, _ := s.ensureTaskIsolation(ctx, *qt)\n\tsubTasks := s.loadOrGenerateSubTasks(*qt)\n\n\t// Revoke any previous approval marker because the user is revising the solution before approving\n\t_ = os.Remove(filepath.Join(isoMeta.ArtifactDir, \".user-approved\"))\n\tif s.QueueStore != nil && !strings.EqualFold(qt.Stage, queue.StageNeedsYou) {\n\t\t_ = s.QueueStore.UpdateStage(ctx, qt.ID, queue.StageNeedsYou, qt.AssignedModel, isoMeta.WorktreePath)\n\t\tqt.Stage = queue.StageNeedsYou\n\t}\n\n\tsubTasks = s.applyTelegramSolutionFeedbackToPlan(*qt, isoMeta, subTasks, feedbackText, fromUser)\n\n\t// Clear PendingRevisionTaskKey once applied so subsequent commands work normally\n\tcfg := s.loadTelegramPersistedConfig()\n\tcfg.PendingRevisionTaskKey = \"\"\n\tcfg.LastNotifiedTask = targetKey\n\tif strings.TrimSpace(chatID) != \"\" && strings.TrimSpace(cfg.ChatID) == \"\" {\n\t\tcfg.ChatID = strings.TrimSpace(chatID)\n\t}\n\t_ = s.saveTelegramPersistedConfig(cfg)\n\n\t// Record User + BRAIN (Slot A) revision messages in Co-Architect Studio chat_history.json\n\thistory := s.loadOrInitTaskChatHistory(*qt, subTasks, isoMeta)\n\tnowClock := time.Now().Format(\"15:04:05\")\n\thistory = append(history,\n\t\tCoArchitectChatMessageDTO{\n\t\t\tID:            fmt.Sprintf(\"msg-tg-revise-user-%d\", time.Now().UnixNano()),\n\t\t\tTaskKey:       targetKey,\n\t\t\tSender:        \"user\",\n\t\t\tAgentRole:     fmt.Sprintf(\"✈️ Telegram (@%s)\", fromUser),\n\t\t\tAgentSlot:     \"Telegram S3 Feedback\",\n\t\t\tSkill:         \"/brain-delegate\",\n\t\t\tModel:         qt.AssignedModel,\n\t\t\tActionMode:    \"revise_solution\",\n\t\t\tMessage:       fmt.Sprintf(\"✏️ **[Telegram Feedback / Sửa Giải Pháp S3]** %s\", feedbackText),\n\t\t\tAppliedToPlan: true,\n\t\t\tTargetFile:    isoMeta.PlanFile,\n\t\t\tTimestamp:     nowClock,\n\t\t},\n\t\tCoArchitectChatMessageDTO{\n\t\t\tID:            fmt.Sprintf(\"msg-tg-revise-agent-%d\", time.Now().UnixNano()+1),\n\t\t\tTaskKey:       targetKey,\n\t\t\tSender:        \"agent\",\n\t\t\tAgentRole:     \"🧠 BRAIN · Architect\",\n\t\t\tAgentSlot:     \"Slot A\",\n\t\t\tSkill:         \"/brain-delegate · /laya-router\",\n\t\t\tModel:         qt.AssignedModel,\n\t\t\tActionMode:    \"revise_solution\",\n\t\t\tMessage:       fmt.Sprintf(\"✍️ **[Đã cập nhật `09_tasks_solution.md` & `08_tasks.md` theo phản hồi Telegram của `@%s`]**\\n- **Nội dung điều chỉnh:** %s\\n- **File đã lưu:** `%s` (`%d Sub-Tasks`)\\n- **Trạng thái:** Giữ tại `NEEDS_YOU` (`⏸ CHỜ APPROVE`) chờ bạn duyệt bản giải pháp mới.\", fromUser, feedbackText, isoMeta.PlanFile, len(subTasks)),\n\t\t\tAppliedToPlan: true,\n\t\t\tTargetFile:    isoMeta.PlanFile,\n\t\t\tTimestamp:     nowClock,\n\t\t},\n\t)\n\t_ = s.saveTaskChatHistory(targetKey, history)\n\n\ts.appendTaskLog(targetKey, fmt.Sprintf(\"[✏️ Telegram S3 Revise] @%s gửi phản hồi sửa giải pháp cho %s -> Đã cập nhật %s: %s\", fromUser, targetKey, isoMeta.PlanFile, feedbackText))\n\ts.appendPaneLog(\"A\", fmt.Sprintf(\"[✏️ Telegram -> Slot A] @%s cập nhật giải pháp %s: %s\", fromUser, targetKey, feedbackText))\n\n\tmsgText, rows := s.buildTelegramApprovalRequiredMessage(ctx, *qt, isoMeta, subTasks, fmt.Sprintf(\"ĐÃ CẬP NHẬT GIẢI PHÁP THEO PHẢN HỒI CỦA @%s\", fromUser))\n\tdeliveryStatus := s.sendTelegramChunkedMessageWithCustomKeyboard(ctx, cfg, msgText, rows)\n\ts.appendTelegramEvent(\"INBOUND_REVISE\", targetKey, fmt.Sprintf(\"✏️ @%s phản hồi sửa giải pháp %s (#%d): %q -> Đã cập nhật 09_tasks_solution.md & gửi lại Plan (%s)\", fromUser, targetKey, qt.ID, truncateRunes(feedbackText, 80), deliveryStatus), deliveryStatus)\n\ts.broadcast(\"telegram_solution_revised\")\n\treturn targetKey, nil\n}\n",
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1492-1582, hàm handleTelegramReviseSolutionCommand xử lý phản hồi sửa giải pháp của người dùng trên Telegram, cập nhật trực tiếp 09_tasks_solution.md, 08_tasks.md, chat_history.json và gửi lại bản Hồ Sơ Duyệt Giải Pháp S3 mới."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4336,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8667,
+                "NO": 0.1333
+              },
+              "confidence": 0.4336,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1492-1582\n// handleTelegramReviseSolutionCommand applies the user's feedback from Telegram directly into 09_tasks_solution.md (and 08_tasks.md if applicable),\n// records the Co-Architect Studio revision history, keeps the task at NEEDS_YOU (⏸ CHỜ APPROVE), and sends the updated Approval Dossier back to Telegram!\nfunc (s *Server) handleTelegramReviseSolutionCommand(ctx context.Context, targetRef, feedbackText, chatID, fromUser string) (string, error) {\n\tfeedbackText = scout.MaskSecrets(strings.TrimSpace(feedbackText))\n\tif feedbackText == \"\" {\n\t\treturn \"\", fmt.Errorf(\"empty feedback text for solution revision\")\n\t}\n\tif strings.TrimSpace(targetRef) == \"\" {\n\t\tcfg := s.loadTelegramPersistedConfig()\n\t\tif cfg.PendingRevisionTaskKey != \"\" {\n\t\t\ttargetRef = cfg.PendingRevisionTaskKey\n\t\t} else {\n\t\t\ttargetRef = cfg.LastNotifiedTask\n\t\t}\n\t}\n\tqt, err := s.findQueuedTask(ctx, targetRef)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\ttargetKey := qt.ExternalID\n\n\ts.mu.Lock()\n\ts.selectedTaskKey = targetKey\n\ts.mu.Unlock()\n\n\tisoMeta, _ := s.ensureTaskIsolation(ctx, *qt)\n\tsubTasks := s.loadOrGenerateSubTasks(*qt)\n\n\t// Revoke any previous approval marker because the user is revising the solution before approving\n\t_ = os.Remove(filepath.Join(isoMeta.ArtifactDir, \".user-approved\"))\n\tif s.QueueStore != nil && !strings.EqualFold(qt.Stage, queue.StageNeedsYou) {\n\t\t_ = s.QueueStore.UpdateStage(ctx, qt.ID, queue.StageNeedsYou, qt.AssignedModel, isoMeta.WorktreePath)\n\t\tqt.Stage = queue.StageNeedsYou\n\t}\n\n\tsubTasks = s.applyTelegramSolutionFeedbackToPlan(*qt, isoMeta, subTasks, feedbackText, fromUser)\n\n\t// Clear PendingRevisionTaskKey once applied so subsequent commands work normally\n\tcfg := s.loadTelegramPersistedConfig()\n\tcfg.PendingRevisionTaskKey = \"\"\n\tcfg.LastNotifiedTask = targetKey\n\tif strings.TrimSpace(chatID) != \"\" && strings.TrimSpace(cfg.ChatID) == \"\" {\n\t\tcfg.ChatID = strings.TrimSpace(chatID)\n\t}\n\t_ = s.saveTelegramPersistedConfig(cfg)\n\n\t// Record User + BRAIN (Slot A) revision messages in Co-Architect Studio chat_history.json\n\thistory := s.loadOrInitTaskChatHistory(*qt, subTasks, isoMeta)\n\tnowClock := time.Now().Format(\"15:04:05\")\n\thistory = append(history,\n\t\tCoArchitectChatMessageDTO{\n\t\t\tID:            fmt.Sprintf(\"msg-tg-revise-user-%d\", time.Now().UnixNano()),\n\t\t\tTaskKey:       targetKey,\n\t\t\tSender:        \"user\",\n\t\t\tAgentRole:     fmt.Sprintf(\"✈️ Telegram (@%s)\", fromUser),\n\t\t\tAgentSlot:     \"Telegram S3 Feedback\",\n\t\t\tSkill:         \"/brain-delegate\",\n\t\t\tModel:         qt.AssignedModel,\n\t\t\tActionMode:    \"revise_solution\",\n\t\t\tMessage:       fmt.Sprintf(\"✏️ **[Telegram Feedback / Sửa Giải Pháp S3]** %s\", feedbackText),\n\t\t\tAppliedToPlan: true,\n\t\t\tTargetFile:    isoMeta.PlanFile,\n\t\t\tTimestamp:     nowClock,\n\t\t},\n\t\tCoArchitectChatMessageDTO{\n\t\t\tID:            fmt.Sprintf(\"msg-tg-revise-agent-%d\", time.Now().UnixNano()+1),\n\t\t\tTaskKey:       targetKey,\n\t\t\tSender:        \"agent\",\n\t\t\tAgentRole:     \"🧠 BRAIN · Architect\",\n\t\t\tAgentSlot:     \"Slot A\",\n\t\t\tSkill:         \"/brain-delegate · /laya-router\",\n\t\t\tModel:         qt.AssignedModel,\n\t\t\tActionMode:    \"revise_solution\",\n\t\t\tMessage:       fmt.Sprintf(\"✍️ **[Đã cập nhật `09_tasks_solution.md` & `08_tasks.md` theo phản hồi Telegram của `@%s`]**\\n- **Nội dung điều chỉnh:** %s\\n- **File đã lưu:** `%s` (`%d Sub-Tasks`)\\n- **Trạng thái:** Giữ tại `NEEDS_YOU` (`⏸ CHỜ APPROVE`) chờ bạn duyệt bản giải pháp mới.\", fromUser, feedbackText, isoMeta.PlanFile, len(subTasks)),\n\t\t\tAppliedToPlan: true,\n\t\t\tTargetFile:    isoMeta.PlanFile,\n\t\t\tTimestamp:     nowClock,\n\t\t},\n\t)\n\t_ = s.saveTaskChatHistory(targetKey, history)\n\n\ts.appendTaskLog(targetKey, fmt.Sprintf(\"[✏️ Telegram S3 Revise] @%s gửi phản hồi sửa giải pháp cho %s -> Đã cập nhật %s: %s\", fromUser, targetKey, isoMeta.PlanFile, feedbackText))\n\ts.appendPaneLog(\"A\", fmt.Sprintf(\"[✏️ Telegram -> Slot A] @%s cập nhật giải pháp %s: %s\", fromUser, targetKey, feedbackText))\n\n\tmsgText, rows := s.buildTelegramApprovalRequiredMessage(ctx, *qt, isoMeta, subTasks, fmt.Sprintf(\"ĐÃ CẬP NHẬT GIẢI PHÁP THEO PHẢN HỒI CỦA @%s\", fromUser))\n\tdeliveryStatus := s.sendTelegramChunkedMessageWithCustomKeyboard(ctx, cfg, msgText, rows)\n\ts.appendTelegramEvent(\"INBOUND_REVISE\", targetKey, fmt.Sprintf(\"✏️ @%s phản hồi sửa giải pháp %s (#%d): %q -> Đã cập nhật 09_tasks_solution.md & gửi lại Plan (%s)\", fromUser, targetKey, qt.ID, truncateRunes(feedbackText, 80), deliveryStatus), deliveryStatus)\n\ts.broadcast(\"telegram_solution_revised\")\n\treturn targetKey, nil\n}\n",
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1492-1582, hàm handleTelegramReviseSolutionCommand xử lý phản hồi sửa giải pháp của người dùng trên Telegram, cập nhật trực tiếp 09_tasks_solution.md, 08_tasks.md, chat_history.json và gửi lại bản Hồ Sơ Duyệt Giải Pháp S3 mới."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "A-DIFF-04",
+    "kind": "target",
+    "basis": "code",
+    "claim": "Tại internal/webui/server.go dòng 1051-1107, hàm findQueuedTask hỗ trợ tìm kiếm theo #<ID> hoặc tên tiếng Việt có khoảng trắng.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1051-1107\n\nfunc (s *Server) findQueuedTask(ctx context.Context, taskKey string) (*queue.QueuedTask, error) {\n\tif s.QueueStore == nil {\n\t\treturn nil, fmt.Errorf(\"queue store is not initialized\")\n\t}\n\tall, err := s.QueueStore.ListAll(ctx)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tif len(all) == 0 {\n\t\treturn nil, fmt.Errorf(\"no tasks in queue\")\n\t}\n\ttaskKey = strings.TrimSpace(taskKey)\n\tif taskKey != \"\" {\n\t\tcleanRef := strings.TrimPrefix(strings.ToUpper(taskKey), \"#\")\n\t\tif idNum, nErr := strconv.ParseInt(cleanRef, 10, 64); nErr == nil && idNum > 0 {\n\t\t\tfor i := range all {\n\t\t\t\tif all[i].ID == idNum {\n\t\t\t\t\treturn &all[i], nil\n\t\t\t\t}\n\t\t\t}\n\t\t\tif int(idNum) <= len(all) {\n\t\t\t\treturn &all[idNum-1], nil\n\t\t\t}\n\t\t}\n\t\tsafeTarget := sanitizeTaskKeyPath(taskKey)\n\t\tfor i := range all {\n\t\t\tif strings.EqualFold(all[i].ExternalID, taskKey) ||\n\t\t\t\tstrings.EqualFold(sanitizeTaskKeyPath(all[i].ExternalID), safeTarget) {\n\t\t\t\treturn &all[i], nil\n\t\t\t}\n\t\t}\n\t\tlowerKey := strings.ToLower(taskKey)\n\t\tfor i := range all {\n\t\t\tif strings.Contains(strings.ToLower(all[i].ExternalID), lowerKey) ||\n\t\t\t\tstrings.Contains(strings.ToLower(all[i].Title), lowerKey) {\n\t\t\t\treturn &all[i], nil\n\t\t\t}\n\t\t}\n\t}\n\t// Fallback to selectedTaskKey or first non-DONE task\n\ts.mu.Lock()\n\tsel := s.selectedTaskKey\n\ts.mu.Unlock()\n\tif sel != \"\" {\n\t\tfor i := range all {\n\t\t\tif strings.EqualFold(all[i].ExternalID, sel) {\n\t\t\t\treturn &all[i], nil\n\t\t\t}\n\t\t}\n\t}\n\tfor i := range all {\n\t\tif all[i].Stage != queue.StageDone {\n\t\t\treturn &all[i], nil\n\t\t}\n\t}\n\treturn &all[0], nil",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3278,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7028,
+                "INCORRECT": 0.25,
+                "UNSUPPORTED": 0.0472
+              },
+              "confidence": 0.3278,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 950,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Tại internal/webui/server.go dòng 1051-1107, hàm findQueuedTask hỗ trợ tìm kiếm theo #<ID> hoặc tên tiếng Việt có khoảng trắng.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1051-1107\n\nfunc (s *Server) findQueuedTask(ctx context.Context, taskKey string) (*queue.QueuedTask, error) {\n\tif s.QueueStore == nil {\n\t\treturn nil, fmt.Errorf(\"queue store is not initialized\")\n\t}\n\tall, err := s.QueueStore.ListAll(ctx)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tif len(all) == 0 {\n\t\treturn nil, fmt.Errorf(\"no tasks in queue\")\n\t}\n\ttaskKey = strings.TrimSpace(taskKey)\n\tif taskKey != \"\" {\n\t\tcleanRef := strings.TrimPrefix(strings.ToUpper(taskKey), \"#\")\n\t\tif idNum, nErr := strconv.ParseInt(cleanRef, 10, 64); nErr == nil && idNum > 0 {\n\t\t\tfor i := range all {\n\t\t\t\tif all[i].ID == idNum {\n\t\t\t\t\treturn &all[i], nil\n\t\t\t\t}\n\t\t\t}\n\t\t\tif int(idNum) <= len(all) {\n\t\t\t\treturn &all[idNum-1], nil\n\t\t\t}\n\t\t}\n\t\tsafeTarget := sanitizeTaskKeyPath(taskKey)\n\t\tfor i := range all {\n\t\t\tif strings.EqualFold(all[i].ExternalID, taskKey) ||\n\t\t\t\tstrings.EqualFold(sanitizeTaskKeyPath(all[i].ExternalID), safeTarget) {\n\t\t\t\treturn &all[i], nil\n\t\t\t}\n\t\t}\n\t\tlowerKey := strings.ToLower(taskKey)\n\t\tfor i := range all {\n\t\t\tif strings.Contains(strings.ToLower(all[i].ExternalID), lowerKey) ||\n\t\t\t\tstrings.Contains(strings.ToLower(all[i].Title), lowerKey) {\n\t\t\t\treturn &all[i], nil\n\t\t\t}\n\t\t}\n\t}\n\t// Fallback to selectedTaskKey or first non-DONE task\n\ts.mu.Lock()\n\tsel := s.selectedTaskKey\n\ts.mu.Unlock()\n\tif sel != \"\" {\n\t\tfor i := range all {\n\t\t\tif strings.EqualFold(all[i].ExternalID, sel) {\n\t\t\t\treturn &all[i], nil\n\t\t\t}\n\t\t}\n\t}\n\tfor i := range all {\n\t\tif all[i].Stage != queue.StageDone {\n\t\t\treturn &all[i], nil\n\t\t}\n\t}\n\treturn &all[0], nil",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.0681,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3914,
+                "INCORRECT": 0.4448,
+                "UNSUPPORTED": 0.1638
+              },
+              "confidence": 0.0681,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 956,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1051-1107\n\nfunc (s *Server) findQueuedTask(ctx context.Context, taskKey string) (*queue.QueuedTask, error) {\n\tif s.QueueStore == nil {\n\t\treturn nil, fmt.Errorf(\"queue store is not initialized\")\n\t}\n\tall, err := s.QueueStore.ListAll(ctx)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tif len(all) == 0 {\n\t\treturn nil, fmt.Errorf(\"no tasks in queue\")\n\t}\n\ttaskKey = strings.TrimSpace(taskKey)\n\tif taskKey != \"\" {\n\t\tcleanRef := strings.TrimPrefix(strings.ToUpper(taskKey), \"#\")\n\t\tif idNum, nErr := strconv.ParseInt(cleanRef, 10, 64); nErr == nil && idNum > 0 {\n\t\t\tfor i := range all {\n\t\t\t\tif all[i].ID == idNum {\n\t\t\t\t\treturn &all[i], nil\n\t\t\t\t}\n\t\t\t}\n\t\t\tif int(idNum) <= len(all) {\n\t\t\t\treturn &all[idNum-1], nil\n\t\t\t}\n\t\t}\n\t\tsafeTarget := sanitizeTaskKeyPath(taskKey)\n\t\tfor i := range all {\n\t\t\tif strings.EqualFold(all[i].ExternalID, taskKey) ||\n\t\t\t\tstrings.EqualFold(sanitizeTaskKeyPath(all[i].ExternalID), safeTarget) {\n\t\t\t\treturn &all[i], nil\n\t\t\t}\n\t\t}\n\t\tlowerKey := strings.ToLower(taskKey)\n\t\tfor i := range all {\n\t\t\tif strings.Contains(strings.ToLower(all[i].ExternalID), lowerKey) ||\n\t\t\t\tstrings.Contains(strings.ToLower(all[i].Title), lowerKey) {\n\t\t\t\treturn &all[i], nil\n\t\t\t}\n\t\t}\n\t}\n\t// Fallback to selectedTaskKey or first non-DONE task\n\ts.mu.Lock()\n\tsel := s.selectedTaskKey\n\ts.mu.Unlock()\n\tif sel != \"\" {\n\t\tfor i := range all {\n\t\t\tif strings.EqualFold(all[i].ExternalID, sel) {\n\t\t\t\treturn &all[i], nil\n\t\t\t}\n\t\t}\n\t}\n\tfor i := range all {\n\t\tif all[i].Stage != queue.StageDone {\n\t\t\treturn &all[i], nil\n\t\t}\n\t}\n\treturn &all[0], nil",
+          "claim": "Tại internal/webui/server.go dòng 1051-1107, hàm findQueuedTask hỗ trợ tìm kiếm theo #<ID> hoặc tên tiếng Việt có khoảng trắng."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6283,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9284,
+                "NO": 0.0716
+              },
+              "confidence": 0.6283,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 889,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1051-1107\n\nfunc (s *Server) findQueuedTask(ctx context.Context, taskKey string) (*queue.QueuedTask, error) {\n\tif s.QueueStore == nil {\n\t\treturn nil, fmt.Errorf(\"queue store is not initialized\")\n\t}\n\tall, err := s.QueueStore.ListAll(ctx)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tif len(all) == 0 {\n\t\treturn nil, fmt.Errorf(\"no tasks in queue\")\n\t}\n\ttaskKey = strings.TrimSpace(taskKey)\n\tif taskKey != \"\" {\n\t\tcleanRef := strings.TrimPrefix(strings.ToUpper(taskKey), \"#\")\n\t\tif idNum, nErr := strconv.ParseInt(cleanRef, 10, 64); nErr == nil && idNum > 0 {\n\t\t\tfor i := range all {\n\t\t\t\tif all[i].ID == idNum {\n\t\t\t\t\treturn &all[i], nil\n\t\t\t\t}\n\t\t\t}\n\t\t\tif int(idNum) <= len(all) {\n\t\t\t\treturn &all[idNum-1], nil\n\t\t\t}\n\t\t}\n\t\tsafeTarget := sanitizeTaskKeyPath(taskKey)\n\t\tfor i := range all {\n\t\t\tif strings.EqualFold(all[i].ExternalID, taskKey) ||\n\t\t\t\tstrings.EqualFold(sanitizeTaskKeyPath(all[i].ExternalID), safeTarget) {\n\t\t\t\treturn &all[i], nil\n\t\t\t}\n\t\t}\n\t\tlowerKey := strings.ToLower(taskKey)\n\t\tfor i := range all {\n\t\t\tif strings.Contains(strings.ToLower(all[i].ExternalID), lowerKey) ||\n\t\t\t\tstrings.Contains(strings.ToLower(all[i].Title), lowerKey) {\n\t\t\t\treturn &all[i], nil\n\t\t\t}\n\t\t}\n\t}\n\t// Fallback to selectedTaskKey or first non-DONE task\n\ts.mu.Lock()\n\tsel := s.selectedTaskKey\n\ts.mu.Unlock()\n\tif sel != \"\" {\n\t\tfor i := range all {\n\t\t\tif strings.EqualFold(all[i].ExternalID, sel) {\n\t\t\t\treturn &all[i], nil\n\t\t\t}\n\t\t}\n\t}\n\tfor i := range all {\n\t\tif all[i].Stage != queue.StageDone {\n\t\t\treturn &all[i], nil\n\t\t}\n\t}\n\treturn &all[0], nil",
+          "claim": "Tại internal/webui/server.go dòng 1051-1107, hàm findQueuedTask hỗ trợ tìm kiếm theo #<ID> hoặc tên tiếng Việt có khoảng trắng."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "CTRL-TRUE-01",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "Tại internal/webui/telegram_bridge.go dòng 1808-1851, hàm splitTelegramTextIntoSafeChunks chia tin nhắn dài theo ranh giới dòng mới với độ dài mỗi phần không vượt quá maxRunes (mặc định 3500 ký tự).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1808-1851\n\t\t\t{\n\t\t\t\t{\n\t\t\t\t\t\"text\":          fmt.Sprintf(\"✅ APPROVE %s & Chạy S4–S5 Ngay\", truncateRunes(taskKey, 28)),\n\t\t\t\t\t\"callback_data\": cbData,\n\t\t\t\t},\n\t\t\t},\n\t\t\t{\n\t\t\t\t{\n\t\t\t\t\t\"text\":          fmt.Sprintf(\"✏️ Phản hồi / Sửa Giải Pháp (%s)\", truncateRunes(taskKey, 22)),\n\t\t\t\t\t\"callback_data\": revData,\n\t\t\t\t},\n\t\t\t},\n\t\t\t{\n\t\t\t\t{\n\t\t\t\t\t\"text\":          \"📋 Xem Hàng Đợi Task (/task)\",\n\t\t\t\t\t\"callback_data\": \"/task\",\n\t\t\t\t},\n\t\t\t},\n\t\t}\n\t}\n\treturn s.sendTelegramChunkedMessageWithCustomKeyboard(ctx, cfg, text, rows)\n}\n\n// splitTelegramTextIntoSafeChunks splits long messages along newline boundaries so no chunk exceeds maxRunes (default 3500, safely under Telegram's 4096-char limit).\nfunc splitTelegramTextIntoSafeChunks(text string, maxRunes int) []string {\n\tif maxRunes <= 0 {\n\t\tmaxRunes = 3500\n\t}\n\trunes := []rune(text)\n\tif len(runes) <= maxRunes {\n\t\treturn []string{text}\n\t}\n\tlines := strings.Split(text, \"\\n\")\n\tvar chunks []string\n\tvar cur strings.Builder\n\tcurLen := 0\n\tfor _, ln := range lines {\n\t\tlnRunes := len([]rune(ln)) + 1\n\t\tif curLen > 0 && curLen+lnRunes > maxRunes {\n\t\t\tchunks = append(chunks, strings.TrimRight(cur.String(), \"\\n\"))\n\t\t\tcur.Reset()\n\t\t\tcurLen = 0\n\t\t}\n\t\tif lnRunes > maxRunes {",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.0321,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3628,
+                "INCORRECT": 0.4207,
+                "UNSUPPORTED": 0.2165
+              },
+              "confidence": 0.0321,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 864,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1808-1851, hàm splitTelegramTextIntoSafeChunks chia tin nhắn dài theo ranh giới dòng mới với độ dài mỗi phần không vượt quá maxRunes (mặc định 3500 ký tự).",
+          "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1808-1851\n\t\t\t{\n\t\t\t\t{\n\t\t\t\t\t\"text\":          fmt.Sprintf(\"✅ APPROVE %s & Chạy S4–S5 Ngay\", truncateRunes(taskKey, 28)),\n\t\t\t\t\t\"callback_data\": cbData,\n\t\t\t\t},\n\t\t\t},\n\t\t\t{\n\t\t\t\t{\n\t\t\t\t\t\"text\":          fmt.Sprintf(\"✏️ Phản hồi / Sửa Giải Pháp (%s)\", truncateRunes(taskKey, 22)),\n\t\t\t\t\t\"callback_data\": revData,\n\t\t\t\t},\n\t\t\t},\n\t\t\t{\n\t\t\t\t{\n\t\t\t\t\t\"text\":          \"📋 Xem Hàng Đợi Task (/task)\",\n\t\t\t\t\t\"callback_data\": \"/task\",\n\t\t\t\t},\n\t\t\t},\n\t\t}\n\t}\n\treturn s.sendTelegramChunkedMessageWithCustomKeyboard(ctx, cfg, text, rows)\n}\n\n// splitTelegramTextIntoSafeChunks splits long messages along newline boundaries so no chunk exceeds maxRunes (default 3500, safely under Telegram's 4096-char limit).\nfunc splitTelegramTextIntoSafeChunks(text string, maxRunes int) []string {\n\tif maxRunes <= 0 {\n\t\tmaxRunes = 3500\n\t}\n\trunes := []rune(text)\n\tif len(runes) <= maxRunes {\n\t\treturn []string{text}\n\t}\n\tlines := strings.Split(text, \"\\n\")\n\tvar chunks []string\n\tvar cur strings.Builder\n\tcurLen := 0\n\tfor _, ln := range lines {\n\t\tlnRunes := len([]rune(ln)) + 1\n\t\tif curLen > 0 && curLen+lnRunes > maxRunes {\n\t\t\tchunks = append(chunks, strings.TrimRight(cur.String(), \"\\n\"))\n\t\t\tcur.Reset()\n\t\t\tcurLen = 0\n\t\t}\n\t\tif lnRunes > maxRunes {",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5093,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.831,
+                "INCORRECT": 0.1352,
+                "UNSUPPORTED": 0.0339
+              },
+              "confidence": 0.5093,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 869,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1808-1851\n\t\t\t{\n\t\t\t\t{\n\t\t\t\t\t\"text\":          fmt.Sprintf(\"✅ APPROVE %s & Chạy S4–S5 Ngay\", truncateRunes(taskKey, 28)),\n\t\t\t\t\t\"callback_data\": cbData,\n\t\t\t\t},\n\t\t\t},\n\t\t\t{\n\t\t\t\t{\n\t\t\t\t\t\"text\":          fmt.Sprintf(\"✏️ Phản hồi / Sửa Giải Pháp (%s)\", truncateRunes(taskKey, 22)),\n\t\t\t\t\t\"callback_data\": revData,\n\t\t\t\t},\n\t\t\t},\n\t\t\t{\n\t\t\t\t{\n\t\t\t\t\t\"text\":          \"📋 Xem Hàng Đợi Task (/task)\",\n\t\t\t\t\t\"callback_data\": \"/task\",\n\t\t\t\t},\n\t\t\t},\n\t\t}\n\t}\n\treturn s.sendTelegramChunkedMessageWithCustomKeyboard(ctx, cfg, text, rows)\n}\n\n// splitTelegramTextIntoSafeChunks splits long messages along newline boundaries so no chunk exceeds maxRunes (default 3500, safely under Telegram's 4096-char limit).\nfunc splitTelegramTextIntoSafeChunks(text string, maxRunes int) []string {\n\tif maxRunes <= 0 {\n\t\tmaxRunes = 3500\n\t}\n\trunes := []rune(text)\n\tif len(runes) <= maxRunes {\n\t\treturn []string{text}\n\t}\n\tlines := strings.Split(text, \"\\n\")\n\tvar chunks []string\n\tvar cur strings.Builder\n\tcurLen := 0\n\tfor _, ln := range lines {\n\t\tlnRunes := len([]rune(ln)) + 1\n\t\tif curLen > 0 && curLen+lnRunes > maxRunes {\n\t\t\tchunks = append(chunks, strings.TrimRight(cur.String(), \"\\n\"))\n\t\t\tcur.Reset()\n\t\t\tcurLen = 0\n\t\t}\n\t\tif lnRunes > maxRunes {",
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1808-1851, hàm splitTelegramTextIntoSafeChunks chia tin nhắn dài theo ranh giới dòng mới với độ dài mỗi phần không vượt quá maxRunes (mặc định 3500 ký tự)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7995,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9688,
+                "NO": 0.0312
+              },
+              "confidence": 0.7995,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 802,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1808-1851\n\t\t\t{\n\t\t\t\t{\n\t\t\t\t\t\"text\":          fmt.Sprintf(\"✅ APPROVE %s & Chạy S4–S5 Ngay\", truncateRunes(taskKey, 28)),\n\t\t\t\t\t\"callback_data\": cbData,\n\t\t\t\t},\n\t\t\t},\n\t\t\t{\n\t\t\t\t{\n\t\t\t\t\t\"text\":          fmt.Sprintf(\"✏️ Phản hồi / Sửa Giải Pháp (%s)\", truncateRunes(taskKey, 22)),\n\t\t\t\t\t\"callback_data\": revData,\n\t\t\t\t},\n\t\t\t},\n\t\t\t{\n\t\t\t\t{\n\t\t\t\t\t\"text\":          \"📋 Xem Hàng Đợi Task (/task)\",\n\t\t\t\t\t\"callback_data\": \"/task\",\n\t\t\t\t},\n\t\t\t},\n\t\t}\n\t}\n\treturn s.sendTelegramChunkedMessageWithCustomKeyboard(ctx, cfg, text, rows)\n}\n\n// splitTelegramTextIntoSafeChunks splits long messages along newline boundaries so no chunk exceeds maxRunes (default 3500, safely under Telegram's 4096-char limit).\nfunc splitTelegramTextIntoSafeChunks(text string, maxRunes int) []string {\n\tif maxRunes <= 0 {\n\t\tmaxRunes = 3500\n\t}\n\trunes := []rune(text)\n\tif len(runes) <= maxRunes {\n\t\treturn []string{text}\n\t}\n\tlines := strings.Split(text, \"\\n\")\n\tvar chunks []string\n\tvar cur strings.Builder\n\tcurLen := 0\n\tfor _, ln := range lines {\n\t\tlnRunes := len([]rune(ln)) + 1\n\t\tif curLen > 0 && curLen+lnRunes > maxRunes {\n\t\t\tchunks = append(chunks, strings.TrimRight(cur.String(), \"\\n\"))\n\t\t\tcur.Reset()\n\t\t\tcurLen = 0\n\t\t}\n\t\tif lnRunes > maxRunes {",
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1808-1851, hàm splitTelegramTextIntoSafeChunks chia tin nhắn dài theo ranh giới dòng mới với độ dài mỗi phần không vượt quá maxRunes (mặc định 3500 ký tự)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-01",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "Tại internal/webui/telegram_bridge.go dòng 1337-1382, khi uiStage == NEEDS_YOU thì hàm handleTelegramTaskListCommand hoàn toàn bỏ qua không gọi extractTaskApprovalDossier và không in ra Nguyên nhân hay Giải pháp.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1337-1382\n\t\t\t// Expand full approval details directly beneath any task in `⏸ CHỜ APPROVE`!\n\t\t\tif uiStage == \"NEEDS_YOU\" {\n\t\t\t\tdossier := s.extractTaskApprovalDossier(ctx, qt, iso, subTasks)\n\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📄 *Plan cần duyệt:* `%s`\\n\", dossier.PlanFilePath))\n\t\t\t\tif len(dossier.UserRevisions) > 0 {\n\t\t\t\t\tsb.WriteString(\"  ✏️ *Phản hồi đã cập nhật vào Plan:*\\n\")\n\t\t\t\t\tfor _, rev := range dossier.UserRevisions {\n\t\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(rev, 160) + \"\\n\")\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tsb.WriteString(\"  🔍 *Nguyên nhân gốc rễ:*\\n\")\n\t\t\t\tmaxRC := len(dossier.RootCauseLines)\n\t\t\t\tif maxRC > 3 {\n\t\t\t\t\tmaxRC = 3\n\t\t\t\t}\n\t\t\t\tfor i := 0; i < maxRC; i++ {\n\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(dossier.RootCauseLines[i], 165) + \"\\n\")\n\t\t\t\t}\n\t\t\t\tsb.WriteString(\"  💡 *Giải pháp S3:*\\n\")\n\t\t\t\tmaxSol := len(dossier.SolutionLines)\n\t\t\t\tif maxSol > 4 {\n\t\t\t\t\tmaxSol = 4\n\t\t\t\t}\n\t\t\t\tfor i := 0; i < maxSol; i++ {\n\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(dossier.SolutionLines[i], 165) + \"\\n\")\n\t\t\t\t}\n\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📋 *%d Sub-Tasks dự kiến chạy:*\\n\", len(dossier.SubTaskLines)))\n\t\t\t\tfor _, stLn := range dossier.SubTaskLines {\n\t\t\t\t\tsb.WriteString(\"    \" + stLn + \"\\n\")\n\t\t\t\t}\n\t\t\t\tif len(dossier.ChangedFiles) > 0 {\n\t\t\t\t\tvar filePreview []string\n\t\t\t\t\tmaxF := len(dossier.ChangedFiles)\n\t\t\t\t\tif maxF > 10 {\n\t\t\t\t\t\tmaxF = 10\n\t\t\t\t\t}\n\t\t\t\t\tfor i := 0; i < maxF; i++ {\n\t\t\t\t\t\tfilePreview = append(filePreview, fmt.Sprintf(\"`%s`\", dossier.ChangedFiles[i]))\n\t\t\t\t\t}\n\t\t\t\t\textraFiles := \"\"\n\t\t\t\t\tif len(dossier.ChangedFiles) > maxF {\n\t\t\t\t\t\textraFiles = fmt.Sprintf(\" (+%d files — bấm *👁 Xem Plan (#%d)* để xem đủ)\", len(dossier.ChangedFiles)-maxF, qt.ID)\n\t\t\t\t\t}\n\t\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📝 *%d files bị ảnh hưởng:* %s%s\\n\", len(dossier.ChangedFiles), strings.Join(filePreview, \", \"), extraFiles))\n\t\t\t\t}\n\t\t\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.0837,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.369,
+                "INCORRECT": 0.4791,
+                "UNSUPPORTED": 0.1519
+              },
+              "confidence": 0.0837,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1337-1382, khi uiStage == NEEDS_YOU thì hàm handleTelegramTaskListCommand hoàn toàn bỏ qua không gọi extractTaskApprovalDossier và không in ra Nguyên nhân hay Giải pháp.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1337-1382\n\t\t\t// Expand full approval details directly beneath any task in `⏸ CHỜ APPROVE`!\n\t\t\tif uiStage == \"NEEDS_YOU\" {\n\t\t\t\tdossier := s.extractTaskApprovalDossier(ctx, qt, iso, subTasks)\n\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📄 *Plan cần duyệt:* `%s`\\n\", dossier.PlanFilePath))\n\t\t\t\tif len(dossier.UserRevisions) > 0 {\n\t\t\t\t\tsb.WriteString(\"  ✏️ *Phản hồi đã cập nhật vào Plan:*\\n\")\n\t\t\t\t\tfor _, rev := range dossier.UserRevisions {\n\t\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(rev, 160) + \"\\n\")\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tsb.WriteString(\"  🔍 *Nguyên nhân gốc rễ:*\\n\")\n\t\t\t\tmaxRC := len(dossier.RootCauseLines)\n\t\t\t\tif maxRC > 3 {\n\t\t\t\t\tmaxRC = 3\n\t\t\t\t}\n\t\t\t\tfor i := 0; i < maxRC; i++ {\n\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(dossier.RootCauseLines[i], 165) + \"\\n\")\n\t\t\t\t}\n\t\t\t\tsb.WriteString(\"  💡 *Giải pháp S3:*\\n\")\n\t\t\t\tmaxSol := len(dossier.SolutionLines)\n\t\t\t\tif maxSol > 4 {\n\t\t\t\t\tmaxSol = 4\n\t\t\t\t}\n\t\t\t\tfor i := 0; i < maxSol; i++ {\n\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(dossier.SolutionLines[i], 165) + \"\\n\")\n\t\t\t\t}\n\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📋 *%d Sub-Tasks dự kiến chạy:*\\n\", len(dossier.SubTaskLines)))\n\t\t\t\tfor _, stLn := range dossier.SubTaskLines {\n\t\t\t\t\tsb.WriteString(\"    \" + stLn + \"\\n\")\n\t\t\t\t}\n\t\t\t\tif len(dossier.ChangedFiles) > 0 {\n\t\t\t\t\tvar filePreview []string\n\t\t\t\t\tmaxF := len(dossier.ChangedFiles)\n\t\t\t\t\tif maxF > 10 {\n\t\t\t\t\t\tmaxF = 10\n\t\t\t\t\t}\n\t\t\t\t\tfor i := 0; i < maxF; i++ {\n\t\t\t\t\t\tfilePreview = append(filePreview, fmt.Sprintf(\"`%s`\", dossier.ChangedFiles[i]))\n\t\t\t\t\t}\n\t\t\t\t\textraFiles := \"\"\n\t\t\t\t\tif len(dossier.ChangedFiles) > maxF {\n\t\t\t\t\t\textraFiles = fmt.Sprintf(\" (+%d files — bấm *👁 Xem Plan (#%d)* để xem đủ)\", len(dossier.ChangedFiles)-maxF, qt.ID)\n\t\t\t\t\t}\n\t\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📝 *%d files bị ảnh hưởng:* %s%s\\n\", len(dossier.ChangedFiles), strings.Join(filePreview, \", \"), extraFiles))\n\t\t\t\t}\n\t\t\t}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0663,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4757,
+                "INCORRECT": 0.3494,
+                "UNSUPPORTED": 0.1749
+              },
+              "confidence": 0.0663,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1337-1382\n\t\t\t// Expand full approval details directly beneath any task in `⏸ CHỜ APPROVE`!\n\t\t\tif uiStage == \"NEEDS_YOU\" {\n\t\t\t\tdossier := s.extractTaskApprovalDossier(ctx, qt, iso, subTasks)\n\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📄 *Plan cần duyệt:* `%s`\\n\", dossier.PlanFilePath))\n\t\t\t\tif len(dossier.UserRevisions) > 0 {\n\t\t\t\t\tsb.WriteString(\"  ✏️ *Phản hồi đã cập nhật vào Plan:*\\n\")\n\t\t\t\t\tfor _, rev := range dossier.UserRevisions {\n\t\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(rev, 160) + \"\\n\")\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tsb.WriteString(\"  🔍 *Nguyên nhân gốc rễ:*\\n\")\n\t\t\t\tmaxRC := len(dossier.RootCauseLines)\n\t\t\t\tif maxRC > 3 {\n\t\t\t\t\tmaxRC = 3\n\t\t\t\t}\n\t\t\t\tfor i := 0; i < maxRC; i++ {\n\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(dossier.RootCauseLines[i], 165) + \"\\n\")\n\t\t\t\t}\n\t\t\t\tsb.WriteString(\"  💡 *Giải pháp S3:*\\n\")\n\t\t\t\tmaxSol := len(dossier.SolutionLines)\n\t\t\t\tif maxSol > 4 {\n\t\t\t\t\tmaxSol = 4\n\t\t\t\t}\n\t\t\t\tfor i := 0; i < maxSol; i++ {\n\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(dossier.SolutionLines[i], 165) + \"\\n\")\n\t\t\t\t}\n\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📋 *%d Sub-Tasks dự kiến chạy:*\\n\", len(dossier.SubTaskLines)))\n\t\t\t\tfor _, stLn := range dossier.SubTaskLines {\n\t\t\t\t\tsb.WriteString(\"    \" + stLn + \"\\n\")\n\t\t\t\t}\n\t\t\t\tif len(dossier.ChangedFiles) > 0 {\n\t\t\t\t\tvar filePreview []string\n\t\t\t\t\tmaxF := len(dossier.ChangedFiles)\n\t\t\t\t\tif maxF > 10 {\n\t\t\t\t\t\tmaxF = 10\n\t\t\t\t\t}\n\t\t\t\t\tfor i := 0; i < maxF; i++ {\n\t\t\t\t\t\tfilePreview = append(filePreview, fmt.Sprintf(\"`%s`\", dossier.ChangedFiles[i]))\n\t\t\t\t\t}\n\t\t\t\t\textraFiles := \"\"\n\t\t\t\t\tif len(dossier.ChangedFiles) > maxF {\n\t\t\t\t\t\textraFiles = fmt.Sprintf(\" (+%d files — bấm *👁 Xem Plan (#%d)* để xem đủ)\", len(dossier.ChangedFiles)-maxF, qt.ID)\n\t\t\t\t\t}\n\t\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📝 *%d files bị ảnh hưởng:* %s%s\\n\", len(dossier.ChangedFiles), strings.Join(filePreview, \", \"), extraFiles))\n\t\t\t\t}\n\t\t\t}",
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1337-1382, khi uiStage == NEEDS_YOU thì hàm handleTelegramTaskListCommand hoàn toàn bỏ qua không gọi extractTaskApprovalDossier và không in ra Nguyên nhân hay Giải pháp."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4941,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.888,
+                "NO": 0.112
+              },
+              "confidence": 0.4941,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1337-1382\n\t\t\t// Expand full approval details directly beneath any task in `⏸ CHỜ APPROVE`!\n\t\t\tif uiStage == \"NEEDS_YOU\" {\n\t\t\t\tdossier := s.extractTaskApprovalDossier(ctx, qt, iso, subTasks)\n\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📄 *Plan cần duyệt:* `%s`\\n\", dossier.PlanFilePath))\n\t\t\t\tif len(dossier.UserRevisions) > 0 {\n\t\t\t\t\tsb.WriteString(\"  ✏️ *Phản hồi đã cập nhật vào Plan:*\\n\")\n\t\t\t\t\tfor _, rev := range dossier.UserRevisions {\n\t\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(rev, 160) + \"\\n\")\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tsb.WriteString(\"  🔍 *Nguyên nhân gốc rễ:*\\n\")\n\t\t\t\tmaxRC := len(dossier.RootCauseLines)\n\t\t\t\tif maxRC > 3 {\n\t\t\t\t\tmaxRC = 3\n\t\t\t\t}\n\t\t\t\tfor i := 0; i < maxRC; i++ {\n\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(dossier.RootCauseLines[i], 165) + \"\\n\")\n\t\t\t\t}\n\t\t\t\tsb.WriteString(\"  💡 *Giải pháp S3:*\\n\")\n\t\t\t\tmaxSol := len(dossier.SolutionLines)\n\t\t\t\tif maxSol > 4 {\n\t\t\t\t\tmaxSol = 4\n\t\t\t\t}\n\t\t\t\tfor i := 0; i < maxSol; i++ {\n\t\t\t\t\tsb.WriteString(\"    \" + truncateRunes(dossier.SolutionLines[i], 165) + \"\\n\")\n\t\t\t\t}\n\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📋 *%d Sub-Tasks dự kiến chạy:*\\n\", len(dossier.SubTaskLines)))\n\t\t\t\tfor _, stLn := range dossier.SubTaskLines {\n\t\t\t\t\tsb.WriteString(\"    \" + stLn + \"\\n\")\n\t\t\t\t}\n\t\t\t\tif len(dossier.ChangedFiles) > 0 {\n\t\t\t\t\tvar filePreview []string\n\t\t\t\t\tmaxF := len(dossier.ChangedFiles)\n\t\t\t\t\tif maxF > 10 {\n\t\t\t\t\t\tmaxF = 10\n\t\t\t\t\t}\n\t\t\t\t\tfor i := 0; i < maxF; i++ {\n\t\t\t\t\t\tfilePreview = append(filePreview, fmt.Sprintf(\"`%s`\", dossier.ChangedFiles[i]))\n\t\t\t\t\t}\n\t\t\t\t\textraFiles := \"\"\n\t\t\t\t\tif len(dossier.ChangedFiles) > maxF {\n\t\t\t\t\t\textraFiles = fmt.Sprintf(\" (+%d files — bấm *👁 Xem Plan (#%d)* để xem đủ)\", len(dossier.ChangedFiles)-maxF, qt.ID)\n\t\t\t\t\t}\n\t\t\t\t\tsb.WriteString(fmt.Sprintf(\"  📝 *%d files bị ảnh hưởng:* %s%s\\n\", len(dossier.ChangedFiles), strings.Join(filePreview, \", \"), extraFiles))\n\t\t\t\t}\n\t\t\t}",
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1337-1382, khi uiStage == NEEDS_YOU thì hàm handleTelegramTaskListCommand hoàn toàn bỏ qua không gọi extractTaskApprovalDossier và không in ra Nguyên nhân hay Giải pháp."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-02",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "Tại internal/webui/telegram_bridge.go dòng 1494-1581, hàm handleTelegramReviseSolutionCommand xóa hoàn toàn file 09_tasks_solution.md khỏi đĩa thay vì ghi bổ sung phản hồi của người dùng.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1494-1581\nfunc (s *Server) handleTelegramReviseSolutionCommand(ctx context.Context, targetRef, feedbackText, chatID, fromUser string) (string, error) {\n\tfeedbackText = scout.MaskSecrets(strings.TrimSpace(feedbackText))\n\tif feedbackText == \"\" {\n\t\treturn \"\", fmt.Errorf(\"empty feedback text for solution revision\")\n\t}\n\tif strings.TrimSpace(targetRef) == \"\" {\n\t\tcfg := s.loadTelegramPersistedConfig()\n\t\tif cfg.PendingRevisionTaskKey != \"\" {\n\t\t\ttargetRef = cfg.PendingRevisionTaskKey\n\t\t} else {\n\t\t\ttargetRef = cfg.LastNotifiedTask\n\t\t}\n\t}\n\tqt, err := s.findQueuedTask(ctx, targetRef)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\ttargetKey := qt.ExternalID\n\n\ts.mu.Lock()\n\ts.selectedTaskKey = targetKey\n\ts.mu.Unlock()\n\n\tisoMeta, _ := s.ensureTaskIsolation(ctx, *qt)\n\tsubTasks := s.loadOrGenerateSubTasks(*qt)\n\n\t// Revoke any previous approval marker because the user is revising the solution before approving\n\t_ = os.Remove(filepath.Join(isoMeta.ArtifactDir, \".user-approved\"))\n\tif s.QueueStore != nil && !strings.EqualFold(qt.Stage, queue.StageNeedsYou) {\n\t\t_ = s.QueueStore.UpdateStage(ctx, qt.ID, queue.StageNeedsYou, qt.AssignedModel, isoMeta.WorktreePath)\n\t\tqt.Stage = queue.StageNeedsYou\n\t}\n\n\tsubTasks = s.applyTelegramSolutionFeedbackToPlan(*qt, isoMeta, subTasks, feedbackText, fromUser)\n\n\t// Clear PendingRevisionTaskKey once applied so subsequent commands work normally\n\tcfg := s.loadTelegramPersistedConfig()\n\tcfg.PendingRevisionTaskKey = \"\"\n\tcfg.LastNotifiedTask = targetKey\n\tif strings.TrimSpace(chatID) != \"\" && strings.TrimSpace(cfg.ChatID) == \"\" {\n\t\tcfg.ChatID = strings.TrimSpace(chatID)\n\t}\n\t_ = s.saveTelegramPersistedConfig(cfg)\n\n\t// Record User + BRAIN (Slot A) revision messages in Co-Architect Studio chat_history.json\n\thistory := s.loadOrInitTaskChatHistory(*qt, subTasks, isoMeta)\n\tnowClock := time.Now().Format(\"15:04:05\")\n\thistory = append(history,\n\t\tCoArchitectChatMessageDTO{\n\t\t\tID:            fmt.Sprintf(\"msg-tg-revise-user-%d\", time.Now().UnixNano()),\n\t\t\tTaskKey:       targetKey,\n\t\t\tSender:        \"user\",\n\t\t\tAgentRole:     fmt.Sprintf(\"✈️ Telegram (@%s)\", fromUser),\n\t\t\tAgentSlot:     \"Telegram S3 Feedback\",\n\t\t\tSkill:         \"/brain-delegate\",\n\t\t\tModel:         qt.AssignedModel,\n\t\t\tActionMode:    \"revise_solution\",\n\t\t\tMessage:       fmt.Sprintf(\"✏️ **[Telegram Feedback / Sửa Giải Pháp S3]** %s\", feedbackText),\n\t\t\tAppliedToPlan: true,\n\t\t\tTargetFile:    isoMeta.PlanFile,\n\t\t\tTimestamp:     nowClock,\n\t\t},\n\t\tCoArchitectChatMessageDTO{\n\t\t\tID:            fmt.Sprintf(\"msg-tg-revise-agent-%d\", time.Now().UnixNano()+1),\n\t\t\tTaskKey:       targetKey,\n\t\t\tSender:        \"agent\",\n\t\t\tAgentRole:     \"🧠 BRAIN · Architect\",\n\t\t\tAgentSlot:     \"Slot A\",\n\t\t\tSkill:         \"/brain-delegate · /laya-router\",\n\t\t\tModel:         qt.AssignedModel,\n\t\t\tActionMode:    \"revise_solution\",\n\t\t\tMessage:       fmt.Sprintf(\"✍️ **[Đã cập nhật `09_tasks_solution.md` & `08_tasks.md` theo phản hồi Telegram của `@%s`]**\\n- **Nội dung điều chỉnh:** %s\\n- **File đã lưu:** `%s` (`%d Sub-Tasks`)\\n- **Trạng thái:** Giữ tại `NEEDS_YOU` (`⏸ CHỜ APPROVE`) chờ bạn duyệt bản giải pháp mới.\", fromUser, feedbackText, isoMeta.PlanFile, len(subTasks)),\n\t\t\tAppliedToPlan: true,\n\t\t\tTargetFile:    isoMeta.PlanFile,\n\t\t\tTimestamp:     nowClock,\n\t\t},\n\t)\n\t_ = s.saveTaskChatHistory(targetKey, history)\n\n\ts.appendTaskLog(targetKey, fmt.Sprintf(\"[✏️ Telegram S3 Revise] @%s gửi phản hồi sửa giải pháp cho %s -> Đã cập nhật %s: %s\", fromUser, targetKey, isoMeta.PlanFile, feedbackText))\n\ts.appendPaneLog(\"A\", fmt.Sprintf(\"[✏️ Telegram -> Slot A] @%s cập nhật giải pháp %s: %s\", fromUser, targetKey, feedbackText))\n\n\tmsgText, rows := s.buildTelegramApprovalRequiredMessage(ctx, *qt, isoMeta, subTasks, fmt.Sprintf(\"ĐÃ CẬP NHẬT GIẢI PHÁP THEO PHẢN HỒI CỦA @%s\", fromUser))\n\tdeliveryStatus := s.sendTelegramChunkedMessageWithCustomKeyboard(ctx, cfg, msgText, rows)\n\ts.appendTelegramEvent(\"INBOUND_REVISE\", targetKey, fmt.Sprintf(\"✏️ @%s phản hồi sửa giải pháp %s (#%d): %q -> Đã cập nhật 09_tasks_solution.md & gửi lại Plan (%s)\", fromUser, targetKey, qt.ID, truncateRunes(feedbackText, 80), deliveryStatus), deliveryStatus)\n\ts.broadcast(\"telegram_solution_revised\")\n\treturn targetKey, nil\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1927,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5576,
+                "INCORRECT": 0.368,
+                "UNSUPPORTED": 0.0744
+              },
+              "confidence": 0.1927,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1494-1581, hàm handleTelegramReviseSolutionCommand xóa hoàn toàn file 09_tasks_solution.md khỏi đĩa thay vì ghi bổ sung phản hồi của người dùng.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1494-1581\nfunc (s *Server) handleTelegramReviseSolutionCommand(ctx context.Context, targetRef, feedbackText, chatID, fromUser string) (string, error) {\n\tfeedbackText = scout.MaskSecrets(strings.TrimSpace(feedbackText))\n\tif feedbackText == \"\" {\n\t\treturn \"\", fmt.Errorf(\"empty feedback text for solution revision\")\n\t}\n\tif strings.TrimSpace(targetRef) == \"\" {\n\t\tcfg := s.loadTelegramPersistedConfig()\n\t\tif cfg.PendingRevisionTaskKey != \"\" {\n\t\t\ttargetRef = cfg.PendingRevisionTaskKey\n\t\t} else {\n\t\t\ttargetRef = cfg.LastNotifiedTask\n\t\t}\n\t}\n\tqt, err := s.findQueuedTask(ctx, targetRef)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\ttargetKey := qt.ExternalID\n\n\ts.mu.Lock()\n\ts.selectedTaskKey = targetKey\n\ts.mu.Unlock()\n\n\tisoMeta, _ := s.ensureTaskIsolation(ctx, *qt)\n\tsubTasks := s.loadOrGenerateSubTasks(*qt)\n\n\t// Revoke any previous approval marker because the user is revising the solution before approving\n\t_ = os.Remove(filepath.Join(isoMeta.ArtifactDir, \".user-approved\"))\n\tif s.QueueStore != nil && !strings.EqualFold(qt.Stage, queue.StageNeedsYou) {\n\t\t_ = s.QueueStore.UpdateStage(ctx, qt.ID, queue.StageNeedsYou, qt.AssignedModel, isoMeta.WorktreePath)\n\t\tqt.Stage = queue.StageNeedsYou\n\t}\n\n\tsubTasks = s.applyTelegramSolutionFeedbackToPlan(*qt, isoMeta, subTasks, feedbackText, fromUser)\n\n\t// Clear PendingRevisionTaskKey once applied so subsequent commands work normally\n\tcfg := s.loadTelegramPersistedConfig()\n\tcfg.PendingRevisionTaskKey = \"\"\n\tcfg.LastNotifiedTask = targetKey\n\tif strings.TrimSpace(chatID) != \"\" && strings.TrimSpace(cfg.ChatID) == \"\" {\n\t\tcfg.ChatID = strings.TrimSpace(chatID)\n\t}\n\t_ = s.saveTelegramPersistedConfig(cfg)\n\n\t// Record User + BRAIN (Slot A) revision messages in Co-Architect Studio chat_history.json\n\thistory := s.loadOrInitTaskChatHistory(*qt, subTasks, isoMeta)\n\tnowClock := time.Now().Format(\"15:04:05\")\n\thistory = append(history,\n\t\tCoArchitectChatMessageDTO{\n\t\t\tID:            fmt.Sprintf(\"msg-tg-revise-user-%d\", time.Now().UnixNano()),\n\t\t\tTaskKey:       targetKey,\n\t\t\tSender:        \"user\",\n\t\t\tAgentRole:     fmt.Sprintf(\"✈️ Telegram (@%s)\", fromUser),\n\t\t\tAgentSlot:     \"Telegram S3 Feedback\",\n\t\t\tSkill:         \"/brain-delegate\",\n\t\t\tModel:         qt.AssignedModel,\n\t\t\tActionMode:    \"revise_solution\",\n\t\t\tMessage:       fmt.Sprintf(\"✏️ **[Telegram Feedback / Sửa Giải Pháp S3]** %s\", feedbackText),\n\t\t\tAppliedToPlan: true,\n\t\t\tTargetFile:    isoMeta.PlanFile,\n\t\t\tTimestamp:     nowClock,\n\t\t},\n\t\tCoArchitectChatMessageDTO{\n\t\t\tID:            fmt.Sprintf(\"msg-tg-revise-agent-%d\", time.Now().UnixNano()+1),\n\t\t\tTaskKey:       targetKey,\n\t\t\tSender:        \"agent\",\n\t\t\tAgentRole:     \"🧠 BRAIN · Architect\",\n\t\t\tAgentSlot:     \"Slot A\",\n\t\t\tSkill:         \"/brain-delegate · /laya-router\",\n\t\t\tModel:         qt.AssignedModel,\n\t\t\tActionMode:    \"revise_solution\",\n\t\t\tMessage:       fmt.Sprintf(\"✍️ **[Đã cập nhật `09_tasks_solution.md` & `08_tasks.md` theo phản hồi Telegram của `@%s`]**\\n- **Nội dung điều chỉnh:** %s\\n- **File đã lưu:** `%s` (`%d Sub-Tasks`)\\n- **Trạng thái:** Giữ tại `NEEDS_YOU` (`⏸ CHỜ APPROVE`) chờ bạn duyệt bản giải pháp mới.\", fromUser, feedbackText, isoMeta.PlanFile, len(subTasks)),\n\t\t\tAppliedToPlan: true,\n\t\t\tTargetFile:    isoMeta.PlanFile,\n\t\t\tTimestamp:     nowClock,\n\t\t},\n\t)\n\t_ = s.saveTaskChatHistory(targetKey, history)\n\n\ts.appendTaskLog(targetKey, fmt.Sprintf(\"[✏️ Telegram S3 Revise] @%s gửi phản hồi sửa giải pháp cho %s -> Đã cập nhật %s: %s\", fromUser, targetKey, isoMeta.PlanFile, feedbackText))\n\ts.appendPaneLog(\"A\", fmt.Sprintf(\"[✏️ Telegram -> Slot A] @%s cập nhật giải pháp %s: %s\", fromUser, targetKey, feedbackText))\n\n\tmsgText, rows := s.buildTelegramApprovalRequiredMessage(ctx, *qt, isoMeta, subTasks, fmt.Sprintf(\"ĐÃ CẬP NHẬT GIẢI PHÁP THEO PHẢN HỒI CỦA @%s\", fromUser))\n\tdeliveryStatus := s.sendTelegramChunkedMessageWithCustomKeyboard(ctx, cfg, msgText, rows)\n\ts.appendTelegramEvent(\"INBOUND_REVISE\", targetKey, fmt.Sprintf(\"✏️ @%s phản hồi sửa giải pháp %s (#%d): %q -> Đã cập nhật 09_tasks_solution.md & gửi lại Plan (%s)\", fromUser, targetKey, qt.ID, truncateRunes(feedbackText, 80), deliveryStatus), deliveryStatus)\n\ts.broadcast(\"telegram_solution_revised\")\n\treturn targetKey, nil\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2564,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6502,
+                "INCORRECT": 0.2836,
+                "UNSUPPORTED": 0.0662
+              },
+              "confidence": 0.2564,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1494-1581\nfunc (s *Server) handleTelegramReviseSolutionCommand(ctx context.Context, targetRef, feedbackText, chatID, fromUser string) (string, error) {\n\tfeedbackText = scout.MaskSecrets(strings.TrimSpace(feedbackText))\n\tif feedbackText == \"\" {\n\t\treturn \"\", fmt.Errorf(\"empty feedback text for solution revision\")\n\t}\n\tif strings.TrimSpace(targetRef) == \"\" {\n\t\tcfg := s.loadTelegramPersistedConfig()\n\t\tif cfg.PendingRevisionTaskKey != \"\" {\n\t\t\ttargetRef = cfg.PendingRevisionTaskKey\n\t\t} else {\n\t\t\ttargetRef = cfg.LastNotifiedTask\n\t\t}\n\t}\n\tqt, err := s.findQueuedTask(ctx, targetRef)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\ttargetKey := qt.ExternalID\n\n\ts.mu.Lock()\n\ts.selectedTaskKey = targetKey\n\ts.mu.Unlock()\n\n\tisoMeta, _ := s.ensureTaskIsolation(ctx, *qt)\n\tsubTasks := s.loadOrGenerateSubTasks(*qt)\n\n\t// Revoke any previous approval marker because the user is revising the solution before approving\n\t_ = os.Remove(filepath.Join(isoMeta.ArtifactDir, \".user-approved\"))\n\tif s.QueueStore != nil && !strings.EqualFold(qt.Stage, queue.StageNeedsYou) {\n\t\t_ = s.QueueStore.UpdateStage(ctx, qt.ID, queue.StageNeedsYou, qt.AssignedModel, isoMeta.WorktreePath)\n\t\tqt.Stage = queue.StageNeedsYou\n\t}\n\n\tsubTasks = s.applyTelegramSolutionFeedbackToPlan(*qt, isoMeta, subTasks, feedbackText, fromUser)\n\n\t// Clear PendingRevisionTaskKey once applied so subsequent commands work normally\n\tcfg := s.loadTelegramPersistedConfig()\n\tcfg.PendingRevisionTaskKey = \"\"\n\tcfg.LastNotifiedTask = targetKey\n\tif strings.TrimSpace(chatID) != \"\" && strings.TrimSpace(cfg.ChatID) == \"\" {\n\t\tcfg.ChatID = strings.TrimSpace(chatID)\n\t}\n\t_ = s.saveTelegramPersistedConfig(cfg)\n\n\t// Record User + BRAIN (Slot A) revision messages in Co-Architect Studio chat_history.json\n\thistory := s.loadOrInitTaskChatHistory(*qt, subTasks, isoMeta)\n\tnowClock := time.Now().Format(\"15:04:05\")\n\thistory = append(history,\n\t\tCoArchitectChatMessageDTO{\n\t\t\tID:            fmt.Sprintf(\"msg-tg-revise-user-%d\", time.Now().UnixNano()),\n\t\t\tTaskKey:       targetKey,\n\t\t\tSender:        \"user\",\n\t\t\tAgentRole:     fmt.Sprintf(\"✈️ Telegram (@%s)\", fromUser),\n\t\t\tAgentSlot:     \"Telegram S3 Feedback\",\n\t\t\tSkill:         \"/brain-delegate\",\n\t\t\tModel:         qt.AssignedModel,\n\t\t\tActionMode:    \"revise_solution\",\n\t\t\tMessage:       fmt.Sprintf(\"✏️ **[Telegram Feedback / Sửa Giải Pháp S3]** %s\", feedbackText),\n\t\t\tAppliedToPlan: true,\n\t\t\tTargetFile:    isoMeta.PlanFile,\n\t\t\tTimestamp:     nowClock,\n\t\t},\n\t\tCoArchitectChatMessageDTO{\n\t\t\tID:            fmt.Sprintf(\"msg-tg-revise-agent-%d\", time.Now().UnixNano()+1),\n\t\t\tTaskKey:       targetKey,\n\t\t\tSender:        \"agent\",\n\t\t\tAgentRole:     \"🧠 BRAIN · Architect\",\n\t\t\tAgentSlot:     \"Slot A\",\n\t\t\tSkill:         \"/brain-delegate · /laya-router\",\n\t\t\tModel:         qt.AssignedModel,\n\t\t\tActionMode:    \"revise_solution\",\n\t\t\tMessage:       fmt.Sprintf(\"✍️ **[Đã cập nhật `09_tasks_solution.md` & `08_tasks.md` theo phản hồi Telegram của `@%s`]**\\n- **Nội dung điều chỉnh:** %s\\n- **File đã lưu:** `%s` (`%d Sub-Tasks`)\\n- **Trạng thái:** Giữ tại `NEEDS_YOU` (`⏸ CHỜ APPROVE`) chờ bạn duyệt bản giải pháp mới.\", fromUser, feedbackText, isoMeta.PlanFile, len(subTasks)),\n\t\t\tAppliedToPlan: true,\n\t\t\tTargetFile:    isoMeta.PlanFile,\n\t\t\tTimestamp:     nowClock,\n\t\t},\n\t)\n\t_ = s.saveTaskChatHistory(targetKey, history)\n\n\ts.appendTaskLog(targetKey, fmt.Sprintf(\"[✏️ Telegram S3 Revise] @%s gửi phản hồi sửa giải pháp cho %s -> Đã cập nhật %s: %s\", fromUser, targetKey, isoMeta.PlanFile, feedbackText))\n\ts.appendPaneLog(\"A\", fmt.Sprintf(\"[✏️ Telegram -> Slot A] @%s cập nhật giải pháp %s: %s\", fromUser, targetKey, feedbackText))\n\n\tmsgText, rows := s.buildTelegramApprovalRequiredMessage(ctx, *qt, isoMeta, subTasks, fmt.Sprintf(\"ĐÃ CẬP NHẬT GIẢI PHÁP THEO PHẢN HỒI CỦA @%s\", fromUser))\n\tdeliveryStatus := s.sendTelegramChunkedMessageWithCustomKeyboard(ctx, cfg, msgText, rows)\n\ts.appendTelegramEvent(\"INBOUND_REVISE\", targetKey, fmt.Sprintf(\"✏️ @%s phản hồi sửa giải pháp %s (#%d): %q -> Đã cập nhật 09_tasks_solution.md & gửi lại Plan (%s)\", fromUser, targetKey, qt.ID, truncateRunes(feedbackText, 80), deliveryStatus), deliveryStatus)\n\ts.broadcast(\"telegram_solution_revised\")\n\treturn targetKey, nil\n}",
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1494-1581, hàm handleTelegramReviseSolutionCommand xóa hoàn toàn file 09_tasks_solution.md khỏi đĩa thay vì ghi bổ sung phản hồi của người dùng."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.715,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9503,
+                "NO": 0.0497
+              },
+              "confidence": 0.715,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1494-1581\nfunc (s *Server) handleTelegramReviseSolutionCommand(ctx context.Context, targetRef, feedbackText, chatID, fromUser string) (string, error) {\n\tfeedbackText = scout.MaskSecrets(strings.TrimSpace(feedbackText))\n\tif feedbackText == \"\" {\n\t\treturn \"\", fmt.Errorf(\"empty feedback text for solution revision\")\n\t}\n\tif strings.TrimSpace(targetRef) == \"\" {\n\t\tcfg := s.loadTelegramPersistedConfig()\n\t\tif cfg.PendingRevisionTaskKey != \"\" {\n\t\t\ttargetRef = cfg.PendingRevisionTaskKey\n\t\t} else {\n\t\t\ttargetRef = cfg.LastNotifiedTask\n\t\t}\n\t}\n\tqt, err := s.findQueuedTask(ctx, targetRef)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\ttargetKey := qt.ExternalID\n\n\ts.mu.Lock()\n\ts.selectedTaskKey = targetKey\n\ts.mu.Unlock()\n\n\tisoMeta, _ := s.ensureTaskIsolation(ctx, *qt)\n\tsubTasks := s.loadOrGenerateSubTasks(*qt)\n\n\t// Revoke any previous approval marker because the user is revising the solution before approving\n\t_ = os.Remove(filepath.Join(isoMeta.ArtifactDir, \".user-approved\"))\n\tif s.QueueStore != nil && !strings.EqualFold(qt.Stage, queue.StageNeedsYou) {\n\t\t_ = s.QueueStore.UpdateStage(ctx, qt.ID, queue.StageNeedsYou, qt.AssignedModel, isoMeta.WorktreePath)\n\t\tqt.Stage = queue.StageNeedsYou\n\t}\n\n\tsubTasks = s.applyTelegramSolutionFeedbackToPlan(*qt, isoMeta, subTasks, feedbackText, fromUser)\n\n\t// Clear PendingRevisionTaskKey once applied so subsequent commands work normally\n\tcfg := s.loadTelegramPersistedConfig()\n\tcfg.PendingRevisionTaskKey = \"\"\n\tcfg.LastNotifiedTask = targetKey\n\tif strings.TrimSpace(chatID) != \"\" && strings.TrimSpace(cfg.ChatID) == \"\" {\n\t\tcfg.ChatID = strings.TrimSpace(chatID)\n\t}\n\t_ = s.saveTelegramPersistedConfig(cfg)\n\n\t// Record User + BRAIN (Slot A) revision messages in Co-Architect Studio chat_history.json\n\thistory := s.loadOrInitTaskChatHistory(*qt, subTasks, isoMeta)\n\tnowClock := time.Now().Format(\"15:04:05\")\n\thistory = append(history,\n\t\tCoArchitectChatMessageDTO{\n\t\t\tID:            fmt.Sprintf(\"msg-tg-revise-user-%d\", time.Now().UnixNano()),\n\t\t\tTaskKey:       targetKey,\n\t\t\tSender:        \"user\",\n\t\t\tAgentRole:     fmt.Sprintf(\"✈️ Telegram (@%s)\", fromUser),\n\t\t\tAgentSlot:     \"Telegram S3 Feedback\",\n\t\t\tSkill:         \"/brain-delegate\",\n\t\t\tModel:         qt.AssignedModel,\n\t\t\tActionMode:    \"revise_solution\",\n\t\t\tMessage:       fmt.Sprintf(\"✏️ **[Telegram Feedback / Sửa Giải Pháp S3]** %s\", feedbackText),\n\t\t\tAppliedToPlan: true,\n\t\t\tTargetFile:    isoMeta.PlanFile,\n\t\t\tTimestamp:     nowClock,\n\t\t},\n\t\tCoArchitectChatMessageDTO{\n\t\t\tID:            fmt.Sprintf(\"msg-tg-revise-agent-%d\", time.Now().UnixNano()+1),\n\t\t\tTaskKey:       targetKey,\n\t\t\tSender:        \"agent\",\n\t\t\tAgentRole:     \"🧠 BRAIN · Architect\",\n\t\t\tAgentSlot:     \"Slot A\",\n\t\t\tSkill:         \"/brain-delegate · /laya-router\",\n\t\t\tModel:         qt.AssignedModel,\n\t\t\tActionMode:    \"revise_solution\",\n\t\t\tMessage:       fmt.Sprintf(\"✍️ **[Đã cập nhật `09_tasks_solution.md` & `08_tasks.md` theo phản hồi Telegram của `@%s`]**\\n- **Nội dung điều chỉnh:** %s\\n- **File đã lưu:** `%s` (`%d Sub-Tasks`)\\n- **Trạng thái:** Giữ tại `NEEDS_YOU` (`⏸ CHỜ APPROVE`) chờ bạn duyệt bản giải pháp mới.\", fromUser, feedbackText, isoMeta.PlanFile, len(subTasks)),\n\t\t\tAppliedToPlan: true,\n\t\t\tTargetFile:    isoMeta.PlanFile,\n\t\t\tTimestamp:     nowClock,\n\t\t},\n\t)\n\t_ = s.saveTaskChatHistory(targetKey, history)\n\n\ts.appendTaskLog(targetKey, fmt.Sprintf(\"[✏️ Telegram S3 Revise] @%s gửi phản hồi sửa giải pháp cho %s -> Đã cập nhật %s: %s\", fromUser, targetKey, isoMeta.PlanFile, feedbackText))\n\ts.appendPaneLog(\"A\", fmt.Sprintf(\"[✏️ Telegram -> Slot A] @%s cập nhật giải pháp %s: %s\", fromUser, targetKey, feedbackText))\n\n\tmsgText, rows := s.buildTelegramApprovalRequiredMessage(ctx, *qt, isoMeta, subTasks, fmt.Sprintf(\"ĐÃ CẬP NHẬT GIẢI PHÁP THEO PHẢN HỒI CỦA @%s\", fromUser))\n\tdeliveryStatus := s.sendTelegramChunkedMessageWithCustomKeyboard(ctx, cfg, msgText, rows)\n\ts.appendTelegramEvent(\"INBOUND_REVISE\", targetKey, fmt.Sprintf(\"✏️ @%s phản hồi sửa giải pháp %s (#%d): %q -> Đã cập nhật 09_tasks_solution.md & gửi lại Plan (%s)\", fromUser, targetKey, qt.ID, truncateRunes(feedbackText, 80), deliveryStatus), deliveryStatus)\n\ts.broadcast(\"telegram_solution_revised\")\n\treturn targetKey, nil\n}",
+          "claim": "Tại internal/webui/telegram_bridge.go dòng 1494-1581, hàm handleTelegramReviseSolutionCommand xóa hoàn toàn file 09_tasks_solution.md khỏi đĩa thay vì ghi bổ sung phản hồi của người dùng."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

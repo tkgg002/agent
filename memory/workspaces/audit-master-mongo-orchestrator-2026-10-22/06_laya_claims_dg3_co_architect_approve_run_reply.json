@@ -1,0 +1,63 @@
+[
+  {
+    "id": "A-S5-HOOK",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Tích hợp Verbatim S5 Adversarial Audit Hook Prompt trong telegram_bridge.go dòng 20-26",
+    "claim": "Trong telegram_bridge.go dòng 20-26, hằng số VerbatimS5AdversarialAuditHookPrompt định nghĩa nguyên văn prompt Audit quy trình S5, yêu cầu gọi /laya_router, lưu vào audit_report_*.md và không test bằng mockup hay hallucination kết quả.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:20-26\n// VerbatimS5AdversarialAuditHookPrompt embeds the exact /agent S5 Mandatory Final Adversarial Audit Hook prompt.\nconst VerbatimS5AdversarialAuditHookPrompt = `Audit lại \"quá trình\" vừa thực hiện, sử dụng tư duy phản biện cho các task đã làm, các file đã update, từng dòng update. \nKiểm tra các xem có suy diễn, báo cáo láo không. \nÁp dụng Vòng Lặp Phản Tỉnh & Khắc Phục (Self-Improvement Loop).\nChạy 1 tiến trình QC gắt gao, soạn context đầy đủ & gọi /laya_router ra nhận xét lại 1 lần xem quyết định làm như vậy là ổn chưa cùng \nLưu toàn bộ vào file audit_report_*.md trong workspace của task\nĐặc biệt : ko test bằng mockup và Hallucination kết quả, nếu cần phải nói phối hợp với anh trace runtime value.`"
+  },
+  {
+    "id": "A-REPLAN-AND-CHAT",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Xuất audit_report_<taskKey>.md, kích hoạt S5->S3 Re-Plan hoặc trả lời vào Co-Architect Chat trong server.go dòng 1454-1482",
+    "claim": "Trong server.go dòng 1454-1482, sau khi ghi auditContent ra isoMeta.AuditFile và auditReportNamed, nếu blocking > 0 thì gọi triggerS5ToS3RePlan, ngược lại gọi appendLifecycleExecutionChatReply.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1454-1482\n\t\t_ = os.WriteFile(isoMeta.AuditFile, []byte(auditContent), 0o644)\n\t\t_ = os.WriteFile(auditReportNamed, []byte(auditContent), 0o644)\n\n\t\telapsed := time.Since(start).Seconds()\n\t\tif elapsed < 0.05 {\n\t\t\telapsed = 0.05\n\t\t}\n\t\t_ = s.QueueStore.UpdateStage(ctx, qt.ID, finalStage, routedModel, isoMeta.WorktreePath)\n\t\t_ = s.QueueStore.RecordRound(ctx, queue.AutopilotRound{\n\t\t\tTaskKey:       qt.ExternalID,\n\t\t\tRoundNum:      nextRoundNum,\n\t\t\tStage:         fmt.Sprintf(\"Build · S5 Multi-Repo QA, On-Disk Verification (%d/%d) & Laya DG3 (%s · %s): %s\", verifiedSubTasks, len(subTasks), activeRunner, routedModel, strings.ToLower(verdict)),\n\t\t\tBlockingCount: blocking,\n\t\t\tAdvisoryCount: 0,\n\t\t\tTurns:         len(qaLogs),\n\t\t\tDurationSec:   elapsed,\n\t\t\tCostUSD:       0.0,\n\t\t\tGateVerdict:   verdict,\n\t\t})\n\n\t\tmsg := fmt.Sprintf(\"[S5 QA & DG3 · K] %s Verdict=%s | %s\", qt.ExternalID, verdict, strings.Join(qaLogs, \" · \"))\n\t\ts.appendTaskLog(qt.ExternalID, msg)\n\t\ts.appendPaneLog(\"K\", msg)\n\n\t\tif blocking > 0 {\n\t\t\ts.triggerS5ToS3RePlan(ctx, *qt, isoMeta, subTasks, verifiedSubTasks, blocking, qaLogs, routedModel, auditReportNamed)\n\t\t} else {\n\t\t\ts.appendLifecycleExecutionChatReply(ctx, *qt, isoMeta, subTasks, verifiedSubTasks, blocking, verdict, finalStage, routedModel, qaLogs, auditReportNamed)\n\t\t}"
+  },
+  {
+    "id": "A-TOPBAR-AND-TELEGRAM",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Ẩn 2 badge tĩnh trên Topbar và bổ sung nút Setup Telegram trong index.html dòng 18-21 và 47-52",
+    "claim": "Trong index.html dòng 18-21, hai thẻ hdr-project-branch và hdr-kernel-badge được gắn class hidden và aria-hidden=\"true\"; còn ở dòng 47-52 có nút btn-setup-telegram gọi openTelegramSettingsModal() nằm ngay cạnh nút Setup CLI & Model.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/index.html:18-21\n        <span id=\"hdr-project-branch\" class=\"branch-pill hidden\" aria-hidden=\"true\">ai-orchestrator · HEAD</span>\n        <span id=\"hdr-kernel-badge\" class=\"kernel-pill hidden\" aria-hidden=\"true\" title=\"/agent Inner Governance Kernel (GEMINI.md + lessons/INDEX.md + H1..H7 + Laya DG1..DG3)\">\n          🛡️ Kernel: /agent ACTIVE\n        </span>\nREF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/index.html:47-52\n        <button class=\"btn-cli-setup\" onclick=\"openCLISettingsModal()\" title=\"Cấu hình CLI Binary, Model theo từng Role (Planner, Coder, QA, Security)\">\n          ⚙ Setup CLI &amp; Model\n        </button>\n        <button id=\"btn-setup-telegram\" class=\"btn-cli-setup btn-telegram-setup\" onclick=\"openTelegramSettingsModal()\" title=\"Cấu hình nối Telegram vào bước S3 & tự động chạy S4–S5 khi gửi APPROVE trên Telegram\">\n          ✈️ Setup Telegram\n        </button>"
+  },
+  {
+    "id": "A-WAVE-3-TIER",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Tái cấu trúc màn 2 Wave 0..N Dependency DAG thành 3 tầng trực quan trong index.html dòng 490-528",
+    "claim": "Trong index.html dòng 490-528, khu vực wave-hierarchy-body được tách thành 3 tầng: Tầng 1 wave-tier-1-box chứa wave-tier-epics (không nối dây giữa các Epic), Tầng 2 wave-tier-2-box chứa wave-tier-tasks, và Tầng 3 wave-tier-3-box chứa wave-svg và wave-columns.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/index.html:490-528\n              <!-- TIER 1: EPICS (INDEPENDENT THEMES — NO BEZIER LINES BETWEEN EPICS) -->\n              <div class=\"wave-tier-box\" id=\"wave-tier-1-box\">\n                <div class=\"wave-tier-hdr\">\n                  <div class=\"wave-tier-title\">\n                    <span class=\"tier-step-badge\">TẦNG 1 · EPICS</span>\n                    <strong>🏛️ Chủ Đề Lớn (Epics — Độc lập nhau, không nối dây giữa các Epic; bấm chọn 1 Epic để lọc Tasks ở Tầng 2)</strong>\n                  </div>\n                  <span id=\"wave-tier-epics-meta\" class=\"wave-tier-meta\">Đang chọn: TẤT CẢ EPICS</span>\n                </div>\n                <div id=\"wave-tier-epics\" class=\"wave-epics-row\"></div>\n              </div>\n\n              <!-- TIER 2: TASKS BELONGING TO THE SELECTED EPIC -->\n              <div class=\"wave-tier-box\" id=\"wave-tier-2-box\">\n                <div class=\"wave-tier-hdr\">\n                  <div class=\"wave-tier-title\">\n                    <span class=\"tier-step-badge tier-2\">TẦNG 2 · TASKS</span>\n                    <strong>📋 Danh Sách Tasks Thuộc Epic <code id=\"wave-selected-epic-label\">TẤT CẢ EPICS</code> (Bấm chọn 1 Task để hiển thị sơ đồ Sub-Tasks ở Tầng 3)</strong>\n                  </div>\n                  <span id=\"wave-tier-tasks-meta\" class=\"wave-tier-meta\">0 Tasks</span>\n                </div>\n                <div id=\"wave-tier-tasks\" class=\"wave-tasks-row\"></div>\n              </div>\n\n              <!-- TIER 3: SUB-TASKS DEPENDENCY DAG (WAVE 0..N WITH SVG BEZIER LINES) OF THE SELECTED TASK -->\n              <div class=\"wave-tier-box wave-tier-3-box\" id=\"wave-tier-3-box\">\n                <div class=\"wave-tier-hdr\">\n                  <div class=\"wave-tier-title\">\n                    <span class=\"tier-step-badge tier-3\">TẦNG 3 · SUB-TASKS DAG (WAVE 0..N)</span>\n                    <strong>🧩 Sơ Đồ Phụ Thuộc Sub-Tasks Của Task <code id=\"wave-selected-task-label\">TASK-11</code> (Chia theo cột Wave 0..N kèm đường nối phụ thuộc)</strong>\n                  </div>\n                  <span id=\"wave-tier-subtasks-meta\" class=\"wave-tier-meta\">0 Sub-Tasks</span>\n                </div>\n                <div class=\"wave-canvas-scroll\" id=\"wave-scroll-area\">\n                  <div class=\"wave-canvas\" id=\"wave-canvas\">\n                    <svg id=\"wave-svg\" class=\"wave-svg-overlay\"></svg>\n                    <div id=\"wave-columns\" class=\"wave-columns\"></div>\n                  </div>\n                </div>"
+  },
+  {
+    "id": "A-TG-BRIDGE-FIX",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Đồng bộ notify_on_s3 và notify_on_s3_plan giữa telegram_bridge.go dòng 200-211 và app.js dòng 2345-2361",
+    "claim": "Trong telegram_bridge.go dòng 200-211, hàm applyTelegramSettingsInput ưu tiên gán cfg.NotifyOnS3 = *req.NotifyOnS3Plan khi trường này khác nil; còn trong app.js dòng 2345-2361, hàm collectTelegramFormPayload gửi đồng thời cả notify_on_s3 và notify_on_s3_plan.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:200-211\nfunc (s *Server) applyTelegramSettingsInput(req TelegramSettingsDTO) telegramPersistedConfig {\n\tcfg := s.loadTelegramPersistedConfig()\n\tcfg.Enabled = req.Enabled\n\tif req.NotifyOnS3Plan != nil {\n\t\tcfg.NotifyOnS3 = *req.NotifyOnS3Plan\n\t} else {\n\t\tcfg.NotifyOnS3 = req.NotifyOnS3\n\t}\n\tif cfg.Enabled && !req.NotifyOnS3 && req.NotifyOnS3Plan == nil {\n\t\tcfg.NotifyOnS3 = true\n\t}\n\tcfg.AutoRunOnApprove = req.AutoRunOnApprove\nREF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/app.js:2345-2361\nfunction collectTelegramFormPayload(activeKey) {\n  const notifyVal = Boolean(document.getElementById(\"tg-notify-s3\")?.checked ?? true);\n  const payload = {\n    enabled: Boolean(document.getElementById(\"tg-enabled\")?.checked ?? true),\n    bot_token: document.getElementById(\"tg-bot-token\")?.value.trim() || \"\",\n    chat_id: document.getElementById(\"tg-chat-id\")?.value.trim() || \"\",\n    bot_username: document.getElementById(\"tg-bot-username\")?.value.trim() || \"@ai_orchestrator_bot\",\n    notify_on_s3: notifyVal,\n    notify_on_s3_plan: notifyVal,\n    auto_run_on_approve: Boolean(document.getElementById(\"tg-auto-run\")?.checked ?? true),\n    polling_enabled: Boolean(document.getElementById(\"tg-polling\")?.checked ?? true),\n  };\n  if (activeKey) {\n    payload.task_key = activeKey;\n  }\n  return payload;\n}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "flow": "Control false: khai báo sai hành vi khi blocking > 0 trong server.go dòng 1478-1482",
+    "claim": "Trong server.go dòng 1478-1482, khi blocking > 0 thì hàm bỏ qua việc lên plan lại và chỉ gọi appendLifecycleExecutionChatReply.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1478-1482\n\t\tif blocking > 0 {\n\t\t\ts.triggerS5ToS3RePlan(ctx, *qt, isoMeta, subTasks, verifiedSubTasks, blocking, qaLogs, routedModel, auditReportNamed)\n\t\t} else {\n\t\t\ts.appendLifecycleExecutionChatReply(ctx, *qt, isoMeta, subTasks, verifiedSubTasks, blocking, verdict, finalStage, routedModel, qaLogs, auditReportNamed)\n\t\t}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "flow": "Control false: khai báo sai thuộc tính onclick của btn-setup-telegram trong index.html dòng 50-52",
+    "claim": "Trong index.html dòng 50-52, nút btn-setup-telegram có thuộc tính onclick là deleteWorkspace().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/index.html:50-52\n        <button id=\"btn-setup-telegram\" class=\"btn-cli-setup btn-telegram-setup\" onclick=\"openTelegramSettingsModal()\" title=\"Cấu hình nối Telegram vào bước S3 & tự động chạy S4–S5 khi gửi APPROVE trên Telegram\">\n          ✈️ Setup Telegram\n        </button>"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "flow": "Control true: xác nhận chính xác thuộc tính onclick của btn-setup-telegram trong index.html dòng 50-52",
+    "claim": "Trong index.html dòng 50-52, nút btn-setup-telegram có thuộc tính onclick là openTelegramSettingsModal().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/index.html:50-52\n        <button id=\"btn-setup-telegram\" class=\"btn-cli-setup btn-telegram-setup\" onclick=\"openTelegramSettingsModal()\" title=\"Cấu hình nối Telegram vào bước S3 & tự động chạy S4–S5 khi gửi APPROVE trên Telegram\">\n          ✈️ Setup Telegram\n        </button>"
+  }
+]

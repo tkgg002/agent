@@ -1,0 +1,79 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Kiểm tra cấu trúc TaskIsolationDTO trong server.go dòng 427-439",
+    "claim": "Trong server.go dòng 427-439, struct TaskIsolationDTO hiện chỉ khai báo SpecFile (01_requirements.md), PlanFile (09_tasks_solution.md), AuditFile (audit_report.md), LogFile (terminal.log) và DiffFile (diff.patch), chưa có trường cho 05_progress.md hay restore_points.json.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:427-439\n\treturn TaskIsolationDTO{\n\t\tTaskKey:       taskKey,\n\t\tBranchName:    \"task/\" + safeKey,\n\t\tWorktreePath:  wtPath,\n\t\tArtifactDir:   artDir,\n\t\tSpecFile:      filepath.Join(artDir, \"01_requirements.md\"),\n\t\tPlanFile:      filepath.Join(artDir, \"09_tasks_solution.md\"),\n\t\tAuditFile:     filepath.Join(artDir, \"audit_report.md\"),\n\t\tLogFile:       filepath.Join(artDir, \"terminal.log\"),\n\t\tDiffFile:      filepath.Join(artDir, \"diff.patch\"),\n\t\tWorktreeReady: wtReady,\n\t}\n}"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Kiểm tra logic khởi tạo git worktree trong ensureTaskIsolation tại server.go dòng 511-535",
+    "claim": "Trong server.go dòng 511-535, ensureTaskIsolation gọi lệnh git worktree add khi rootHasGit == nil và filepath.Clean(repoDir) == filepath.Clean(s.Root); còn ở nhánh else thì gọi os.MkdirAll(meta.WorktreePath, 0o755) và ghi file .task-worktree.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:511-535\n\tif !meta.WorktreeReady {\n\t\trepoDir := s.ResolveTaskTargetRepo(qt)\n\t\t_, rootHasGit := os.Stat(filepath.Join(s.Root, \".git\"))\n\t\tif rootHasGit == nil && filepath.Clean(repoDir) == filepath.Clean(s.Root) {\n\t\t\tcmd := fmt.Sprintf(\"git worktree add -B %q %q HEAD\", meta.BranchName, meta.WorktreePath)\n\t\t\tif out, wtErr := s.executeCommandInDir(ctx, s.Root, cmd); wtErr != nil {\n\t\t\t\tfallbackCmd := fmt.Sprintf(\"git worktree add --force --detach %q HEAD\", meta.WorktreePath)\n\t\t\t\tif out2, wtErr2 := s.executeCommandInDir(ctx, s.Root, fallbackCmd); wtErr2 != nil {\n\t\t\t\t\t_ = os.MkdirAll(meta.WorktreePath, 0o755)\n\t\t\t\t\ts.appendTaskLog(qt.ExternalID, fmt.Sprintf(\"[Worktree Fallback] Dir initialized at %s (%v: %s)\", meta.WorktreePath, wtErr2, out2))\n\t\t\t\t} else {\n\t\t\t\t\tmeta.WorktreeReady = true\n\t\t\t\t\ts.appendTaskLog(qt.ExternalID, fmt.Sprintf(\"[Worktree Ready] Detached worktree created at %s (%s)\", meta.WorktreePath, out2))\n\t\t\t\t}\n\t\t\t} else {\n\t\t\t\tmeta.WorktreeReady = true\n\t\t\t\ts.appendTaskLog(qt.ExternalID, fmt.Sprintf(\"[Worktree Ready] Branch %s checked out at %s (%s)\", meta.BranchName, meta.WorktreePath, out))\n\t\t\t}\n\t\t} else {\n\t\t\t_ = os.MkdirAll(meta.WorktreePath, 0o755)\n\t\t\treadmeMarker := filepath.Join(meta.WorktreePath, \".task-worktree\")\n\t\t\t_ = os.WriteFile(readmeMarker, []byte(fmt.Sprintf(\"task_key=%s\\nbranch=%s\\ntarget_repo=%s\\n\", qt.ExternalID, meta.BranchName, repoDir)), 0o644)\n\t\t\tmeta.WorktreeReady = true\n\t\t}\n\t}"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Kiểm tra việc ghi động tier, mode, laya_health_s0, harness_surface_s0 trong task_inspector.go dòng 1752-1762",
+    "claim": "Trong task_inspector.go dòng 1752-1762, reqDoc ghi động các trường tier, mode, laya_health_s0, harness_surface_s0, harness_libraries, routed_topics, matched_tripwires.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:1752-1762\n\t\tfmt.Sprintf(\"stage: %s\", qt.Stage),\n\t\tfmt.Sprintf(\"tier: %s\", tier),\n\t\tfmt.Sprintf(\"mode: %s\", mode),\n\t\tfmt.Sprintf(\"laya_health_s0: %v\", bootRep.LayaUp),\n\t\tfmt.Sprintf(\"harness_surface_s0: %s\", bootRep.HarnessSurfaceNote),\n\t\tfmt.Sprintf(\"harness_libraries: [%s]\", strings.Join(bootRep.HarnessLibraries, \", \")),\n\t\tfmt.Sprintf(\"routed_topics: [%s]\", strings.Join(bootRep.SelectedTopicFiles, \", \")),\n\t\tfmt.Sprintf(\"matched_tripwires: [%s]\", strings.Join(tripwireIDs, \", \")),\n\t\tfmt.Sprintf(\"kernel_constitution: %s/GEMINI.md\", agentRoot),\n\t\tfmt.Sprintf(\"total_lessons_indexed: %d\", totalLessons),\n\t\t\"---\","
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Kiểm tra các hàm RunLayaGate, RunMutationGate, RunGovernanceLinter trong internal/agentgate/gate.go dòng 326-381",
+    "claim": "Trong internal/agentgate/gate.go dòng 326-381, Gatekeeper định nghĩa 3 phương thức RunLayaGate, RunMutationGate và RunGovernanceLinter gọi các script python3 trong g.AgentCoreDir/tooling/.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/gate.go:326-381\n// RunLayaGate invokes /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py\n// for stage (\"dg1\" | \"dg2\" | \"dg3\") if claimsPath is provided.\nfunc (g *Gatekeeper) RunLayaGate(ctx context.Context, stage, workspace, claimsPath string) (bool, string, error) {\n\tif g == nil || g.AgentCoreDir == \"\" || strings.TrimSpace(claimsPath) == \"\" {\n\t\treturn true, \"skipped (no claims file)\", nil\n\t}\n\tscript := filepath.Join(g.AgentCoreDir, \"tooling\", \"laya_gate.py\")\n\tif _, err := os.Stat(script); err != nil {\n\t\treturn false, \"\", fmt.Errorf(\"laya_gate.py not found at %s: %w\", script, err)\n\t}\n\tout, err := runPythonTool(ctx, g.AgentCoreDir, script, \"run\", \"--stage\", stage, \"--workspace\", workspace, \"--claims\", claimsPath)\n\tif err != nil {\n\t\treturn false, out, err\n\t}\n\treturn true, out, nil\n}\n\n// RunMutationGate invokes /Users/trainguyen/Documents/work/agent/tooling/mutation_gate.py\n// to verify >=3 mutants are KILLED by the test suite.\nfunc (g *Gatekeeper) RunMutationGate(ctx context.Context, workspace, suffix, mutationsPath string) (bool, string, error) {\n\tif g == nil || g.AgentCoreDir == \"\" || strings.TrimSpace(mutationsPath) == \"\" {\n\t\treturn true, \"skipped (no mutations file)\", nil\n\t}\n\tscript := filepath.Join(g.AgentCoreDir, \"tooling\", \"mutation_gate.py\")\n\tif _, err := os.Stat(script); err != nil {\n\t\treturn false, \"\", fmt.Errorf(\"mutation_gate.py not found at %s: %w\", script, err)\n\t}\n\tout, err := runPythonTool(ctx, g.AgentCoreDir, script, \"--workspace\", workspace, \"--suffix\", suffix, \"--mutations\", mutationsPath)\n\tif err != nil {\n\t\treturn false, out, err\n\t}\n\treturn true, out, nil\n}\n\n// RunGovernanceLinter invokes /Users/trainguyen/Documents/work/agent/tooling/verify_governance.py.\nfunc (g *Gatekeeper) RunGovernanceLinter(ctx context.Context, workspace, stage, suffix string) (bool, string, error) {\n\tif g == nil || g.AgentCoreDir == \"\" || strings.TrimSpace(workspace) == \"\" {\n\t\treturn true, \"skipped (no workspace)\", nil\n\t}\n\tscript := filepath.Join(g.AgentCoreDir, \"tooling\", \"verify_governance.py\")\n\tif _, err := os.Stat(script); err != nil {\n\t\treturn false, \"\", fmt.Errorf(\"verify_governance.py not found at %s: %w\", script, err)\n\t}\n\targs := []string{\"--workspace\", workspace}\n\tif strings.TrimSpace(stage) != \"\" {\n\t\targs = append(args, \"--stage\", stage)\n\t}\n\tif strings.TrimSpace(suffix) != \"\" {\n\t\targs = append(args, \"--suffix\", suffix)\n\t}\n\tout, err := runPythonTool(ctx, g.AgentCoreDir, script, args...)\n\tif err != nil {\n\t\treturn false, out, err\n\t}\n\treturn true, out, nil\n}"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Code demo appendTaskLog sử dụng s.buildTaskIsolationMeta và scout.MaskSecrets tại server.go dòng 581-591",
+    "claim": "Trong server.go dòng 581-591, hàm appendTaskLog sử dụng s.buildTaskIsolationMeta(taskKey), os.MkdirAll(meta.ArtifactDir, 0o755), scout.MaskSecrets và os.OpenFile với cờ os.O_CREATE|os.O_WRONLY|os.O_APPEND.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:581-591\nfunc (s *Server) appendTaskLog(taskKey, line string) {\n\tmeta := s.buildTaskIsolationMeta(taskKey)\n\t_ = os.MkdirAll(meta.ArtifactDir, 0o755)\n\tts := time.Now().Format(\"15:04:05\")\n\tentry := fmt.Sprintf(\"[%s] [%s] %s\\n\", ts, taskKey, scout.MaskSecrets(strings.TrimSpace(line)))\n\tf, err := os.OpenFile(meta.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)\n\tif err == nil {\n\t\t_, _ = f.WriteString(entry)\n\t\t_ = f.Close()\n\t}\n}"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Kiểm tra sanitizeTaskKeyPath trong server.go dòng 391-409",
+    "claim": "Trong server.go dòng 391-409, hàm sanitizeTaskKeyPath trả về \"TASK-DEFAULT\" nếu taskKey rỗng và chỉ giữ lại các ký tự chữ, số, '-', '_', '.'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:391-409\nfunc sanitizeTaskKeyPath(taskKey string) string {\n\ttaskKey = strings.TrimSpace(taskKey)\n\tif taskKey == \"\" {\n\t\treturn \"TASK-DEFAULT\"\n\t}\n\tvar b strings.Builder\n\tfor _, r := range taskKey {\n\t\tif (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {\n\t\t\tb.WriteRune(r)\n\t\t} else {\n\t\t\tb.WriteRune('-')\n\t\t}\n\t}\n\tres := strings.Trim(b.String(), \"-\")\n\tif res == \"\" {\n\t\treturn \"TASK-DEFAULT\"\n\t}\n\treturn res\n}"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Kiểm tra chữ ký hàm RunGovernanceLinter trong internal/agentgate/gate.go dòng 361-381",
+    "claim": "Trong internal/agentgate/gate.go dòng 361-381, phương thức RunGovernanceLinter có chữ ký (ctx context.Context, workspace, stage, suffix string) (bool, string, error).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/gate.go:361-381\nfunc (g *Gatekeeper) RunGovernanceLinter(ctx context.Context, workspace, stage, suffix string) (bool, string, error) {\n\tif g == nil || g.AgentCoreDir == \"\" || strings.TrimSpace(workspace) == \"\" {\n\t\treturn true, \"skipped (no workspace)\", nil\n\t}\n\tscript := filepath.Join(g.AgentCoreDir, \"tooling\", \"verify_governance.py\")\n\tif _, err := os.Stat(script); err != nil {\n\t\treturn false, \"\", fmt.Errorf(\"verify_governance.py not found at %s: %w\", script, err)\n\t}\n\targs := []string{\"--workspace\", workspace}\n\tif strings.TrimSpace(stage) != \"\" {\n\t\targs = append(args, \"--stage\", stage)\n\t}\n\tif strings.TrimSpace(suffix) != \"\" {\n\t\targs = append(args, \"--suffix\", suffix)\n\t}\n\tout, err := runPythonTool(ctx, g.AgentCoreDir, script, args...)\n\tif err != nil {\n\t\treturn false, out, err\n\t}\n\treturn true, out, nil\n}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "flow": "Control false: khai báo sai giá trị mặc định của sanitizeTaskKeyPath khi taskKey rỗng trong server.go dòng 391-395",
+    "claim": "Trong server.go dòng 391-395, khi taskKey rỗng thì hàm sanitizeTaskKeyPath trả về chuỗi \"EMPTY-NONE\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:391-395\nfunc sanitizeTaskKeyPath(taskKey string) string {\n\ttaskKey = strings.TrimSpace(taskKey)\n\tif taskKey == \"\" {\n\t\treturn \"TASK-DEFAULT\"\n\t}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "flow": "Control false: khai báo sai tiền tố BranchName trong buildTaskIsolationMeta tại server.go dòng 427-431",
+    "claim": "Trong server.go dòng 427-431, trường BranchName được gán bằng \"hotfix/\" + safeKey.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:427-431\n\treturn TaskIsolationDTO{\n\t\tTaskKey:       taskKey,\n\t\tBranchName:    \"task/\" + safeKey,\n\t\tWorktreePath:  wtPath,\n\t\tArtifactDir:   artDir,"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "flow": "Control true: xác nhận chính xác tiền tố BranchName trong buildTaskIsolationMeta tại server.go dòng 427-431",
+    "claim": "Trong server.go dòng 427-431, trường BranchName được gán bằng \"task/\" + safeKey.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:427-431\n\treturn TaskIsolationDTO{\n\t\tTaskKey:       taskKey,\n\t\tBranchName:    \"task/\" + safeKey,\n\t\tWorktreePath:  wtPath,\n\t\tArtifactDir:   artDir,"
+  }
+]

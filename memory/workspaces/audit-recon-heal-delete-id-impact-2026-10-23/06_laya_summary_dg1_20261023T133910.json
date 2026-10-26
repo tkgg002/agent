@@ -1,0 +1,241 @@
+{
+  "mode": "claim",
+  "stage": "dg1",
+  "workspace": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-recon-heal-delete-id-impact-2026-10-23",
+  "ts": "20261023T133910",
+  "trusted_rounds": [],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-recon-heal-delete-id-impact-2026-10-23/06_laya_raw_dg1_20261023T133910.json",
+  "claims": [
+    {
+      "id": "S-RC-1",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In TransmuterModule.deleteFromMasterBySourceAndGpayIDs, pkCol is initialized via resolveConflictTarget(binding, colTypes) and only falls back to '_source_id' if colTypes contains '_source_id', without checking binding.SourcePK when resolveConflictTarget returns '_gpay_id'.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6509
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2308
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7038
+        }
+      }
+    },
+    {
+      "id": "S-RC-2",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In TransmuterModule.Run, when chunkIDs is non-empty and lastGpayID is 0, any row in shadowRows with row.Deleted == true has its SourceID appended to deletedInShadow and toHardDelete without checking whether another row in shadowRows for the same SourceID has row.Deleted == false.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6279
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6047
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7742
+        }
+      }
+    },
+    {
+      "id": "S-RC-3",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In ExecuteHealHandler.executeHealSegB, the PruneMissingSrc branch checks 'if idType == \"gpay\"' directly on staleB.IDType without auto-detecting gpay IDs when idType is empty, and resolveSourceIDsForSegmentB returns inputIDs unchanged when len(out) == 0.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4248
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4933
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.696
+        }
+      }
+    },
+    {
+      "id": "S-RC-4",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In ExecuteHealHandler.FetchAndWriteByIDs, nowMs is initialized to time.Now().UnixMilli() and passed to buildHealEnvelope(afterJSON, nowMs), setting source_ts_ms to nowMs for every healed document.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.74
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3611
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4269
+        }
+      }
+    },
+    {
+      "id": "S-FIX-1",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In ExecuteHealHandler.publishTransmuteShadowForSegA, the payload sets shadow_connection_key to 'default_shadow', while MasterBindingRepo.ListMasterTargetsByShadowIdentity only treats empty string or 'default' as wildcard default connection keys.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.7617
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1926
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.5854
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT-1",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In SchemaAdapter.buildOCCWhereClause, when hasSourceTs and hasPositiveTs are true and _source exists in schema.Columns, the equality branch _source_ts = EXCLUDED._source_ts only permits updates when the existing shadow row has _source = 'snapshot:v2' and EXCLUDED._source <> 'snapshot:v2'.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5257
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4419
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7452
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN-1",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In TransmuterModule.bulkUpsertMaster, when isFullSync is false, the ON CONFLICT DO UPDATE query includes a WHERE clause comparing COALESCE(EXCLUDED._source_ts, 0) >= COALESCE(master._source_ts, 0) - clockSkewToleranceMs.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0823
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.5373
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.4844
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the proposed demo for FetchAndWriteByIDs, docTsMs is extracted via servicerecon.ExtractSourceTsFromDoc(doc, entry.TimestampField) and falls back to nowMs only when docTsMs <= 0 before calling buildHealEnvelope(afterJSON, docTsMs).",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.0614
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4909
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8991
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the proposed demo for resolveBusinessPKForMaster, if resolveConflictTarget returns a non-empty column other than '_gpay_id' it returns that column; otherwise for non-flatten bindings it checks candidates binding.SourcePK, '_id', 'id', and '_source_id' against colTypes.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3668
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.5393
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.9524
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the proposed demo for Run and processBatch, a SourceID is appended to deletedInShadow only if !activeSourceIDs[row.SourceID], preventing a historical tombstone row from deleting a newly resurrected active row for the same SourceID.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4089
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.2208
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7944
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

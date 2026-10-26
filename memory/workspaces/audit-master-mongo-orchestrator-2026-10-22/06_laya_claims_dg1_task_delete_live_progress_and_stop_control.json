@@ -1,0 +1,65 @@
+[
+    {
+      "id": "S-RC",
+      "category": "solution",
+      "claim": "Trong renderLiveTelemetryHUD tại internal/webui/static/app.js:1156-1169, nhánh else của kiểm tra st === 'NEEDS_YOU' và st === 'DONE' đang gán cứng indEl.textContent = '⚡ LIVE RUNNING' và indEl.className = 'hud-live-badge running' ngay cả khi st là 'READY' (không có tiến trình nào đang chạy).",
+      "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/app.js:1156-1169\n  const indEl = document.getElementById(\"hud-live-indicator\");\n  if (indEl) {\n    const st = String(le.active_stage || dashboardState.active_task_stage || \"\").toUpperCase();\n    if (st === \"NEEDS_YOU\") {\n      indEl.textContent = \"⏸ WAITING FOR YOU (S3 GATE)\";\n      indEl.className = \"hud-live-badge waiting\";\n    } else if (st === \"DONE\") {\n      indEl.textContent = \"✅ VERIFIED ON DISK (100%)\";\n      indEl.className = \"hud-live-badge done\";\n    } else {\n      indEl.textContent = \"⚡ LIVE RUNNING\";\n      indEl.className = \"hud-live-badge running\";\n    }\n  }"
+    },
+    {
+      "id": "S-FIX",
+      "category": "solution",
+      "claim": "Hàm advancePacedWorkflowStep tại internal/webui/telegram_bridge.go:784-816 cập nhật s.liveStepProgress (Active: true, TaskKey, StageLabel, StepIndex, TotalSteps, Percent, CurrentAction, CurrentWhere, ActiveRoleSlot, StartedAt), phát SSE 'step_progress' và chờ select giữa time.After(stepDelay) với ctx.Done().",
+      "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:784-816\nfunc (s *Server) advancePacedWorkflowStep(\n\tctx context.Context,\n\tqt queue.QueuedTask,\n\tstepIdx, totalSteps, percent int,\n\tstageLabel, actionDesc, whereDesc, roleSlot string,\n\tstepDelay time.Duration,\n) {\n\ts.mu.Lock()\n\ts.liveStepProgress = LiveStepProgressState{\n\t\tActive:         true,\n\t\tTaskKey:        qt.ExternalID,\n\t\tStageLabel:     stageLabel,\n\t\tStepIndex:      stepIdx,\n\t\tTotalSteps:     totalSteps,\n\t\tPercent:        percent,\n\t\tCurrentAction:  actionDesc,\n\t\tCurrentWhere:   whereDesc,\n\t\tActiveRoleSlot: roleSlot,\n\t\tStartedAt:      time.Now(),\n\t}\n\ts.mu.Unlock()\n\n\tstepLog := fmt.Sprintf(\"[⏳ Step %d/%d · %d%%] %s — %s (%s)\", stepIdx, totalSteps, percent, stageLabel, actionDesc, whereDesc)\n\ts.appendTaskLog(qt.ExternalID, stepLog)\n\ts.broadcast(\"step_progress\")\n\n\tif stepDelay > 0 && !s.isTestTaskOrTempRoot(qt.ExternalID) {\n\t\tselect {\n\t\tcase <-time.After(stepDelay):\n\t\tcase <-ctx.Done():\n\t\t}\n\t}\n}"
+    },
+    {
+      "id": "S-IMPACT",
+      "category": "solution",
+      "claim": "Hàm SyncRealWorkspaceState tại internal/webui/seed_data.go:278-303 kiểm tra existingByKey[pt.Key] và nếu task chưa có trong SQLite sẽ tự động gọi s.QueueStore.EnqueueRaw với Source 'agent-workspace'.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/seed_data.go:278-303\n\t\tif cur, ok := existingByKey[pt.Key]; ok {\n\t\t\tif cur.Source != \"\" && cur.Source != \"agent-workspace\" {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\ttargetStage := cur.Stage\n\t\t\tif pt.Done && cur.Stage != queue.StageDone {\n\t\t\t\ttargetStage = queue.StageDone\n\t\t\t}\n\t\t\t_ = s.QueueStore.UpdateWaveAndStage(ctx, cur.ID, waveIdx, targetStage, mdl, pt.Score)\n\t\t\tcontinue\n\t\t}\n\n\t\tid, inserted, enqErr := s.QueueStore.EnqueueRaw(ctx, queue.RawTask{\n\t\t\tExternalID:  pt.Key,\n\t\t\tSource:      \"agent-workspace\",\n\t\t\tTitle:       pt.Title,\n\t\t\tDescription: pt.Title,\n\t\t\tSeverity:    \"high\",\n\t\t\tLabels:      labels,\n\t\t\tSLAHours:    12,\n\t\t\tComplexity:  pt.Complexity,\n\t\t})\n\t\tif enqErr == nil && (inserted || id > 0) {\n\t\t\t_ = s.QueueStore.UpdateWaveAndStage(ctx, id, waveIdx, stage, mdl, pt.Score)\n\t\t}\n\t}"
+    },
+    {
+      "id": "S-PATTERN",
+      "category": "solution",
+      "claim": "Struct Server tại internal/webui/server.go:242-261 hiện quản lý trạng thái đồng bộ bằng s.mu sync.Mutex cùng các trường panes, selectedTaskKey, activeRunner, liveStepProgress, telegramPollerRunning và subscribers.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:242-261\ntype Server struct {\n\tRoot           string\n\tWorkspaceName  string\n\tBranch         string\n\tCfg            config.Config\n\tQueueStore     *queue.Store\n\tMemStore       *memory.Store\n\tGatekeeper     *agentgate.Gatekeeper\n\tIndexedLessons int\n\tBus            *bus.Bus\n\tTaskRunner     *orchestrator.TaskRunner\n\n\tmu                    sync.Mutex\n\tpanes                 []VibePaneDTO\n\tselectedTaskKey       string\n\tactiveRunner          string\n\tliveStepProgress      LiveStepProgressState\n\ttelegramPollerRunning bool\n\tsubscribers           map[chan string]struct{}\n}"
+    },
+    {
+      "id": "D-BEHAV",
+      "category": "demo",
+      "claim": "Hàm Handler() tại internal/webui/server.go:621-643 đăng ký các route REST và SSE trên http.NewServeMux bao gồm /api/dashboard, /api/tasks, /api/tasks/action, /api/tasks/subtasks, /api/tasks/chat và /api/stream.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:621-643\nfunc (s *Server) Handler() http.Handler {\n\tmux := http.NewServeMux()\n\tsub, err := fs.Sub(staticFS, \"static\")\n\tif err == nil {\n\t\tmux.Handle(\"/\", http.FileServer(http.FS(sub)))\n\t}\n\tmux.HandleFunc(\"/api/dashboard\", s.handleDashboard)\n\tmux.HandleFunc(\"/api/tasks\", s.handleCreateTask)\n\tmux.HandleFunc(\"/api/tasks/action\", s.handleTaskAction)\n\tmux.HandleFunc(\"/api/tasks/subtasks\", s.handleTaskSubTasks)\n\tmux.HandleFunc(\"/api/tasks/chat\", s.handleTaskPlanningChat)\n\tmux.HandleFunc(\"/api/trackers\", s.handleTrackerConnections)\n\tmux.HandleFunc(\"/api/trackers/test\", s.handleTrackerTestConnection)\n\tmux.HandleFunc(\"/api/trackers/issues\", s.handleTrackerIssues)\n\tmux.HandleFunc(\"/api/settings/cli\", s.handleCLISettings)\n\tmux.HandleFunc(\"/api/settings/telegram\", s.handleTelegramSettings)\n\tmux.HandleFunc(\"/api/settings/telegram/test\", s.handleTelegramTestSend)\n\tmux.HandleFunc(\"/api/telegram/webhook\", s.handleTelegramWebhook)\n\tmux.HandleFunc(\"/api/pipeline/trigger\", s.handleTriggerCycle)\n\tmux.HandleFunc(\"/api/agents/message\", s.handleAgentMessage)\n\tmux.HandleFunc(\"/api/stream\", s.handleSSEStream)\n\treturn mux\n}"
+    },
+    {
+      "id": "D-EDGE",
+      "category": "demo",
+      "claim": "Hàm executeCommandInDir tại internal/webui/server.go:371-378 sử dụng context.WithTimeout(ctx, 20*time.Second) và exec.CommandContext(runCtx, 'sh', '-c', cmdLine), do đó khi ctx bị cancel thì tiến trình con cũng bị ngắt theo.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:371-378\nfunc (s *Server) executeCommandInDir(ctx context.Context, workDir, cmdLine string) (string, error) {\n\tif err := agentgate.ValidateCommandSafety(cmdLine); err != nil {\n\t\treturn \"\", err\n\t}\n\trunCtx, cancel := context.WithTimeout(ctx, 20*time.Second)\n\tdefer cancel()\n\tcmd := exec.CommandContext(runCtx, \"sh\", \"-c\", cmdLine)\n\ttargetDir := strings.TrimSpace(workDir)"
+    },
+    {
+      "id": "D-API",
+      "category": "demo",
+      "claim": "Struct LiveExecutionTelemetryDTO tại internal/webui/task_chat.go:37-68 định nghĩa các trường JSON cho Live Telemetry HUD bao gồm is_running, active_task_key, active_stage, active_phase_label, active_step_num, active_sub_task_id và overall_progress_pct.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_chat.go:37-68\ntype LiveExecutionTelemetryDTO struct {\n\tIsRunning          bool              `json:\"is_running\"`\n\tActiveTaskKey      string            `json:\"active_task_key\"`\n\tActiveTaskTitle    string            `json:\"active_task_title\"`\n\tActiveStage        string            `json:\"active_stage\"`\n\tActivePhaseLabel   string            `json:\"active_phase_label\"`\n\tActiveStepNum      int               `json:\"active_step_num\"`\n\tActiveStepTitle    string            `json:\"active_step_title\"`\n\tActiveSubTaskID    string            `json:\"active_sub_task_id\"`\n\tActiveSubTaskTitle string            `json:\"active_sub_task_title\"`\n\tActiveRole         string            `json:\"active_role\"`\n\tActiveAgentSlot    string            `json:\"active_agent_slot\"`\n\tActiveSkill        string            `json:\"active_skill\"`\n\tActiveRunner       string            `json:\"active_runner\"`\n\tActiveModel        string            `json:\"active_model\"`\n\tActiveRepoName     string            `json:\"active_repo_name\"`\n\tActiveRepoPath     string            `json:\"active_repo_path\"`\n\tActiveWorktreePath string            `json:\"active_worktree_path\"`\n\tActiveBranch       string            `json:\"active_branch\"`\n\tActiveFileLine     string            `json:\"active_file_line\"`\n\tActiveCommand      string            `json:\"active_command\"`\n\tCurrentDetail      string            `json:\"current_detail\"`\n\tOverallProgressPct int               `json:\"overall_progress_pct\"`\n\tDoneSubTasks       int               `json:\"done_sub_tasks\"`\n\tTotalSubTasks      int               `json:\"total_sub_tasks\"`\n\tDoneWorkflowSteps  int               `json:\"done_workflow_steps\"`\n\tTotalWorkflowSteps int               `json:\"total_workflow_steps\"`\n\tTotalDiffLines     int               `json:\"total_diff_lines\"`\n\tRepoProgress       []RepoProgressDTO `json:\"repo_progress\"`\n\tRecentEvents       []string          `json:\"recent_events\"`\n\tUpdatedAt          string            `json:\"updated_at\"`\n}"
+    },
+    {
+      "id": "CTRL-TRUE-01",
+      "kind": "control_true",
+      "flow": "Control true: xác nhận hàm clearPacedWorkflowStep tại internal/webui/telegram_bridge.go:818-825",
+      "claim": "Hàm clearPacedWorkflowStep tại internal/webui/telegram_bridge.go:818-825 xóa s.liveStepProgress về struct rỗng và gọi s.broadcast('step_progress_cleared').",
+      "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:818-825\nfunc (s *Server) clearPacedWorkflowStep(taskKey string) {\n\ts.mu.Lock()\n\tif s.liveStepProgress.TaskKey == \"\" || strings.EqualFold(s.liveStepProgress.TaskKey, taskKey) {\n\t\ts.liveStepProgress = LiveStepProgressState{}\n\t}\n\ts.mu.Unlock()\n\ts.broadcast(\"step_progress_cleared\")\n}"
+    },
+    {
+      "id": "CTRL-FALSE-01",
+      "kind": "control_false",
+      "flow": "Control false: phát biểu sai hành vi của clearPacedWorkflowStep tại internal/webui/telegram_bridge.go:818-825",
+      "claim": "Hàm clearPacedWorkflowStep tại internal/webui/telegram_bridge.go:818-825 xóa toàn bộ bảng task_queue trong SQLite khi kết thúc bước chạy.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:818-825\nfunc (s *Server) clearPacedWorkflowStep(taskKey string) {\n\ts.mu.Lock()\n\tif s.liveStepProgress.TaskKey == \"\" || strings.EqualFold(s.liveStepProgress.TaskKey, taskKey) {\n\t\ts.liveStepProgress = LiveStepProgressState{}\n\t}\n\ts.mu.Unlock()\n\ts.broadcast(\"step_progress_cleared\")\n}"
+    },
+    {
+      "id": "CTRL-FALSE-02",
+      "kind": "control_false",
+      "flow": "Control false: phát biểu sai nhánh DONE trong renderLiveTelemetryHUD tại internal/webui/static/app.js:1156-1169",
+      "claim": "Trong renderLiveTelemetryHUD tại internal/webui/static/app.js:1156-1169, khi st === 'DONE' thì indEl.textContent được gán bằng '⚡ LIVE RUNNING'.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/app.js:1156-1169\n  const indEl = document.getElementById(\"hud-live-indicator\");\n  if (indEl) {\n    const st = String(le.active_stage || dashboardState.active_task_stage || \"\").toUpperCase();\n    if (st === \"NEEDS_YOU\") {\n      indEl.textContent = \"⏸ WAITING FOR YOU (S3 GATE)\";\n      indEl.className = \"hud-live-badge waiting\";\n    } else if (st === \"DONE\") {\n      indEl.textContent = \"✅ VERIFIED ON DISK (100%)\";\n      indEl.className = \"hud-live-badge done\";\n    } else {\n      indEl.textContent = \"⚡ LIVE RUNNING\";\n      indEl.className = \"hud-live-badge running\";\n    }\n  }"
+    }
+]

@@ -1,0 +1,242 @@
+{
+  "mode": "claim",
+  "stage": "dg2",
+  "workspace": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-recon-heal-delete-id-impact-2026-10-23",
+  "ts": "20261023T122532",
+  "trusted_rounds": [],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-recon-heal-delete-id-impact-2026-10-23/06_laya_raw_dg1_20261023T122532.json",
+  "claims": [
+    {
+      "id": "S-RC-1",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In ChunkStreamBucketEngine.resolveFieldsB, tsCol is overwritten with tsField(*entry) when entry is non-nil and has a non-empty TimestampField, while pkCol resolves to segBPKColumn ('_gpay_id') when both shadow and master have that column.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3861
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3485
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8587
+        }
+      }
+    },
+    {
+      "id": "S-RC-2",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In TransmuterModule.Run, when chunkIDs is non-empty and lastGpayID is 0, any row in shadowRows with row.Deleted == true has its SourceID appended to deletedInShadow and toHardDelete without checking whether another row in shadowRows for the same SourceID has row.Deleted == false.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6279
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6105
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7742
+        }
+      }
+    },
+    {
+      "id": "S-RC-3",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In ExecuteHealHandler.executeHealSegB, the PruneMissingSrc branch checks 'if idType == \"gpay\"' directly on staleB.IDType without auto-detecting gpay IDs when idType is empty, and resolveSourceIDsForSegmentB returns inputIDs unchanged when len(out) == 0.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4248
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3266
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.696
+        }
+      }
+    },
+    {
+      "id": "S-RC-4",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In ExecuteHealHandler.FetchAndWriteByIDs, nowMs is initialized to time.Now().UnixMilli() and passed to buildHealEnvelope(afterJSON, nowMs), setting source_ts_ms to nowMs for every healed document.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.74
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4406
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4269
+        }
+      }
+    },
+    {
+      "id": "S-FIX-1",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In ReconCore.measureAndResolveWatermarksB, tsCol starts as '_source_ts' and is overwritten by dstTS from resolveSourceAndDestTSFields when entry is found in registryRepo; keeping tsCol as '_source_ts' when both shadow and master have '_source_ts' aligns watermark and window queries on the BIGINT epoch-ms column.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4382
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3671
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.577
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT-1",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In SchemaAdapter.buildOCCWhereClause, when hasSourceTs and hasPositiveTs are true and _source exists in schema.Columns, the equality branch _source_ts = EXCLUDED._source_ts only permits updates when the existing shadow row has _source = 'snapshot:v2' and EXCLUDED._source <> 'snapshot:v2'.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5257
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2541
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7452
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN-1",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In TransmuterModule.bulkUpsertMaster, when isFullSync is false, the ON CONFLICT DO UPDATE query includes a WHERE clause comparing COALESCE(EXCLUDED._source_ts, 0) >= COALESCE(master._source_ts, 0) - clockSkewToleranceMs.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0823
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.542
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.4844
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the proposed demo for FetchAndWriteByIDs, docTsMs is extracted via servicerecon.ExtractSourceTsFromDoc(doc, entry.TimestampField) and falls back to nowMs only when docTsMs <= 0 before calling buildHealEnvelope(afterJSON, docTsMs).",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.0614
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.628
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8991
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the proposed demo for resolveFieldsB, if both e.destAgent.ColumnExists(ctx, shadowRel, \"_source_ts\") and msAgent.ColumnExists(ctx, masterRel, \"_source_ts\") return true without error, resolveFieldsB keeps tsCol = \"_source_ts\" instead of overwriting it with entry.TimestampField.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5519
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.422
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.5162
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the proposed demo for Run and processBatch, a SourceID is appended to deletedInShadow only if !activeSourceIDs[row.SourceID], preventing a historical tombstone row from deleting a newly resurrected active row for the same SourceID.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4089
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.2962
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7944
+        }
+      }
+    }
+  ],
+  "gate": "PASS",
+  "summary_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-recon-heal-delete-id-impact-2026-10-23/06_laya_summary_dg1_20261023T122532.json"
+}

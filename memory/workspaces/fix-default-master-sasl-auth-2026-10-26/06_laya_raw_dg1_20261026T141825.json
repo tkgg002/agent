@@ -1,0 +1,1519 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "basis": "code",
+    "claim": "In transmuter.go lines 356-376, when state.LastCursorJSON has last_gpay_id > 0, Run sets lastGpayID = int64(fVal) and counts remaining shadow rows without checking whether activeShadowRows exceeds masterCount.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:356-376\n\t\t\tif t.runtimeRepo != nil {\n\t\t\t\tstate, errState := t.runtimeRepo.GetByMasterBinding(ctx, masterRow.ID)\n\t\t\t\tif errState == nil && state != nil && len(state.LastCursorJSON) > 0 {\n\t\t\t\t\tvar cursorMap map[string]any\n\t\t\t\t\tif errJson := json.Unmarshal(state.LastCursorJSON, &cursorMap); errJson == nil {\n\t\t\t\t\t\tif val, ok := cursorMap[\"last_gpay_id\"]; ok {\n\t\t\t\t\t\t\tif fVal, ok := val.(float64); ok && int64(fVal) > 0 {\n\t\t\t\t\t\t\t\tlastGpayID = int64(fVal)\n\t\t\t\t\t\t\t\ttotalShadowRows, _ = t.countShadowRows(ctx, masterRow, lastGpayID)\n\t\t\t\t\t\t\t\tif jobID != \"\" && t.transmuteJobRepo != nil {\n\t\t\t\t\t\t\t\t\t_ = t.transmuteJobRepo.UpdateStatus(ctx, jobID, \"RUNNING\", 0, totalShadowRows, \"\", masterRow.ID)\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\tt.logger.Info(\"transmuter: resuming from checkpoint\",\n\t\t\t\t\t\t\t\t\tzap.String(\"master\", masterName),\n\t\t\t\t\t\t\t\t\tzap.Int64(\"last_gpay_id\", lastGpayID),\n\t\t\t\t\t\t\t\t\tzap.Int64(\"remaining_shadow_rows\", totalShadowRows))\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2223,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4901,
+                "INCORRECT": 0.4608,
+                "UNSUPPORTED": 0.0491
+              },
+              "confidence": 0.2223,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 789,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmuter.go lines 356-376, when state.LastCursorJSON has last_gpay_id > 0, Run sets lastGpayID = int64(fVal) and counts remaining shadow rows without checking whether activeShadowRows exceeds masterCount.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:356-376\n\t\t\tif t.runtimeRepo != nil {\n\t\t\t\tstate, errState := t.runtimeRepo.GetByMasterBinding(ctx, masterRow.ID)\n\t\t\t\tif errState == nil && state != nil && len(state.LastCursorJSON) > 0 {\n\t\t\t\t\tvar cursorMap map[string]any\n\t\t\t\t\tif errJson := json.Unmarshal(state.LastCursorJSON, &cursorMap); errJson == nil {\n\t\t\t\t\t\tif val, ok := cursorMap[\"last_gpay_id\"]; ok {\n\t\t\t\t\t\t\tif fVal, ok := val.(float64); ok && int64(fVal) > 0 {\n\t\t\t\t\t\t\t\tlastGpayID = int64(fVal)\n\t\t\t\t\t\t\t\ttotalShadowRows, _ = t.countShadowRows(ctx, masterRow, lastGpayID)\n\t\t\t\t\t\t\t\tif jobID != \"\" && t.transmuteJobRepo != nil {\n\t\t\t\t\t\t\t\t\t_ = t.transmuteJobRepo.UpdateStatus(ctx, jobID, \"RUNNING\", 0, totalShadowRows, \"\", masterRow.ID)\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\tt.logger.Info(\"transmuter: resuming from checkpoint\",\n\t\t\t\t\t\t\t\t\tzap.String(\"master\", masterName),\n\t\t\t\t\t\t\t\t\tzap.Int64(\"last_gpay_id\", lastGpayID),\n\t\t\t\t\t\t\t\t\tzap.Int64(\"remaining_shadow_rows\", totalShadowRows))\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3644,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7509,
+                "INCORRECT": 0.1897,
+                "UNSUPPORTED": 0.0594
+              },
+              "confidence": 0.3644,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 795,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:356-376\n\t\t\tif t.runtimeRepo != nil {\n\t\t\t\tstate, errState := t.runtimeRepo.GetByMasterBinding(ctx, masterRow.ID)\n\t\t\t\tif errState == nil && state != nil && len(state.LastCursorJSON) > 0 {\n\t\t\t\t\tvar cursorMap map[string]any\n\t\t\t\t\tif errJson := json.Unmarshal(state.LastCursorJSON, &cursorMap); errJson == nil {\n\t\t\t\t\t\tif val, ok := cursorMap[\"last_gpay_id\"]; ok {\n\t\t\t\t\t\t\tif fVal, ok := val.(float64); ok && int64(fVal) > 0 {\n\t\t\t\t\t\t\t\tlastGpayID = int64(fVal)\n\t\t\t\t\t\t\t\ttotalShadowRows, _ = t.countShadowRows(ctx, masterRow, lastGpayID)\n\t\t\t\t\t\t\t\tif jobID != \"\" && t.transmuteJobRepo != nil {\n\t\t\t\t\t\t\t\t\t_ = t.transmuteJobRepo.UpdateStatus(ctx, jobID, \"RUNNING\", 0, totalShadowRows, \"\", masterRow.ID)\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\tt.logger.Info(\"transmuter: resuming from checkpoint\",\n\t\t\t\t\t\t\t\t\tzap.String(\"master\", masterName),\n\t\t\t\t\t\t\t\t\tzap.Int64(\"last_gpay_id\", lastGpayID),\n\t\t\t\t\t\t\t\t\tzap.Int64(\"remaining_shadow_rows\", totalShadowRows))\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n",
+          "claim": "In transmuter.go lines 356-376, when state.LastCursorJSON has last_gpay_id > 0, Run sets lastGpayID = int64(fVal) and counts remaining shadow rows without checking whether activeShadowRows exceeds masterCount."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7844,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9657,
+                "NO": 0.0343
+              },
+              "confidence": 0.7844,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 728,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:356-376\n\t\t\tif t.runtimeRepo != nil {\n\t\t\t\tstate, errState := t.runtimeRepo.GetByMasterBinding(ctx, masterRow.ID)\n\t\t\t\tif errState == nil && state != nil && len(state.LastCursorJSON) > 0 {\n\t\t\t\t\tvar cursorMap map[string]any\n\t\t\t\t\tif errJson := json.Unmarshal(state.LastCursorJSON, &cursorMap); errJson == nil {\n\t\t\t\t\t\tif val, ok := cursorMap[\"last_gpay_id\"]; ok {\n\t\t\t\t\t\t\tif fVal, ok := val.(float64); ok && int64(fVal) > 0 {\n\t\t\t\t\t\t\t\tlastGpayID = int64(fVal)\n\t\t\t\t\t\t\t\ttotalShadowRows, _ = t.countShadowRows(ctx, masterRow, lastGpayID)\n\t\t\t\t\t\t\t\tif jobID != \"\" && t.transmuteJobRepo != nil {\n\t\t\t\t\t\t\t\t\t_ = t.transmuteJobRepo.UpdateStatus(ctx, jobID, \"RUNNING\", 0, totalShadowRows, \"\", masterRow.ID)\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\tt.logger.Info(\"transmuter: resuming from checkpoint\",\n\t\t\t\t\t\t\t\t\tzap.String(\"master\", masterName),\n\t\t\t\t\t\t\t\t\tzap.Int64(\"last_gpay_id\", lastGpayID),\n\t\t\t\t\t\t\t\t\tzap.Int64(\"remaining_shadow_rows\", totalShadowRows))\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n",
+          "claim": "In transmuter.go lines 356-376, when state.LastCursorJSON has last_gpay_id > 0, Run sets lastGpayID = int64(fVal) and counts remaining shadow rows without checking whether activeShadowRows exceeds masterCount."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "basis": "code",
+    "claim": "In recon_execute_heal_handler.go lines 596-604, when DELETE FROM master WHERE _gpay_id IN (toDeleteGpay) succeeds without error, the code currently increments pruned by int(res.RowsAffected) instead of len(toDeleteGpay).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:596-604\n\t\t\t\t\t\tif len(toDeleteGpay) > 0 {\n\t\t\t\t\t\t\tres := masterDB.WithContext(ctx).Exec(delSQL, toDeleteGpay)\n\t\t\t\t\t\t\tif res.Error != nil {\n\t\t\t\t\t\t\t\tobservability.Ctx(ctx, h.logger).Error(\"[execute-heal-b] prune master (_gpay_id) failed\", zap.Error(res.Error))\n\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\tpruned += int(res.RowsAffected)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5674,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8509,
+                "INCORRECT": 0.1315,
+                "UNSUPPORTED": 0.0176
+              },
+              "confidence": 0.5674,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 457,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In recon_execute_heal_handler.go lines 596-604, when DELETE FROM master WHERE _gpay_id IN (toDeleteGpay) succeeds without error, the code currently increments pruned by int(res.RowsAffected) instead of len(toDeleteGpay).",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:596-604\n\t\t\t\t\t\tif len(toDeleteGpay) > 0 {\n\t\t\t\t\t\t\tres := masterDB.WithContext(ctx).Exec(delSQL, toDeleteGpay)\n\t\t\t\t\t\t\tif res.Error != nil {\n\t\t\t\t\t\t\t\tobservability.Ctx(ctx, h.logger).Error(\"[execute-heal-b] prune master (_gpay_id) failed\", zap.Error(res.Error))\n\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\tpruned += int(res.RowsAffected)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.2096,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3105,
+                "INCORRECT": 0.6089,
+                "UNSUPPORTED": 0.0807
+              },
+              "confidence": 0.2096,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 462,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:596-604\n\t\t\t\t\t\tif len(toDeleteGpay) > 0 {\n\t\t\t\t\t\t\tres := masterDB.WithContext(ctx).Exec(delSQL, toDeleteGpay)\n\t\t\t\t\t\t\tif res.Error != nil {\n\t\t\t\t\t\t\t\tobservability.Ctx(ctx, h.logger).Error(\"[execute-heal-b] prune master (_gpay_id) failed\", zap.Error(res.Error))\n\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\tpruned += int(res.RowsAffected)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n",
+          "claim": "In recon_execute_heal_handler.go lines 596-604, when DELETE FROM master WHERE _gpay_id IN (toDeleteGpay) succeeds without error, the code currently increments pruned by int(res.RowsAffected) instead of len(toDeleteGpay)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6856,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9433,
+                "NO": 0.0567
+              },
+              "confidence": 0.6856,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 395,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:596-604\n\t\t\t\t\t\tif len(toDeleteGpay) > 0 {\n\t\t\t\t\t\t\tres := masterDB.WithContext(ctx).Exec(delSQL, toDeleteGpay)\n\t\t\t\t\t\t\tif res.Error != nil {\n\t\t\t\t\t\t\t\tobservability.Ctx(ctx, h.logger).Error(\"[execute-heal-b] prune master (_gpay_id) failed\", zap.Error(res.Error))\n\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\tpruned += int(res.RowsAffected)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n",
+          "claim": "In recon_execute_heal_handler.go lines 596-604, when DELETE FROM master WHERE _gpay_id IN (toDeleteGpay) succeeds without error, the code currently increments pruned by int(res.RowsAffected) instead of len(toDeleteGpay)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "basis": "code",
+    "claim": "In transmuter.go lines 1122-1126, inferLastGpayIDFromMaster queries SELECT _gpay_id FROM master WHERE _gpay_id <= maxShadowID ORDER BY _gpay_id DESC LIMIT 50 and scans the max matching shadowPK into inferred.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1122-1126\n\tvar inferred int64\n\tvar candGpayIDs []int64\n\tif masterDB.WithContext(ctx).Raw(fmt.Sprintf(`SELECT _gpay_id FROM %s WHERE _gpay_id <= ? ORDER BY _gpay_id DESC LIMIT 50`, masterQT), maxShadowID).Scan(&candGpayIDs).Error == nil && len(candGpayIDs) > 0 {\n\t\t_ = shadowDB.WithContext(ctx).Raw(fmt.Sprintf(`SELECT COALESCE(MAX(%s), 0) FROM %s WHERE %s IN (?)`, shadowPK, shadowQT, shadowPK), candGpayIDs).Scan(&inferred).Error\n\t}\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4599,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8122,
+                "INCORRECT": 0.1362,
+                "UNSUPPORTED": 0.0516
+              },
+              "confidence": 0.4599,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 397,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmuter.go lines 1122-1126, inferLastGpayIDFromMaster queries SELECT _gpay_id FROM master WHERE _gpay_id <= maxShadowID ORDER BY _gpay_id DESC LIMIT 50 and scans the max matching shadowPK into inferred.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1122-1126\n\tvar inferred int64\n\tvar candGpayIDs []int64\n\tif masterDB.WithContext(ctx).Raw(fmt.Sprintf(`SELECT _gpay_id FROM %s WHERE _gpay_id <= ? ORDER BY _gpay_id DESC LIMIT 50`, masterQT), maxShadowID).Scan(&candGpayIDs).Error == nil && len(candGpayIDs) > 0 {\n\t\t_ = shadowDB.WithContext(ctx).Raw(fmt.Sprintf(`SELECT COALESCE(MAX(%s), 0) FROM %s WHERE %s IN (?)`, shadowPK, shadowQT, shadowPK), candGpayIDs).Scan(&inferred).Error\n\t}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3686,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7423,
+                "INCORRECT": 0.2104,
+                "UNSUPPORTED": 0.0474
+              },
+              "confidence": 0.3686,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 403,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1122-1126\n\tvar inferred int64\n\tvar candGpayIDs []int64\n\tif masterDB.WithContext(ctx).Raw(fmt.Sprintf(`SELECT _gpay_id FROM %s WHERE _gpay_id <= ? ORDER BY _gpay_id DESC LIMIT 50`, masterQT), maxShadowID).Scan(&candGpayIDs).Error == nil && len(candGpayIDs) > 0 {\n\t\t_ = shadowDB.WithContext(ctx).Raw(fmt.Sprintf(`SELECT COALESCE(MAX(%s), 0) FROM %s WHERE %s IN (?)`, shadowPK, shadowQT, shadowPK), candGpayIDs).Scan(&inferred).Error\n\t}\n",
+          "claim": "In transmuter.go lines 1122-1126, inferLastGpayIDFromMaster queries SELECT _gpay_id FROM master WHERE _gpay_id <= maxShadowID ORDER BY _gpay_id DESC LIMIT 50 and scans the max matching shadowPK into inferred."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6105,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9236,
+                "NO": 0.0764
+              },
+              "confidence": 0.6105,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 336,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1122-1126\n\tvar inferred int64\n\tvar candGpayIDs []int64\n\tif masterDB.WithContext(ctx).Raw(fmt.Sprintf(`SELECT _gpay_id FROM %s WHERE _gpay_id <= ? ORDER BY _gpay_id DESC LIMIT 50`, masterQT), maxShadowID).Scan(&candGpayIDs).Error == nil && len(candGpayIDs) > 0 {\n\t\t_ = shadowDB.WithContext(ctx).Raw(fmt.Sprintf(`SELECT COALESCE(MAX(%s), 0) FROM %s WHERE %s IN (?)`, shadowPK, shadowQT, shadowPK), candGpayIDs).Scan(&inferred).Error\n\t}\n",
+          "claim": "In transmuter.go lines 1122-1126, inferLastGpayIDFromMaster queries SELECT _gpay_id FROM master WHERE _gpay_id <= maxShadowID ORDER BY _gpay_id DESC LIMIT 50 and scans the max matching shadowPK into inferred."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "basis": "code",
+    "claim": "In transmuter_utils.go lines 736-749, resolveConflictTarget extracts pk via parsePKFromSpec(binding.TransformSpec) and returns \"_gpay_id\" if pk is empty or not in colTypes.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:736-749\nfunc resolveConflictTarget(binding *masterBindingRuntime, colTypes map[string]string) string {\n\tif binding != nil && len(binding.TransformSpec) > 0 {\n\t\tpk := parsePKFromSpec(binding.TransformSpec)\n\t\tif pk != \"\" && pk != \"_gpay_id\" && ddlIdentRe.MatchString(pk) {\n\t\t\tif colTypes == nil {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t\tif _, ok := colTypes[pk]; ok {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t}\n\t}\n\treturn \"_gpay_id\"\n}\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4698,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7944,
+                "INCORRECT": 0.1814,
+                "UNSUPPORTED": 0.0242
+              },
+              "confidence": 0.4698,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 402,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmuter_utils.go lines 736-749, resolveConflictTarget extracts pk via parsePKFromSpec(binding.TransformSpec) and returns \"_gpay_id\" if pk is empty or not in colTypes.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:736-749\nfunc resolveConflictTarget(binding *masterBindingRuntime, colTypes map[string]string) string {\n\tif binding != nil && len(binding.TransformSpec) > 0 {\n\t\tpk := parsePKFromSpec(binding.TransformSpec)\n\t\tif pk != \"\" && pk != \"_gpay_id\" && ddlIdentRe.MatchString(pk) {\n\t\t\tif colTypes == nil {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t\tif _, ok := colTypes[pk]; ok {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t}\n\t}\n\treturn \"_gpay_id\"\n}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1851,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4796,
+                "INCORRECT": 0.4518,
+                "UNSUPPORTED": 0.0686
+              },
+              "confidence": 0.1851,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 408,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:736-749\nfunc resolveConflictTarget(binding *masterBindingRuntime, colTypes map[string]string) string {\n\tif binding != nil && len(binding.TransformSpec) > 0 {\n\t\tpk := parsePKFromSpec(binding.TransformSpec)\n\t\tif pk != \"\" && pk != \"_gpay_id\" && ddlIdentRe.MatchString(pk) {\n\t\t\tif colTypes == nil {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t\tif _, ok := colTypes[pk]; ok {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t}\n\t}\n\treturn \"_gpay_id\"\n}\n",
+          "claim": "In transmuter_utils.go lines 736-749, resolveConflictTarget extracts pk via parsePKFromSpec(binding.TransformSpec) and returns \"_gpay_id\" if pk is empty or not in colTypes."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7216,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9519,
+                "NO": 0.0481
+              },
+              "confidence": 0.7216,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 341,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:736-749\nfunc resolveConflictTarget(binding *masterBindingRuntime, colTypes map[string]string) string {\n\tif binding != nil && len(binding.TransformSpec) > 0 {\n\t\tpk := parsePKFromSpec(binding.TransformSpec)\n\t\tif pk != \"\" && pk != \"_gpay_id\" && ddlIdentRe.MatchString(pk) {\n\t\t\tif colTypes == nil {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t\tif _, ok := colTypes[pk]; ok {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t}\n\t}\n\treturn \"_gpay_id\"\n}\n",
+          "claim": "In transmuter_utils.go lines 736-749, resolveConflictTarget extracts pk via parsePKFromSpec(binding.TransformSpec) and returns \"_gpay_id\" if pk is empty or not in colTypes."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "basis": "code",
+    "claim": "In transmuter.go lines 137-156, NewTransmuterModule executes an UPDATE on cdc_system.master_binding to backfill transform_spec.pk from cdc_system.source_object_registry.primary_key_field.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:137-156\n\tif systemDB != nil && (systemDB.Dialector == nil || systemDB.Dialector.Name() != \"sqlite\") {\n\t\t_ = systemDB.Exec(`\n\t\t\tUPDATE cdc_system.master_binding mb\n\t\t\t   SET transform_spec = jsonb_set(\n\t\t\t           CASE\n\t\t\t               WHEN mb.transform_spec IS NULL OR jsonb_typeof(mb.transform_spec) <> 'object' THEN '{}'::jsonb\n\t\t\t               ELSE mb.transform_spec\n\t\t\t           END,\n\t\t\t           '{pk}',\n\t\t\t           to_jsonb(BTRIM(sor.primary_key_field)),\n\t\t\t           true\n\t\t\t       ),\n\t\t\t       updated_at = NOW()\n\t\t\t  FROM cdc_system.source_object_registry sor\n\t\t\t WHERE sor.id = mb.source_object_id\n\t\t\t   AND COALESCE(mb.transform_type, '') <> 'flatten'\n\t\t\t   AND COALESCE(BTRIM(mb.transform_spec->>'pk'), '') = ''\n\t\t\t   AND COALESCE(BTRIM(sor.primary_key_field), '') <> ''\n\t\t`).Error\n\t}\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4725,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8075,
+                "INCORRECT": 0.1585,
+                "UNSUPPORTED": 0.034
+              },
+              "confidence": 0.4725,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 671,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmuter.go lines 137-156, NewTransmuterModule executes an UPDATE on cdc_system.master_binding to backfill transform_spec.pk from cdc_system.source_object_registry.primary_key_field.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:137-156\n\tif systemDB != nil && (systemDB.Dialector == nil || systemDB.Dialector.Name() != \"sqlite\") {\n\t\t_ = systemDB.Exec(`\n\t\t\tUPDATE cdc_system.master_binding mb\n\t\t\t   SET transform_spec = jsonb_set(\n\t\t\t           CASE\n\t\t\t               WHEN mb.transform_spec IS NULL OR jsonb_typeof(mb.transform_spec) <> 'object' THEN '{}'::jsonb\n\t\t\t               ELSE mb.transform_spec\n\t\t\t           END,\n\t\t\t           '{pk}',\n\t\t\t           to_jsonb(BTRIM(sor.primary_key_field)),\n\t\t\t           true\n\t\t\t       ),\n\t\t\t       updated_at = NOW()\n\t\t\t  FROM cdc_system.source_object_registry sor\n\t\t\t WHERE sor.id = mb.source_object_id\n\t\t\t   AND COALESCE(mb.transform_type, '') <> 'flatten'\n\t\t\t   AND COALESCE(BTRIM(mb.transform_spec->>'pk'), '') = ''\n\t\t\t   AND COALESCE(BTRIM(sor.primary_key_field), '') <> ''\n\t\t`).Error\n\t}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1261,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5891,
+                "INCORRECT": 0.2256,
+                "UNSUPPORTED": 0.1853
+              },
+              "confidence": 0.1261,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 677,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:137-156\n\tif systemDB != nil && (systemDB.Dialector == nil || systemDB.Dialector.Name() != \"sqlite\") {\n\t\t_ = systemDB.Exec(`\n\t\t\tUPDATE cdc_system.master_binding mb\n\t\t\t   SET transform_spec = jsonb_set(\n\t\t\t           CASE\n\t\t\t               WHEN mb.transform_spec IS NULL OR jsonb_typeof(mb.transform_spec) <> 'object' THEN '{}'::jsonb\n\t\t\t               ELSE mb.transform_spec\n\t\t\t           END,\n\t\t\t           '{pk}',\n\t\t\t           to_jsonb(BTRIM(sor.primary_key_field)),\n\t\t\t           true\n\t\t\t       ),\n\t\t\t       updated_at = NOW()\n\t\t\t  FROM cdc_system.source_object_registry sor\n\t\t\t WHERE sor.id = mb.source_object_id\n\t\t\t   AND COALESCE(mb.transform_type, '') <> 'flatten'\n\t\t\t   AND COALESCE(BTRIM(mb.transform_spec->>'pk'), '') = ''\n\t\t\t   AND COALESCE(BTRIM(sor.primary_key_field), '') <> ''\n\t\t`).Error\n\t}\n",
+          "claim": "In transmuter.go lines 137-156, NewTransmuterModule executes an UPDATE on cdc_system.master_binding to backfill transform_spec.pk from cdc_system.source_object_registry.primary_key_field."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6797,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9418,
+                "NO": 0.0582
+              },
+              "confidence": 0.6797,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 610,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:137-156\n\tif systemDB != nil && (systemDB.Dialector == nil || systemDB.Dialector.Name() != \"sqlite\") {\n\t\t_ = systemDB.Exec(`\n\t\t\tUPDATE cdc_system.master_binding mb\n\t\t\t   SET transform_spec = jsonb_set(\n\t\t\t           CASE\n\t\t\t               WHEN mb.transform_spec IS NULL OR jsonb_typeof(mb.transform_spec) <> 'object' THEN '{}'::jsonb\n\t\t\t               ELSE mb.transform_spec\n\t\t\t           END,\n\t\t\t           '{pk}',\n\t\t\t           to_jsonb(BTRIM(sor.primary_key_field)),\n\t\t\t           true\n\t\t\t       ),\n\t\t\t       updated_at = NOW()\n\t\t\t  FROM cdc_system.source_object_registry sor\n\t\t\t WHERE sor.id = mb.source_object_id\n\t\t\t   AND COALESCE(mb.transform_type, '') <> 'flatten'\n\t\t\t   AND COALESCE(BTRIM(mb.transform_spec->>'pk'), '') = ''\n\t\t\t   AND COALESCE(BTRIM(sor.primary_key_field), '') <> ''\n\t\t`).Error\n\t}\n",
+          "claim": "In transmuter.go lines 137-156, NewTransmuterModule executes an UPDATE on cdc_system.master_binding to backfill transform_spec.pk from cdc_system.source_object_registry.primary_key_field."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "basis": "code",
+    "claim": "In recon_execute_heal_handler.go lines 639-660, both the numeric PK and string PK prune loops execute masterDB.WithContext(ctx).Exec(delSQL, ...) in batches.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:639-660\n\t\t\t\t\t\t\t\tres := masterDB.WithContext(ctx).Exec(delSQL, numIDs[i:end])\n\t\t\t\t\t\t\t\tif res.Error != nil {\n\t\t\t\t\t\t\t\t\tobservability.Ctx(ctx, h.logger).Error(\"[execute-heal-b] prune master (numeric pk) failed\", zap.Error(res.Error))\n\t\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\t\tpruned += int(res.RowsAffected)\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t} else {\n\t\t\t\t\t\t// Kiểu chuỗi (string, varchar, text, uuid, objectId)\n\t\t\t\t\t\tfor i := 0; i < len(staleB.MissingFromSrc); i += batch {\n\t\t\t\t\t\t\tend := i + batch\n\t\t\t\t\t\t\tif end > len(staleB.MissingFromSrc) {\n\t\t\t\t\t\t\t\tend = len(staleB.MissingFromSrc)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tres := masterDB.WithContext(ctx).Exec(delSQL, staleB.MissingFromSrc[i:end])\n\t\t\t\t\t\t\tif res.Error != nil {\n\t\t\t\t\t\t\t\tobservability.Ctx(ctx, h.logger).Error(\"[execute-heal-b] prune master (string pk) failed\", zap.Error(res.Error))\n\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\tpruned += int(res.RowsAffected)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.0282,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2637,
+                "INCORRECT": 0.4528,
+                "UNSUPPORTED": 0.2835
+              },
+              "confidence": 0.0282,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 790,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In recon_execute_heal_handler.go lines 639-660, both the numeric PK and string PK prune loops execute masterDB.WithContext(ctx).Exec(delSQL, ...) in batches.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:639-660\n\t\t\t\t\t\t\t\tres := masterDB.WithContext(ctx).Exec(delSQL, numIDs[i:end])\n\t\t\t\t\t\t\t\tif res.Error != nil {\n\t\t\t\t\t\t\t\t\tobservability.Ctx(ctx, h.logger).Error(\"[execute-heal-b] prune master (numeric pk) failed\", zap.Error(res.Error))\n\t\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\t\tpruned += int(res.RowsAffected)\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t} else {\n\t\t\t\t\t\t// Kiểu chuỗi (string, varchar, text, uuid, objectId)\n\t\t\t\t\t\tfor i := 0; i < len(staleB.MissingFromSrc); i += batch {\n\t\t\t\t\t\t\tend := i + batch\n\t\t\t\t\t\t\tif end > len(staleB.MissingFromSrc) {\n\t\t\t\t\t\t\t\tend = len(staleB.MissingFromSrc)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tres := masterDB.WithContext(ctx).Exec(delSQL, staleB.MissingFromSrc[i:end])\n\t\t\t\t\t\t\tif res.Error != nil {\n\t\t\t\t\t\t\t\tobservability.Ctx(ctx, h.logger).Error(\"[execute-heal-b] prune master (string pk) failed\", zap.Error(res.Error))\n\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\tpruned += int(res.RowsAffected)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1073,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5115,
+                "INCORRECT": 0.3536,
+                "UNSUPPORTED": 0.1349
+              },
+              "confidence": 0.1073,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 796,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:639-660\n\t\t\t\t\t\t\t\tres := masterDB.WithContext(ctx).Exec(delSQL, numIDs[i:end])\n\t\t\t\t\t\t\t\tif res.Error != nil {\n\t\t\t\t\t\t\t\t\tobservability.Ctx(ctx, h.logger).Error(\"[execute-heal-b] prune master (numeric pk) failed\", zap.Error(res.Error))\n\t\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\t\tpruned += int(res.RowsAffected)\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t} else {\n\t\t\t\t\t\t// Kiểu chuỗi (string, varchar, text, uuid, objectId)\n\t\t\t\t\t\tfor i := 0; i < len(staleB.MissingFromSrc); i += batch {\n\t\t\t\t\t\t\tend := i + batch\n\t\t\t\t\t\t\tif end > len(staleB.MissingFromSrc) {\n\t\t\t\t\t\t\t\tend = len(staleB.MissingFromSrc)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tres := masterDB.WithContext(ctx).Exec(delSQL, staleB.MissingFromSrc[i:end])\n\t\t\t\t\t\t\tif res.Error != nil {\n\t\t\t\t\t\t\t\tobservability.Ctx(ctx, h.logger).Error(\"[execute-heal-b] prune master (string pk) failed\", zap.Error(res.Error))\n\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\tpruned += int(res.RowsAffected)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n",
+          "claim": "In recon_execute_heal_handler.go lines 639-660, both the numeric PK and string PK prune loops execute masterDB.WithContext(ctx).Exec(delSQL, ...) in batches."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6928,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.945,
+                "NO": 0.055
+              },
+              "confidence": 0.6928,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 729,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:639-660\n\t\t\t\t\t\t\t\tres := masterDB.WithContext(ctx).Exec(delSQL, numIDs[i:end])\n\t\t\t\t\t\t\t\tif res.Error != nil {\n\t\t\t\t\t\t\t\t\tobservability.Ctx(ctx, h.logger).Error(\"[execute-heal-b] prune master (numeric pk) failed\", zap.Error(res.Error))\n\t\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\t\tpruned += int(res.RowsAffected)\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t} else {\n\t\t\t\t\t\t// Kiểu chuỗi (string, varchar, text, uuid, objectId)\n\t\t\t\t\t\tfor i := 0; i < len(staleB.MissingFromSrc); i += batch {\n\t\t\t\t\t\t\tend := i + batch\n\t\t\t\t\t\t\tif end > len(staleB.MissingFromSrc) {\n\t\t\t\t\t\t\t\tend = len(staleB.MissingFromSrc)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tres := masterDB.WithContext(ctx).Exec(delSQL, staleB.MissingFromSrc[i:end])\n\t\t\t\t\t\t\tif res.Error != nil {\n\t\t\t\t\t\t\t\tobservability.Ctx(ctx, h.logger).Error(\"[execute-heal-b] prune master (string pk) failed\", zap.Error(res.Error))\n\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\tpruned += int(res.RowsAffected)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n",
+          "claim": "In recon_execute_heal_handler.go lines 639-660, both the numeric PK and string PK prune loops execute masterDB.WithContext(ctx).Exec(delSQL, ...) in batches."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "basis": "code",
+    "claim": "In transmuter.go lines 129-171, NewTransmuterModule initializes TransmuterModule with batchSize 2000 and cacheTTL 60 seconds.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:129-171\nfunc NewTransmuterModule(\n\tsystemDB *gorm.DB,\n\tconnMgr *source.ConnectionManager,\n\truntimeRepo *repomaster.SyncRuntimeStateRepo,\n\tddlEnsurer MasterDestinationEnsurer,\n\ttypeRes *shadow.TypeResolver,\n\tlogger *zap.Logger,\n) *TransmuterModule {\n\tif systemDB != nil && (systemDB.Dialector == nil || systemDB.Dialector.Name() != \"sqlite\") {\n\t\t_ = systemDB.Exec(`\n\t\t\tUPDATE cdc_system.master_binding mb\n\t\t\t   SET transform_spec = jsonb_set(\n\t\t\t           CASE\n\t\t\t               WHEN mb.transform_spec IS NULL OR jsonb_typeof(mb.transform_spec) <> 'object' THEN '{}'::jsonb\n\t\t\t               ELSE mb.transform_spec\n\t\t\t           END,\n\t\t\t           '{pk}',\n\t\t\t           to_jsonb(BTRIM(sor.primary_key_field)),\n\t\t\t           true\n\t\t\t       ),\n\t\t\t       updated_at = NOW()\n\t\t\t  FROM cdc_system.source_object_registry sor\n\t\t\t WHERE sor.id = mb.source_object_id\n\t\t\t   AND COALESCE(mb.transform_type, '') <> 'flatten'\n\t\t\t   AND COALESCE(BTRIM(mb.transform_spec->>'pk'), '') = ''\n\t\t\t   AND COALESCE(BTRIM(sor.primary_key_field), '') <> ''\n\t\t`).Error\n\t}\n\treturn &TransmuterModule{\n\t\tsystemDB:             systemDB,\n\t\tconnMgr:              connMgr,\n\t\truntimeRepo:          runtimeRepo,\n\t\tddlEnsurer:           ddlEnsurer,\n\t\ttypeRes:              typeRes,\n\t\tlogger:               logger,\n\t\tbatchSize:            2000,\n\t\tcache:                make(map[string]cachedRules),\n\t\tshadowCache:          make(map[string]shadowState),\n\t\tensuredMasters:       make(map[string]bool),\n\t\tensuredShadowIndexes: make(map[string]bool), // Khởi tạo cache\n\t\tcacheTTL:             60 * time.Second,\n\t}\n}\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.0575,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2426,
+                "INCORRECT": 0.506,
+                "UNSUPPORTED": 0.2514
+              },
+              "confidence": 0.0575,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmuter.go lines 129-171, NewTransmuterModule initializes TransmuterModule with batchSize 2000 and cacheTTL 60 seconds.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:129-171\nfunc NewTransmuterModule(\n\tsystemDB *gorm.DB,\n\tconnMgr *source.ConnectionManager,\n\truntimeRepo *repomaster.SyncRuntimeStateRepo,\n\tddlEnsurer MasterDestinationEnsurer,\n\ttypeRes *shadow.TypeResolver,\n\tlogger *zap.Logger,\n) *TransmuterModule {\n\tif systemDB != nil && (systemDB.Dialector == nil || systemDB.Dialector.Name() != \"sqlite\") {\n\t\t_ = systemDB.Exec(`\n\t\t\tUPDATE cdc_system.master_binding mb\n\t\t\t   SET transform_spec = jsonb_set(\n\t\t\t           CASE\n\t\t\t               WHEN mb.transform_spec IS NULL OR jsonb_typeof(mb.transform_spec) <> 'object' THEN '{}'::jsonb\n\t\t\t               ELSE mb.transform_spec\n\t\t\t           END,\n\t\t\t           '{pk}',\n\t\t\t           to_jsonb(BTRIM(sor.primary_key_field)),\n\t\t\t           true\n\t\t\t       ),\n\t\t\t       updated_at = NOW()\n\t\t\t  FROM cdc_system.source_object_registry sor\n\t\t\t WHERE sor.id = mb.source_object_id\n\t\t\t   AND COALESCE(mb.transform_type, '') <> 'flatten'\n\t\t\t   AND COALESCE(BTRIM(mb.transform_spec->>'pk'), '') = ''\n\t\t\t   AND COALESCE(BTRIM(sor.primary_key_field), '') <> ''\n\t\t`).Error\n\t}\n\treturn &TransmuterModule{\n\t\tsystemDB:             systemDB,\n\t\tconnMgr:              connMgr,\n\t\truntimeRepo:          runtimeRepo,\n\t\tddlEnsurer:           ddlEnsurer,\n\t\ttypeRes:              typeRes,\n\t\tlogger:               logger,\n\t\tbatchSize:            2000,\n\t\tcache:                make(map[string]cachedRules),\n\t\tshadowCache:          make(map[string]shadowState),\n\t\tensuredMasters:       make(map[string]bool),\n\t\tensuredShadowIndexes: make(map[string]bool), // Khởi tạo cache\n\t\tcacheTTL:             60 * time.Second,\n\t}\n}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.0129,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3422,
+                "INCORRECT": 0.3965,
+                "UNSUPPORTED": 0.2613
+              },
+              "confidence": 0.0129,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:129-171\nfunc NewTransmuterModule(\n\tsystemDB *gorm.DB,\n\tconnMgr *source.ConnectionManager,\n\truntimeRepo *repomaster.SyncRuntimeStateRepo,\n\tddlEnsurer MasterDestinationEnsurer,\n\ttypeRes *shadow.TypeResolver,\n\tlogger *zap.Logger,\n) *TransmuterModule {\n\tif systemDB != nil && (systemDB.Dialector == nil || systemDB.Dialector.Name() != \"sqlite\") {\n\t\t_ = systemDB.Exec(`\n\t\t\tUPDATE cdc_system.master_binding mb\n\t\t\t   SET transform_spec = jsonb_set(\n\t\t\t           CASE\n\t\t\t               WHEN mb.transform_spec IS NULL OR jsonb_typeof(mb.transform_spec) <> 'object' THEN '{}'::jsonb\n\t\t\t               ELSE mb.transform_spec\n\t\t\t           END,\n\t\t\t           '{pk}',\n\t\t\t           to_jsonb(BTRIM(sor.primary_key_field)),\n\t\t\t           true\n\t\t\t       ),\n\t\t\t       updated_at = NOW()\n\t\t\t  FROM cdc_system.source_object_registry sor\n\t\t\t WHERE sor.id = mb.source_object_id\n\t\t\t   AND COALESCE(mb.transform_type, '') <> 'flatten'\n\t\t\t   AND COALESCE(BTRIM(mb.transform_spec->>'pk'), '') = ''\n\t\t\t   AND COALESCE(BTRIM(sor.primary_key_field), '') <> ''\n\t\t`).Error\n\t}\n\treturn &TransmuterModule{\n\t\tsystemDB:             systemDB,\n\t\tconnMgr:              connMgr,\n\t\truntimeRepo:          runtimeRepo,\n\t\tddlEnsurer:           ddlEnsurer,\n\t\ttypeRes:              typeRes,\n\t\tlogger:               logger,\n\t\tbatchSize:            2000,\n\t\tcache:                make(map[string]cachedRules),\n\t\tshadowCache:          make(map[string]shadowState),\n\t\tensuredMasters:       make(map[string]bool),\n\t\tensuredShadowIndexes: make(map[string]bool), // Khởi tạo cache\n\t\tcacheTTL:             60 * time.Second,\n\t}\n}\n",
+          "claim": "In transmuter.go lines 129-171, NewTransmuterModule initializes TransmuterModule with batchSize 2000 and cacheTTL 60 seconds."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8854,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9846,
+                "NO": 0.0154
+              },
+              "confidence": 0.8854,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 983,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:129-171\nfunc NewTransmuterModule(\n\tsystemDB *gorm.DB,\n\tconnMgr *source.ConnectionManager,\n\truntimeRepo *repomaster.SyncRuntimeStateRepo,\n\tddlEnsurer MasterDestinationEnsurer,\n\ttypeRes *shadow.TypeResolver,\n\tlogger *zap.Logger,\n) *TransmuterModule {\n\tif systemDB != nil && (systemDB.Dialector == nil || systemDB.Dialector.Name() != \"sqlite\") {\n\t\t_ = systemDB.Exec(`\n\t\t\tUPDATE cdc_system.master_binding mb\n\t\t\t   SET transform_spec = jsonb_set(\n\t\t\t           CASE\n\t\t\t               WHEN mb.transform_spec IS NULL OR jsonb_typeof(mb.transform_spec) <> 'object' THEN '{}'::jsonb\n\t\t\t               ELSE mb.transform_spec\n\t\t\t           END,\n\t\t\t           '{pk}',\n\t\t\t           to_jsonb(BTRIM(sor.primary_key_field)),\n\t\t\t           true\n\t\t\t       ),\n\t\t\t       updated_at = NOW()\n\t\t\t  FROM cdc_system.source_object_registry sor\n\t\t\t WHERE sor.id = mb.source_object_id\n\t\t\t   AND COALESCE(mb.transform_type, '') <> 'flatten'\n\t\t\t   AND COALESCE(BTRIM(mb.transform_spec->>'pk'), '') = ''\n\t\t\t   AND COALESCE(BTRIM(sor.primary_key_field), '') <> ''\n\t\t`).Error\n\t}\n\treturn &TransmuterModule{\n\t\tsystemDB:             systemDB,\n\t\tconnMgr:              connMgr,\n\t\truntimeRepo:          runtimeRepo,\n\t\tddlEnsurer:           ddlEnsurer,\n\t\ttypeRes:              typeRes,\n\t\tlogger:               logger,\n\t\tbatchSize:            2000,\n\t\tcache:                make(map[string]cachedRules),\n\t\tshadowCache:          make(map[string]shadowState),\n\t\tensuredMasters:       make(map[string]bool),\n\t\tensuredShadowIndexes: make(map[string]bool), // Khởi tạo cache\n\t\tcacheTTL:             60 * time.Second,\n\t}\n}\n",
+          "claim": "In transmuter.go lines 129-171, NewTransmuterModule initializes TransmuterModule with batchSize 2000 and cacheTTL 60 seconds."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "C-TRUE-1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "In transmuter.go lines 164-170, TransmuterModule sets batchSize to 2000 and cacheTTL to 60 * time.Second.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:164-170\n\t\tbatchSize:            2000,\n\t\tcache:                make(map[string]cachedRules),\n\t\tshadowCache:          make(map[string]shadowState),\n\t\tensuredMasters:       make(map[string]bool),\n\t\tensuredShadowIndexes: make(map[string]bool), // Khởi tạo cache\n\t\tcacheTTL:             60 * time.Second,\n\t}\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1173,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4739,
+                "INCORRECT": 0.4097,
+                "UNSUPPORTED": 0.1163
+              },
+              "confidence": 0.1173,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 368,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmuter.go lines 164-170, TransmuterModule sets batchSize to 2000 and cacheTTL to 60 * time.Second.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:164-170\n\t\tbatchSize:            2000,\n\t\tcache:                make(map[string]cachedRules),\n\t\tshadowCache:          make(map[string]shadowState),\n\t\tensuredMasters:       make(map[string]bool),\n\t\tensuredShadowIndexes: make(map[string]bool), // Khởi tạo cache\n\t\tcacheTTL:             60 * time.Second,\n\t}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0294,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4401,
+                "INCORRECT": 0.2334,
+                "UNSUPPORTED": 0.3265
+              },
+              "confidence": 0.0294,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 374,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:164-170\n\t\tbatchSize:            2000,\n\t\tcache:                make(map[string]cachedRules),\n\t\tshadowCache:          make(map[string]shadowState),\n\t\tensuredMasters:       make(map[string]bool),\n\t\tensuredShadowIndexes: make(map[string]bool), // Khởi tạo cache\n\t\tcacheTTL:             60 * time.Second,\n\t}\n",
+          "claim": "In transmuter.go lines 164-170, TransmuterModule sets batchSize to 2000 and cacheTTL to 60 * time.Second."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8029,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9695,
+                "NO": 0.0305
+              },
+              "confidence": 0.8029,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 307,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:164-170\n\t\tbatchSize:            2000,\n\t\tcache:                make(map[string]cachedRules),\n\t\tshadowCache:          make(map[string]shadowState),\n\t\tensuredMasters:       make(map[string]bool),\n\t\tensuredShadowIndexes: make(map[string]bool), // Khởi tạo cache\n\t\tcacheTTL:             60 * time.Second,\n\t}\n",
+          "claim": "In transmuter.go lines 164-170, TransmuterModule sets batchSize to 2000 and cacheTTL to 60 * time.Second."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "C-FALSE-1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In transmuter.go lines 164-170, TransmuterModule sets batchSize to 999999 and drops all database tables.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:164-170\n\t\tbatchSize:            2000,\n\t\tcache:                make(map[string]cachedRules),\n\t\tshadowCache:          make(map[string]shadowState),\n\t\tensuredMasters:       make(map[string]bool),\n\t\tensuredShadowIndexes: make(map[string]bool), // Khởi tạo cache\n\t\tcacheTTL:             60 * time.Second,\n\t}\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2753,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6636,
+                "INCORRECT": 0.2765,
+                "UNSUPPORTED": 0.0599
+              },
+              "confidence": 0.2753,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 364,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmuter.go lines 164-170, TransmuterModule sets batchSize to 999999 and drops all database tables.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:164-170\n\t\tbatchSize:            2000,\n\t\tcache:                make(map[string]cachedRules),\n\t\tshadowCache:          make(map[string]shadowState),\n\t\tensuredMasters:       make(map[string]bool),\n\t\tensuredShadowIndexes: make(map[string]bool), // Khởi tạo cache\n\t\tcacheTTL:             60 * time.Second,\n\t}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.0265,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.379,
+                "INCORRECT": 0.3972,
+                "UNSUPPORTED": 0.2238
+              },
+              "confidence": 0.0265,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 370,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:164-170\n\t\tbatchSize:            2000,\n\t\tcache:                make(map[string]cachedRules),\n\t\tshadowCache:          make(map[string]shadowState),\n\t\tensuredMasters:       make(map[string]bool),\n\t\tensuredShadowIndexes: make(map[string]bool), // Khởi tạo cache\n\t\tcacheTTL:             60 * time.Second,\n\t}\n",
+          "claim": "In transmuter.go lines 164-170, TransmuterModule sets batchSize to 999999 and drops all database tables."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.2402,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.7802,
+                "NO": 0.2198
+              },
+              "confidence": 0.2402,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 303,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:164-170\n\t\tbatchSize:            2000,\n\t\tcache:                make(map[string]cachedRules),\n\t\tshadowCache:          make(map[string]shadowState),\n\t\tensuredMasters:       make(map[string]bool),\n\t\tensuredShadowIndexes: make(map[string]bool), // Khởi tạo cache\n\t\tcacheTTL:             60 * time.Second,\n\t}\n",
+          "claim": "In transmuter.go lines 164-170, TransmuterModule sets batchSize to 999999 and drops all database tables."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "C-FALSE-2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In transmuter_utils.go lines 736-749, resolveConflictTarget always returns the hardcoded string \"mongodb_object_id\" regardless of transform_spec.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:736-749\nfunc resolveConflictTarget(binding *masterBindingRuntime, colTypes map[string]string) string {\n\tif binding != nil && len(binding.TransformSpec) > 0 {\n\t\tpk := parsePKFromSpec(binding.TransformSpec)\n\t\tif pk != \"\" && pk != \"_gpay_id\" && ddlIdentRe.MatchString(pk) {\n\t\t\tif colTypes == nil {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t\tif _, ok := colTypes[pk]; ok {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t}\n\t}\n\treturn \"_gpay_id\"\n}\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3988,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7832,
+                "INCORRECT": 0.1452,
+                "UNSUPPORTED": 0.0717
+              },
+              "confidence": 0.3988,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 389,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmuter_utils.go lines 736-749, resolveConflictTarget always returns the hardcoded string \"mongodb_object_id\" regardless of transform_spec.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:736-749\nfunc resolveConflictTarget(binding *masterBindingRuntime, colTypes map[string]string) string {\n\tif binding != nil && len(binding.TransformSpec) > 0 {\n\t\tpk := parsePKFromSpec(binding.TransformSpec)\n\t\tif pk != \"\" && pk != \"_gpay_id\" && ddlIdentRe.MatchString(pk) {\n\t\t\tif colTypes == nil {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t\tif _, ok := colTypes[pk]; ok {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t}\n\t}\n\treturn \"_gpay_id\"\n}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.2163,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.1698,
+                "INCORRECT": 0.6712,
+                "UNSUPPORTED": 0.159
+              },
+              "confidence": 0.2163,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 395,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:736-749\nfunc resolveConflictTarget(binding *masterBindingRuntime, colTypes map[string]string) string {\n\tif binding != nil && len(binding.TransformSpec) > 0 {\n\t\tpk := parsePKFromSpec(binding.TransformSpec)\n\t\tif pk != \"\" && pk != \"_gpay_id\" && ddlIdentRe.MatchString(pk) {\n\t\t\tif colTypes == nil {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t\tif _, ok := colTypes[pk]; ok {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t}\n\t}\n\treturn \"_gpay_id\"\n}\n",
+          "claim": "In transmuter_utils.go lines 736-749, resolveConflictTarget always returns the hardcoded string \"mongodb_object_id\" regardless of transform_spec."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.0255,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.5938,
+                "NO": 0.4062
+              },
+              "confidence": 0.0255,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 328,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:736-749\nfunc resolveConflictTarget(binding *masterBindingRuntime, colTypes map[string]string) string {\n\tif binding != nil && len(binding.TransformSpec) > 0 {\n\t\tpk := parsePKFromSpec(binding.TransformSpec)\n\t\tif pk != \"\" && pk != \"_gpay_id\" && ddlIdentRe.MatchString(pk) {\n\t\t\tif colTypes == nil {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t\tif _, ok := colTypes[pk]; ok {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t}\n\t}\n\treturn \"_gpay_id\"\n}\n",
+          "claim": "In transmuter_utils.go lines 736-749, resolveConflictTarget always returns the hardcoded string \"mongodb_object_id\" regardless of transform_spec."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

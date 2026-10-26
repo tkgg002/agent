@@ -1,0 +1,79 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Kiểm tra cấu hình model mặc định trong loadCLISettings tại internal/webui/task_inspector.go dòng 603-620",
+    "claim": "Trong task_inspector.go dòng 603-620, hàm loadCLISettings khởi tạo biến def kiểu CLISettingsDTO với PlannerModel, CoderHighModel, QAAuditorModel và SecurityModel đều bằng \"gemini-4-argon (antigravity)\" và EnforceApproveGate: true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:603-620\nfunc (s *Server) loadCLISettings() CLISettingsDTO {\n\tagentRoot := \"/Users/trainguyen/Documents/work/agent\"\n\tif s.Gatekeeper != nil && s.Gatekeeper.AgentCoreDir != \"\" {\n\t\tagentRoot = s.Gatekeeper.AgentCoreDir\n\t}\n\tdef := CLISettingsDTO{\n\t\tDefaultRunner:      s.activeRunner,\n\t\tPlannerModel:       \"gemini-4-argon (antigravity)\",\n\t\tCoderHighModel:     \"gemini-4-argon (antigravity)\",\n\t\tCoderStdModel:      \"gemini-2.5-flash (antigravity)\",\n\t\tQAAuditorModel:     \"gemini-4-argon (antigravity)\",\n\t\tSecurityModel:      \"gemini-4-argon (antigravity)\",\n\t\tAgentKernelRoot:    agentRoot,\n\t\tEnforceApproveGate: true,\n\t}"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Kiểm tra cấu trúc hai bước cuối 'qa' và 'pr' trong buildAutopilotView tại internal/webui/server.go dòng 2683-2696",
+    "claim": "Trong server.go dòng 2683-2696, nhóm ID \"qa\" chứa hai thẻ là \"Local QA & DG3\" (AgentSlot \"Slot K / H\", Model cliCfg.QAAuditorModel) và \"Self-Healing\" (Subtitle \"S5->S3->S4->S5\", Meta \"G1-G8 Gates\", AgentSlot \"Slot I\", Model cliCfg.SecurityModel), còn nhóm ID \"pr\" chứa thẻ \"Isolated Branch\" (RoleLabel \"▶_ Worktree Ready\", AgentSlot \"Slot C\").",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:2683-2696\n\t\t{\n\t\t\tID:         \"qa\",\n\t\t\tRoundBadge: fmt.Sprintf(\"⟲ %d QA/DG3 runs (%s)\", qaRuns, activeTask.ExternalID),\n\t\t\tCards: []AutopilotSubCardDTO{\n\t\t\t\t{Title: \"Local QA & DG3\", Subtitle: qaSubtitle, Meta: fmt.Sprintf(\"%d min · $%.2f\", qaMin, qaCost), Status: qaStatus, RoleLabel: \"🧪 QA Auditor\", AgentSlot: \"Slot K / H\", SkillBadge: \"/qa-agent · DG3\", Model: cliCfg.QAAuditorModel},\n\t\t\t\t{Title: \"Self-Healing\", Subtitle: \"S5->S3->S4->S5\", Meta: \"G1-G8 Gates\", Status: qaStatus, RoleLabel: \"🛡️ Security Guard\", AgentSlot: \"Slot I\", SkillBadge: \"/security-agent\", Model: cliCfg.SecurityModel},\n\t\t\t},\n\t\t},\n\t\t{\n\t\t\tID: \"pr\",\n\t\t\tCards: []AutopilotSubCardDTO{\n\t\t\t\t{Title: \"Isolated Branch\", Subtitle: gitRef, Meta: \"No-Push (H5)\", Status: prStatus, RoleLabel: \"▶_ Worktree Ready\", AgentSlot: \"Slot C\", SkillBadge: \"/session-wrapup\", Model: cliCfg.CoderHighModel},\n\t\t\t},\n\t\t},"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Kiểm tra bước 'sub-qa' và 'sub-branch' trong buildSubTaskPipelineStages tại internal/webui/task_inspector.go dòng 2300-2327",
+    "claim": "Trong task_inspector.go dòng 2300-2327, bước ID \"sub-qa\" có RoundBadge \"S5 QA + DG3\" với thẻ \"Local QA & Output Check\" (AgentSlot \"Slot K\", SkillBadge \"/qa-agent\", Model st.Model) và bước ID \"sub-branch\" có thẻ \"Isolated Branch\" (Subtitle st.BranchName, Meta downLabel).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:2300-2327\n\t\t{\n\t\t\tID:         \"sub-qa\",\n\t\t\tRoundBadge: \"S5 QA + DG3\",\n\t\t\tCards: []AutopilotSubCardDTO{\n\t\t\t\t{\n\t\t\t\t\tTitle:      \"Local QA & Output Check\",\n\t\t\t\t\tSubtitle:   st.OutputContract.EvidenceReceiptID,\n\t\t\t\t\tMeta:       st.TestDoD,\n\t\t\t\t\tStatus:     qaSt,\n\t\t\t\t\tRoleLabel:  \"🧪 QA & DG3 Auditor\",\n\t\t\t\t\tAgentSlot:  \"Slot K\",\n\t\t\t\t\tSkillBadge: \"/qa-agent\",\n\t\t\t\t\tModel:      st.Model,\n\t\t\t\t},\n\t\t\t},\n\t\t},\n\t\t{\n\t\t\tID: \"sub-branch\",\n\t\t\tCards: []AutopilotSubCardDTO{\n\t\t\t\t{\n\t\t\t\t\tTitle:    \"Isolated Branch\",\n\t\t\t\t\tSubtitle: st.BranchName,\n\t\t\t\t\tMeta:     downLabel,\n\t\t\t\t\tStatus:   branchSt,\n\t\t\t\t},\n\t\t\t},\n\t\t},"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Kiểm tra checkUpstreamWaveGate trong runSubTaskLifecycleAction tại internal/webui/task_inspector.go dòng 2376-2389",
+    "claim": "Trong task_inspector.go dòng 2376-2389, closure checkUpstreamWaveGate kiểm tra nếu st.WaveIndex > 0 && !st.InputContract.UpstreamReady thì gán st.Stage = \"NEEDS_YOU\", st.Status = \"waiting\", ghi \"NEEDS_YOU\\n\" vào stageFile và trả về false.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:2376-2389\n\t// Helper to check Upstream Wave Dependency Gate (GAP-FRAC-AUDIT-01)\n\tcheckUpstreamWaveGate := func(attemptedAction string) bool {\n\t\tif st.WaveIndex > 0 && !st.InputContract.UpstreamReady {\n\t\t\tst.Stage = \"NEEDS_YOU\"\n\t\t\tst.Status = \"waiting\"\n\t\t\t_ = os.WriteFile(stageFile, []byte(\"NEEDS_YOU\\n\"), 0o644)\n\t\t\tmsg := fmt.Sprintf(\"[Wave Dependency Gate BLOCK] Chặn %s trên %s (Wave %d): Upstream DependsOn (%s) chưa đạt DONE (UpstreamReady=false)!\",\n\t\t\t\tattemptedAction, st.SubTaskID, st.WaveIndex, strings.Join(st.DependsOn, \", \"))\n\t\t\tappendSubProgress(msg)\n\t\t\ts.appendTaskLog(qt.ExternalID, msg)\n\t\t\treturn false\n\t\t}\n\t\treturn true\n\t}"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Kiểm tra bước 'implement' trong buildAutopilotView tại internal/webui/server.go dòng 2675-2682",
+    "claim": "Trong server.go dòng 2675-2682, nhóm ID \"implement\" chứa hai thẻ là \"Implement (S4)\" (AgentSlot \"Slot B / D / E\", SkillBadge \"/muscle-execute\") và \"Sub-Tasks Progress\" (Subtitle \"Zero-Mockup H4b\", RoleLabel \"⚡ Multi-Repo Wave\", AgentSlot \"Slot E / F\").",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:2675-2682\n\t\t{\n\t\t\tID:         \"implement\",\n\t\t\tRoundBadge: fmt.Sprintf(\"⟲ %d build runs (%s)\", implRuns, activeTask.ExternalID),\n\t\t\tCards: []AutopilotSubCardDTO{\n\t\t\t\t{Title: \"Implement (S4)\", Subtitle: implSubtitle, Meta: fmt.Sprintf(\"%d min · $%.2f\", implMin, implCost), Status: implStatus, RoleLabel: \"🛠️ MUSCLE · Coder\", AgentSlot: \"Slot B / D / E\", SkillBadge: \"/muscle-execute\", Model: cliCfg.CoderHighModel},\n\t\t\t\t{Title: \"Sub-Tasks Progress\", Subtitle: \"Zero-Mockup H4b\", Meta: fmt.Sprintf(\"%d/%d Sub-Tasks DONE\", doneSubTasks, len(activeSubTasks)), Status: implStatus, RoleLabel: \"⚡ Multi-Repo Wave\", AgentSlot: \"Slot E / F\", SkillBadge: \"/muscle-execute\", Model: cliCfg.CoderHighModel},\n\t\t\t},\n\t\t},"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Kiểm tra bước 'you' trong buildAutopilotView tại internal/webui/server.go dòng 2669-2674",
+    "claim": "Trong server.go dòng 2669-2674, nhóm ID \"you\" chứa thẻ \"You (Human Gate)\" với Meta \"Propose-Only H4b\", RoleLabel \"👤 You + 🧠 BRAIN\", AgentSlot \"Slot A\" và SkillBadge \"Co-Architect Chat\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:2669-2674\n\t\t{\n\t\t\tID: \"you\",\n\t\t\tCards: []AutopilotSubCardDTO{\n\t\t\t\t{Title: \"You (Human Gate)\", Subtitle: youSubtitle, Meta: \"Propose-Only H4b\", Status: youStatus, RoleLabel: \"👤 You + 🧠 BRAIN\", AgentSlot: \"Slot A\", SkillBadge: \"Co-Architect Chat\", Model: cliCfg.PlannerModel},\n\t\t\t},\n\t\t},"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Kiểm tra định nghĩa CLISettingsDTO tại internal/webui/task_inspector.go dòng 33-42",
+    "claim": "Trong task_inspector.go dòng 33-42, struct CLISettingsDTO khai báo các trường DefaultRunner, PlannerModel, CoderHighModel, CoderStdModel, QAAuditorModel, SecurityModel, AgentKernelRoot và EnforceApproveGate.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:33-42\ntype CLISettingsDTO struct {\n\tDefaultRunner      string `json:\"default_runner\"`       // antigravity | gemini | claude | codex | opencode\n\tPlannerModel       string `json:\"planner_model\"`        // gemini-4-argon (antigravity) | gemini-2.5-pro (antigravity) | claude-opus-4-6\n\tCoderHighModel     string `json:\"coder_high_model\"`     // gemini-4-argon (antigravity) | gemini-2.5-pro (antigravity) | claude-opus-4-6\n\tCoderStdModel      string `json:\"coder_std_model\"`      // gemini-2.5-flash (antigravity) | claude-sonnet-4-6\n\tQAAuditorModel     string `json:\"qa_auditor_model\"`     // gemini-4-argon (antigravity) | claude-opus-4-6\n\tSecurityModel      string `json:\"security_model\"`       // gemini-4-argon (antigravity)\n\tAgentKernelRoot    string `json:\"agent_kernel_root\"`    // /Users/trainguyen/Documents/work/agent\n\tEnforceApproveGate bool   `json:\"enforce_approve_gate\"` // true -> hard stop at NEEDS_YOU after S3\n}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "flow": "Control false: phát biểu sai đường dẫn trả về của cliSettingsPath tại internal/webui/task_inspector.go dòng 595-601",
+    "claim": "Trong task_inspector.go dòng 595-601, hàm cliSettingsPath trả về đường dẫn lưu trong thư mục /etc/postgres/settings.yaml.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:595-601\nfunc (s *Server) cliSettingsPath() string {\n\trootDir := s.Root\n\tif strings.TrimSpace(rootDir) == \"\" {\n\t\trootDir = \".\"\n\t}\n\treturn filepath.Join(rootDir, \".orchestrator\", \"cli_settings.json\")\n}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "flow": "Control false: phát biểu sai giá trị mặc định của EnforceApproveGate trong loadCLISettings tại internal/webui/task_inspector.go dòng 603-620",
+    "claim": "Trong task_inspector.go dòng 603-620, hàm loadCLISettings gán mặc định EnforceApproveGate: false.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:603-620\nfunc (s *Server) loadCLISettings() CLISettingsDTO {\n\tagentRoot := \"/Users/trainguyen/Documents/work/agent\"\n\tif s.Gatekeeper != nil && s.Gatekeeper.AgentCoreDir != \"\" {\n\t\tagentRoot = s.Gatekeeper.AgentCoreDir\n\t}\n\tdef := CLISettingsDTO{\n\t\tDefaultRunner:      s.activeRunner,\n\t\tPlannerModel:       \"gemini-4-argon (antigravity)\",\n\t\tCoderHighModel:     \"gemini-4-argon (antigravity)\",\n\t\tCoderStdModel:      \"gemini-2.5-flash (antigravity)\",\n\t\tQAAuditorModel:     \"gemini-4-argon (antigravity)\",\n\t\tSecurityModel:      \"gemini-4-argon (antigravity)\",\n\t\tAgentKernelRoot:    agentRoot,\n\t\tEnforceApproveGate: true,\n\t}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "flow": "Control true: xác nhận chính xác đường dẫn trả về của cliSettingsPath tại internal/webui/task_inspector.go dòng 595-601",
+    "claim": "Trong task_inspector.go dòng 595-601, hàm cliSettingsPath trả về filepath.Join(rootDir, \".orchestrator\", \"cli_settings.json\").",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:595-601\nfunc (s *Server) cliSettingsPath() string {\n\trootDir := s.Root\n\tif strings.TrimSpace(rootDir) == \"\" {\n\t\trootDir = \".\"\n\t}\n\treturn filepath.Join(rootDir, \".orchestrator\", \"cli_settings.json\")\n}"
+  }
+]

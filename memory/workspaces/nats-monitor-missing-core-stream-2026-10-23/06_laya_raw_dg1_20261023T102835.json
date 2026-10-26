@@ -1,0 +1,1519 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "claim",
+    "claim": "When CDC_TRANSMUTE stream is missing on JetStream, publishTransmuteTrigger retries bb.js.PublishMsg up to 3 times and falls back to Core NATS on subject cdc.cmd.transmute-shadow.core-fallback, while EnsureStreams returns early if the first stream fails and ReconnectHandler does not re-run EnsureStreams.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:105-125\n\tif bb.js != nil {\n\t\tvar pubErr error\n\t\tfor attempt := 1; attempt <= 3; attempt++ {\n\t\t\t_, pubErr = bb.js.PublishMsg(msg)\n\t\t\tif pubErr == nil {\n\t\t\t\treturn\n\t\t\t}\n\t\t\ttime.Sleep(time.Duration(attempt*50) * time.Millisecond)\n\t\t}\n\t\tbb.logger.Error(\"failed to publish transmute trigger to JetStream, falling back to core NATS\",\n\t\t\tzap.String(\"table\", shadowTable), zap.Error(pubErr))\n\t}\n\t// Fallback sang core NATS qua subject riêng (không bị stream CDC_TRANSMUTE chặn và luôn có QueueSubscribe lắng nghe)\n\tif bb.natsConn != nil {\n\t\tfallbackMsg := &nats.Msg{\n\t\t\tSubject: \"cdc.cmd.transmute-shadow.core-fallback\",\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/natsconn/nats_client.go:26-29\n\t\tnats.ReconnectHandler(func(nc *nats.Conn) {\n\t\t\tlogger.Info(\"NATS reconnected\", zap.String(\"url\", nc.ConnectedUrl()))\n\t\t}),\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/natsconn/nats_client.go:159-164\n\t\tif needUpdate {\n\t\t\tif _, err := c.JS.UpdateStream(&info.Config); err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to update stream %s config: %w\", desired.Name, err)\n\t\t\t}\n\t\t}",
+    "flow": "BatchBuffer.publishTransmuteTrigger -> bb.js.PublishMsg fails -> fallbackMsg on cdc.cmd.transmute-shadow.core-fallback -> server_setup.go QueueSubscribe -> HandleTransmuteShadow.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5826,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8705,
+                "INCORRECT": 0.0967,
+                "UNSUPPORTED": 0.0327
+              },
+              "confidence": 0.5826,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 760,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "When CDC_TRANSMUTE stream is missing on JetStream, publishTransmuteTrigger retries bb.js.PublishMsg up to 3 times and falls back to Core NATS on subject cdc.cmd.transmute-shadow.core-fallback, while EnsureStreams returns early if the first stream fails and ReconnectHandler does not re-run EnsureStreams.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:105-125\n\tif bb.js != nil {\n\t\tvar pubErr error\n\t\tfor attempt := 1; attempt <= 3; attempt++ {\n\t\t\t_, pubErr = bb.js.PublishMsg(msg)\n\t\t\tif pubErr == nil {\n\t\t\t\treturn\n\t\t\t}\n\t\t\ttime.Sleep(time.Duration(attempt*50) * time.Millisecond)\n\t\t}\n\t\tbb.logger.Error(\"failed to publish transmute trigger to JetStream, falling back to core NATS\",\n\t\t\tzap.String(\"table\", shadowTable), zap.Error(pubErr))\n\t}\n\t// Fallback sang core NATS qua subject riêng (không bị stream CDC_TRANSMUTE chặn và luôn có QueueSubscribe lắng nghe)\n\tif bb.natsConn != nil {\n\t\tfallbackMsg := &nats.Msg{\n\t\t\tSubject: \"cdc.cmd.transmute-shadow.core-fallback\",\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/natsconn/nats_client.go:26-29\n\t\tnats.ReconnectHandler(func(nc *nats.Conn) {\n\t\t\tlogger.Info(\"NATS reconnected\", zap.String(\"url\", nc.ConnectedUrl()))\n\t\t}),\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/natsconn/nats_client.go:159-164\n\t\tif needUpdate {\n\t\t\tif _, err := c.JS.UpdateStream(&info.Config); err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to update stream %s config: %w\", desired.Name, err)\n\t\t\t}\n\t\t}",
+          "flow": "BatchBuffer.publishTransmuteTrigger -> bb.js.PublishMsg fails -> fallbackMsg on cdc.cmd.transmute-shadow.core-fallback -> server_setup.go QueueSubscribe -> HandleTransmuteShadow."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.1162,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3774,
+                "INCORRECT": 0.5005,
+                "UNSUPPORTED": 0.1221
+              },
+              "confidence": 0.1162,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 799,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Refined S3 solution for MISSING_CORE_STREAM with lock-free watchdog, async ReconnectHandler, 30s cooldown, single source of truth StreamConfig, and fast fallback on ErrNoStreamResponse",
+          "function_workflow": "BatchBuffer.publishTransmuteTrigger -> bb.js.PublishMsg fails -> fallbackMsg on cdc.cmd.transmute-shadow.core-fallback -> server_setup.go QueueSubscribe -> HandleTransmuteShadow.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:105-125\n\tif bb.js != nil {\n\t\tvar pubErr error\n\t\tfor attempt := 1; attempt <= 3; attempt++ {\n\t\t\t_, pubErr = bb.js.PublishMsg(msg)\n\t\t\tif pubErr == nil {\n\t\t\t\treturn\n\t\t\t}\n\t\t\ttime.Sleep(time.Duration(attempt*50) * time.Millisecond)\n\t\t}\n\t\tbb.logger.Error(\"failed to publish transmute trigger to JetStream, falling back to core NATS\",\n\t\t\tzap.String(\"table\", shadowTable), zap.Error(pubErr))\n\t}\n\t// Fallback sang core NATS qua subject riêng (không bị stream CDC_TRANSMUTE chặn và luôn có QueueSubscribe lắng nghe)\n\tif bb.natsConn != nil {\n\t\tfallbackMsg := &nats.Msg{\n\t\t\tSubject: \"cdc.cmd.transmute-shadow.core-fallback\",\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/natsconn/nats_client.go:26-29\n\t\tnats.ReconnectHandler(func(nc *nats.Conn) {\n\t\t\tlogger.Info(\"NATS reconnected\", zap.String(\"url\", nc.ConnectedUrl()))\n\t\t}),\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/natsconn/nats_client.go:159-164\n\t\tif needUpdate {\n\t\t\tif _, err := c.JS.UpdateStream(&info.Config); err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to update stream %s config: %w\", desired.Name, err)\n\t\t\t}\n\t\t}",
+          "claim": "When CDC_TRANSMUTE stream is missing on JetStream, publishTransmuteTrigger retries bb.js.PublishMsg up to 3 times and falls back to Core NATS on subject cdc.cmd.transmute-shadow.core-fallback, while EnsureStreams returns early if the first stream fails and ReconnectHandler does not re-run EnsureStreams."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4371,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.868,
+                "NO": 0.132
+              },
+              "confidence": 0.4371,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 652,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:105-125\n\tif bb.js != nil {\n\t\tvar pubErr error\n\t\tfor attempt := 1; attempt <= 3; attempt++ {\n\t\t\t_, pubErr = bb.js.PublishMsg(msg)\n\t\t\tif pubErr == nil {\n\t\t\t\treturn\n\t\t\t}\n\t\t\ttime.Sleep(time.Duration(attempt*50) * time.Millisecond)\n\t\t}\n\t\tbb.logger.Error(\"failed to publish transmute trigger to JetStream, falling back to core NATS\",\n\t\t\tzap.String(\"table\", shadowTable), zap.Error(pubErr))\n\t}\n\t// Fallback sang core NATS qua subject riêng (không bị stream CDC_TRANSMUTE chặn và luôn có QueueSubscribe lắng nghe)\n\tif bb.natsConn != nil {\n\t\tfallbackMsg := &nats.Msg{\n\t\t\tSubject: \"cdc.cmd.transmute-shadow.core-fallback\",\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/natsconn/nats_client.go:26-29\n\t\tnats.ReconnectHandler(func(nc *nats.Conn) {\n\t\t\tlogger.Info(\"NATS reconnected\", zap.String(\"url\", nc.ConnectedUrl()))\n\t\t}),\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/natsconn/nats_client.go:159-164\n\t\tif needUpdate {\n\t\t\tif _, err := c.JS.UpdateStream(&info.Config); err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to update stream %s config: %w\", desired.Name, err)\n\t\t\t}\n\t\t}",
+          "claim": "When CDC_TRANSMUTE stream is missing on JetStream, publishTransmuteTrigger retries bb.js.PublishMsg up to 3 times and falls back to Core NATS on subject cdc.cmd.transmute-shadow.core-fallback, while EnsureStreams returns early if the first stream fails and ReconnectHandler does not re-run EnsureStreams."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "claim",
+    "claim": "In cdc-cms-service, EnsureStreams currently defines only 3 streams (missing CDC_TRANSMUTE) and buildNATSGovernance appends MISSING_CORE_STREAM alerts when canonicalCoreStreamOrder streams are missing from seenCoreStreams.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/pkgs/natsconn/nats_client.go:71-80\nfunc (c *NatsClient) EnsureStreams() error {\n\tstreams := []struct {\n\t\tname     string\n\t\tsubjects []string\n\t}{\n\t\t{\"CDC_EVENTS\", []string{\"cdc.goopay.>\"}},\n\t\t{\"SCHEMA_DRIFT\", []string{\"schema.drift.detected\"}},\n\t\t{\"SCHEMA_CONFIG\", []string{\"schema.config.reload\"}},\n\t}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:835-847\n\tif jsz != nil {\n\t\tfor _, coreName := range canonicalCoreStreamOrder {\n\t\t\tif !seenCoreStreams[coreName] {\n\t\t\t\tmissingCoreStreams = append(missingCoreStreams, coreName)\n\t\t\t\talerts = append(alerts, map[string]any{\n\t\t\t\t\t\"code\":    \"MISSING_CORE_STREAM\",\n\t\t\t\t\t\"level\":   \"error\",\n\t\t\t\t\t\"stream\":  coreName,\n\t\t\t\t\t\"message\": fmt.Sprintf(\"Thiếu Core Stream bắt buộc '%s' trên NATS JetStream\", coreName),\n\t\t\t\t})\n\t\t\t}\n\t\t}\n\t}",
+    "flow": "GET /api/system/nats/overview -> NATSMonitorHandler.Overview -> buildNATSGovernance -> checks seenCoreStreams against canonicalCoreStreamOrder.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5033,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8327,
+                "INCORRECT": 0.1254,
+                "UNSUPPORTED": 0.0419
+              },
+              "confidence": 0.5033,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 615,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In cdc-cms-service, EnsureStreams currently defines only 3 streams (missing CDC_TRANSMUTE) and buildNATSGovernance appends MISSING_CORE_STREAM alerts when canonicalCoreStreamOrder streams are missing from seenCoreStreams.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/pkgs/natsconn/nats_client.go:71-80\nfunc (c *NatsClient) EnsureStreams() error {\n\tstreams := []struct {\n\t\tname     string\n\t\tsubjects []string\n\t}{\n\t\t{\"CDC_EVENTS\", []string{\"cdc.goopay.>\"}},\n\t\t{\"SCHEMA_DRIFT\", []string{\"schema.drift.detected\"}},\n\t\t{\"SCHEMA_CONFIG\", []string{\"schema.config.reload\"}},\n\t}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:835-847\n\tif jsz != nil {\n\t\tfor _, coreName := range canonicalCoreStreamOrder {\n\t\t\tif !seenCoreStreams[coreName] {\n\t\t\t\tmissingCoreStreams = append(missingCoreStreams, coreName)\n\t\t\t\talerts = append(alerts, map[string]any{\n\t\t\t\t\t\"code\":    \"MISSING_CORE_STREAM\",\n\t\t\t\t\t\"level\":   \"error\",\n\t\t\t\t\t\"stream\":  coreName,\n\t\t\t\t\t\"message\": fmt.Sprintf(\"Thiếu Core Stream bắt buộc '%s' trên NATS JetStream\", coreName),\n\t\t\t\t})\n\t\t\t}\n\t\t}\n\t}",
+          "flow": "GET /api/system/nats/overview -> NATSMonitorHandler.Overview -> buildNATSGovernance -> checks seenCoreStreams against canonicalCoreStreamOrder."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.4901,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.0725,
+                "INCORRECT": 0.8354,
+                "UNSUPPORTED": 0.0921
+              },
+              "confidence": 0.4901,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 654,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Refined S3 solution for MISSING_CORE_STREAM with lock-free watchdog, async ReconnectHandler, 30s cooldown, single source of truth StreamConfig, and fast fallback on ErrNoStreamResponse",
+          "function_workflow": "GET /api/system/nats/overview -> NATSMonitorHandler.Overview -> buildNATSGovernance -> checks seenCoreStreams against canonicalCoreStreamOrder.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/pkgs/natsconn/nats_client.go:71-80\nfunc (c *NatsClient) EnsureStreams() error {\n\tstreams := []struct {\n\t\tname     string\n\t\tsubjects []string\n\t}{\n\t\t{\"CDC_EVENTS\", []string{\"cdc.goopay.>\"}},\n\t\t{\"SCHEMA_DRIFT\", []string{\"schema.drift.detected\"}},\n\t\t{\"SCHEMA_CONFIG\", []string{\"schema.config.reload\"}},\n\t}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:835-847\n\tif jsz != nil {\n\t\tfor _, coreName := range canonicalCoreStreamOrder {\n\t\t\tif !seenCoreStreams[coreName] {\n\t\t\t\tmissingCoreStreams = append(missingCoreStreams, coreName)\n\t\t\t\talerts = append(alerts, map[string]any{\n\t\t\t\t\t\"code\":    \"MISSING_CORE_STREAM\",\n\t\t\t\t\t\"level\":   \"error\",\n\t\t\t\t\t\"stream\":  coreName,\n\t\t\t\t\t\"message\": fmt.Sprintf(\"Thiếu Core Stream bắt buộc '%s' trên NATS JetStream\", coreName),\n\t\t\t\t})\n\t\t\t}\n\t\t}\n\t}",
+          "claim": "In cdc-cms-service, EnsureStreams currently defines only 3 streams (missing CDC_TRANSMUTE) and buildNATSGovernance appends MISSING_CORE_STREAM alerts when canonicalCoreStreamOrder streams are missing from seenCoreStreams."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.0001,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.4939,
+                "NO": 0.5061
+              },
+              "confidence": 0.0001,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 521,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/pkgs/natsconn/nats_client.go:71-80\nfunc (c *NatsClient) EnsureStreams() error {\n\tstreams := []struct {\n\t\tname     string\n\t\tsubjects []string\n\t}{\n\t\t{\"CDC_EVENTS\", []string{\"cdc.goopay.>\"}},\n\t\t{\"SCHEMA_DRIFT\", []string{\"schema.drift.detected\"}},\n\t\t{\"SCHEMA_CONFIG\", []string{\"schema.config.reload\"}},\n\t}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:835-847\n\tif jsz != nil {\n\t\tfor _, coreName := range canonicalCoreStreamOrder {\n\t\t\tif !seenCoreStreams[coreName] {\n\t\t\t\tmissingCoreStreams = append(missingCoreStreams, coreName)\n\t\t\t\talerts = append(alerts, map[string]any{\n\t\t\t\t\t\"code\":    \"MISSING_CORE_STREAM\",\n\t\t\t\t\t\"level\":   \"error\",\n\t\t\t\t\t\"stream\":  coreName,\n\t\t\t\t\t\"message\": fmt.Sprintf(\"Thiếu Core Stream bắt buộc '%s' trên NATS JetStream\", coreName),\n\t\t\t\t})\n\t\t\t}\n\t\t}\n\t}",
+          "claim": "In cdc-cms-service, EnsureStreams currently defines only 3 streams (missing CDC_TRANSMUTE) and buildNATSGovernance appends MISSING_CORE_STREAM alerts when canonicalCoreStreamOrder streams are missing from seenCoreStreams."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "claim",
+    "claim": "canonicalCoreStreams in nats_monitor_handler.go defines the expected retention policies, max bytes, and max age for CDC_EVENTS, CDC_TRANSMUTE (workqueue), SCHEMA_DRIFT, and SCHEMA_CONFIG.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:53-82\nvar canonicalCoreStreams = map[string]CoreStreamSpec{\n\t\"CDC_EVENTS\": {\n\t\tName:              \"CDC_EVENTS\",\n\t\tRole:              \"Hàng đợi dự phòng sự kiện CDC (Hiện KafkaConsumer ghi thẳng qua cdcBatchBuffer RAM, bypass NATS)\",\n\t\tExpectedRetention: \"limits\",\n\t\tExpectedMaxBytes:  512 * 1024 * 1024, // 512 MiB\n\t\tExpectedMaxAgeNs:  int64(24 * time.Hour),\n\t},\n\t\"CDC_TRANSMUTE\": {\n\t\tName:              \"CDC_TRANSMUTE\",\n\t\tRole:              \"Hàng đợi WorkQueue điều phối job Shadow -> Master (Xóa ngay bản tin khỏi đĩa sau khi Worker ACK)\",\n\t\tExpectedRetention: \"workqueue\",\n\t\tExpectedMaxBytes:  256 * 1024 * 1024, // 256 MiB\n\t\tExpectedMaxAgeNs:  int64(1 * time.Hour),\n\t},\n\t\"SCHEMA_DRIFT\": {\n\t\tName:              \"SCHEMA_DRIFT\",\n\t\tRole:              \"Sự kiện phát hiện thay đổi cấu trúc trường dữ liệu từ nguồn\",\n\t\tExpectedRetention: \"limits\",\n\t\tExpectedMaxBytes:  64 * 1024 * 1024, // 64 MiB\n\t\tExpectedMaxAgeNs:  int64(7 * 24 * time.Hour),\n\t},\n\t\"SCHEMA_CONFIG\": {\n\t\tName:              \"SCHEMA_CONFIG\",\n\t\tRole:              \"Sự kiện đồng bộ cấu hình Mapping Rules cho các Worker\",\n\t\tExpectedRetention: \"limits\",\n\t\tExpectedMaxBytes:  64 * 1024 * 1024, // 64 MiB\n\t\tExpectedMaxAgeNs:  int64(7 * 24 * time.Hour),\n\t},\n}",
+    "flow": "canonicalCoreStreams defines the governance rules used by buildNATSGovernance.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3038,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7258,
+                "INCORRECT": 0.1783,
+                "UNSUPPORTED": 0.0959
+              },
+              "confidence": 0.3038,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 838,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "canonicalCoreStreams in nats_monitor_handler.go defines the expected retention policies, max bytes, and max age for CDC_EVENTS, CDC_TRANSMUTE (workqueue), SCHEMA_DRIFT, and SCHEMA_CONFIG.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:53-82\nvar canonicalCoreStreams = map[string]CoreStreamSpec{\n\t\"CDC_EVENTS\": {\n\t\tName:              \"CDC_EVENTS\",\n\t\tRole:              \"Hàng đợi dự phòng sự kiện CDC (Hiện KafkaConsumer ghi thẳng qua cdcBatchBuffer RAM, bypass NATS)\",\n\t\tExpectedRetention: \"limits\",\n\t\tExpectedMaxBytes:  512 * 1024 * 1024, // 512 MiB\n\t\tExpectedMaxAgeNs:  int64(24 * time.Hour),\n\t},\n\t\"CDC_TRANSMUTE\": {\n\t\tName:              \"CDC_TRANSMUTE\",\n\t\tRole:              \"Hàng đợi WorkQueue điều phối job Shadow -> Master (Xóa ngay bản tin khỏi đĩa sau khi Worker ACK)\",\n\t\tExpectedRetention: \"workqueue\",\n\t\tExpectedMaxBytes:  256 * 1024 * 1024, // 256 MiB\n\t\tExpectedMaxAgeNs:  int64(1 * time.Hour),\n\t},\n\t\"SCHEMA_DRIFT\": {\n\t\tName:              \"SCHEMA_DRIFT\",\n\t\tRole:              \"Sự kiện phát hiện thay đổi cấu trúc trường dữ liệu từ nguồn\",\n\t\tExpectedRetention: \"limits\",\n\t\tExpectedMaxBytes:  64 * 1024 * 1024, // 64 MiB\n\t\tExpectedMaxAgeNs:  int64(7 * 24 * time.Hour),\n\t},\n\t\"SCHEMA_CONFIG\": {\n\t\tName:              \"SCHEMA_CONFIG\",\n\t\tRole:              \"Sự kiện đồng bộ cấu hình Mapping Rules cho các Worker\",\n\t\tExpectedRetention: \"limits\",\n\t\tExpectedMaxBytes:  64 * 1024 * 1024, // 64 MiB\n\t\tExpectedMaxAgeNs:  int64(7 * 24 * time.Hour),\n\t},\n}",
+          "flow": "canonicalCoreStreams defines the governance rules used by buildNATSGovernance."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1528,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5287,
+                "INCORRECT": 0.3746,
+                "UNSUPPORTED": 0.0967
+              },
+              "confidence": 0.1528,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 877,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Refined S3 solution for MISSING_CORE_STREAM with lock-free watchdog, async ReconnectHandler, 30s cooldown, single source of truth StreamConfig, and fast fallback on ErrNoStreamResponse",
+          "function_workflow": "canonicalCoreStreams defines the governance rules used by buildNATSGovernance.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:53-82\nvar canonicalCoreStreams = map[string]CoreStreamSpec{\n\t\"CDC_EVENTS\": {\n\t\tName:              \"CDC_EVENTS\",\n\t\tRole:              \"Hàng đợi dự phòng sự kiện CDC (Hiện KafkaConsumer ghi thẳng qua cdcBatchBuffer RAM, bypass NATS)\",\n\t\tExpectedRetention: \"limits\",\n\t\tExpectedMaxBytes:  512 * 1024 * 1024, // 512 MiB\n\t\tExpectedMaxAgeNs:  int64(24 * time.Hour),\n\t},\n\t\"CDC_TRANSMUTE\": {\n\t\tName:              \"CDC_TRANSMUTE\",\n\t\tRole:              \"Hàng đợi WorkQueue điều phối job Shadow -> Master (Xóa ngay bản tin khỏi đĩa sau khi Worker ACK)\",\n\t\tExpectedRetention: \"workqueue\",\n\t\tExpectedMaxBytes:  256 * 1024 * 1024, // 256 MiB\n\t\tExpectedMaxAgeNs:  int64(1 * time.Hour),\n\t},\n\t\"SCHEMA_DRIFT\": {\n\t\tName:              \"SCHEMA_DRIFT\",\n\t\tRole:              \"Sự kiện phát hiện thay đổi cấu trúc trường dữ liệu từ nguồn\",\n\t\tExpectedRetention: \"limits\",\n\t\tExpectedMaxBytes:  64 * 1024 * 1024, // 64 MiB\n\t\tExpectedMaxAgeNs:  int64(7 * 24 * time.Hour),\n\t},\n\t\"SCHEMA_CONFIG\": {\n\t\tName:              \"SCHEMA_CONFIG\",\n\t\tRole:              \"Sự kiện đồng bộ cấu hình Mapping Rules cho các Worker\",\n\t\tExpectedRetention: \"limits\",\n\t\tExpectedMaxBytes:  64 * 1024 * 1024, // 64 MiB\n\t\tExpectedMaxAgeNs:  int64(7 * 24 * time.Hour),\n\t},\n}",
+          "claim": "canonicalCoreStreams in nats_monitor_handler.go defines the expected retention policies, max bytes, and max age for CDC_EVENTS, CDC_TRANSMUTE (workqueue), SCHEMA_DRIFT, and SCHEMA_CONFIG."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7932,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9675,
+                "NO": 0.0325
+              },
+              "confidence": 0.7932,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 762,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:53-82\nvar canonicalCoreStreams = map[string]CoreStreamSpec{\n\t\"CDC_EVENTS\": {\n\t\tName:              \"CDC_EVENTS\",\n\t\tRole:              \"Hàng đợi dự phòng sự kiện CDC (Hiện KafkaConsumer ghi thẳng qua cdcBatchBuffer RAM, bypass NATS)\",\n\t\tExpectedRetention: \"limits\",\n\t\tExpectedMaxBytes:  512 * 1024 * 1024, // 512 MiB\n\t\tExpectedMaxAgeNs:  int64(24 * time.Hour),\n\t},\n\t\"CDC_TRANSMUTE\": {\n\t\tName:              \"CDC_TRANSMUTE\",\n\t\tRole:              \"Hàng đợi WorkQueue điều phối job Shadow -> Master (Xóa ngay bản tin khỏi đĩa sau khi Worker ACK)\",\n\t\tExpectedRetention: \"workqueue\",\n\t\tExpectedMaxBytes:  256 * 1024 * 1024, // 256 MiB\n\t\tExpectedMaxAgeNs:  int64(1 * time.Hour),\n\t},\n\t\"SCHEMA_DRIFT\": {\n\t\tName:              \"SCHEMA_DRIFT\",\n\t\tRole:              \"Sự kiện phát hiện thay đổi cấu trúc trường dữ liệu từ nguồn\",\n\t\tExpectedRetention: \"limits\",\n\t\tExpectedMaxBytes:  64 * 1024 * 1024, // 64 MiB\n\t\tExpectedMaxAgeNs:  int64(7 * 24 * time.Hour),\n\t},\n\t\"SCHEMA_CONFIG\": {\n\t\tName:              \"SCHEMA_CONFIG\",\n\t\tRole:              \"Sự kiện đồng bộ cấu hình Mapping Rules cho các Worker\",\n\t\tExpectedRetention: \"limits\",\n\t\tExpectedMaxBytes:  64 * 1024 * 1024, // 64 MiB\n\t\tExpectedMaxAgeNs:  int64(7 * 24 * time.Hour),\n\t},\n}",
+          "claim": "canonicalCoreStreams in nats_monitor_handler.go defines the expected retention policies, max bytes, and max age for CDC_EVENTS, CDC_TRANSMUTE (workqueue), SCHEMA_DRIFT, and SCHEMA_CONFIG."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "claim",
+    "claim": "TransmuteConsumerPool in centralized-data-service uses a mutex and stopCh channel pattern and binds worker subscriptions to p.cfg.StreamName and p.cfg.ConsumerName.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_consumer_pool.go:62-70\ntype TransmuteConsumerPool struct {\n\tjs      nats.JetStreamContext\n\tcfg     TransmuteConsumerPoolConfig\n\thandler TransmuteTaskHandler\n\tlogger  *zap.Logger\n\tsubs    []*nats.Subscription // VÁ BUG 3: Mảng lưu các worker subscriptions độc lập\n\tstopCh  chan struct{}\n\tmu      sync.Mutex\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_consumer_pool.go:143-153\n\tfor i := 0; i < p.cfg.WorkerCount; i++ {\n\t\tworkerID := i\n\t\tsub, err := p.js.QueueSubscribe(p.cfg.FilterSubject, queueGroup, func(msg *nats.Msg) {\n\t\t\tp.processMessage(msg, workerID)\n\t\t}, nats.Bind(p.cfg.StreamName, p.cfg.ConsumerName), nats.ManualAck())",
+    "flow": "NewTransmuteConsumerPool -> Start -> ConsumerInfo / AddConsumer -> QueueSubscribe with nats.Bind.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.0608,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4419,
+                "INCORRECT": 0.3852,
+                "UNSUPPORTED": 0.1729
+              },
+              "confidence": 0.0608,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 496,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "TransmuteConsumerPool in centralized-data-service uses a mutex and stopCh channel pattern and binds worker subscriptions to p.cfg.StreamName and p.cfg.ConsumerName.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_consumer_pool.go:62-70\ntype TransmuteConsumerPool struct {\n\tjs      nats.JetStreamContext\n\tcfg     TransmuteConsumerPoolConfig\n\thandler TransmuteTaskHandler\n\tlogger  *zap.Logger\n\tsubs    []*nats.Subscription // VÁ BUG 3: Mảng lưu các worker subscriptions độc lập\n\tstopCh  chan struct{}\n\tmu      sync.Mutex\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_consumer_pool.go:143-153\n\tfor i := 0; i < p.cfg.WorkerCount; i++ {\n\t\tworkerID := i\n\t\tsub, err := p.js.QueueSubscribe(p.cfg.FilterSubject, queueGroup, func(msg *nats.Msg) {\n\t\t\tp.processMessage(msg, workerID)\n\t\t}, nats.Bind(p.cfg.StreamName, p.cfg.ConsumerName), nats.ManualAck())",
+          "flow": "NewTransmuteConsumerPool -> Start -> ConsumerInfo / AddConsumer -> QueueSubscribe with nats.Bind."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0619,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4627,
+                "INCORRECT": 0.3607,
+                "UNSUPPORTED": 0.1766
+              },
+              "confidence": 0.0619,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 535,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Refined S3 solution for MISSING_CORE_STREAM with lock-free watchdog, async ReconnectHandler, 30s cooldown, single source of truth StreamConfig, and fast fallback on ErrNoStreamResponse",
+          "function_workflow": "NewTransmuteConsumerPool -> Start -> ConsumerInfo / AddConsumer -> QueueSubscribe with nats.Bind.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_consumer_pool.go:62-70\ntype TransmuteConsumerPool struct {\n\tjs      nats.JetStreamContext\n\tcfg     TransmuteConsumerPoolConfig\n\thandler TransmuteTaskHandler\n\tlogger  *zap.Logger\n\tsubs    []*nats.Subscription // VÁ BUG 3: Mảng lưu các worker subscriptions độc lập\n\tstopCh  chan struct{}\n\tmu      sync.Mutex\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_consumer_pool.go:143-153\n\tfor i := 0; i < p.cfg.WorkerCount; i++ {\n\t\tworkerID := i\n\t\tsub, err := p.js.QueueSubscribe(p.cfg.FilterSubject, queueGroup, func(msg *nats.Msg) {\n\t\t\tp.processMessage(msg, workerID)\n\t\t}, nats.Bind(p.cfg.StreamName, p.cfg.ConsumerName), nats.ManualAck())",
+          "claim": "TransmuteConsumerPool in centralized-data-service uses a mutex and stopCh channel pattern and binds worker subscriptions to p.cfg.StreamName and p.cfg.ConsumerName."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6484,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9338,
+                "NO": 0.0662
+              },
+              "confidence": 0.6484,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 412,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_consumer_pool.go:62-70\ntype TransmuteConsumerPool struct {\n\tjs      nats.JetStreamContext\n\tcfg     TransmuteConsumerPoolConfig\n\thandler TransmuteTaskHandler\n\tlogger  *zap.Logger\n\tsubs    []*nats.Subscription // VÁ BUG 3: Mảng lưu các worker subscriptions độc lập\n\tstopCh  chan struct{}\n\tmu      sync.Mutex\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_consumer_pool.go:143-153\n\tfor i := 0; i < p.cfg.WorkerCount; i++ {\n\t\tworkerID := i\n\t\tsub, err := p.js.QueueSubscribe(p.cfg.FilterSubject, queueGroup, func(msg *nats.Msg) {\n\t\t\tp.processMessage(msg, workerID)\n\t\t}, nats.Bind(p.cfg.StreamName, p.cfg.ConsumerName), nats.ManualAck())",
+          "claim": "TransmuteConsumerPool in centralized-data-service uses a mutex and stopCh channel pattern and binds worker subscriptions to p.cfg.StreamName and p.cfg.ConsumerName."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "claim": "In the refined demo solution, publishTransmuteTrigger breaks out of the retry loop immediately when pubErr is nats.ErrNoStreamResponse or nats.ErrStreamNotFound, and ReconnectHandler uses reconciling.CompareAndSwap(false, true) to run EnsureStreams asynchronously.",
+    "evidence": "DEMO:\nif errors.Is(pubErr, nats.ErrNoStreamResponse) || errors.Is(pubErr, nats.ErrStreamNotFound) {\n\tbreak\n}\nif client.reconciling.CompareAndSwap(false, true) {\n\tgo func(subs []string) {\n\t\tdefer client.reconciling.Store(false)\n\t\t_ = client.EnsureStreams(subs)\n\t}(subjects)\n}",
+    "flow": "publishTransmuteTrigger -> ErrNoStreamResponse -> break -> immediate Core NATS fallback; ReconnectHandler -> CompareAndSwap -> async EnsureStreams.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6661,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9071,
+                "INCORRECT": 0.0639,
+                "UNSUPPORTED": 0.029
+              },
+              "confidence": 0.6661,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 315,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In the refined demo solution, publishTransmuteTrigger breaks out of the retry loop immediately when pubErr is nats.ErrNoStreamResponse or nats.ErrStreamNotFound, and ReconnectHandler uses reconciling.CompareAndSwap(false, true) to run EnsureStreams asynchronously.",
+          "evidence": "DEMO:\nif errors.Is(pubErr, nats.ErrNoStreamResponse) || errors.Is(pubErr, nats.ErrStreamNotFound) {\n\tbreak\n}\nif client.reconciling.CompareAndSwap(false, true) {\n\tgo func(subs []string) {\n\t\tdefer client.reconciling.Store(false)\n\t\t_ = client.EnsureStreams(subs)\n\t}(subjects)\n}",
+          "flow": "publishTransmuteTrigger -> ErrNoStreamResponse -> break -> immediate Core NATS fallback; ReconnectHandler -> CompareAndSwap -> async EnsureStreams."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.9054,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9813,
+                "INCORRECT": 0.0138,
+                "UNSUPPORTED": 0.005
+              },
+              "confidence": 0.9054,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 354,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Refined S3 solution for MISSING_CORE_STREAM with lock-free watchdog, async ReconnectHandler, 30s cooldown, single source of truth StreamConfig, and fast fallback on ErrNoStreamResponse",
+          "function_workflow": "publishTransmuteTrigger -> ErrNoStreamResponse -> break -> immediate Core NATS fallback; ReconnectHandler -> CompareAndSwap -> async EnsureStreams.",
+          "diff_lines": "DEMO:\nif errors.Is(pubErr, nats.ErrNoStreamResponse) || errors.Is(pubErr, nats.ErrStreamNotFound) {\n\tbreak\n}\nif client.reconciling.CompareAndSwap(false, true) {\n\tgo func(subs []string) {\n\t\tdefer client.reconciling.Store(false)\n\t\t_ = client.EnsureStreams(subs)\n\t}(subjects)\n}",
+          "claim": "In the refined demo solution, publishTransmuteTrigger breaks out of the retry loop immediately when pubErr is nats.ErrNoStreamResponse or nats.ErrStreamNotFound, and ReconnectHandler uses reconciling.CompareAndSwap(false, true) to run EnsureStreams asynchronously."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4145,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8595,
+                "NO": 0.1405
+              },
+              "confidence": 0.4145,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 223,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "DEMO:\nif errors.Is(pubErr, nats.ErrNoStreamResponse) || errors.Is(pubErr, nats.ErrStreamNotFound) {\n\tbreak\n}\nif client.reconciling.CompareAndSwap(false, true) {\n\tgo func(subs []string) {\n\t\tdefer client.reconciling.Store(false)\n\t\t_ = client.EnsureStreams(subs)\n\t}(subjects)\n}",
+          "claim": "In the refined demo solution, publishTransmuteTrigger breaks out of the retry loop immediately when pubErr is nats.ErrNoStreamResponse or nats.ErrStreamNotFound, and ReconnectHandler uses reconciling.CompareAndSwap(false, true) to run EnsureStreams asynchronously."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "claim": "In the refined demo solution, watchdogLoop releases p.mu.Unlock() before calling js.ConsumerInfo with nats.MaxWait(2*time.Second) and drainSubsLocked drains or unsubscribes old subscriptions before recreating p.subs.",
+    "evidence": "DEMO:\np.mu.Unlock()\nif !needsHeal {\n\tif _, err := js.ConsumerInfo(streamName, consumerName, nats.MaxWait(2*time.Second)); err != nil {\n\t\tneedsHeal = true\n\t}\n}\nfunc (p *TransmuteConsumerPool) drainSubsLocked() {\n\tfor _, sub := range p.subs {\n\t\tif sub != nil {\n\t\t\tif sub.IsValid() {\n\t\t\t\t_ = sub.Drain()\n\t\t\t} else {\n\t\t\t\t_ = sub.Unsubscribe()\n\t\t\t}\n\t\t}\n\t}\n\tp.subs = nil\n}",
+    "flow": "watchdogLoop -> unlock before network I/O -> ConsumerInfo -> lock and drainSubsLocked before re-subscribing.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.8002,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9527,
+                "INCORRECT": 0.033,
+                "UNSUPPORTED": 0.0143
+              },
+              "confidence": 0.8002,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 379,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In the refined demo solution, watchdogLoop releases p.mu.Unlock() before calling js.ConsumerInfo with nats.MaxWait(2*time.Second) and drainSubsLocked drains or unsubscribes old subscriptions before recreating p.subs.",
+          "evidence": "DEMO:\np.mu.Unlock()\nif !needsHeal {\n\tif _, err := js.ConsumerInfo(streamName, consumerName, nats.MaxWait(2*time.Second)); err != nil {\n\t\tneedsHeal = true\n\t}\n}\nfunc (p *TransmuteConsumerPool) drainSubsLocked() {\n\tfor _, sub := range p.subs {\n\t\tif sub != nil {\n\t\t\tif sub.IsValid() {\n\t\t\t\t_ = sub.Drain()\n\t\t\t} else {\n\t\t\t\t_ = sub.Unsubscribe()\n\t\t\t}\n\t\t}\n\t}\n\tp.subs = nil\n}",
+          "flow": "watchdogLoop -> unlock before network I/O -> ConsumerInfo -> lock and drainSubsLocked before re-subscribing."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.7897,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9471,
+                "INCORRECT": 0.0438,
+                "UNSUPPORTED": 0.0091
+              },
+              "confidence": 0.7897,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 418,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Refined S3 solution for MISSING_CORE_STREAM with lock-free watchdog, async ReconnectHandler, 30s cooldown, single source of truth StreamConfig, and fast fallback on ErrNoStreamResponse",
+          "function_workflow": "watchdogLoop -> unlock before network I/O -> ConsumerInfo -> lock and drainSubsLocked before re-subscribing.",
+          "diff_lines": "DEMO:\np.mu.Unlock()\nif !needsHeal {\n\tif _, err := js.ConsumerInfo(streamName, consumerName, nats.MaxWait(2*time.Second)); err != nil {\n\t\tneedsHeal = true\n\t}\n}\nfunc (p *TransmuteConsumerPool) drainSubsLocked() {\n\tfor _, sub := range p.subs {\n\t\tif sub != nil {\n\t\t\tif sub.IsValid() {\n\t\t\t\t_ = sub.Drain()\n\t\t\t} else {\n\t\t\t\t_ = sub.Unsubscribe()\n\t\t\t}\n\t\t}\n\t}\n\tp.subs = nil\n}",
+          "claim": "In the refined demo solution, watchdogLoop releases p.mu.Unlock() before calling js.ConsumerInfo with nats.MaxWait(2*time.Second) and drainSubsLocked drains or unsubscribes old subscriptions before recreating p.subs."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7763,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.964,
+                "NO": 0.036
+              },
+              "confidence": 0.7763,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 291,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "DEMO:\np.mu.Unlock()\nif !needsHeal {\n\tif _, err := js.ConsumerInfo(streamName, consumerName, nats.MaxWait(2*time.Second)); err != nil {\n\t\tneedsHeal = true\n\t}\n}\nfunc (p *TransmuteConsumerPool) drainSubsLocked() {\n\tfor _, sub := range p.subs {\n\t\tif sub != nil {\n\t\t\tif sub.IsValid() {\n\t\t\t\t_ = sub.Drain()\n\t\t\t} else {\n\t\t\t\t_ = sub.Unsubscribe()\n\t\t\t}\n\t\t}\n\t}\n\tp.subs = nil\n}",
+          "claim": "In the refined demo solution, watchdogLoop releases p.mu.Unlock() before calling js.ConsumerInfo with nats.MaxWait(2*time.Second) and drainSubsLocked drains or unsubscribes old subscriptions before recreating p.subs."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "claim": "In the refined demo solution, tryAutoHealMissingCoreStreams enforces a 30-second cooldown via lastHealAttemptUnix.CompareAndSwap(last, now) before calling h.natsClient.EnsureStreams().",
+    "evidence": "DEMO:\nconst autoHealCooldownSec = 30\nnow := time.Now().Unix()\nlast := h.lastHealAttemptUnix.Load()\nif now-last < autoHealCooldownSec {\n\treturn false\n}\nif !h.lastHealAttemptUnix.CompareAndSwap(last, now) {\n\treturn false\n}\nif err := h.natsClient.EnsureStreams(); err != nil {\n\treturn false\n}",
+    "flow": "NATSMonitorHandler.Overview -> tryAutoHealMissingCoreStreams -> 30s atomic CAS cooldown -> EnsureStreams.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.0628,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5103,
+                "INCORRECT": 0.2708,
+                "UNSUPPORTED": 0.2189
+              },
+              "confidence": 0.0628,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 295,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In the refined demo solution, tryAutoHealMissingCoreStreams enforces a 30-second cooldown via lastHealAttemptUnix.CompareAndSwap(last, now) before calling h.natsClient.EnsureStreams().",
+          "evidence": "DEMO:\nconst autoHealCooldownSec = 30\nnow := time.Now().Unix()\nlast := h.lastHealAttemptUnix.Load()\nif now-last < autoHealCooldownSec {\n\treturn false\n}\nif !h.lastHealAttemptUnix.CompareAndSwap(last, now) {\n\treturn false\n}\nif err := h.natsClient.EnsureStreams(); err != nil {\n\treturn false\n}",
+          "flow": "NATSMonitorHandler.Overview -> tryAutoHealMissingCoreStreams -> 30s atomic CAS cooldown -> EnsureStreams."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.8529,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9678,
+                "INCORRECT": 0.023,
+                "UNSUPPORTED": 0.0092
+              },
+              "confidence": 0.8529,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 334,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Refined S3 solution for MISSING_CORE_STREAM with lock-free watchdog, async ReconnectHandler, 30s cooldown, single source of truth StreamConfig, and fast fallback on ErrNoStreamResponse",
+          "function_workflow": "NATSMonitorHandler.Overview -> tryAutoHealMissingCoreStreams -> 30s atomic CAS cooldown -> EnsureStreams.",
+          "diff_lines": "DEMO:\nconst autoHealCooldownSec = 30\nnow := time.Now().Unix()\nlast := h.lastHealAttemptUnix.Load()\nif now-last < autoHealCooldownSec {\n\treturn false\n}\nif !h.lastHealAttemptUnix.CompareAndSwap(last, now) {\n\treturn false\n}\nif err := h.natsClient.EnsureStreams(); err != nil {\n\treturn false\n}",
+          "claim": "In the refined demo solution, tryAutoHealMissingCoreStreams enforces a 30-second cooldown via lastHealAttemptUnix.CompareAndSwap(last, now) before calling h.natsClient.EnsureStreams()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.3694,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8416,
+                "NO": 0.1584
+              },
+              "confidence": 0.3694,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 208,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "DEMO:\nconst autoHealCooldownSec = 30\nnow := time.Now().Unix()\nlast := h.lastHealAttemptUnix.Load()\nif now-last < autoHealCooldownSec {\n\treturn false\n}\nif !h.lastHealAttemptUnix.CompareAndSwap(last, now) {\n\treturn false\n}\nif err := h.natsClient.EnsureStreams(); err != nil {\n\treturn false\n}",
+          "claim": "In the refined demo solution, tryAutoHealMissingCoreStreams enforces a 30-second cooldown via lastHealAttemptUnix.CompareAndSwap(last, now) before calling h.natsClient.EnsureStreams()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "canonicalCoreStreamOrder in nats_monitor_handler.go contains the 4 core stream names CDC_EVENTS, CDC_TRANSMUTE, SCHEMA_DRIFT, and SCHEMA_CONFIG.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:46-51\nvar canonicalCoreStreamOrder = []string{\n\t\"CDC_EVENTS\",\n\t\"CDC_TRANSMUTE\",\n\t\"SCHEMA_DRIFT\",\n\t\"SCHEMA_CONFIG\",\n}",
+    "flow": "Static slice declaration in nats_monitor_handler.go.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.2546,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.0531,
+                "INCORRECT": 0.6183,
+                "UNSUPPORTED": 0.3286
+              },
+              "confidence": 0.2546,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 266,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "canonicalCoreStreamOrder in nats_monitor_handler.go contains the 4 core stream names CDC_EVENTS, CDC_TRANSMUTE, SCHEMA_DRIFT, and SCHEMA_CONFIG.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:46-51\nvar canonicalCoreStreamOrder = []string{\n\t\"CDC_EVENTS\",\n\t\"CDC_TRANSMUTE\",\n\t\"SCHEMA_DRIFT\",\n\t\"SCHEMA_CONFIG\",\n}",
+          "flow": "Static slice declaration in nats_monitor_handler.go."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2086,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.502,
+                "INCORRECT": 0.4415,
+                "UNSUPPORTED": 0.0566
+              },
+              "confidence": 0.2086,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 305,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Refined S3 solution for MISSING_CORE_STREAM with lock-free watchdog, async ReconnectHandler, 30s cooldown, single source of truth StreamConfig, and fast fallback on ErrNoStreamResponse",
+          "function_workflow": "Static slice declaration in nats_monitor_handler.go.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:46-51\nvar canonicalCoreStreamOrder = []string{\n\t\"CDC_EVENTS\",\n\t\"CDC_TRANSMUTE\",\n\t\"SCHEMA_DRIFT\",\n\t\"SCHEMA_CONFIG\",\n}",
+          "claim": "canonicalCoreStreamOrder in nats_monitor_handler.go contains the 4 core stream names CDC_EVENTS, CDC_TRANSMUTE, SCHEMA_DRIFT, and SCHEMA_CONFIG."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8893,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9853,
+                "NO": 0.0147
+              },
+              "confidence": 0.8893,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 191,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:46-51\nvar canonicalCoreStreamOrder = []string{\n\t\"CDC_EVENTS\",\n\t\"CDC_TRANSMUTE\",\n\t\"SCHEMA_DRIFT\",\n\t\"SCHEMA_CONFIG\",\n}",
+          "claim": "canonicalCoreStreamOrder in nats_monitor_handler.go contains the 4 core stream names CDC_EVENTS, CDC_TRANSMUTE, SCHEMA_DRIFT, and SCHEMA_CONFIG."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "When bb.js.PublishMsg fails in publishTransmuteTrigger, the function immediately panics and crashes the entire process without logging or falling back to core NATS.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:114-125\n\t\tbb.logger.Error(\"failed to publish transmute trigger to JetStream, falling back to core NATS\",\n\t\t\tzap.String(\"table\", shadowTable), zap.Error(pubErr))\n\t}\n\t// Fallback sang core NATS qua subject riêng (không bị stream CDC_TRANSMUTE chặn và luôn có QueueSubscribe lắng nghe)\n\tif bb.natsConn != nil {\n\t\tfallbackMsg := &nats.Msg{\n\t\t\tSubject: \"cdc.cmd.transmute-shadow.core-fallback\",",
+    "flow": "publishTransmuteTrigger logs an error and publishes to cdc.cmd.transmute-shadow.core-fallback.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3965,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7775,
+                "INCORRECT": 0.1592,
+                "UNSUPPORTED": 0.0633
+              },
+              "confidence": 0.3965,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 361,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "When bb.js.PublishMsg fails in publishTransmuteTrigger, the function immediately panics and crashes the entire process without logging or falling back to core NATS.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:114-125\n\t\tbb.logger.Error(\"failed to publish transmute trigger to JetStream, falling back to core NATS\",\n\t\t\tzap.String(\"table\", shadowTable), zap.Error(pubErr))\n\t}\n\t// Fallback sang core NATS qua subject riêng (không bị stream CDC_TRANSMUTE chặn và luôn có QueueSubscribe lắng nghe)\n\tif bb.natsConn != nil {\n\t\tfallbackMsg := &nats.Msg{\n\t\t\tSubject: \"cdc.cmd.transmute-shadow.core-fallback\",",
+          "flow": "publishTransmuteTrigger logs an error and publishes to cdc.cmd.transmute-shadow.core-fallback."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2737,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5862,
+                "INCORRECT": 0.3788,
+                "UNSUPPORTED": 0.0349
+              },
+              "confidence": 0.2737,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 400,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Refined S3 solution for MISSING_CORE_STREAM with lock-free watchdog, async ReconnectHandler, 30s cooldown, single source of truth StreamConfig, and fast fallback on ErrNoStreamResponse",
+          "function_workflow": "publishTransmuteTrigger logs an error and publishes to cdc.cmd.transmute-shadow.core-fallback.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:114-125\n\t\tbb.logger.Error(\"failed to publish transmute trigger to JetStream, falling back to core NATS\",\n\t\t\tzap.String(\"table\", shadowTable), zap.Error(pubErr))\n\t}\n\t// Fallback sang core NATS qua subject riêng (không bị stream CDC_TRANSMUTE chặn và luôn có QueueSubscribe lắng nghe)\n\tif bb.natsConn != nil {\n\t\tfallbackMsg := &nats.Msg{\n\t\t\tSubject: \"cdc.cmd.transmute-shadow.core-fallback\",",
+          "claim": "When bb.js.PublishMsg fails in publishTransmuteTrigger, the function immediately panics and crashes the entire process without logging or falling back to core NATS."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4865,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8854,
+                "NO": 0.1146
+              },
+              "confidence": 0.4865,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 275,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:114-125\n\t\tbb.logger.Error(\"failed to publish transmute trigger to JetStream, falling back to core NATS\",\n\t\t\tzap.String(\"table\", shadowTable), zap.Error(pubErr))\n\t}\n\t// Fallback sang core NATS qua subject riêng (không bị stream CDC_TRANSMUTE chặn và luôn có QueueSubscribe lắng nghe)\n\tif bb.natsConn != nil {\n\t\tfallbackMsg := &nats.Msg{\n\t\t\tSubject: \"cdc.cmd.transmute-shadow.core-fallback\",",
+          "claim": "When bb.js.PublishMsg fails in publishTransmuteTrigger, the function immediately panics and crashes the entire process without logging or falling back to core NATS."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "DeleteStream in nats_monitor_handler.go allows deleting the 4 canonical core streams without returning any error.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:573-579\n\tif _, isCore := canonicalCoreStreams[streamName]; isCore {\n\t\treturn c.Status(fiber.StatusForbidden).JSON(fiber.Map{\n\t\t\t\"error\":   \"forbidden_core_stream\",\n\t\t\t\"message\": fmt.Sprintf(\"Không được phép xóa Core Stream bắt buộc '%s' của hệ thống Data-Hub\", streamName),\n\t\t})\n\t}",
+    "flow": "DeleteStream checks canonicalCoreStreams and returns HTTP 403 Forbidden.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.399,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7896,
+                "INCORRECT": 0.1023,
+                "UNSUPPORTED": 0.1081
+              },
+              "confidence": 0.399,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 309,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "DeleteStream in nats_monitor_handler.go allows deleting the 4 canonical core streams without returning any error.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:573-579\n\tif _, isCore := canonicalCoreStreams[streamName]; isCore {\n\t\treturn c.Status(fiber.StatusForbidden).JSON(fiber.Map{\n\t\t\t\"error\":   \"forbidden_core_stream\",\n\t\t\t\"message\": fmt.Sprintf(\"Không được phép xóa Core Stream bắt buộc '%s' của hệ thống Data-Hub\", streamName),\n\t\t})\n\t}",
+          "flow": "DeleteStream checks canonicalCoreStreams and returns HTTP 403 Forbidden."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.0586,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.1738,
+                "INCORRECT": 0.424,
+                "UNSUPPORTED": 0.4023
+              },
+              "confidence": 0.0586,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 348,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Refined S3 solution for MISSING_CORE_STREAM with lock-free watchdog, async ReconnectHandler, 30s cooldown, single source of truth StreamConfig, and fast fallback on ErrNoStreamResponse",
+          "function_workflow": "DeleteStream checks canonicalCoreStreams and returns HTTP 403 Forbidden.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:573-579\n\tif _, isCore := canonicalCoreStreams[streamName]; isCore {\n\t\treturn c.Status(fiber.StatusForbidden).JSON(fiber.Map{\n\t\t\t\"error\":   \"forbidden_core_stream\",\n\t\t\t\"message\": fmt.Sprintf(\"Không được phép xóa Core Stream bắt buộc '%s' của hệ thống Data-Hub\", streamName),\n\t\t})\n\t}",
+          "claim": "DeleteStream in nats_monitor_handler.go allows deleting the 4 canonical core streams without returning any error."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.2502,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.2144,
+                "NO": 0.7856
+              },
+              "confidence": 0.2502,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 232,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:573-579\n\tif _, isCore := canonicalCoreStreams[streamName]; isCore {\n\t\treturn c.Status(fiber.StatusForbidden).JSON(fiber.Map{\n\t\t\t\"error\":   \"forbidden_core_stream\",\n\t\t\t\"message\": fmt.Sprintf(\"Không được phép xóa Core Stream bắt buộc '%s' của hệ thống Data-Hub\", streamName),\n\t\t})\n\t}",
+          "claim": "DeleteStream in nats_monitor_handler.go allows deleting the 4 canonical core streams without returning any error."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

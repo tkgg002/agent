@@ -1,0 +1,11 @@
+{
+  "id": "EV-20261026T152437-79d9",
+  "cmd": "bash -c \ndocker exec gpay-postgres-cdc psql -U root -d cdc_cms_database -Atc \"SELECT id, master_schema, master_table, transform_spec::text FROM cdc_system.master_binding WHERE is_active = true ORDER BY id;\"\ndocker exec gpay-postgres-shadow psql -U root -d cdc_shadow_db -Atc \"SELECT 'shadow.payment_bills', COUNT(*), COALESCE(BIT_XOR(('x' || SUBSTR(MD5(\\\"_source_id\\\"::text || '|' || \\\"_source_ts\\\"::text), 1, 16))::bit(64)::bigint), 0) FROM shadow_traitestpbs.payment_bills WHERE NOT COALESCE(\\\"_deleted\\\", false);\"\ndocker exec gpay-postgres-dest psql -U root -d cdc_dest_db -Atc \"SELECT 'master.payment_bills', COUNT(*), COALESCE(BIT_XOR(('x' || SUBSTR(MD5(\\\"_id\\\"::text || '|' || \\\"_source_ts\\\"::text), 1, 16))::bit(64)::bigint), 0) FROM master_payment_bill_service.payment_bills WHERE NOT COALESCE(\\\"_deleted\\\", false);\"\ndocker exec gpay-postgres-dest psql -U root -d cdc_dest_db -Atc \"SELECT 'master.payment_bills_1', COUNT(*), COALESCE(BIT_XOR(('x' || SUBSTR(MD5(\\\"_id\\\"::text || '|' || \\\"_source_ts\\\"::text), 1, 16))::bit(64)::bigint), 0) FROM master_payment_bill_service.payment_bills_1 WHERE NOT COALESCE(\\\"_deleted\\\", false);\"\n",
+  "cwd": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service",
+  "kind": "runtime",
+  "exit": 2,
+  "started_at": "2026-10-26T15:24:37+07:00",
+  "stdout_tail": "bash: -c: option requires an argument\npsql: error: connection to server on socket \"/var/run/postgresql/.s.PGSQL.5432\" failed: FATAL:  role \"root\" does not exist\npsql: error: connection to server on socket \"/var/run/postgresql/.s.PGSQL.5432\" failed: FATAL:  role \"root\" does not exist\npsql: error: connection to server on socket \"/var/run/postgresql/.s.PGSQL.5432\" failed: FATAL:  role \"root\" does not exist\npsql: error: connection to server on socket \"/var/run/postgresql/.s.PGSQL.5432\" failed: FATAL:  role \"root\" does not exist\n",
+  "stdout_sha256": "565666131971f2110aef29bf834b53b0de898fab9e02b4f8163b1370111c667d",
+  "src_fingerprint": "e0cd5208e53add4af322560b1b84c13ed4d3174bcbe23980c48d7e8baa910b02"
+}

@@ -1,0 +1,63 @@
+[
+  {
+    "id": "S-RC-01",
+    "kind": "target",
+    "claim": "Hàm formatTelegramChatID trong telegram_bridge.go định dạng giá trị float64 và int64 bằng strconv.FormatInt để không bị ký hiệu khoa học.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:405-420\nfunc formatTelegramChatID(raw any) string {\n\tswitch v := raw.(type) {\n\tcase nil:\n\t\treturn \"\"\n\tcase string:\n\t\treturn strings.TrimSpace(v)\n\tcase json.Number:\n\t\treturn strings.TrimSpace(v.String())\n\tcase float64:\n\t\treturn strconv.FormatInt(int64(v), 10)\n\tcase float32:\n\t\treturn strconv.FormatInt(int64(v), 10)\n\tcase int64:\n\t\treturn strconv.FormatInt(v, 10)"
+  },
+  {
+    "id": "S-FIX-01",
+    "kind": "target",
+    "claim": "Hàm formatTelegramChatID trong 09_tasks_solution_telegram_approve_and_s4_task13_execution.md sử dụng strconv.FormatInt(int64(v), 10) cho kiểu float64 và float32.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_telegram_approve_and_s4_task13_execution.md:38-52\nfunc formatTelegramChatID(raw any) string {\n\tif raw == nil {\n\t\treturn \"\"\n\t}\n\tswitch v := raw.(type) {\n\tcase json.Number:\n\t\treturn strings.TrimSpace(v.String())\n\tcase float64:\n\t\treturn strconv.FormatInt(int64(v), 10)\n\tcase float32:\n\t\treturn strconv.FormatInt(int64(v), 10)\n\tcase int64:\n\t\treturn strconv.FormatInt(v, 10)"
+  },
+  {
+    "id": "S-IMPACT-01",
+    "kind": "target",
+    "claim": "Trong triggerS5ToS3RePlan, giải pháp ghi file .audit-remediation-ready khi len(subTasks) > 0 và không chứa ESCALATE hoặc ISO-.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_telegram_approve_and_s4_task13_execution.md:86-90\n\t// In triggerS5ToS3RePlan (telegram_bridge.go):\n\tupperKey := strings.ToUpper(strings.TrimSpace(qt.ExternalID))\n\tif len(subTasks) > 0 && !strings.Contains(upperKey, \"ESCALATE\") && !strings.Contains(upperKey, \"ISO-\") {\n\t\t_ = os.WriteFile(filepath.Join(isoMeta.ArtifactDir, \".audit-remediation-ready\"), []byte(time.Now().Format(time.RFC3339)+\"\\n\"), 0o644)\n\t}"
+  },
+  {
+    "id": "S-PATTERN-01",
+    "kind": "target",
+    "claim": "Nhánh case \"approve\" trong server.go ghi file .user-approved và .audit-remediation-ready trong isoMeta.ArtifactDir rồi khởi tạo subTasks.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1360-1368\n\t\t_ = os.MkdirAll(isoMeta.ArtifactDir, 0o755)\n\t\tnowStamp := []byte(time.Now().Format(time.RFC3339) + \"\\n\")\n\t\t_ = os.WriteFile(filepath.Join(isoMeta.ArtifactDir, \".user-approved\"), nowStamp, 0o644)\n\t\tif !s.isTestTaskOrTempRoot(qt.ExternalID) {\n\t\t\t_ = os.WriteFile(filepath.Join(isoMeta.ArtifactDir, \".audit-remediation-ready\"), nowStamp, 0o644)\n\t\t}\n\t\t// Reset Circuit Breaker & Tier-2 Re-Approve lock upon explicit User APPROVE\n\t\tsubTasks := s.loadOrGenerateSubTasks(*qt)"
+  },
+  {
+    "id": "D-BEHAV-01",
+    "kind": "target",
+    "claim": "Hàm formatTelegramChatID trả về chuỗi rỗng khi raw == nil và trả về strconv.FormatInt(v, 10) khi v là int64.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_telegram_approve_and_s4_task13_execution.md:38-51\nfunc formatTelegramChatID(raw any) string {\n\tif raw == nil {\n\t\treturn \"\"\n\t}\n\tswitch v := raw.(type) {\n\tcase json.Number:\n\t\treturn strings.TrimSpace(v.String())\n\tcase float64:\n\t\treturn strconv.FormatInt(int64(v), 10)\n\tcase float32:\n\t\treturn strconv.FormatInt(int64(v), 10)\n\tcase int64:\n\t\treturn strconv.FormatInt(v, 10)"
+  },
+  {
+    "id": "D-EDGE-01",
+    "kind": "target",
+    "claim": "Code Demo hàm telegramChatIDMatches trả về true khi configuredChatID rỗng, incomingChatID rỗng, hoặc 2 chuỗi khớp nhau.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_telegram_approve_and_s4_task13_execution.md:60-75\nfunc telegramChatIDMatches(configuredChatID, incomingChatID string) bool {\n\tcfgID := strings.TrimSpace(configuredChatID)\n\tincID := strings.TrimSpace(incomingChatID)\n\tif cfgID == \"\" || incID == \"\" {\n\t\treturn true\n\t}\n\tif cfgID == incID {\n\t\treturn true\n\t}"
+  },
+  {
+    "id": "D-API-01",
+    "kind": "target",
+    "claim": "Hàm handleTelegramWebhook tại telegram_bridge.go phục vụ POST /api/telegram/webhook và gọi processIncomingTelegramCommand.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:465-538\n// handleTelegramWebhook serves POST /api/telegram/webhook (supports Telegram Bot Webhook JSON, CallbackQuery inline button, ChannelPost, and direct UI/CLI remote APPROVE trigger).\nfunc (s *Server) handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Hàm formatTelegramChatID trong 09_tasks_solution_telegram_approve_and_s4_task13_execution.md luôn trả về chuỗi rỗng cho mọi kiểu float64 và int64.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_telegram_approve_and_s4_task13_execution.md:38-60\n\tcase float64:\n\t\treturn strconv.FormatInt(int64(v), 10)\n\tcase int64:\n\t\treturn strconv.FormatInt(v, 10)"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Nhánh case \"approve\" trong server.go xóa toàn bộ thư mục ArtifactDir và đặt CircuitOpen = true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1360-1368\n\t\t_ = os.MkdirAll(isoMeta.ArtifactDir, 0o755)\n\t\tnowStamp := []byte(time.Now().Format(time.RFC3339) + \"\\n\")\n\t\t_ = os.WriteFile(filepath.Join(isoMeta.ArtifactDir, \".user-approved\"), nowStamp, 0o644)"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Hàm processIncomingTelegramCommand trong telegram_bridge.go ghi .user-approved và .audit-remediation-ready khi nhận lệnh APPROVE.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:601-607\n\t_ = os.MkdirAll(isoMeta.ArtifactDir, 0o755)\n\tnowStamp := []byte(time.Now().Format(time.RFC3339) + \"\\n\")\n\t_ = os.WriteFile(filepath.Join(isoMeta.ArtifactDir, \".user-approved\"), nowStamp, 0o644)\n\t_ = os.WriteFile(filepath.Join(isoMeta.ArtifactDir, \".audit-remediation-ready\"), nowStamp, 0o644)"
+  }
+]
+

@@ -1,0 +1,174 @@
+{
+  "mode": "claim",
+  "stage": "dg1",
+  "workspace": "nats-monitor-missing-core-stream-2026-10-23",
+  "ts": "20261023T115251",
+  "trusted_rounds": [
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/nats-monitor-missing-core-stream-2026-10-23/06_laya_raw_dg1_20261023T115251.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "When CDC_TRANSMUTE stream is missing on JetStream, publishTransmuteTrigger retries bb.js.PublishMsg up to 3 times and falls back to Core NATS on subject cdc.cmd.transmute-shadow.core-fallback, while EnsureStreams returns early if the first stream fails and ReconnectHandler does not re-run EnsureStreams.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "trích dẫn không khớp /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:105-125: fallbackMsg := &nats.Msg{",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5826
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1689
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4371
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In cdc-cms-service, EnsureStreams currently defines only 3 streams (missing CDC_TRANSMUTE) and buildNATSGovernance appends MISSING_CORE_STREAM alerts when canonicalCoreStreamOrder streams are missing from seenCoreStreams.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "trích dẫn không khớp /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/pkgs/natsconn/nats_client.go:71-80: func (c *NatsClient) EnsureStreams() error {",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5033
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.0637
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.0001
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "canonicalCoreStreams in nats_monitor_handler.go defines the expected retention policies, max bytes, and max age for CDC_EVENTS, CDC_TRANSMUTE (workqueue), SCHEMA_DRIFT, and SCHEMA_CONFIG.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "trích dẫn không khớp /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/nats_monitor_handler.go:53-82: var canonicalCoreStreams = map[string]CoreStreamSpec{",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3038
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3192
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7932
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "TransmuteConsumerPool in centralized-data-service uses a mutex and stopCh channel pattern and binds worker subscriptions to p.cfg.StreamName and p.cfg.ConsumerName.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "trích dẫn không khớp /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_consumer_pool.go:62-70: stopCh chan struct{}",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0608
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1536
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6484
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the refined demo solution, publishTransmuteTrigger breaks out of the retry loop immediately when pubErr is nats.ErrNoStreamResponse or nats.ErrStreamNotFound, and ReconnectHandler uses reconciling.CompareAndSwap(false, true) to run EnsureStreams asynchronously.",
+      "decision": "FLAG",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6661
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.7771
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4145
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the refined demo solution, watchdogLoop releases p.mu.Unlock() before calling js.ConsumerInfo with nats.MaxWait(2*time.Second) and drainSubsLocked drains or unsubscribes old subscriptions before recreating p.subs.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.8002
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.8324
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7763
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the refined demo solution, tryAutoHealMissingCoreStreams enforces a 30-second cooldown via lastHealAttemptUnix.CompareAndSwap(last, now) before calling h.natsClient.EnsureStreams().",
+      "decision": "FLAG",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0628
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.8876
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.3694
+        }
+      }
+    }
+  ],
+  "gate": "BLOCK"
+}

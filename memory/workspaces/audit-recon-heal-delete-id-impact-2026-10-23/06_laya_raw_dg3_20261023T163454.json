@@ -1,0 +1,1063 @@
+[
+  {
+    "id": "A-DIFF-1",
+    "kind": "audit",
+    "claim": "In transmuter_utils.go, resolveConflictTarget reads the primary key strictly from binding.TransformSpec (parsePKFromSpec) and isMasterPKMappedFromSourcePK verifies via mapping_rule_master that TargetColumn == pkCol maps from binding.SourcePK or _source_id without fallback chains.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:736-776\nfunc resolveConflictTarget(binding *masterBindingRuntime, colTypes map[string]string) string {\n\tif binding != nil && len(binding.TransformSpec) > 0 {\n\t\tpk := parsePKFromSpec(binding.TransformSpec)\n\t\tif pk != \"\" && pk != \"_gpay_id\" && ddlIdentRe.MatchString(pk) {\n\t\t\tif colTypes == nil {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t\tif _, ok := colTypes[pk]; ok {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t}\n\t}\n\treturn \"_gpay_id\"\n}\n\n// isMasterPKMappedFromSourcePK verifies via mapping_rule_master that the Master PK column\n// resolved from transform_spec.pk maps from the source primary key (binding.SourcePK or _source_id).\nfunc isMasterPKMappedFromSourcePK(binding *masterBindingRuntime, rules []mappingRuleRow, pkCol string) bool {\n\tif binding == nil || pkCol == \"\" || pkCol == \"_gpay_id\" || binding.TransformType == \"flatten\" {\n\t\treturn false\n\t}\n\tfor _, r := range rules {\n\t\tif r.TargetColumn == pkCol {\n\t\t\tsrcField := strings.TrimSpace(r.SourceField)\n\t\t\tif srcField == \"\" {\n\t\t\t\tsrcField = r.TargetColumn\n\t\t\t}\n\t\t\tif srcField == \"_source_id\" {\n\t\t\t\treturn true\n\t\t\t}\n\t\t\tif binding.SourcePK != \"\" {\n\t\t\t\treturn srcField == binding.SourcePK\n\t\t\t}\n\t\t\treturn srcField == pkCol\n\t\t}\n\t}\n\tif len(rules) == 0 {\n\t\treturn binding.SourcePK == \"\" || pkCol == binding.SourcePK\n\t}\n\treturn false\n}",
+    "flow": "resolveConflictTarget extracts pk from TransformSpec JSON, and isMasterPKMappedFromSourcePK checks mapping_rule_master for r.TargetColumn == pkCol.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4444,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7828,
+                "INCORRECT": 0.1873,
+                "UNSUPPORTED": 0.0299
+              },
+              "confidence": 0.4444,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 796,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmuter_utils.go, resolveConflictTarget reads the primary key strictly from binding.TransformSpec (parsePKFromSpec) and isMasterPKMappedFromSourcePK verifies via mapping_rule_master that TargetColumn == pkCol maps from binding.SourcePK or _source_id without fallback chains.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:736-776\nfunc resolveConflictTarget(binding *masterBindingRuntime, colTypes map[string]string) string {\n\tif binding != nil && len(binding.TransformSpec) > 0 {\n\t\tpk := parsePKFromSpec(binding.TransformSpec)\n\t\tif pk != \"\" && pk != \"_gpay_id\" && ddlIdentRe.MatchString(pk) {\n\t\t\tif colTypes == nil {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t\tif _, ok := colTypes[pk]; ok {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t}\n\t}\n\treturn \"_gpay_id\"\n}\n\n// isMasterPKMappedFromSourcePK verifies via mapping_rule_master that the Master PK column\n// resolved from transform_spec.pk maps from the source primary key (binding.SourcePK or _source_id).\nfunc isMasterPKMappedFromSourcePK(binding *masterBindingRuntime, rules []mappingRuleRow, pkCol string) bool {\n\tif binding == nil || pkCol == \"\" || pkCol == \"_gpay_id\" || binding.TransformType == \"flatten\" {\n\t\treturn false\n\t}\n\tfor _, r := range rules {\n\t\tif r.TargetColumn == pkCol {\n\t\t\tsrcField := strings.TrimSpace(r.SourceField)\n\t\t\tif srcField == \"\" {\n\t\t\t\tsrcField = r.TargetColumn\n\t\t\t}\n\t\t\tif srcField == \"_source_id\" {\n\t\t\t\treturn true\n\t\t\t}\n\t\t\tif binding.SourcePK != \"\" {\n\t\t\t\treturn srcField == binding.SourcePK\n\t\t\t}\n\t\t\treturn srcField == pkCol\n\t\t}\n\t}\n\tif len(rules) == 0 {\n\t\treturn binding.SourcePK == \"\" || pkCol == binding.SourcePK\n\t}\n\treturn false\n}",
+          "flow": "resolveConflictTarget extracts pk from TransformSpec JSON, and isMasterPKMappedFromSourcePK checks mapping_rule_master for r.TargetColumn == pkCol."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5336,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.831,
+                "INCORRECT": 0.1506,
+                "UNSUPPORTED": 0.0184
+              },
+              "confidence": 0.5336,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 801,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "resolveConflictTarget extracts pk from TransformSpec JSON, and isMasterPKMappedFromSourcePK checks mapping_rule_master for r.TargetColumn == pkCol.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:736-776\nfunc resolveConflictTarget(binding *masterBindingRuntime, colTypes map[string]string) string {\n\tif binding != nil && len(binding.TransformSpec) > 0 {\n\t\tpk := parsePKFromSpec(binding.TransformSpec)\n\t\tif pk != \"\" && pk != \"_gpay_id\" && ddlIdentRe.MatchString(pk) {\n\t\t\tif colTypes == nil {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t\tif _, ok := colTypes[pk]; ok {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t}\n\t}\n\treturn \"_gpay_id\"\n}\n\n// isMasterPKMappedFromSourcePK verifies via mapping_rule_master that the Master PK column\n// resolved from transform_spec.pk maps from the source primary key (binding.SourcePK or _source_id).\nfunc isMasterPKMappedFromSourcePK(binding *masterBindingRuntime, rules []mappingRuleRow, pkCol string) bool {\n\tif binding == nil || pkCol == \"\" || pkCol == \"_gpay_id\" || binding.TransformType == \"flatten\" {\n\t\treturn false\n\t}\n\tfor _, r := range rules {\n\t\tif r.TargetColumn == pkCol {\n\t\t\tsrcField := strings.TrimSpace(r.SourceField)\n\t\t\tif srcField == \"\" {\n\t\t\t\tsrcField = r.TargetColumn\n\t\t\t}\n\t\t\tif srcField == \"_source_id\" {\n\t\t\t\treturn true\n\t\t\t}\n\t\t\tif binding.SourcePK != \"\" {\n\t\t\t\treturn srcField == binding.SourcePK\n\t\t\t}\n\t\t\treturn srcField == pkCol\n\t\t}\n\t}\n\tif len(rules) == 0 {\n\t\treturn binding.SourcePK == \"\" || pkCol == binding.SourcePK\n\t}\n\treturn false\n}",
+          "claim": "In transmuter_utils.go, resolveConflictTarget reads the primary key strictly from binding.TransformSpec (parsePKFromSpec) and isMasterPKMappedFromSourcePK verifies via mapping_rule_master that TargetColumn == pkCol maps from binding.SourcePK or _source_id without fallback chains."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7705,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9628,
+                "NO": 0.0372
+              },
+              "confidence": 0.7705,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 701,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:736-776\nfunc resolveConflictTarget(binding *masterBindingRuntime, colTypes map[string]string) string {\n\tif binding != nil && len(binding.TransformSpec) > 0 {\n\t\tpk := parsePKFromSpec(binding.TransformSpec)\n\t\tif pk != \"\" && pk != \"_gpay_id\" && ddlIdentRe.MatchString(pk) {\n\t\t\tif colTypes == nil {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t\tif _, ok := colTypes[pk]; ok {\n\t\t\t\treturn pk\n\t\t\t}\n\t\t}\n\t}\n\treturn \"_gpay_id\"\n}\n\n// isMasterPKMappedFromSourcePK verifies via mapping_rule_master that the Master PK column\n// resolved from transform_spec.pk maps from the source primary key (binding.SourcePK or _source_id).\nfunc isMasterPKMappedFromSourcePK(binding *masterBindingRuntime, rules []mappingRuleRow, pkCol string) bool {\n\tif binding == nil || pkCol == \"\" || pkCol == \"_gpay_id\" || binding.TransformType == \"flatten\" {\n\t\treturn false\n\t}\n\tfor _, r := range rules {\n\t\tif r.TargetColumn == pkCol {\n\t\t\tsrcField := strings.TrimSpace(r.SourceField)\n\t\t\tif srcField == \"\" {\n\t\t\t\tsrcField = r.TargetColumn\n\t\t\t}\n\t\t\tif srcField == \"_source_id\" {\n\t\t\t\treturn true\n\t\t\t}\n\t\t\tif binding.SourcePK != \"\" {\n\t\t\t\treturn srcField == binding.SourcePK\n\t\t\t}\n\t\t\treturn srcField == pkCol\n\t\t}\n\t}\n\tif len(rules) == 0 {\n\t\treturn binding.SourcePK == \"\" || pkCol == binding.SourcePK\n\t}\n\treturn false\n}",
+          "claim": "In transmuter_utils.go, resolveConflictTarget reads the primary key strictly from binding.TransformSpec (parsePKFromSpec) and isMasterPKMappedFromSourcePK verifies via mapping_rule_master that TargetColumn == pkCol maps from binding.SourcePK or _source_id without fallback chains."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-DIFF-2",
+    "kind": "audit",
+    "claim": "In MasterBindingRepo.ListMasterTargetsByShadowIdentity, the SQL query joins cdc_system.connection_registry scr ON scr.id = COALESCE(mb.shadow_connection_id, sb.shadow_connection_id) and matches (@shadow_connection_key = '' OR scr.connection_code = @shadow_connection_key).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go:93-120\nfunc (r *MasterBindingRepo) ListMasterTargetsByShadowIdentity(ctx context.Context, shadowTable, shadowSchema, shadowConnectionKey, shadowBindingCode string) ([]MasterTargetIdentity, error) {\n\tvar result []MasterTargetIdentity\n\terr := r.db.WithContext(ctx).Raw(\n\t\t`SELECT mb.id,\n\t\t        COALESCE(NULLIF(mb.master_schema, ''), 'public') || '.' || mb.master_table AS master_fqn,\n\t\t        COALESCE(mcr.connection_code, '') AS master_connection_key\n\t\t   FROM cdc_system.master_binding mb\n\t\t   JOIN cdc_system.shadow_binding sb ON sb.id = mb.shadow_binding_id\n\t\t   LEFT JOIN cdc_system.connection_registry mcr ON mcr.id = mb.master_connection_id\n\t\t   LEFT JOIN cdc_system.connection_registry scr ON scr.id = COALESCE(mb.shadow_connection_id, sb.shadow_connection_id)\n\t\t  WHERE mb.is_active = true\n\t\t    AND mb.schema_status = 'approved'\n\t\t    AND (\n\t\t      (@binding_code <> '' AND sb.binding_code = @binding_code)\n\t\t      OR\n\t\t      (@binding_code = '' AND sb.shadow_table = @shadow_table \n\t\t        AND COALESCE(sb.shadow_schema, '') = COALESCE(NULLIF(@shadow_schema, ''), COALESCE(sb.shadow_schema, '')) \n\t\t        AND (@shadow_connection_key = '' OR scr.connection_code = @shadow_connection_key))\n\t\t    )`,\n\t\tmap[string]interface{}{\n\t\t\t\"binding_code\":          shadowBindingCode,\n\t\t\t\"shadow_table\":          shadowTable,\n\t\t\t\"shadow_schema\":         shadowSchema,\n\t\t\t\"shadow_connection_key\": shadowConnectionKey,\n\t\t},\n\t).Scan(&result).Error\n\treturn result, err\n}",
+    "flow": "ListMasterTargetsByShadowIdentity joins connection_registry scr and filters by binding_code or shadow_table + shadow_schema + scr.connection_code.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5367,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8481,
+                "INCORRECT": 0.1162,
+                "UNSUPPORTED": 0.0358
+              },
+              "confidence": 0.5367,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 886,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In MasterBindingRepo.ListMasterTargetsByShadowIdentity, the SQL query joins cdc_system.connection_registry scr ON scr.id = COALESCE(mb.shadow_connection_id, sb.shadow_connection_id) and matches (@shadow_connection_key = '' OR scr.connection_code = @shadow_connection_key).",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go:93-120\nfunc (r *MasterBindingRepo) ListMasterTargetsByShadowIdentity(ctx context.Context, shadowTable, shadowSchema, shadowConnectionKey, shadowBindingCode string) ([]MasterTargetIdentity, error) {\n\tvar result []MasterTargetIdentity\n\terr := r.db.WithContext(ctx).Raw(\n\t\t`SELECT mb.id,\n\t\t        COALESCE(NULLIF(mb.master_schema, ''), 'public') || '.' || mb.master_table AS master_fqn,\n\t\t        COALESCE(mcr.connection_code, '') AS master_connection_key\n\t\t   FROM cdc_system.master_binding mb\n\t\t   JOIN cdc_system.shadow_binding sb ON sb.id = mb.shadow_binding_id\n\t\t   LEFT JOIN cdc_system.connection_registry mcr ON mcr.id = mb.master_connection_id\n\t\t   LEFT JOIN cdc_system.connection_registry scr ON scr.id = COALESCE(mb.shadow_connection_id, sb.shadow_connection_id)\n\t\t  WHERE mb.is_active = true\n\t\t    AND mb.schema_status = 'approved'\n\t\t    AND (\n\t\t      (@binding_code <> '' AND sb.binding_code = @binding_code)\n\t\t      OR\n\t\t      (@binding_code = '' AND sb.shadow_table = @shadow_table \n\t\t        AND COALESCE(sb.shadow_schema, '') = COALESCE(NULLIF(@shadow_schema, ''), COALESCE(sb.shadow_schema, '')) \n\t\t        AND (@shadow_connection_key = '' OR scr.connection_code = @shadow_connection_key))\n\t\t    )`,\n\t\tmap[string]interface{}{\n\t\t\t\"binding_code\":          shadowBindingCode,\n\t\t\t\"shadow_table\":          shadowTable,\n\t\t\t\"shadow_schema\":         shadowSchema,\n\t\t\t\"shadow_connection_key\": shadowConnectionKey,\n\t\t},\n\t).Scan(&result).Error\n\treturn result, err\n}",
+          "flow": "ListMasterTargetsByShadowIdentity joins connection_registry scr and filters by binding_code or shadow_table + shadow_schema + scr.connection_code."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3375,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.726,
+                "INCORRECT": 0.2165,
+                "UNSUPPORTED": 0.0574
+              },
+              "confidence": 0.3375,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 890,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "ListMasterTargetsByShadowIdentity joins connection_registry scr and filters by binding_code or shadow_table + shadow_schema + scr.connection_code.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go:93-120\nfunc (r *MasterBindingRepo) ListMasterTargetsByShadowIdentity(ctx context.Context, shadowTable, shadowSchema, shadowConnectionKey, shadowBindingCode string) ([]MasterTargetIdentity, error) {\n\tvar result []MasterTargetIdentity\n\terr := r.db.WithContext(ctx).Raw(\n\t\t`SELECT mb.id,\n\t\t        COALESCE(NULLIF(mb.master_schema, ''), 'public') || '.' || mb.master_table AS master_fqn,\n\t\t        COALESCE(mcr.connection_code, '') AS master_connection_key\n\t\t   FROM cdc_system.master_binding mb\n\t\t   JOIN cdc_system.shadow_binding sb ON sb.id = mb.shadow_binding_id\n\t\t   LEFT JOIN cdc_system.connection_registry mcr ON mcr.id = mb.master_connection_id\n\t\t   LEFT JOIN cdc_system.connection_registry scr ON scr.id = COALESCE(mb.shadow_connection_id, sb.shadow_connection_id)\n\t\t  WHERE mb.is_active = true\n\t\t    AND mb.schema_status = 'approved'\n\t\t    AND (\n\t\t      (@binding_code <> '' AND sb.binding_code = @binding_code)\n\t\t      OR\n\t\t      (@binding_code = '' AND sb.shadow_table = @shadow_table \n\t\t        AND COALESCE(sb.shadow_schema, '') = COALESCE(NULLIF(@shadow_schema, ''), COALESCE(sb.shadow_schema, '')) \n\t\t        AND (@shadow_connection_key = '' OR scr.connection_code = @shadow_connection_key))\n\t\t    )`,\n\t\tmap[string]interface{}{\n\t\t\t\"binding_code\":          shadowBindingCode,\n\t\t\t\"shadow_table\":          shadowTable,\n\t\t\t\"shadow_schema\":         shadowSchema,\n\t\t\t\"shadow_connection_key\": shadowConnectionKey,\n\t\t},\n\t).Scan(&result).Error\n\treturn result, err\n}",
+          "claim": "In MasterBindingRepo.ListMasterTargetsByShadowIdentity, the SQL query joins cdc_system.connection_registry scr ON scr.id = COALESCE(mb.shadow_connection_id, sb.shadow_connection_id) and matches (@shadow_connection_key = '' OR scr.connection_code = @shadow_connection_key)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7064,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9483,
+                "NO": 0.0517
+              },
+              "confidence": 0.7064,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 791,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go:93-120\nfunc (r *MasterBindingRepo) ListMasterTargetsByShadowIdentity(ctx context.Context, shadowTable, shadowSchema, shadowConnectionKey, shadowBindingCode string) ([]MasterTargetIdentity, error) {\n\tvar result []MasterTargetIdentity\n\terr := r.db.WithContext(ctx).Raw(\n\t\t`SELECT mb.id,\n\t\t        COALESCE(NULLIF(mb.master_schema, ''), 'public') || '.' || mb.master_table AS master_fqn,\n\t\t        COALESCE(mcr.connection_code, '') AS master_connection_key\n\t\t   FROM cdc_system.master_binding mb\n\t\t   JOIN cdc_system.shadow_binding sb ON sb.id = mb.shadow_binding_id\n\t\t   LEFT JOIN cdc_system.connection_registry mcr ON mcr.id = mb.master_connection_id\n\t\t   LEFT JOIN cdc_system.connection_registry scr ON scr.id = COALESCE(mb.shadow_connection_id, sb.shadow_connection_id)\n\t\t  WHERE mb.is_active = true\n\t\t    AND mb.schema_status = 'approved'\n\t\t    AND (\n\t\t      (@binding_code <> '' AND sb.binding_code = @binding_code)\n\t\t      OR\n\t\t      (@binding_code = '' AND sb.shadow_table = @shadow_table \n\t\t        AND COALESCE(sb.shadow_schema, '') = COALESCE(NULLIF(@shadow_schema, ''), COALESCE(sb.shadow_schema, '')) \n\t\t        AND (@shadow_connection_key = '' OR scr.connection_code = @shadow_connection_key))\n\t\t    )`,\n\t\tmap[string]interface{}{\n\t\t\t\"binding_code\":          shadowBindingCode,\n\t\t\t\"shadow_table\":          shadowTable,\n\t\t\t\"shadow_schema\":         shadowSchema,\n\t\t\t\"shadow_connection_key\": shadowConnectionKey,\n\t\t},\n\t).Scan(&result).Error\n\treturn result, err\n}",
+          "claim": "In MasterBindingRepo.ListMasterTargetsByShadowIdentity, the SQL query joins cdc_system.connection_registry scr ON scr.id = COALESCE(mb.shadow_connection_id, sb.shadow_connection_id) and matches (@shadow_connection_key = '' OR scr.connection_code = @shadow_connection_key)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-DIFF-3",
+    "kind": "audit",
+    "claim": "In ExecuteHealHandler.publishTransmuteShadowForSegA, shadowBindingCode, shadowSchema, and shadowConnKey are resolved via h.reconCore.ResolveShadowBindingIdentity, and resolveMasterPKFromSpec reads PK strictly from ref.TransformSpec.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:359-376\n\tvar shadowBindingCode, shadowConnKey string\n\tif h.reconCore != nil {\n\t\tshadowBindingCode, shadowSchema, shadowConnKey = h.reconCore.ResolveShadowBindingIdentity(ctx, shadowSchema, shadowTable)\n\t}\n\tfor start := 0; start < len(cleanIDs); start += healChunkSize {\n\t\tend := start + healChunkSize\n\t\tif end > len(cleanIDs) {\n\t\t\tend = len(cleanIDs)\n\t\t}\n\t\tchunk := cleanIDs[start:end]\n\t\ttPayload := map[string]any{\n\t\t\t\"shadow_binding_code\":   shadowBindingCode,\n\t\t\t\"shadow_table\":          shadowTable,\n\t\t\t\"shadow_schema\":         shadowSchema,\n\t\t\t\"shadow_connection_key\": shadowConnKey,\n\t\t\t\"_source_ids\":           chunk,\n\t\t\t\"triggered_by\":          triggeredBy,\n\t\t}\n\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:698-710\nfunc (h *ExecuteHealHandler) resolveMasterPKFromSpec(ctx context.Context, masterDB *gorm.DB, ref *servicerecon.MasterBindingRef) (string, string) {\n\tif ref == nil || strings.TrimSpace(ref.TransformSpec) == \"\" {\n\t\treturn \"\", \"\"\n\t}\n\tvar spec struct {\n\t\tPK string `json:\"pk\"`\n\t}\n\tif err := json.Unmarshal([]byte(ref.TransformSpec), &spec); err != nil {\n\t\treturn \"\", \"\"\n\t}\n\tpkCol := strings.TrimSpace(spec.PK)\n\tif pkCol == \"\" || pkCol == \"_gpay_id\" {\n\t\treturn \"\", \"\"",
+    "flow": "publishTransmuteShadowForSegA calls ResolveShadowBindingIdentity to populate shadow_binding_code and shadow_connection_key; resolveMasterPKFromSpec unmarshals ref.TransformSpec to extract spec.PK.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3933,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7505,
+                "INCORRECT": 0.2125,
+                "UNSUPPORTED": 0.037
+              },
+              "confidence": 0.3933,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 802,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In ExecuteHealHandler.publishTransmuteShadowForSegA, shadowBindingCode, shadowSchema, and shadowConnKey are resolved via h.reconCore.ResolveShadowBindingIdentity, and resolveMasterPKFromSpec reads PK strictly from ref.TransformSpec.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:359-376\n\tvar shadowBindingCode, shadowConnKey string\n\tif h.reconCore != nil {\n\t\tshadowBindingCode, shadowSchema, shadowConnKey = h.reconCore.ResolveShadowBindingIdentity(ctx, shadowSchema, shadowTable)\n\t}\n\tfor start := 0; start < len(cleanIDs); start += healChunkSize {\n\t\tend := start + healChunkSize\n\t\tif end > len(cleanIDs) {\n\t\t\tend = len(cleanIDs)\n\t\t}\n\t\tchunk := cleanIDs[start:end]\n\t\ttPayload := map[string]any{\n\t\t\t\"shadow_binding_code\":   shadowBindingCode,\n\t\t\t\"shadow_table\":          shadowTable,\n\t\t\t\"shadow_schema\":         shadowSchema,\n\t\t\t\"shadow_connection_key\": shadowConnKey,\n\t\t\t\"_source_ids\":           chunk,\n\t\t\t\"triggered_by\":          triggeredBy,\n\t\t}\n\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:698-710\nfunc (h *ExecuteHealHandler) resolveMasterPKFromSpec(ctx context.Context, masterDB *gorm.DB, ref *servicerecon.MasterBindingRef) (string, string) {\n\tif ref == nil || strings.TrimSpace(ref.TransformSpec) == \"\" {\n\t\treturn \"\", \"\"\n\t}\n\tvar spec struct {\n\t\tPK string `json:\"pk\"`\n\t}\n\tif err := json.Unmarshal([]byte(ref.TransformSpec), &spec); err != nil {\n\t\treturn \"\", \"\"\n\t}\n\tpkCol := strings.TrimSpace(spec.PK)\n\tif pkCol == \"\" || pkCol == \"_gpay_id\" {\n\t\treturn \"\", \"\"",
+          "flow": "publishTransmuteShadowForSegA calls ResolveShadowBindingIdentity to populate shadow_binding_code and shadow_connection_key; resolveMasterPKFromSpec unmarshals ref.TransformSpec to extract spec.PK."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.2738,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.4761,
+                "INCORRECT": 0.4971,
+                "UNSUPPORTED": 0.0268
+              },
+              "confidence": 0.2738,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 807,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "publishTransmuteShadowForSegA calls ResolveShadowBindingIdentity to populate shadow_binding_code and shadow_connection_key; resolveMasterPKFromSpec unmarshals ref.TransformSpec to extract spec.PK.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:359-376\n\tvar shadowBindingCode, shadowConnKey string\n\tif h.reconCore != nil {\n\t\tshadowBindingCode, shadowSchema, shadowConnKey = h.reconCore.ResolveShadowBindingIdentity(ctx, shadowSchema, shadowTable)\n\t}\n\tfor start := 0; start < len(cleanIDs); start += healChunkSize {\n\t\tend := start + healChunkSize\n\t\tif end > len(cleanIDs) {\n\t\t\tend = len(cleanIDs)\n\t\t}\n\t\tchunk := cleanIDs[start:end]\n\t\ttPayload := map[string]any{\n\t\t\t\"shadow_binding_code\":   shadowBindingCode,\n\t\t\t\"shadow_table\":          shadowTable,\n\t\t\t\"shadow_schema\":         shadowSchema,\n\t\t\t\"shadow_connection_key\": shadowConnKey,\n\t\t\t\"_source_ids\":           chunk,\n\t\t\t\"triggered_by\":          triggeredBy,\n\t\t}\n\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:698-710\nfunc (h *ExecuteHealHandler) resolveMasterPKFromSpec(ctx context.Context, masterDB *gorm.DB, ref *servicerecon.MasterBindingRef) (string, string) {\n\tif ref == nil || strings.TrimSpace(ref.TransformSpec) == \"\" {\n\t\treturn \"\", \"\"\n\t}\n\tvar spec struct {\n\t\tPK string `json:\"pk\"`\n\t}\n\tif err := json.Unmarshal([]byte(ref.TransformSpec), &spec); err != nil {\n\t\treturn \"\", \"\"\n\t}\n\tpkCol := strings.TrimSpace(spec.PK)\n\tif pkCol == \"\" || pkCol == \"_gpay_id\" {\n\t\treturn \"\", \"\"",
+          "claim": "In ExecuteHealHandler.publishTransmuteShadowForSegA, shadowBindingCode, shadowSchema, and shadowConnKey are resolved via h.reconCore.ResolveShadowBindingIdentity, and resolveMasterPKFromSpec reads PK strictly from ref.TransformSpec."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8013,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9691,
+                "NO": 0.0309
+              },
+              "confidence": 0.8013,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 696,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:359-376\n\tvar shadowBindingCode, shadowConnKey string\n\tif h.reconCore != nil {\n\t\tshadowBindingCode, shadowSchema, shadowConnKey = h.reconCore.ResolveShadowBindingIdentity(ctx, shadowSchema, shadowTable)\n\t}\n\tfor start := 0; start < len(cleanIDs); start += healChunkSize {\n\t\tend := start + healChunkSize\n\t\tif end > len(cleanIDs) {\n\t\t\tend = len(cleanIDs)\n\t\t}\n\t\tchunk := cleanIDs[start:end]\n\t\ttPayload := map[string]any{\n\t\t\t\"shadow_binding_code\":   shadowBindingCode,\n\t\t\t\"shadow_table\":          shadowTable,\n\t\t\t\"shadow_schema\":         shadowSchema,\n\t\t\t\"shadow_connection_key\": shadowConnKey,\n\t\t\t\"_source_ids\":           chunk,\n\t\t\t\"triggered_by\":          triggeredBy,\n\t\t}\n\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:698-710\nfunc (h *ExecuteHealHandler) resolveMasterPKFromSpec(ctx context.Context, masterDB *gorm.DB, ref *servicerecon.MasterBindingRef) (string, string) {\n\tif ref == nil || strings.TrimSpace(ref.TransformSpec) == \"\" {\n\t\treturn \"\", \"\"\n\t}\n\tvar spec struct {\n\t\tPK string `json:\"pk\"`\n\t}\n\tif err := json.Unmarshal([]byte(ref.TransformSpec), &spec); err != nil {\n\t\treturn \"\", \"\"\n\t}\n\tpkCol := strings.TrimSpace(spec.PK)\n\tif pkCol == \"\" || pkCol == \"_gpay_id\" {\n\t\treturn \"\", \"\"",
+          "claim": "In ExecuteHealHandler.publishTransmuteShadowForSegA, shadowBindingCode, shadowSchema, and shadowConnKey are resolved via h.reconCore.ResolveShadowBindingIdentity, and resolveMasterPKFromSpec reads PK strictly from ref.TransformSpec."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-DIFF-4",
+    "kind": "audit",
+    "claim": "In CreateMasterCommand.Validate, if Spec is provided and contains a pk key whose value is not a non-empty string, Validate returns invalid_spec_pk_required.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/create_master.go:65-75\n\t\tvar parsed map[string]interface{}\n\t\tif err := json.Unmarshal(c.Spec, &parsed); err != nil || parsed == nil {\n\t\t\treturn errors.New(\"invalid_spec_json\")\n\t\t}\n\t\tif rawPK, exists := parsed[\"pk\"]; exists {\n\t\t\tpkStr, ok := rawPK.(string)\n\t\t\tif !ok || strings.TrimSpace(pkStr) == \"\" {\n\t\t\t\treturn errors.New(\"invalid_spec_pk_required\")\n\t\t\t}\n\t\t}",
+    "flow": "CreateMasterCommand.Validate unmarshals c.Spec and returns invalid_spec_pk_required when parsed[\"pk\"] is not a non-empty string.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7026,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9179,
+                "INCORRECT": 0.0642,
+                "UNSUPPORTED": 0.0178
+              },
+              "confidence": 0.7026,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 395,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In CreateMasterCommand.Validate, if Spec is provided and contains a pk key whose value is not a non-empty string, Validate returns invalid_spec_pk_required.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/create_master.go:65-75\n\t\tvar parsed map[string]interface{}\n\t\tif err := json.Unmarshal(c.Spec, &parsed); err != nil || parsed == nil {\n\t\t\treturn errors.New(\"invalid_spec_json\")\n\t\t}\n\t\tif rawPK, exists := parsed[\"pk\"]; exists {\n\t\t\tpkStr, ok := rawPK.(string)\n\t\t\tif !ok || strings.TrimSpace(pkStr) == \"\" {\n\t\t\t\treturn errors.New(\"invalid_spec_pk_required\")\n\t\t\t}\n\t\t}",
+          "flow": "CreateMasterCommand.Validate unmarshals c.Spec and returns invalid_spec_pk_required when parsed[\"pk\"] is not a non-empty string."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.7335,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9314,
+                "INCORRECT": 0.0468,
+                "UNSUPPORTED": 0.0218
+              },
+              "confidence": 0.7335,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 400,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "CreateMasterCommand.Validate unmarshals c.Spec and returns invalid_spec_pk_required when parsed[\"pk\"] is not a non-empty string.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/create_master.go:65-75\n\t\tvar parsed map[string]interface{}\n\t\tif err := json.Unmarshal(c.Spec, &parsed); err != nil || parsed == nil {\n\t\t\treturn errors.New(\"invalid_spec_json\")\n\t\t}\n\t\tif rawPK, exists := parsed[\"pk\"]; exists {\n\t\t\tpkStr, ok := rawPK.(string)\n\t\t\tif !ok || strings.TrimSpace(pkStr) == \"\" {\n\t\t\t\treturn errors.New(\"invalid_spec_pk_required\")\n\t\t\t}\n\t\t}",
+          "claim": "In CreateMasterCommand.Validate, if Spec is provided and contains a pk key whose value is not a non-empty string, Validate returns invalid_spec_pk_required."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7541,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9592,
+                "NO": 0.0408
+              },
+              "confidence": 0.7541,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 299,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/create_master.go:65-75\n\t\tvar parsed map[string]interface{}\n\t\tif err := json.Unmarshal(c.Spec, &parsed); err != nil || parsed == nil {\n\t\t\treturn errors.New(\"invalid_spec_json\")\n\t\t}\n\t\tif rawPK, exists := parsed[\"pk\"]; exists {\n\t\t\tpkStr, ok := rawPK.(string)\n\t\t\tif !ok || strings.TrimSpace(pkStr) == \"\" {\n\t\t\t\treturn errors.New(\"invalid_spec_pk_required\")\n\t\t\t}\n\t\t}",
+          "claim": "In CreateMasterCommand.Validate, if Spec is provided and contains a pk key whose value is not a non-empty string, Validate returns invalid_spec_pk_required."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB, when len(out) == 0 and effectiveIDType == gpay, the function returns nil, nil instead of returning inputIDs.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:901-908\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+    "flow": "resolveSourceIDsForSegmentB checks if len(out) == 0; if effectiveIDType == gpay, it returns nil, nil.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4343,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7209,
+                "INCORRECT": 0.273,
+                "UNSUPPORTED": 0.0061
+              },
+              "confidence": 0.4343,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 312,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB, when len(out) == 0 and effectiveIDType == gpay, the function returns nil, nil instead of returning inputIDs.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:901-908\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+          "flow": "resolveSourceIDsForSegmentB checks if len(out) == 0; if effectiveIDType == gpay, it returns nil, nil."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.3239,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.447,
+                "INCORRECT": 0.5417,
+                "UNSUPPORTED": 0.0113
+              },
+              "confidence": 0.3239,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 317,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "resolveSourceIDsForSegmentB checks if len(out) == 0; if effectiveIDType == gpay, it returns nil, nil.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:901-908\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+          "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB, when len(out) == 0 and effectiveIDType == gpay, the function returns nil, nil instead of returning inputIDs."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8372,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9761,
+                "NO": 0.0239
+              },
+              "confidence": 0.8372,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 220,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:901-908\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+          "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB, when len(out) == 0 and effectiveIDType == gpay, the function returns nil, nil instead of returning inputIDs."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB, when len(out) == 0 and effectiveIDType == gpay, the function always panics instead of returning.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:901-908\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+    "flow": "resolveSourceIDsForSegmentB returns nil, nil when len(out) == 0 and effectiveIDType == gpay; it never panics.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3623,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6438,
+                "INCORRECT": 0.3451,
+                "UNSUPPORTED": 0.0111
+              },
+              "confidence": 0.3623,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 310,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB, when len(out) == 0 and effectiveIDType == gpay, the function always panics instead of returning.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:901-908\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+          "flow": "resolveSourceIDsForSegmentB returns nil, nil when len(out) == 0 and effectiveIDType == gpay; it never panics."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.3509,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.239,
+                "INCORRECT": 0.7188,
+                "UNSUPPORTED": 0.0422
+              },
+              "confidence": 0.3509,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 315,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "resolveSourceIDsForSegmentB returns nil, nil when len(out) == 0 and effectiveIDType == gpay; it never panics.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:901-908\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+          "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB, when len(out) == 0 and effectiveIDType == gpay, the function always panics instead of returning."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.2414,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.2192,
+                "NO": 0.7808
+              },
+              "confidence": 0.2414,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 217,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_handler.go:901-908\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+          "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB, when len(out) == 0 and effectiveIDType == gpay, the function always panics instead of returning."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In TransmuterModule.lookupShadowGpayIDs, the SQL query filters WHERE _deleted = true and ignores all active rows.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1513-1527\n\t\tvar rows []struct {\n\t\t\tSourceID string `gorm:\"column:_source_id\"`\n\t\t\tGpayID   int64  `gorm:\"column:_gpay_id\"`\n\t\t}\n\t\tquery := fmt.Sprintf(`SELECT _source_id, %s FROM %s WHERE _source_id IN (?) ORDER BY COALESCE(_deleted, false) ASC, %s DESC`, pkSelect, shadowQT, pkIdent)\n\t\tif errQ := shadowDB.WithContext(ctx).Raw(query, uniqueIDs[i:end]).Scan(&rows).Error; errQ == nil {\n\t\t\tfor _, r := range rows {\n\t\t\t\tif r.SourceID != \"\" && r.GpayID > 0 {\n\t\t\t\t\tif _, exists := res[r.SourceID]; !exists {\n\t\t\t\t\t\tres[r.SourceID] = r.GpayID\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}",
+    "flow": "lookupShadowGpayIDs queries WHERE _source_id IN (?) ORDER BY COALESCE(_deleted, false) ASC, _gpay_id DESC, prioritizing non-deleted rows first.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.54,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8361,
+                "INCORRECT": 0.1446,
+                "UNSUPPORTED": 0.0193
+              },
+              "confidence": 0.54,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 518,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In TransmuterModule.lookupShadowGpayIDs, the SQL query filters WHERE _deleted = true and ignores all active rows.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1513-1527\n\t\tvar rows []struct {\n\t\t\tSourceID string `gorm:\"column:_source_id\"`\n\t\t\tGpayID   int64  `gorm:\"column:_gpay_id\"`\n\t\t}\n\t\tquery := fmt.Sprintf(`SELECT _source_id, %s FROM %s WHERE _source_id IN (?) ORDER BY COALESCE(_deleted, false) ASC, %s DESC`, pkSelect, shadowQT, pkIdent)\n\t\tif errQ := shadowDB.WithContext(ctx).Raw(query, uniqueIDs[i:end]).Scan(&rows).Error; errQ == nil {\n\t\t\tfor _, r := range rows {\n\t\t\t\tif r.SourceID != \"\" && r.GpayID > 0 {\n\t\t\t\t\tif _, exists := res[r.SourceID]; !exists {\n\t\t\t\t\t\tres[r.SourceID] = r.GpayID\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}",
+          "flow": "lookupShadowGpayIDs queries WHERE _source_id IN (?) ORDER BY COALESCE(_deleted, false) ASC, _gpay_id DESC, prioritizing non-deleted rows first."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2777,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6475,
+                "INCORRECT": 0.3021,
+                "UNSUPPORTED": 0.0503
+              },
+              "confidence": 0.2777,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 523,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "lookupShadowGpayIDs queries WHERE _source_id IN (?) ORDER BY COALESCE(_deleted, false) ASC, _gpay_id DESC, prioritizing non-deleted rows first.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1513-1527\n\t\tvar rows []struct {\n\t\t\tSourceID string `gorm:\"column:_source_id\"`\n\t\t\tGpayID   int64  `gorm:\"column:_gpay_id\"`\n\t\t}\n\t\tquery := fmt.Sprintf(`SELECT _source_id, %s FROM %s WHERE _source_id IN (?) ORDER BY COALESCE(_deleted, false) ASC, %s DESC`, pkSelect, shadowQT, pkIdent)\n\t\tif errQ := shadowDB.WithContext(ctx).Raw(query, uniqueIDs[i:end]).Scan(&rows).Error; errQ == nil {\n\t\t\tfor _, r := range rows {\n\t\t\t\tif r.SourceID != \"\" && r.GpayID > 0 {\n\t\t\t\t\tif _, exists := res[r.SourceID]; !exists {\n\t\t\t\t\t\tres[r.SourceID] = r.GpayID\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}",
+          "claim": "In TransmuterModule.lookupShadowGpayIDs, the SQL query filters WHERE _deleted = true and ignores all active rows."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6437,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9326,
+                "NO": 0.0674
+              },
+              "confidence": 0.6437,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 417,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1513-1527\n\t\tvar rows []struct {\n\t\t\tSourceID string `gorm:\"column:_source_id\"`\n\t\t\tGpayID   int64  `gorm:\"column:_gpay_id\"`\n\t\t}\n\t\tquery := fmt.Sprintf(`SELECT _source_id, %s FROM %s WHERE _source_id IN (?) ORDER BY COALESCE(_deleted, false) ASC, %s DESC`, pkSelect, shadowQT, pkIdent)\n\t\tif errQ := shadowDB.WithContext(ctx).Raw(query, uniqueIDs[i:end]).Scan(&rows).Error; errQ == nil {\n\t\t\tfor _, r := range rows {\n\t\t\t\tif r.SourceID != \"\" && r.GpayID > 0 {\n\t\t\t\t\tif _, exists := res[r.SourceID]; !exists {\n\t\t\t\t\t\tres[r.SourceID] = r.GpayID\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}",
+          "claim": "In TransmuterModule.lookupShadowGpayIDs, the SQL query filters WHERE _deleted = true and ignores all active rows."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

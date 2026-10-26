@@ -1,0 +1,80 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "SyncRealWorkspaceState bảo vệ task của User không bị ghi đè bởi agent-workspace",
+    "claim": "Trong hàm SyncRealWorkspaceState, khi tìm thấy cur trong existingByKey[pt.Key], nếu cur.Source khác rỗng và khác agent-workspace thì hàm thực hiện continue không ghi đè.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/seed_data.go:278-288\n\t\tif cur, ok := existingByKey[pt.Key]; ok {\n\t\t\tif cur.Source != \"\" && cur.Source != \"agent-workspace\" {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\ttargetStage := cur.Stage\n\t\t\tif pt.Done && cur.Stage != queue.StageDone {\n\t\t\t\ttargetStage = queue.StageDone\n\t\t\t}\n\t\t\t_ = s.QueueStore.UpdateWaveAndStage(ctx, cur.ID, waveIdx, targetStage, mdl, pt.Score)\n\t\t\tcontinue\n\t\t}"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Bước implement cô lập repo ngoài s.Root và thu thập diff kèm file untracked",
+    "claim": "Tại vòng lặp affectedRepos của bước implement, khi execDir khác rỗng, hàm gọi collectRepoUnifiedDiffWithUntracked(ctx, execDir).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1146-1151\n\t\t\tvar statusOut, statOut, patchOut string\n\t\t\tif execDir != \"\" {\n\t\t\t\tstatusOut, _ = s.executeCommandInDir(ctx, execDir, \"git status --short\")\n\t\t\t\tstatOut, _ = s.executeCommandInDir(ctx, execDir, \"git diff --stat\")\n\t\t\t\tpatchOut = s.collectRepoUnifiedDiffWithUntracked(ctx, execDir)\n\t\t\t}"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "isTestTaskOrTempRoot nhận diện task test hoặc thư mục tạm",
+    "claim": "Hàm isTestTaskOrTempRoot trả về true khi upperID bắt đầu bằng TASK-DUAL-, TASK-TEST- hoặc TEST-.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:689-693\nfunc isTestTaskOrTempRoot(root string, externalID string) bool {\n\tupperID := strings.ToUpper(strings.TrimSpace(externalID))\n\tif strings.HasPrefix(upperID, \"TASK-DUAL-\") || strings.HasPrefix(upperID, \"TASK-TEST-\") || strings.HasPrefix(upperID, \"TEST-\") {\n\t\treturn true\n\t}"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "handleTaskPlanningChat chặn ghi vào workspace thật khi chạy test",
+    "claim": "Trong nhánh revise_solution, handleTaskPlanningChat kiểm tra !isTestTaskOrTempRoot(s.Root, qt.ExternalID) trước khi ghi vào ws09Path.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_chat.go:779-786\n\t\t// AF-ORCH-03: Only sync to linked /agent workspace 09_tasks_solution_*.md if NOT a test task or temp root!\n\t\tif !isTestTaskOrTempRoot(s.Root, qt.ExternalID) {\n\t\t\tif _, _, ws09Path, _ := s.FindMatchingAgentWorkspace(*qt); ws09Path != \"\" {\n\t\t\t\tif wsRaw, err := os.ReadFile(ws09Path); err == nil && len(wsRaw) > 0 {\n\t\t\t\t\t_ = os.WriteFile(ws09Path, []byte(strings.TrimRight(string(wsRaw), \"\\n\")+\"\\n\"+revisionBlock), 0o644)\n\t\t\t\t}\n\t\t\t}\n\t\t}"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "BuildMongoOCCBulkModels trong Code Demo dùng Aggregation Pipeline Update",
+    "claim": "Trong Code Demo, BuildMongoOCCBulkModels đặt filter chỉ gồm conflictTarget: keyVal và dùng updateDoc kiểu []bson.M{{\"$set\": setStage}} với $cond.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_audit_master_mongo_orchestrator.md:185-207\n\t\tfilter := bson.M{conflictTarget: keyVal}\n\n\t\tvar updateDoc any\n\t\tif !isFullSync && incomingTs > 0 {\n\t\t\toccAllowCond := bson.M{\n\t\t\t\t\"$or\": bson.A{\n\t\t\t\t\tbson.M{\"$eq\": bson.A{bson.M{\"$type\": \"$_source_ts\"}, \"missing\"}},\n\t\t\t\t\tbson.M{\"$lte\": bson.A{\"$_source_ts\", incomingTs + mongoOCCClockSkewToleranceMs}},\n\t\t\t\t},\n\t\t\t}\n\t\t\tsetStage := bson.M{}\n\t\t\tfor k, v := range bsonDoc {\n\t\t\t\tif k == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\"$cond\": bson.A{occAllowCond, v, \"$\" + k},\n\t\t\t\t}\n\t\t\t}\n\t\t\tupdateDoc = []bson.M{{\"$set\": setStage}}"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Xử lý mặc định conflictTarget rỗng trong BuildMongoOCCBulkModels",
+    "claim": "Trong Code Demo, khi conflictTarget bằng chuỗi rỗng thì hàm gán conflictTarget = \"_gpay_id\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_audit_master_mongo_orchestrator.md:166-168\n\tif conflictTarget == \"\" {\n\t\tconflictTarget = \"_gpay_id\"\n\t}"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "classifyChatActionMode tự động chuyển hướng sang ingest_audit_remediation khi phát hiện Báo cáo Audit",
+    "claim": "Trong Code Demo 5, hàm classifyChatActionMode kiểm tra chuỗi AF-ORCH-, AF-DH-, TASK-A0 hoặc audit_report_ và trả về ingest_audit_remediation.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_audit_master_mongo_orchestrator.md:301-308\nfunc classifyChatActionMode(cleanMsg string, requestedMode string) string {\n\tlower := strings.ToLower(cleanMsg)\n\tif strings.Contains(cleanMsg, \"AF-ORCH-\") || strings.Contains(cleanMsg, \"AF-DH-\") ||\n\t\tstrings.Contains(cleanMsg, \"TASK-A0\") || strings.Contains(lower, \"audit_report_\") ||\n\t\tstrings.Contains(lower, \"09_tasks_solution_audit_\") ||\n\t\t(strings.Contains(lower, \"lỗ hổng\") && strings.Contains(lower, \"phương án khắc phục\")) {\n\t\treturn \"ingest_audit_remediation\"\n\t}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "flow": "Control false: sai tên trường Source khi EnqueueRaw trong SyncRealWorkspaceState",
+    "claim": "Hàm SyncRealWorkspaceState truyền Source bằng \"jira-cloud\" khi gọi QueueStore.EnqueueRaw.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/seed_data.go:290-293\n\t\tid, inserted, enqErr := s.QueueStore.EnqueueRaw(ctx, queue.RawTask{\n\t\t\tExternalID:  pt.Key,\n\t\t\tSource:      \"agent-workspace\",\n\t\t\tTitle:       pt.Title,"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "flow": "Control false: sai giá trị hằng số mongoOCCClockSkewToleranceMs trong Code Demo",
+    "claim": "Hằng số mongoOCCClockSkewToleranceMs trong Code Demo có giá trị bằng 999999.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_audit_master_mongo_orchestrator.md:153-153\nconst mongoOCCClockSkewToleranceMs int64 = 2000"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "flow": "Control true: khớp nguyên văn giá trị hằng số mongoOCCClockSkewToleranceMs trong Code Demo",
+    "claim": "Hằng số mongoOCCClockSkewToleranceMs trong Code Demo được khai báo kiểu int64 với giá trị 2000.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_audit_master_mongo_orchestrator.md:153-153\nconst mongoOCCClockSkewToleranceMs int64 = 2000"
+  }
+]
+

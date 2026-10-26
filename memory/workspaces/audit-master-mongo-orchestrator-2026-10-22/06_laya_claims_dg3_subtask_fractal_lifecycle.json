@@ -1,0 +1,56 @@
+[
+  {
+    "id": "A-SUB-01",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Kiểm tra SubTaskInputContractDTO và SubTaskOutputContractDTO trong task_inspector.go dòng 44-61",
+    "claim": "Trong task_inspector.go dòng 44-61, SubTaskInputContractDTO khai báo SourceContext, UpstreamSubTaskIDs, UpstreamDeliverables, UpstreamReady, InputSpec và SubTaskOutputContractDTO khai báo Deliverables, DownstreamSubTaskIDs, DiffFile, AuditFile, EvidenceReceiptID, HandoffReady.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:44-61\n// SubTaskInputContractDTO defines the explicit input contract of an individual Sub-Task (TASK-SUB-01).\ntype SubTaskInputContractDTO struct {\n\tSourceContext        string   `json:\"source_context\"`         // Exact file:line touchpoint in TargetRepo\n\tUpstreamSubTaskIDs   []string `json:\"upstream_sub_task_ids\"`  // DependsOn Sub-Task IDs from Wave N-1\n\tUpstreamDeliverables []string `json:\"upstream_deliverables\"`  // Concrete outputs handed off from upstream Wave N-1 Sub-Tasks\n\tUpstreamReady        bool     `json:\"upstream_ready\"`         // true if Wave 0 or all UpstreamSubTaskIDs have reached DONE\n\tInputSpec            string   `json:\"input_spec\"`             // Input payload / struct / interface / context specification\n}\n\n// SubTaskOutputContractDTO defines the explicit output deliverables produced by an individual Sub-Task (TASK-SUB-01).\ntype SubTaskOutputContractDTO struct {\n\tDeliverables         []string `json:\"deliverables\"`            // Concrete symbols, files, or endpoints produced by this Sub-Task\n\tDownstreamSubTaskIDs []string `json:\"downstream_sub_task_ids\"` // Sub-Tasks in Wave N+1 that consume this output as their input\n\tDiffFile             string   `json:\"diff_file\"`               // .orchestrator/tasks/<parent>/subtasks/<subID>/diff.patch\n\tAuditFile            string   `json:\"audit_file\"`              // .orchestrator/tasks/<parent>/subtasks/<subID>/audit_report.md\n\tEvidenceReceiptID    string   `json:\"evidence_receipt_id\"`     // EV-... receipt verifying this Sub-Task\n\tHandoffReady         bool     `json:\"handoff_ready\"`           // true when Sub-Task reaches Isolated Branch (DONE)\n}"
+  },
+  {
+    "id": "A-SUB-02",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Kiểm tra checkUpstreamWaveGate và checkApproveGateH4b trong runSubTaskLifecycleAction tại task_inspector.go dòng 2376-2404",
+    "claim": "Trong task_inspector.go dòng 2376-2404, hàm checkUpstreamWaveGate chặn thực thi khi st.WaveIndex > 0 và !st.InputContract.UpstreamReady (gán st.Stage = \"NEEDS_YOU\"), và hàm checkApproveGateH4b chặn thực thi khi !hasApproval (gán st.Stage = \"NEEDS_YOU\").",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:2376-2404\n\t// Helper to check Upstream Wave Dependency Gate (GAP-FRAC-AUDIT-01)\n\tcheckUpstreamWaveGate := func(attemptedAction string) bool {\n\t\tif st.WaveIndex > 0 && !st.InputContract.UpstreamReady {\n\t\t\tst.Stage = \"NEEDS_YOU\"\n\t\t\tst.Status = \"waiting\"\n\t\t\t_ = os.WriteFile(stageFile, []byte(\"NEEDS_YOU\\n\"), 0o644)\n\t\t\tmsg := fmt.Sprintf(\"[Wave Dependency Gate BLOCK] Chặn %s trên %s (Wave %d): Upstream DependsOn (%s) chưa đạt DONE (UpstreamReady=false)!\",\n\t\t\t\tattemptedAction, st.SubTaskID, st.WaveIndex, strings.Join(st.DependsOn, \", \"))\n\t\t\tappendSubProgress(msg)\n\t\t\ts.appendTaskLog(qt.ExternalID, msg)\n\t\t\treturn false\n\t\t}\n\t\treturn true\n\t}\n\n\t// Helper to check H4b Approve Gate (GAP-FRAC-AUDIT-01)\n\tcheckApproveGateH4b := func(attemptedAction string) bool {\n\t\tif !hasApproval {\n\t\t\tst.Stage = \"NEEDS_YOU\"\n\t\t\tst.Status = \"waiting\"\n\t\t\t_ = os.WriteFile(stageFile, []byte(\"NEEDS_YOU\\n\"), 0o644)\n\t\t\tmsg := fmt.Sprintf(\"[Gate H4b BLOCK] Chặn %s trên %s: Plan riêng tại %s chưa được APPROVE (.user-approved missing)!\",\n\t\t\t\tattemptedAction, st.SubTaskID, st.PlanFile)\n\t\t\tappendSubProgress(msg)\n\t\t\ts.appendTaskLog(qt.ExternalID, msg)\n\t\t\treturn false\n\t\t}\n\t\treturn true\n\t}"
+  },
+  {
+    "id": "A-SUB-03",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Kiểm tra định tuyến action subtask_* trong handleTaskAction tại server.go dòng 977-989",
+    "claim": "Trong server.go dòng 977-989, khi strings.HasPrefix(req.Action, \"subtask_\") bằng true, hàm tìm qt qua findQueuedTask, cập nhật s.selectedTaskKey = qt.ExternalID, gọi s.loadOrGenerateSubTasks(*qt), thực thi s.runSubTaskLifecycleAction và phát sự kiện subtasks_updated.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:977-989\n\tif strings.HasPrefix(req.Action, \"subtask_\") {\n\t\tqt, findErr := s.findQueuedTask(r.Context(), req.TaskKey)\n\t\tif findErr != nil {\n\t\t\thttp.Error(w, findErr.Error(), http.StatusNotFound)\n\t\t\treturn\n\t\t}\n\t\ts.mu.Lock()\n\t\ts.selectedTaskKey = qt.ExternalID\n\t\ts.mu.Unlock()\n\t\titems := s.loadOrGenerateSubTasks(*qt)\n\t\t_ = s.runSubTaskLifecycleAction(r.Context(), *qt, items, req.SubTaskID, req.Action)\n\t\ts.broadcast(\"subtasks_updated\")\n\t} else {"
+  },
+  {
+    "id": "A-SUB-04",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Kiểm tra bài test tích hợp TestWebUIServer_SubTaskFractalLifecycle_InputOutputPlanAndBranch trong server_test.go dòng 1380-1396",
+    "claim": "Trong server_test.go dòng 1380-1396, hàm TestWebUIServer_SubTaskFractalLifecycle_InputOutputPlanAndBranch kiểm tra các marker subtask-fractal-inspector, wave-subtask-fractal-inspector trên '/' và buildSubTaskFractalInspectorHTML, selectSubTaskFractal, runSubTaskLifecycle, inspectSubTaskDedicatedPlan trên '/app.js'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server_test.go:1380-1396\nfunc TestWebUIServer_SubTaskFractalLifecycle_InputOutputPlanAndBranch(t *testing.T) {\n\tsrv := newTestWebServer(t)\n\tts := httptest.NewServer(srv.Handler())\n\tdefer ts.Close()\n\n\t// 1. Verify UI static assets expose Sub-Task Fractal Inspector hooks in View 1 & View 2\n\tfor _, assetCheck := range []struct {\n\t\tpath    string\n\t\tmarkers []string\n\t}{\n\t\t{\n\t\t\tpath:    \"/\",\n\t\t\tmarkers: []string{\"subtask-fractal-inspector\", \"wave-subtask-fractal-inspector\"},\n\t\t},\n\t\t{\n\t\t\tpath:    \"/app.js\",\n\t\t\tmarkers: []string{\"buildSubTaskFractalInspectorHTML\", \"selectSubTaskFractal\", \"runSubTaskLifecycle\", \"inspectSubTaskDedicatedPlan\"},"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "flow": "Control false: phát biểu sai kiểu dữ liệu của UpstreamReady trong SubTaskInputContractDTO tại task_inspector.go dòng 45-51",
+    "claim": "Trong task_inspector.go dòng 45-51, trường UpstreamReady trong SubTaskInputContractDTO có kiểu dữ liệu là map[string]float64.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:45-51\ntype SubTaskInputContractDTO struct {\n\tSourceContext        string   `json:\"source_context\"`         // Exact file:line touchpoint in TargetRepo\n\tUpstreamSubTaskIDs   []string `json:\"upstream_sub_task_ids\"`  // DependsOn Sub-Task IDs from Wave N-1\n\tUpstreamDeliverables []string `json:\"upstream_deliverables\"`  // Concrete outputs handed off from upstream Wave N-1 Sub-Tasks\n\tUpstreamReady        bool     `json:\"upstream_ready\"`         // true if Wave 0 or all UpstreamSubTaskIDs have reached DONE\n\tInputSpec            string   `json:\"input_spec\"`             // Input payload / struct / interface / context specification\n}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "flow": "Control false: phát biểu sai nhánh xử lý trong handleTaskAction tại server.go dòng 977-989",
+    "claim": "Trong server.go dòng 977-989, khi strings.HasPrefix(req.Action, \"subtask_\") bằng true thì hàm gọi os.Exit(1) ngay lập tức.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:977-989\n\tif strings.HasPrefix(req.Action, \"subtask_\") {\n\t\tqt, findErr := s.findQueuedTask(r.Context(), req.TaskKey)\n\t\tif findErr != nil {\n\t\t\thttp.Error(w, findErr.Error(), http.StatusNotFound)\n\t\t\treturn\n\t\t}\n\t\ts.mu.Lock()\n\t\ts.selectedTaskKey = qt.ExternalID\n\t\ts.mu.Unlock()\n\t\titems := s.loadOrGenerateSubTasks(*qt)\n\t\t_ = s.runSubTaskLifecycleAction(r.Context(), *qt, items, req.SubTaskID, req.Action)\n\t\ts.broadcast(\"subtasks_updated\")\n\t} else {"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "flow": "Control true: xác nhận chính xác kiểu dữ liệu của HandoffReady trong SubTaskOutputContractDTO tại task_inspector.go dòng 54-61",
+    "claim": "Trong task_inspector.go dòng 54-61, trường HandoffReady trong SubTaskOutputContractDTO có kiểu dữ liệu là bool.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:54-61\ntype SubTaskOutputContractDTO struct {\n\tDeliverables         []string `json:\"deliverables\"`            // Concrete symbols, files, or endpoints produced by this Sub-Task\n\tDownstreamSubTaskIDs []string `json:\"downstream_sub_task_ids\"` // Sub-Tasks in Wave N+1 that consume this output as their input\n\tDiffFile             string   `json:\"diff_file\"`               // .orchestrator/tasks/<parent>/subtasks/<subID>/diff.patch\n\tAuditFile            string   `json:\"audit_file\"`              // .orchestrator/tasks/<parent>/subtasks/<subID>/audit_report.md\n\tEvidenceReceiptID    string   `json:\"evidence_receipt_id\"`     // EV-... receipt verifying this Sub-Task\n\tHandoffReady         bool     `json:\"handoff_ready\"`           // true when Sub-Task reaches Isolated Branch (DONE)\n}"
+  }
+]
+

@@ -1,0 +1,12 @@
+{
+  "internal/service/master/transmuter_extjson_test.go": {
+    "objective": "Kiểm thử toàn diện 4 chế độ chuẩn hoá Extended JSON (extjson_relaxed, extjson_relaxed_num_str, extjson_unwrap_plain, extjson_unwrap_num_str), kiểm thử bảo toàn số nguyên > 2^53 qua dec.UseNumber(), kiểm thử đa luồng 8 workers song song (Gate G4/G6), và kiểm thử tích hợp dữ liệu thật binding_id=59 trên PostgreSQL.",
+    "workflow": "TestNormalizeMongoExtJSONDeep_AllModes -> TestExtractColumns_JSONBWithExtJSONTransforms -> TestConcurrentExtractColumns_MultiWorkerBatch -> TestLiveBinding59_EventsPayloadExtJSONTransform",
+    "rounds": [
+      {
+        "objective": "Mỗi hàm test trong transmuter_extjson_test.go kiểm tra một tầng hoàn toàn khác nhau theo yêu cầu Gate G3/G4/G6: (1) ApplyTransform độc lập cho 4 mode; (2) luồng extractColumns đầy đủ qua gjsonValueToGo + unwrapMongoExtJSON + ApplyTransform + coerceForColumn với số > 2^53 và chuỗi JSON con; (3) chạy 8 goroutines đồng thời với -race trên 400 bản ghi; (4) đọc dữ liệu thật từ PostgreSQL container gpay-postgres-cdc và gpay-postgres-shadow cho binding_id=59. Không hề trùng lặp logic.",
+        "workflow": "Unit Layer (ApplyTransform) -> Pipeline Layer (extractColumns + UseNumber + coerceForColumn) -> Concurrency Race Layer (8 workers x 50 rows) -> Live PostgreSQL Integration Layer (binding_id=59 shadow_walletservice.events)"
+      }
+    ]
+  }
+}

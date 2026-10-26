@@ -1,0 +1,86 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "claim": "In transmute_handler.go, isTransientError does not match 'sqlstate 28p01', 'failed sasl auth', or 'password authentication failed', so a master DB authentication error is not classified as transient.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:918-946\nfunc isTransientError(err error) bool {\n\tif err == nil {\n\t\treturn false\n\t}\n\tmsg := strings.ToLower(err.Error())\n\treturn strings.Contains(msg, \"connection refused\") ||\n\t\tstrings.Contains(msg, \"connection reset\") ||\n\t\tstrings.Contains(msg, \"connection closed\") ||\n\t\tstrings.Contains(msg, \"conn closed\") ||\n\t\tstrings.Contains(msg, \"driver: bad connection\") ||\n\t\tstrings.Contains(msg, \"unexpected eof\") ||\n\t\tstrings.Contains(msg, \"connection pool\") ||\n\t\tstrings.Contains(msg, \"dial tcp\") ||\n\t\tstrings.Contains(msg, \"i/o timeout\") ||\n\t\tstrings.Contains(msg, \"eof\") ||\n\t\tstrings.Contains(msg, \"broken pipe\") ||\n\t\tstrings.Contains(msg, \"sqlstate 08\") ||\n\t\tstrings.Contains(msg, \"out of memory\") ||\n\t\tstrings.Contains(msg, \"sqlstate 53200\") ||\n\t\tstrings.Contains(msg, \"sqlstate 53300\") || // too many clients\n\t\tstrings.Contains(msg, \"sqlstate 40p01\") || // deadlock detected\n\t\tstrings.Contains(msg, \"sqlstate 40001\") || // serialization_failure\n\t\tstrings.Contains(msg, \"sqlstate 57014\") || // statement timeout / canceled\n\t\tstrings.Contains(msg, \"sqlstate 57p01\") || // admin_shutdown\n\t\tstrings.Contains(msg, \"sqlstate 57p02\") || // crash_shutdown\n\t\tstrings.Contains(msg, \"sqlstate 57p03\") || // cannot_connect_now\n\t\tstrings.Contains(msg, \"sqlstate 55p03\") || // lock_not_available\n\t\tstrings.Contains(msg, \"deadlock detected\")\n}",
+    "flow": "isTransientError matches a fixed list of substrings; none of them is 28p01, failed sasl auth, or password authentication failed."
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "claim": "In transmute_handler.go, when isTransientError(err) is true the batch tasks are completed with the error and the function returns without calling binarySearchSplit.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:632-656\n\t\t// Nếu lỗi DB/network tạm thời -> trả lỗi transient về cho toàn bộ để retry sau\n\t\tif isTransientError(err) {\n\t\t\tif logEntry != nil {\n\t\t\t\th.activity.FailWithDetails(logEntry, err.Error(), 0, map[string]interface{}{\n\t\t\t\t\t\"master_binding_id\": masterBindingID,\n\t\t\t\t})\n\t\t\t}\n\t\t\tfor _, t := range batch {\n\t\t\t\th.replyErr(runCtx, t.Msg, t.Req.CorrelationID, \"transient_db_error: \"+err.Error())\n\t\t\t\tt.complete(err)\n\t\t\t}\n\t\t\treturn\n\t\t}\n\n\t\t// Nếu lỗi Poison Pill -> Ghi split_retry và Chia để trị đệ quy\n\t\tif logEntry != nil {\n\t\t\th.activity.FailWithDetails(logEntry, err.Error(), 0, map[string]interface{}{\n\t\t\t\t\"master_binding_id\": masterBindingID,\n\t\t\t\t\"split_retry\":       true,\n\t\t\t})\n\t\t}\n\t\tobservability.Ctx(runCtx, h.logger).Error(\"Poison pill detected in transmute batch. Initiating Binary Search Split...\",\n\t\t\tzap.String(\"master\", masterTable),\n\t\t\tzap.Error(err))\n\t\th.binarySearchSplit(ctx, masterTable, batch)",
+    "flow": "Transient errors complete every task with err and return; only non-transient errors reach binarySearchSplit."
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "claim": "In transmute_consumer_pool.go, finalizeJetStreamMessage calls msg.Term() when the handler error is non-nil and NumDelivered >= MaxDeliver, otherwise NakWithDelay.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_consumer_pool.go:344-381\nfunc finalizeJetStreamMessage(msg *nats.Msg, hErr error, policy deliveryPolicy) {\n\tif msg == nil {\n\t\treturn\n\t}\n\tmeta, err := msg.Metadata()\n\tif hErr != nil {\n\t\tif err == nil && policy.MaxDeliver > 0 && meta.NumDelivered >= uint64(policy.MaxDeliver) {\n\t\t\tif policy.Logger != nil {\n\t\t\t\tpolicy.Logger.Error(\"poison pill message exhausted max_deliver, terminating\",\n\t\t\t\t\tzap.String(\"subject\", msg.Subject),\n\t\t\t\t\tzap.Uint64(\"delivered\", meta.NumDelivered),\n\t\t\t\t\tzap.Int(\"worker_id\", policy.WorkerID),\n\t\t\t\t\tzap.Error(hErr),\n\t\t\t\t)\n\t\t\t}\n\t\t\t_ = msg.Term()\n\t\t\treturn\n\t\t}\n\t\tdelay := policy.NakDelay\n\t\tif delay <= 0 {\n\t\t\tdelay = 2 * time.Second\n\t\t}\n\t\tif err == nil && meta.NumDelivered > 1 {\n\t\t\tdelay = time.Duration(meta.NumDelivered) * delay\n\t\t}\n\t\tif policy.Logger != nil {\n\t\t\tpolicy.Logger.Warn(\"transmute task handler failed, nak with delay\",\n\t\t\t\tzap.String(\"subject\", msg.Subject),\n\t\t\t\tzap.Int(\"worker_id\", policy.WorkerID),\n\t\t\t\tzap.Duration(\"nak_delay\", delay),\n\t\t\t\tzap.Error(hErr),\n\t\t\t)\n\t\t}\n\t\t_ = msg.NakWithDelay(delay)\n\t\treturn\n\t}\n\t_ = msg.Ack()\n}",
+    "flow": "finalizeJetStreamMessage Terms the message once NumDelivered reaches MaxDeliver; before that it Naks with delay."
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "claim": "In connection_manager.go, GetMasterDB returns m.reg.GetDB(database.RoleDestination) directly when key is empty or 'default'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:58-62\nfunc (m *ConnectionManager) GetMasterDB(ctx context.Context, key string) (*gorm.DB, error) {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" || key == \"default\" {\n\t\treturn m.reg.GetDB(database.RoleDestination)\n\t}",
+    "flow": "Empty or 'default' key short-circuits to the RoleDestination pool."
+  },
+  {
+    "id": "S-RC2",
+    "kind": "solution",
+    "claim": "In cdc-cms-service nats_client.go ensureSingleStream, when the existing stream retention differs from desired retention, the code calls js.DeleteStream and then js.AddStream.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/pkgs/natsconn/nats_client.go:210-218\n\tif info.Config.Retention != desired.Retention {\n\t\tif err := js.DeleteStream(desired.Name); err != nil {\n\t\t\treturn fmt.Errorf(\"failed to delete stream %s for retention migration: %w\", desired.Name, err)\n\t\t}\n\t\tif _, err := js.AddStream(desired); err != nil {\n\t\t\treturn fmt.Errorf(\"failed to recreate stream %s with retention %v: %w\", desired.Name, desired.Retention, err)\n\t\t}\n\t\treturn nil\n\t}",
+    "flow": "On retention mismatch the CMS reconcile path deletes then recreates the stream."
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "claim": "In the demo, isTransientError additionally matches 'sqlstate 28p01', 'sqlstate 28000', 'failed sasl auth', 'password authentication failed', and 'get master db'.",
+    "evidence": "DEMO:\n\t\tstrings.Contains(msg, \"sqlstate 28p01\") || // invalid_password\n\t\tstrings.Contains(msg, \"sqlstate 28000\") || // invalid_authorization_specification\n\t\tstrings.Contains(msg, \"failed sasl auth\") ||\n\t\tstrings.Contains(msg, \"password authentication failed\") ||\n\t\tstrings.Contains(msg, \"get master db\") ||",
+    "flow": "Five new substring checks are added to the isTransientError OR chain."
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "claim": "In the demo for EnsureDefaultMasterConnection, an UPDATE clears host, port, and default_database on 'default_master' only when options_json has no dsn/url/username/user.",
+    "evidence": "DEMO:\n\t_ = db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.connection_registry\n\t\t   SET host = NULL,\n\t\t       port = NULL,\n\t\t       default_database = NULL,\n\t\t       updated_at = NOW()\n\t\t WHERE connection_code = 'default_master'\n\t\t   AND (options_json IS NULL\n\t\t        OR COALESCE(options_json->>'dsn', options_json->>'url', options_json->>'username', options_json->>'user', '') = '')\n\t\t   AND (host IS NOT NULL OR port IS NOT NULL OR default_database IS NOT NULL)\n\t`).Error",
+    "flow": "UPDATE resets host/port/default_database only for default_master rows without credentials in options_json."
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "claim": "In the demo, EnsureDefaultMasterConnection has signature (ctx context.Context, db *gorm.DB, logger *zap.Logger) error and does not take cfg.DB.",
+    "evidence": "DEMO:\nfunc EnsureDefaultMasterConnection(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {\n\terr := db.WithContext(ctx).Exec(`\n\t\tINSERT INTO cdc_system.connection_registry\n\t\t\t(connection_code, display_name, role_type, engine_type, secret_ref, status)\n\t\tSELECT 'default_master', 'Default Master Connection',\n\t\t       'master', 'postgresql', 'env:CDS_MASTER_DB_PASSWORD', 'active'\n\t\tWHERE NOT EXISTS (\n\t\t\tSELECT 1 FROM cdc_system.connection_registry\n\t\t\tWHERE role_type = 'master' AND status = 'active'\n\t\t)\n\t\tON CONFLICT (connection_code) DO NOTHING\n\t`).Error",
+    "flow": "Signature takes ctx, db, logger only."
+  },
+  {
+    "id": "D-EDGE2",
+    "kind": "demo",
+    "claim": "In the demo, on retention mismatch ensureSingleStream logs an error and returns an error without calling DeleteStream or AddStream.",
+    "evidence": "DEMO:\n\tif info.Config.Retention != desired.Retention {\n\t\tlog.Error(\"NATS stream retention mismatch; refusing to delete/recreate core stream automatically\",\n\t\t\tzap.String(\"stream\", desired.Name),\n\t\t\tzap.Any(\"existing_retention\", info.Config.Retention),\n\t\t\tzap.Any(\"desired_retention\", desired.Retention))\n\t\treturn fmt.Errorf(\"stream %s retention mismatch (existing=%v desired=%v): manual migration required\",\n\t\t\tdesired.Name, info.Config.Retention, desired.Retention)\n\t}",
+    "flow": "Mismatch branch only logs and returns an error; no destructive call."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In connection_manager.go, GetShadowDB returns m.reg.GetDB(database.RoleShadow).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:53-56\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}",
+    "flow": "GetShadowDB delegates to RoleShadow."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In transmute_handler.go, isTransientError returns true for every non-nil error.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:918-923\nfunc isTransientError(err error) bool {\n\tif err == nil {\n\t\treturn false\n\t}\n\tmsg := strings.ToLower(err.Error())\n\treturn strings.Contains(msg, \"connection refused\") ||",
+    "flow": "isTransientError returns true only when the message contains one of the listed substrings."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In transmute_consumer_pool.go, finalizeJetStreamMessage always calls msg.Ack() even when the handler returns an error.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_consumer_pool.go:349-380\n\tif hErr != nil {\n\t\tif err == nil && policy.MaxDeliver > 0 && meta.NumDelivered >= uint64(policy.MaxDeliver) {\n\t\t\t_ = msg.Term()\n\t\t\treturn\n\t\t}\n\t\t_ = msg.NakWithDelay(delay)\n\t\treturn\n\t}\n\t_ = msg.Ack()",
+    "flow": "On handler error the message is Termed or Naked, not Acked."
+  }
+]
