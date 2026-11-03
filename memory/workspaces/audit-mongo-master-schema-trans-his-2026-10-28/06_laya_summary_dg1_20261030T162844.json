@@ -1,0 +1,175 @@
+{
+  "mode": "claim",
+  "stage": "dg1",
+  "workspace": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-mongo-master-schema-trans-his-2026-10-28",
+  "ts": "20261030T162844",
+  "trusted_rounds": [
+    "r2",
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-mongo-master-schema-trans-his-2026-10-28/06_laya_raw_dg1_20261030T162844.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In resolveSegmentBTSCol, dstTS from resolveSourceAndDestTSFields is assigned to tsCol whenever errTS == nil && dstTS != \"\", without filtering out dstTS == \"_id_only\".",
+      "decision": "FLAG",
+      "resolved": "Verified in recon_engine_segment_b.go:137-140 that dstTS is assigned to tsCol without checking dstTS != '_id_only'. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_engine_segment_b.go:137-140",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6783
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1869
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0887
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "ApplySourceFieldTypesToBSONDoc on disk currently deletes source_field_types and sourceFieldTypes and returns early when rawMeta == nil.",
+      "decision": "FLAG",
+      "resolved": "Verified in mongo_bson_restorer.go:75-83 that ApplySourceFieldTypesToBSONDoc returns early when rawMeta == nil. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:75-83",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.8902
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.2246
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.1367
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "resolveEffectiveMongoConflictTarget on disk returns \"_id\" when conflictTarget is \"id\" and a record has _id, id, source_field_types, or sourceFieldTypes.",
+      "decision": "FLAG",
+      "resolved": "Verified in mongo_bson_restorer.go:408-421 that resolveEffectiveMongoConflictTarget checks _id, id, and source_field_types. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:408-421",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2429
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2534
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0749
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "CoerceRecordToBSONDoc iterates over rec, coerces each non-nil field with CoerceToBSONValue, and invokes ApplySourceFieldTypesToBSONDoc(doc).",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4323
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3882
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8759
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "The demo code for resolveSegmentBTSCol checks dstTS != \"\" && dstTS != \"_id_only\" before assigning tsCol = dstTS.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2309
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.5767
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8683
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "The demo code for ApplySourceFieldTypesToBSONDoc promotes 24-hex IDs to ObjectID via coerceObjectID and preserves non-empty string IDs (such as 36-char UUIDs) when cand is 'id' or 'transaction_history_id'.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.7572
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6783
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0153
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "The demo code for extractInt64SourceTs unwraps bson.M{\"$literal\": lit} and map[string]any{\"$literal\": lit} recursively.",
+      "decision": "FLAG",
+      "resolved": "Verified in 09_tasks_solution_mongo_master_schema_trans_his_20261028.md:5065-5100 that extractInt64SourceTs unwraps  and parses int32/json.Number/string. REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-mongo-master-schema-trans-his-2026-10-28/09_tasks_solution_mongo_master_schema_trans_his_20261028.md:5065-5100",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.1902
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.0165
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.2074
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

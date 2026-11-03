@@ -1,0 +1,32 @@
+{
+  "internal/service/recon/recon_smoke.go": {
+    "objective": "Smoke recon orchestrator: delegate Segment A/B freeze-cutoff verification to recon_smoke_guard.go (single responsibility), clear per-cycle COUNT cache, and run Segment A once per shadow table instead of once per master binding.",
+    "workflow": "CheckAllUnified -> scanExact prefetch (cache cleared) -> per shadow: RunTotalOnlyA(ref=nil) -> verifySegmentAAtFreezeCutoff ; per master binding: RunTotalOnlyB -> verifySegmentBAtFreezeCutoff(lo, hi=lockTime-WindowFreezeMargin)",
+    "rounds": [
+      {
+        "objective": "Engineer defense: the 58-line inline Two-Guard block was moved verbatim in intent into verifySegmentAAtFreezeCutoff; RunTotalOnlyB previously ignored lo/hi (only span attributes) so the delegation actually applies the freeze cutoff. Known open issue disclosed: verifySegmentBAtFreezeCutoff returns shadow counts as master counts when resolved, which leaks into metrics lines 624-625 (proposed fix pending).",
+        "workflow": "Same as above; regression suite in package recon passes; live trace pending with user."
+      }
+    ]
+  },
+  "internal/service/recon/recon_window_index_probe.go": {
+    "objective": "Data-access probe layer: detect B-Tree index on shadow timestamp column and hash [lo,hi) windows via Mongo _id_ index and Postgres _source_id unique index with deterministic zero-padded ObjectID boundaries.",
+    "workflow": "verifySegmentAAtFreezeCutoff -> HasColumnIndex -> (Path 2) HashObjectIDWindow || HashSourceIDWindow",
+    "rounds": [
+      {
+        "objective": "Engineer defense: read-only queries, 3-5s bounded contexts, validateIdent on table names. Known open issues disclosed: package-level cache keyed by table name only (should be per-agent like colTypes), LIKE '%(col%' prefix false positive; fixes proposed.",
+        "workflow": "Same as above."
+      }
+    ]
+  },
+  "internal/service/recon/recon_smoke_guard.go": {
+    "objective": "Service guard layer: enforce backward freeze cutoff for Segment A (source vs shadow) and Segment B (shadow vs master) within CountDriftThreshold, returning drift on mismatch or verification error.",
+    "workflow": "RunTotalOnlyA -> verifySegmentAAtFreezeCutoff ; RunTotalOnlyB -> verifySegmentBAtFreezeCutoff (Step1 subtract [hi,now] on _source_ts, Step2 HashWindow [lo,hi])",
+    "rounds": [
+      {
+        "objective": "Engineer defense: errors never convert to ok (fall through to drift); master copies _source_ts from shadow (transmuter.go:1174) so subtraction is symmetric. Disclosed deviation: Step1 queries run sequentially instead of the approved parallel goroutines; Postgres-source branch keeps TimestampField override.",
+        "workflow": "Same as above."
+      }
+    ]
+  }
+}

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "critique",
+    "claim": "In TransmuterModule.RunEvents in transmuter.go, colTypes is populated from rules and event processing is delegated to t.runEventBatches(ctx, masterRow, strat, rc, colTypes, events, &res).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:699-713\n\tcolTypes := make(map[string]string, len(rules))\n\tfor _, r := range rules {\n\t\tcolTypes[r.TargetColumn] = r.DataType\n\t}\n\n\tlastEventErr := t.runEventBatches(ctx, masterRow, strat, rc, colTypes, events, &res)\n\n\tres.DurationMs = time.Since(start).Milliseconds()\n\tif lastEventErr != nil {\n\t\tt.markRuntimeFailure(ctx, masterRow.ID, lastEventErr)\n\t\treturn res, lastEventErr\n\t}\n\tt.markRuntimeSuccess(ctx, masterRow.ID, res)\n\treturn res, nil\n}",
+    "flow": "RunEvents populates colTypes and calls t.runEventBatches(ctx, masterRow, strat, rc, colTypes, events, &res)."
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "critique",
+    "claim": "In ChunkStreamBucketEngine.GetMasterAgent in recon_stream_bucket_engine.go, targetDB is retrieved via e.connMgr.GetMasterDB(ctx, connectionKey) and wrapped with NewReconDestAgentWithConfig.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_stream_bucket_engine.go:155-176\n\tif e.connMgr == nil {\n\t\tif e.masterAgent != nil {\n\t\t\treturn e.masterAgent, nil\n\t\t}\n\t\treturn nil, fmt.Errorf(\"connection manager not configured in chunkStreamBucketEngine\")\n\t}\n\n\ttargetDB, err := e.connMgr.GetMasterDB(ctx, connectionKey)\n\tif err != nil {\n\t\tif e.masterAgent != nil {\n\t\t\treturn e.masterAgent, nil\n\t\t}\n\t\treturn nil, fmt.Errorf(\"failed to get master db for %s: %w\", connectionKey, err)\n\t}\n\n\tagent := NewReconDestAgentWithConfig(targetDB, targetDB, ReconDestAgentConfig{}, e.logger)\n\tif e.masterAgents == nil {\n\t\te.masterAgents = make(map[string]*ReconDestAgent)\n\t}\n\te.masterAgents[connectionKey] = agent\n\treturn agent, nil\n}",
+    "flow": "ChunkStreamBucketEngine.GetMasterAgent calls e.connMgr.GetMasterDB(ctx, connectionKey) and constructs NewReconDestAgentWithConfig(targetDB, targetDB, ...)."
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "critique",
+    "claim": "In ReconDestAgent.ColumnExists in recon_dest_query.go, the function calls da.GetRealColumnName(ctx, tableName, columnName) and returns realCol != \"\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_dest_query.go:90-98\n// ColumnExists checks if a column exists in a given table (case-insensitive).\n// tableName can be a qualified table name (e.g. \"schema.table\" or just \"table\").\nfunc (da *ReconDestAgent) ColumnExists(ctx context.Context, tableName, columnName string) (bool, error) {\n\trealCol, err := da.GetRealColumnName(ctx, tableName, columnName)\n\tif err != nil {\n\t\treturn false, err\n\t}\n\treturn realCol != \"\", nil\n}",
+    "flow": "ColumnExists calls da.GetRealColumnName(ctx, tableName, columnName) and returns realCol != \"\"."
+  },
+  {
+    "id": "CTRL-TRUE-DG0",
+    "kind": "control_true",
+    "claim": "In ReconDestAgent.ColumnExists in recon_dest_query.go, the function calls da.GetRealColumnName(ctx, tableName, columnName) and returns false, err if err != nil.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_dest_query.go:90-98\n// ColumnExists checks if a column exists in a given table (case-insensitive).\n// tableName can be a qualified table name (e.g. \"schema.table\" or just \"table\").\nfunc (da *ReconDestAgent) ColumnExists(ctx context.Context, tableName, columnName string) (bool, error) {\n\trealCol, err := da.GetRealColumnName(ctx, tableName, columnName)\n\tif err != nil {\n\t\treturn false, err\n\t}\n\treturn realCol != \"\", nil\n}",
+    "flow": "ColumnExists calls da.GetRealColumnName and returns false, err when err != nil."
+  },
+  {
+    "id": "CTRL-FALSE-DG0-1",
+    "kind": "control_false",
+    "claim": "In ReconDestAgent.ColumnExists in recon_dest_query.go, the function always returns true, nil without calling da.GetRealColumnName.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_dest_query.go:90-98\n// ColumnExists checks if a column exists in a given table (case-insensitive).\n// tableName can be a qualified table name (e.g. \"schema.table\" or just \"table\").\nfunc (da *ReconDestAgent) ColumnExists(ctx context.Context, tableName, columnName string) (bool, error) {\n\trealCol, err := da.GetRealColumnName(ctx, tableName, columnName)\n\tif err != nil {\n\t\treturn false, err\n\t}\n\treturn realCol != \"\", nil\n}",
+    "flow": "ColumnExists calls da.GetRealColumnName and returns realCol != \"\", nil."
+  },
+  {
+    "id": "CTRL-FALSE-DG0-2",
+    "kind": "control_false",
+    "claim": "In ChunkStreamBucketEngine.GetMasterAgent in recon_stream_bucket_engine.go, when e.connMgr is nil, the function drops the database schema.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_stream_bucket_engine.go:155-160\n\tif e.connMgr == nil {\n\t\tif e.masterAgent != nil {\n\t\t\treturn e.masterAgent, nil\n\t\t}\n\t\treturn nil, fmt.Errorf(\"connection manager not configured in chunkStreamBucketEngine\")\n\t}",
+    "flow": "When e.connMgr == nil, GetMasterAgent returns e.masterAgent if non-nil or returns an error; it never drops a schema."
+  }
+]

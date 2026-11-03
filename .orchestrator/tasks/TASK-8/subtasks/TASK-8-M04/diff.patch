@@ -1,0 +1,30 @@
+# [NO UNCOMMITTED GIT DIFF HUNK IN WORKTREE — VERIFIED ON-DISK SOURCE AT TargetRepo]
+# Sub-Task: TASK-8-M04 (agent) · Isolated Branch: task/TASK-8/task-8-m04
+# Context: agent/tooling/evidence_run.py:39 (def _git(repo: Path, *args: str) -> Optional[str]:) · Deliverable: Tích hợp tầng Service / Handler & Kiểm thử nghiệm thu DoD tại `agent` (`evidence_run.py`)
+# Verified File: /Users/trainguyen/Documents/work/agent/tooling/evidence_run.py
+// VERIFIED ON-DISK SOURCE: /Users/trainguyen/Documents/work/agent/tooling/evidence_run.py (lines 39-63)
+  39 | def _git(repo: Path, *args: str) -> Optional[str]:
+  40 |     try:
+  41 |         r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=20)
+  42 |     except (OSError, subprocess.TimeoutExpired):
+  43 |         return None
+  44 |     return r.stdout if r.returncode == 0 else None
+  45 | 
+  46 | 
+  47 | def source_fingerprint(cwd: Path) -> str:
+  48 |     """sha256 nội dung file source của repo chứa cwd (tracked + untracked, bỏ memory/). Commit không đổi giá trị."""
+  49 |     root_out = _git(cwd, "rev-parse", "--show-toplevel")
+  50 |     root = Path(root_out.strip()) if root_out else cwd.resolve()
+  51 |     listing = _git(root, "ls-files", "-co", "--exclude-standard")
+  52 |     files = sorted(
+  53 |         f for f in (listing.splitlines() if listing is not None else [])
+  54 |         if f.endswith(SRC_SUFFIXES) and not f.startswith("memory/") and "/__pycache__/" not in f
+  55 |     )
+  56 |     h = hashlib.sha256()
+  57 |     for rel in files:
+  58 |         p = root / rel
+  59 |         try:
+  60 |             data = p.read_bytes()
+  61 |         except OSError:
+  62 |             continue
+  63 |         h.update(rel.encode("utf-8") + b"\0" + hashlib.sha256(data).digest())

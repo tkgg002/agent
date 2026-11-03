@@ -1,0 +1,275 @@
+diff --git a/internal/service/recon/recon_smoke.go b/internal/service/recon/recon_smoke.go
+index 5829dba..f86e9c5 100644
+--- a/internal/service/recon/recon_smoke.go
++++ b/internal/service/recon/recon_smoke.go
+@@ -336,88 +336,31 @@ func (rc *ReconCore) RunTotalOnlyA(ctx context.Context, entry source.TableRegist
+ 	dstActiveClean := dstActive
+ 	if val := dstActive - dstRecentActive; val >= 0 {
+ 		dstActiveClean = val
+ 	} else {
+ 		dstActiveClean = 0
+ 	}
+ 
+ 	dstTotalClean := dstTotal
+ 	if val := dstTotal - dstRecentTotal; val >= 0 {
+ 		dstTotalClean = val
+ 	} else {
+ 		dstTotalClean = 0
+ 	}
+ 	*/
+ 
+-	diff := srcEst - dstActive
+-	statusStr := "ok"
+-
+-	// ── Bắt đầu Logic Two-Guard cho EstimatedCount ──
+-	threshold := rc.cfg.CountDriftThreshold
+-	if threshold <= 0 {
+-		threshold = 100 // Fallback an toàn nếu config chưa hợp lý
+-	}
+-
+-	if diff != 0 {
+-		if abs(diff) > threshold {
+-			// Guard 2: Massive Drift - Chênh lệch vượt ngưỡng an toàn.
+-			// Vượt quá độ nhiễu của In-flight lag hoặc Mongo Metadata.
+-			// Báo drift ngay lập tức, cắt cầu dao bỏ qua HashWindow (ngăn chặn False Negative do HashWindow hẹp).
+-			statusStr = "drift"
+-		} else {
+-			// Guard 1: Minor Noise / Lag - Nằm trong ngưỡng nhiễu cho phép.
+-			// Kích hoạt HashWindow để kiểm tra chính xác 100% trong khung thời gian cố định.
+-			// Kích hoạt HashWindow để kiểm tra chính xác 100% trong khung thời gian cố định.
+-
+-			var srcTS, dstTS string
+-		var errTS error
+-		if entry.TimestampField != nil && *entry.TimestampField != "" {
+-			srcTS = *entry.TimestampField
+-			dstTS = *entry.TimestampField
+-		} else {
+-			srcTS, dstTS, errTS = rc.resolveSourceAndDestTSFields(fastCtx, entry, "smoke")
+-		}
+-
+-		if errTS == nil && srcTS != "" && dstTS != "" {
+-			srcHash, errS := rc.sourceAgent.HashWindow(fastCtx, entry.SourceURL, entry.SourceDB, entry.SourceTable, srcTS, lo, hi)
+-			dstHash, errD := rc.destAgent.HashWindow(fastCtx, entry.QualifiedTarget(), entry.PrimaryKeyField, dstTS, lo, hi)
+-			if errS == nil && errD == nil && srcHash.Count == dstHash.Count && srcHash.XorHash == dstHash.XorHash {
+-				rc.logger.Info("[smoke-A] Discrepancy resolved via HashWindow match on static range",
+-					zap.String("table", entry.TargetTable),
+-					zap.Int64("estimatedDiff", diff),
+-					zap.Time("lo", lo),
+-					zap.Time("hi", hi),
+-					zap.Int64("windowCount", srcHash.Count),
+-				)
+-				diff = 0
+-				statusStr = "ok"
+-			} else {
+-				statusStr = "drift"
+-				rc.logger.Warn("[smoke-A] HashWindow mismatch — real drift confirmed on static range",
+-					zap.String("table", entry.TargetTable),
+-					zap.Int64("estimatedDiff", diff),
+-					zap.Time("lo", lo),
+-					zap.Time("hi", hi),
+-					zap.String("errS", fmt.Sprintf("%v", errS)),
+-					zap.String("errD", fmt.Sprintf("%v", errD)),
+-				)
+-			}
+-		} else {
+-			statusStr = "drift"
+-		}
+-		} // End Guard 1 (else block)
+-	} // End Two-Guard
++	diff, statusStr := rc.verifySegmentAAtFreezeCutoff(ctx, entry, lo, hi, srcEst-dstActive)
+ 
+ 	span.SetAttributes(
+ 		attribute.String("recon.status", statusStr),
+ 		attribute.Int64("recon.diff", diff),
+ 	)
+ 
+ 	metrics.SourceTableRowCount.WithLabelValues(entry.QualifiedTarget(), entry.SourceDB).Set(float64(srcEst))
+ 	metrics.ShadowTableRowCount.WithLabelValues(entry.QualifiedTarget()).Set(float64(dstTotal))
+ 	metrics.ReconDrift.WithLabelValues(entry.QualifiedTarget(), "0").Set(float64(abs(diff)))
+ 
+ 	dur := int(time.Since(handle.started).Milliseconds())
+ 	var statusVal float64 = 0
+ 	if statusStr == "drift" {
+ 		statusVal = 1
+ 	}
+@@ -653,36 +596,35 @@ func (rc *ReconCore) RunTotalOnlyB(
+ 	shadowTotalClean := shadowTotal
+ 	if val := shadowTotal - shRecentTotal; val >= 0 {
+ 		shadowTotalClean = val
+ 	} else {
+ 		shadowTotalClean = 0
+ 	}
+ 
+ 	masterTotalClean := masterTotal
+ 	if val := masterTotal - msRecentTotal; val >= 0 {
+ 		masterTotalClean = val
+ 	} else {
+ 		masterTotalClean = 0
+ 	}
+ 	*/
+ 
+-	diff := shadowActive - masterActive
+-	statusStr := "ok"
+ 	var diffTimeJSON []byte
+-	if diff != 0 {
+-		statusStr = "drift"
+-	}
++	diff, masterTotal, masterActive, statusStr := rc.verifySegmentBAtFreezeCutoff(
++		ctx, masterAgent, ref, lo, hi,
++		shadowActive-masterActive, shadowTotal, shadowActive, masterTotal, masterActive,
++	)
+ 
+ 	span.SetAttributes(
+ 		attribute.String("recon.status", statusStr),
+ 		attribute.Int64("recon.diff", diff),
+ 		attribute.Int64("db.row_count.shadow_active", shadowActive),
+ 		attribute.Int64("db.row_count.master_active", masterActive),
+ 	)
+ 
+ 	metrics.MasterTableRowCount.WithLabelValues(masterFQN).Set(float64(masterTotal))
+ 	metrics.MasterActiveRowCount.WithLabelValues(masterFQN).Set(float64(masterActive))
+ 	metrics.ReconDrift.WithLabelValues(masterFQN, "0").Set(float64(abs(diff)))
+ 
+ 	dur := int(time.Since(handle.started).Milliseconds())
+ 	var statusVal float64
+ 	if statusStr == "drift" {
+@@ -878,30 +820,35 @@ func (rc *ReconCore) CheckAllUnified(ctx context.Context) []*recon.SmokeResult {
+ 	// Đẩy shadow + master relations từ Segment B (nếu trùng shadow → gom)
+ 	for _, r := range validRefs {
+ 		addTarget(r.ShadowRel(), rc.destAgent, "shadow", r.ShadowTable)
+ 		agent, errMA := rc.GetMasterAgent(ctx, r.MasterConnectionKey)
+ 		if errMA != nil || agent == nil {
+ 			agent = rc.masterAgent
+ 		}
+ 		if agent != nil {
+ 			addTarget(r.MasterRel(), agent, "master", r.ShadowTable)
+ 		}
+ 	}
+ 
+ 	span.SetAttributes(attribute.Int("cycle.scan_targets", len(scanTargets)))
+ 
+ 	// ── STEP 3: CHẠY COUNT(*) DUY NHẤT CHO MỖI TARGET ────────────────────────
++	// Xóa snapshot cache cũ trước khi chạy batch COUNT(*) của chu kỳ mới để tránh lệch pha TTL 45s
++	for i := range scanTargets {
++		rc.smokeCountCache.Delete(scanTargets[i].Relation)
++	}
++
+ 	concurrency := rc.cfg.SmokeConcurrency
+ 	if concurrency <= 0 {
+ 		concurrency = 2
+ 	}
+ 	sem := make(chan struct{}, concurrency)
+ 	var wg sync.WaitGroup
+ 
+ 	// Chạy prefetch trực tiếp dưới per-table context (tableCtxs) thay vì scanCtx chung.
+ 	for i := range scanTargets {
+ 		t := &scanTargets[i]
+ 		tCtx := tableCtxs[t.TableKey]
+ 		wg.Add(1)
+ 		go func() {
+ 			defer wg.Done()
+ 			select {
+@@ -947,66 +894,72 @@ func (rc *ReconCore) CheckAllUnified(ctx context.Context) []*recon.SmokeResult {
+ 			defer func() {
+ 				if r := recover(); r != nil {
+ 					rc.logger.Error("panic in CheckAllUnified", zap.Any("panic", r))
+ 				}
+ 			}()
+ 			select {
+ 			case sem <- struct{}{}:
+ 			case <-ctx.Done():
+ 				return
+ 			}
+ 			defer func() { <-sem }()
+ 			fn()
+ 		}()
+ 	}
+ 
+-	// Chỉ chạy cho các pipelines đã full (có cả Entry và Ref)
++	// Chỉ chạy cho các pipelines đã full (có cả Entry và Ref).
++	// Dedup Segment A theo shadow relation (entry.QualifiedTarget()) — chỉ chạy 1 RunTotalOnlyA cho mỗi bảng Shadow.
++	seenSegA := make(map[string]bool)
+ 	for _, p := range pipelineList {
+ 		entry := *p.Entry
+ 		ref := *p.Ref
+ 
+-		// --- Segment A: safe lookup ---
+-		idxA, okA := scanIdx[entry.QualifiedTarget()]
+-		if !okA {
+-			rc.logger.Warn("smoke: scanIdx miss for SegA", zap.String("key", entry.QualifiedTarget()))
+-			continue
+-		}
+-		stA := scanTargets[idxA]
+-		tableCtxA := tableCtxs[entry.TargetTable]
+-		csA := connSem(entry.SourceURL)
+-		
+-		executeGo(func() {
+-			select {
+-			case csA <- struct{}{}:
+-			case <-ctx.Done():
+-				return
+-			}
+-			defer func() { <-csA }()
+-
+-			if stA.Err != nil {
+-				mu.Lock()
+-				reports = append(reports, rc.smokeErrorReportA(tableCtxA, entry, fmt.Errorf("shadow count failed: %w", stA.Err), 0))
+-				mu.Unlock()
+-				return
+-			}
+-			lockTime := start
+-			if rA := rc.RunTotalOnlyA(tableCtxA, entry, &ref, stA.Total, stA.Active, lockTime, traceID); rA != nil {
+-				mu.Lock()
+-				reports = append(reports, rA)
+-				mu.Unlock()
++		// --- Segment A: safe lookup (1 lần duy nhất cho mỗi bảng Shadow) ---
++		shadowKey := entry.QualifiedTarget()
++		if !seenSegA[shadowKey] {
++			seenSegA[shadowKey] = true
++			idxA, okA := scanIdx[shadowKey]
++			if !okA {
++				rc.logger.Warn("smoke: scanIdx miss for SegA", zap.String("key", shadowKey))
++			} else {
++				stA := scanTargets[idxA]
++				tableCtxA := tableCtxs[entry.TargetTable]
++				csA := connSem(entry.SourceURL)
++
++				executeGo(func() {
++					select {
++					case csA <- struct{}{}:
++					case <-ctx.Done():
++						return
++					}
++					defer func() { <-csA }()
++
++					if stA.Err != nil {
++						mu.Lock()
++						reports = append(reports, rc.smokeErrorReportA(tableCtxA, entry, fmt.Errorf("shadow count failed: %w", stA.Err), 0))
++						mu.Unlock()
++						return
++					}
++					lockTime := start
++					if rA := rc.RunTotalOnlyA(tableCtxA, entry, nil, stA.Total, stA.Active, lockTime, traceID); rA != nil {
++						mu.Lock()
++						reports = append(reports, rA)
++						mu.Unlock()
++					}
++				})
+ 			}
+-		})
++		}
+ 
+ 		// --- Segment B: safe lookup ---
+ 		idxSh, okSh := scanIdx[ref.ShadowRel()]
+ 		idxMs, okMs := scanIdx[ref.MasterRel()]
+ 		if !okSh || !okMs {
+ 			rc.logger.Warn("smoke: scanIdx miss for SegB",
+ 				zap.String("shadow", ref.ShadowRel()), zap.Bool("okSh", okSh),
+ 				zap.String("master", ref.MasterRel()), zap.Bool("okMs", okMs),
+ 			)
+ 			continue
+ 		}
+ 		shB := scanTargets[idxSh]
+ 		msB := scanTargets[idxMs]
+ 		tableCtxB := tableCtxs[ref.ShadowTable]
+ 

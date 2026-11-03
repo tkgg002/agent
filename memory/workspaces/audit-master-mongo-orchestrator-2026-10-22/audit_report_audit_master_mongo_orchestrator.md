@@ -110,5 +110,27 @@ Toàn bộ kết quả kiểm định sau lần sửa code cuối cùng đều �
 4. **Kiểm định Bảo mật (`/security-agent`):**
    - Quét toàn bộ `git diff` trên `ai-orchestrator` và workspace memory: 0 hardcoded secret/token/PII (`H3 PASS`), 0 hàm closure mock `*Fn` trong struct production (`H4b PASS`), không chạy `git push` (`Rule #15 PASS`).
 
+---
+
+## 6. Cập Nhật Audit `TASK-A06` (2026-10-28 — `1 Task = 1 Antigravity Conversation Session` & Đấu Nối AI Model Thật Cho Mọi Bước Wave `S1–S6`)
+
+1. **(a) Line-by-Line Diff Critique (`git diff --stat` trên `ai-orchestrator` — 8 files, `+330/-42` dòng):**
+   - `internal/runner/runner.go:37-43`: Bổ sung `SessionFile` và `SessionTitle` vào `CompletionRequest`.
+   - `internal/runner/antigravity.go:33-112,333-570`: Bổ sung `loadValidAgentAPIConversationID` và `readMaxTranscriptStepIndex`; sửa `completeWithAntigravityAgentAPI` để khi Task đã có `convID` trong `.orchestrator/tasks/<TaskKey>/agentapi_conv_id.txt` thì gọi `agentapi send-message --title=<sessionTitle> <convID> <fullPrompt>` nối tiếp vào đúng phiên hội thoại đó và chỉ đọc các step mới có `line.StepIndex > prevMaxStep`. Chỉ gọi `agentapi new-conversation` duy nhất 1 lần khi Task chưa có `convID`.
+   - `internal/runner/antigravity_test.go:118-208`: Bổ sung `TestAntigravityRunner_PerTaskConversationSessionReuse` kiểm chứng 2 lượt gọi liên tiếp trên cùng `SessionFile` (`[new-conversation, send-message]`).
+   - `internal/webui/task_llm_bridge.go:193-265,323-330`: Bổ sung `taskAgentAPISessionFile`, `isStaleFallbackLLMAnalysis`, `invokeQAAuditorLLM` và gắn `SessionFile` của Task vào mọi lời gọi `AntigravityRunner`.
+   - `internal/webui/subtask_codegen_muscle.go:265-275`, `internal/webui/task_inspector.go:1174-1184,2848-2851`, `internal/webui/server.go:1912-1922`, `internal/webui/subtask_wave_engine.go:174-180,335-339,377-383,413-416`: Đấu nối toàn bộ các bước Wave (`S1/S2/S2.5 Critique`, `S3 Plan`, `Sub-Task Plan`, `S4 Muscle`, `5B Semantic Audit & S6 Finalize`) gọi AI Model thật trên cùng phiên conversation của Task.
+2. **(b) Chống Suy Diễn Smoke Test & Concurrency:**
+   - Kiểm chứng lọc `line.StepIndex > prevMaxStep` và `line.Content != ""` + `line.Status == "DONE"` trên file `transcript_full.jsonl` có nhiều turn liên tiếp, không đọc nhầm response của turn cũ hoặc step chỉ có `thinking`.
+3. **(c) Zero-Mockup & Real Runtime Trace (`EV-...`):**
+   - `EV-20261028T050841-b6a0` (`unit` — `go test -v -race ./internal/runner/... -run TestAntigravityRunner`, `4/4 PASS`, `exit=0`).
+   - `EV-20261028T050913-c2fb` (`integration` — `go build -o bin/orchestrator ./cmd/orchestrator`, `exit=0`).
+   - `EV-20261028T051127-18b3` (`runtime` — `curl -fsS -o /tmp/dashboard_task2.json http://127.0.0.1:8090/api/dashboard?task_key=TASK-2`, `exit=0`, xác nhận 4 Sub-Tasks Postgres v2 của `TASK-2` kèm `test_dod: "npm run build && npm test"`).
+4. **(d) Self-Improvement Loop:**
+   - Đã ghi bài học mới vào `memory/global/lessons.md` (`2670 -> 2677` dòng, `352` entries) và chạy `build_lessons_index.py`.
+5. **(e) Hội Đồng `/laya_router` (`DG3`):**
+   - `06_laya_summary_dg3_20261028T051347.json`: **`gate = PASS`** (`A-CONV-REUSE` đạt `ACCEPT` ở `r2`, các claims `A-STEP-FILTER`, `A-SESSION-FILE`, `A-QA-LLM-WIRE` đã đối chiếu `REF:` và resolve đạt `PASS`).
+
+
 
 

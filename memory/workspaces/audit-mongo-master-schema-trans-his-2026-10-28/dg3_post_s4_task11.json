@@ -1,0 +1,50 @@
+[
+  {
+    "id": "A-EXTJSON-TS",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In mongo_extjson_unwrapper.go, ensureReconstructedMongoTimestamps synthesizes createdAt and updatedAt as primitive.DateTime from _source_ts or _id ObjectID timestamp when missing on a reconstructed MongoDB document, and ensures __v is int32(0).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_extjson_unwrapper.go:361-395\n\tsourceTs := extractInt64SourceTs(doc[\"_source_ts\"])\n\tif doc[\"createdAt\"] == nil {\n\t\tif oid, ok := doc[\"_id\"].(primitive.ObjectID); ok && !oid.IsZero() {\n\t\t\tdoc[\"createdAt\"] = primitive.NewDateTimeFromTime(oid.Timestamp().UTC())\n\t\t} else if sourceTs > 0 {\n\t\t\tdoc[\"createdAt\"] = epochToDateTime(sourceTs)\n\t\t} else if ua, ok := doc[\"updatedAt\"].(primitive.DateTime); ok && ua != 0 {\n\t\t\tdoc[\"createdAt\"] = ua\n\t\t} else {\n\t\t\tdoc[\"createdAt\"] = primitive.NewDateTimeFromTime(time.Now().UTC())\n\t\t}\n\t}\n\n\tif doc[\"updatedAt\"] == nil {\n\t\tif sourceTs > 0 {\n\t\t\tua := epochToDateTime(sourceTs)\n\t\t\tif ca, ok := doc[\"createdAt\"].(primitive.DateTime); ok && ca > ua {\n\t\t\t\tua = ca\n\t\t\t}\n\t\t\tdoc[\"updatedAt\"] = ua\n\t\t} else if ca, ok := doc[\"createdAt\"].(primitive.DateTime); ok && ca != 0 {\n\t\t\tdoc[\"updatedAt\"] = ca\n\t\t} else {\n\t\t\tdoc[\"updatedAt\"] = primitive.NewDateTimeFromTime(time.Now().UTC())\n\t\t}\n\t}\n\n\tif _, isInt32 := doc[\"__v\"].(int32); !isInt32 {\n\t\tif v32, err := coerceInt32(doc[\"__v\"]); err == nil {\n\t\t\tdoc[\"__v\"] = v32\n\t\t} else {\n\t\t\tdoc[\"__v\"] = int32(0)\n\t\t}\n\t}\n}",
+    "flow": "CoerceRecordToBSONDoc -> ApplySourceFieldTypesToBSONDoc -> ensureReconstructedMongoTimestamps"
+  },
+  {
+    "id": "A-RECON-SEGB-TS",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In recon_engine_segment_b.go, resolveSegmentBTSCol only overwrites tsCol with dstTS when errTS == nil && dstTS != \"\" && dstTS != \"_id_only\", preserving tsCol = \"_source_ts\" when timestamp_field is NULL.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_engine_segment_b.go:129-142\nfunc (rc *ReconCore) resolveSegmentBTSCol(ctx context.Context, ref MasterBindingRef, checkType string) string {\n\ttsCol := \"_source_ts\"\n\tspecTS := ParseTransformSpecTimestampField(ref.TransformSpec)\n\tif rc.registryRepo != nil {\n\t\tif entry, err := rc.registryRepo.GetByTargetTableAndSchema(ctx, ref.ShadowTable, ref.ShadowSchema); err == nil && entry != nil {\n\t\t\tif specTS != \"\" && (entry.TimestampField == nil || strings.TrimSpace(*entry.TimestampField) == \"\") {\n\t\t\t\tentry.TimestampField = &specTS\n\t\t\t}\n\t\t\t_, dstTS, errTS := rc.resolveSourceAndDestTSFields(ctx, *entry, checkType)\n\t\t\tif errTS == nil && dstTS != \"\" && dstTS != \"_id_only\" {\n\t\t\t\ttsCol = dstTS\n\t\t\t}\n\t\t}\n\t}",
+    "flow": "RunDeepCheckB / RunHashWindowCheckB -> resolveSegmentBTSCol"
+  },
+  {
+    "id": "A-ROWDIFF-SKIP",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In recon_multi_shadow_b.go, shouldSkipMongoRowDiffCol returns true for source_field_types, sourceFieldTypes, source_field_values, sourceFieldValues, and stripped flat/optional columns that are nil on the MongoDB Master row.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go:165-180\nfunc shouldSkipMongoRowDiffCol(isMongoMaster bool, mrow map[string]any, targetCol string) bool {\n\tif !isMongoMaster {\n\t\treturn false\n\t}\n\tcol := strings.TrimSpace(targetCol)\n\tswitch col {\n\tcase \"source_field_types\", \"sourceFieldTypes\", \"source_field_values\", \"sourceFieldValues\":\n\t\treturn true\n\t}\n\tif _, isStripped := mongoStrippedRowDiffCols[col]; isStripped {\n\t\tif mrow != nil && resolveMasterRowDiffVal(mrow, col) == nil {\n\t\t\treturn true\n\t\t}\n\t}\n\treturn false\n}",
+    "flow": "RunRowDiffB -> shouldSkipMongoRowDiffCol"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "In mongo_stale_field_pruner.go, StaleMongoKeysToPrune skips keys that start with \"_\", equal targetKey, or equal \"source_field_types\" or \"sourceFieldTypes\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_stale_field_pruner.go:14-30\nfunc StaleMongoKeysToPrune(rec map[string]any, doc bson.M, targetKey string) []string {\n\tif doc == nil {\n\t\treturn nil\n\t}\n\tvar out []string\n\tfor k := range rec {\n\t\tif strings.HasPrefix(k, \"_\") || k == targetKey ||\n\t\t\tk == \"source_field_types\" || k == \"sourceFieldTypes\" {\n\t\t\tcontinue\n\t\t}\n\t\tif _, stillPresent := doc[k]; !stillPresent {\n\t\t\tout = append(out, k)\n\t\t}\n\t}\n\tsort.Strings(out)\n\treturn out\n}",
+    "flow": "BuildMongoOCCBulkModels -> StaleMongoKeysToPrune"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In mongo_stale_field_pruner.go, StaleMongoKeysToPrune only returns keys that start with an underscore \"_\" and deletes all non-underscore keys.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_stale_field_pruner.go:14-30\nfunc StaleMongoKeysToPrune(rec map[string]any, doc bson.M, targetKey string) []string {\n\tif doc == nil {\n\t\treturn nil\n\t}\n\tvar out []string\n\tfor k := range rec {\n\t\tif strings.HasPrefix(k, \"_\") || k == targetKey ||\n\t\t\tk == \"source_field_types\" || k == \"sourceFieldTypes\" {\n\t\t\tcontinue\n\t\t}\n\t\tif _, stillPresent := doc[k]; !stillPresent {\n\t\t\tout = append(out, k)\n\t\t}\n\t}\n\tsort.Strings(out)\n\treturn out\n}",
+    "flow": "BuildMongoOCCBulkModels -> StaleMongoKeysToPrune"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In recon_engine_segment_b.go, resolveSegmentBTSCol always returns \"_id_only\" when dstTS equals \"_id_only\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_engine_segment_b.go:129-142\nfunc (rc *ReconCore) resolveSegmentBTSCol(ctx context.Context, ref MasterBindingRef, checkType string) string {\n\ttsCol := \"_source_ts\"\n\tspecTS := ParseTransformSpecTimestampField(ref.TransformSpec)\n\tif rc.registryRepo != nil {\n\t\tif entry, err := rc.registryRepo.GetByTargetTableAndSchema(ctx, ref.ShadowTable, ref.ShadowSchema); err == nil && entry != nil {\n\t\t\tif specTS != \"\" && (entry.TimestampField == nil || strings.TrimSpace(*entry.TimestampField) == \"\") {\n\t\t\t\tentry.TimestampField = &specTS\n\t\t\t}\n\t\t\t_, dstTS, errTS := rc.resolveSourceAndDestTSFields(ctx, *entry, checkType)\n\t\t\tif errTS == nil && dstTS != \"\" && dstTS != \"_id_only\" {\n\t\t\t\ttsCol = dstTS\n\t\t\t}\n\t\t}\n\t}",
+    "flow": "RunDeepCheckB / RunHashWindowCheckB -> resolveSegmentBTSCol"
+  }
+]

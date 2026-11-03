@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "critique",
+    "claim": "In DiscoverHandler.scanFieldsSQLSource in discover_handler_sql.go, cols is obtained from h.sourceInferrer.InferSourceColumns(ctx, registry.ID, pkColumn) and returns error \"SQL source returned 0 columns or connection failed\" if len(cols) == 0.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_sql.go:35-42\n\tif h.sourceInferrer == nil {\n\t\treturn 0, 0, fmt.Errorf(\"sourceInferrer is not initialized\")\n\t}\n\tcols := h.sourceInferrer.InferSourceColumns(ctx, registry.ID, pkColumn)\n\tif len(cols) == 0 {\n\t\treturn 0, 0, fmt.Errorf(\"SQL source returned 0 columns or connection failed\")\n\t}\n",
+    "flow": "scanFieldsSQLSource calls h.sourceInferrer.InferSourceColumns(ctx, registry.ID, pkColumn) and returns fmt.Errorf(\"SQL source returned 0 columns or connection failed\") when len(cols) == 0."
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "critique",
+    "claim": "In DiscoverHandler.ScanFieldsDebezium in discover_handler.go, when the shadow table exists and has _raw_data, it calls h.discoverSvc.GetShadowSampleRows(ctx, schemaName, targetTable, 100) before checking isSQLSource(sourceType).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler.go:222-233\n\trows, err := h.discoverSvc.GetShadowSampleRows(ctx, schemaName, targetTable, 100)\n\tif err != nil {\n\t\treturn 0, 0, fmt.Errorf(\"sample raw_data: %w\", err)\n\t}\n\n\tif len(rows) == 0 {\n\t\tif sourceType == \"mongodb\" {\n\t\t\treturn h.scanFieldsMongoSource(ctx, v2ObjectID, shadowBindingID, sourceTable, autoApprove)\n\t\t}\n\t\tif isSQLSource(sourceType) {\n\t\t\treturn h.scanFieldsSQLSource(ctx, v2ObjectID, shadowBindingID, sourceTable, autoApprove)\n\t\t}",
+    "flow": "ScanFieldsDebezium calls h.discoverSvc.GetShadowSampleRows(ctx, schemaName, targetTable, 100) and only calls h.scanFieldsSQLSource when len(rows) == 0."
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "critique",
+    "claim": "In MasterDDLGenerator.applyMongoCollectionAndIndexes in master_ddl_generator.go, dbName is resolved via g.connMgr.ResolveMasterMongoDatabase(ctx, reg.MasterConnectionKey, reg.DefaultDatabase) and only falls back to reg.MasterSchema if dbName is empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator.go:492-501\n\tdbName := g.connMgr.ResolveMasterMongoDatabase(ctx, reg.MasterConnectionKey, reg.DefaultDatabase)\n\tif dbName == \"\" {\n\t\tdbName = reg.MasterSchema\n\t}\n\tif dbName == \"\" || dbName == \"public\" {\n\t\tdbName = \"gpay_master\"\n\t}\n\n\tmongoDB := client.Database(dbName)",
+    "flow": "applyMongoCollectionAndIndexes calls g.connMgr.ResolveMasterMongoDatabase(ctx, reg.MasterConnectionKey, reg.DefaultDatabase) and only uses reg.MasterSchema when dbName == \"\"."
+  },
+  {
+    "id": "CTRL-TRUE-DG0",
+    "kind": "control_true",
+    "claim": "In isSQLSource in discover_handler_sql.go, the function converts sourceType to lowercase trimmed string and returns true for postgres, postgresql, pg, mysql, or mariadb.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_sql.go:96-99\nfunc isSQLSource(sourceType string) bool {\n\tst := strings.ToLower(strings.TrimSpace(sourceType))\n\treturn st == \"postgres\" || st == \"postgresql\" || st == \"pg\" || st == \"mysql\" || st == \"mariadb\"\n}",
+    "flow": "isSQLSource normalizes sourceType with strings.ToLower(strings.TrimSpace(sourceType)) and checks postgres, postgresql, pg, mysql, mariadb."
+  },
+  {
+    "id": "CTRL-FALSE-DG0-1",
+    "kind": "control_false",
+    "claim": "In isSQLSource in discover_handler_sql.go, the function always returns false for postgresql and only returns true for sftp.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_sql.go:96-99\nfunc isSQLSource(sourceType string) bool {\n\tst := strings.ToLower(strings.TrimSpace(sourceType))\n\treturn st == \"postgres\" || st == \"postgresql\" || st == \"pg\" || st == \"mysql\" || st == \"mariadb\"\n}",
+    "flow": "isSQLSource returns true for postgres, postgresql, pg, mysql, and mariadb."
+  },
+  {
+    "id": "CTRL-FALSE-DG0-2",
+    "kind": "control_false",
+    "claim": "In DiscoverHandler.scanFieldsSQLSource in discover_handler_sql.go, when h.sourceInferrer is nil, the function drops the database table and panics.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_sql.go:35-38\n\tif h.sourceInferrer == nil {\n\t\treturn 0, 0, fmt.Errorf(\"sourceInferrer is not initialized\")\n\t}\n\tcols := h.sourceInferrer.InferSourceColumns(ctx, registry.ID, pkColumn)",
+    "flow": "When h.sourceInferrer == nil, scanFieldsSQLSource returns 0, 0, fmt.Errorf(\"sourceInferrer is not initialized\")."
+  }
+]

@@ -1,0 +1,750 @@
+diff --git a/internal/service/recon/recon_smoke.go b/internal/service/recon/recon_smoke.go
+index 5829dba..f86e9c5 100644
+--- a/internal/service/recon/recon_smoke.go
++++ b/internal/service/recon/recon_smoke.go
+@@ -331,98 +331,41 @@ func (rc *ReconCore) RunTotalOnlyA(ctx context.Context, entry source.TableRegist
+ 		srcEstClean = val
+ 	} else {
+ 		srcEstClean = 0
+ 	}
+ 
+ 	dstActiveClean := dstActive
+ 	if val := dstActive - dstRecentActive; val >= 0 {
+ 		dstActiveClean = val
+ 	} else {
+ 		dstActiveClean = 0
+ 	}
+ 
+ 	dstTotalClean := dstTotal
+ 	if val := dstTotal - dstRecentTotal; val >= 0 {
+ 		dstTotalClean = val
+ 	} else {
+ 		dstTotalClean = 0
+ 	}
+ 	*/
+ 
+-	diff := srcEst - dstActive
+-	statusStr := "ok"
+-
+-	// ── Bắt đầu Logic Two-Guard cho EstimatedCount ──
+-	threshold := rc.cfg.CountDriftThreshold
+-	if threshold <= 0 {
+-		threshold = 100 // Fallback an toàn nếu config chưa hợp lý
+-	}
+-
+-	if diff != 0 {
+-		if abs(diff) > threshold {
+-			// Guard 2: Massive Drift - Chênh lệch vượt ngưỡng an toàn.
+-			// Vượt quá độ nhiễu của In-flight lag hoặc Mongo Metadata.
+-			// Báo drift ngay lập tức, cắt cầu dao bỏ qua HashWindow (ngăn chặn False Negative do HashWindow hẹp).
+-			statusStr = "drift"
+-		} else {
+-			// Guard 1: Minor Noise / Lag - Nằm trong ngưỡng nhiễu cho phép.
+-			// Kích hoạt HashWindow để kiểm tra chính xác 100% trong khung thời gian cố định.
+-			// Kích hoạt HashWindow để kiểm tra chính xác 100% trong khung thời gian cố định.
+-
+-			var srcTS, dstTS string
+-		var errTS error
+-		if entry.TimestampField != nil && *entry.TimestampField != "" {
+-			srcTS = *entry.TimestampField
+-			dstTS = *entry.TimestampField
+-		} else {
+-			srcTS, dstTS, errTS = rc.resolveSourceAndDestTSFields(fastCtx, entry, "smoke")
+-		}
+-
+-		if errTS == nil && srcTS != "" && dstTS != "" {
+-			srcHash, errS := rc.sourceAgent.HashWindow(fastCtx, entry.SourceURL, entry.SourceDB, entry.SourceTable, srcTS, lo, hi)
+-			dstHash, errD := rc.destAgent.HashWindow(fastCtx, entry.QualifiedTarget(), entry.PrimaryKeyField, dstTS, lo, hi)
+-			if errS == nil && errD == nil && srcHash.Count == dstHash.Count && srcHash.XorHash == dstHash.XorHash {
+-				rc.logger.Info("[smoke-A] Discrepancy resolved via HashWindow match on static range",
+-					zap.String("table", entry.TargetTable),
+-					zap.Int64("estimatedDiff", diff),
+-					zap.Time("lo", lo),
+-					zap.Time("hi", hi),
+-					zap.Int64("windowCount", srcHash.Count),
+-				)
+-				diff = 0
+-				statusStr = "ok"
+-			} else {
+-				statusStr = "drift"
+-				rc.logger.Warn("[smoke-A] HashWindow mismatch — real drift confirmed on static range",
+-					zap.String("table", entry.TargetTable),
+-					zap.Int64("estimatedDiff", diff),
+-					zap.Time("lo", lo),
+-					zap.Time("hi", hi),
+-					zap.String("errS", fmt.Sprintf("%v", errS)),
+-					zap.String("errD", fmt.Sprintf("%v", errD)),
+-				)
+-			}
+-		} else {
+-			statusStr = "drift"
+-		}
+-		} // End Guard 1 (else block)
+-	} // End Two-Guard
++	diff, statusStr := rc.verifySegmentAAtFreezeCutoff(ctx, entry, lo, hi, srcEst-dstActive)
+ 
+ 	span.SetAttributes(
+ 		attribute.String("recon.status", statusStr),
+ 		attribute.Int64("recon.diff", diff),
+ 	)
+ 
+ 	metrics.SourceTableRowCount.WithLabelValues(entry.QualifiedTarget(), entry.SourceDB).Set(float64(srcEst))
+ 	metrics.ShadowTableRowCount.WithLabelValues(entry.QualifiedTarget()).Set(float64(dstTotal))
+ 	metrics.ReconDrift.WithLabelValues(entry.QualifiedTarget(), "0").Set(float64(abs(diff)))
+ 
+ 	dur := int(time.Since(handle.started).Milliseconds())
+ 	var statusVal float64 = 0
+ 	if statusStr == "drift" {
+ 		statusVal = 1
+ 	}
+ 	metrics.ReconSmokeStatus.WithLabelValues("source_shadow", entry.QualifiedTarget()).Set(statusVal)
+ 	metrics.ReconSmokeLatency.WithLabelValues("source_shadow", entry.QualifiedTarget()).Set(float64(dur))
+ 	metrics.ReconSmokeDrift.WithLabelValues("source_shadow", entry.QualifiedTarget()).Set(float64(abs(diff)))
+ 
+ 	rc.alertOnReport(ctx, "source_shadow", entry.TargetTable, statusStr, 0, diff)
+@@ -648,46 +591,45 @@ func (rc *ReconCore) RunTotalOnlyB(
+ 		masterActiveClean = val
+ 	} else {
+ 		masterActiveClean = 0
+ 	}
+ 
+ 	shadowTotalClean := shadowTotal
+ 	if val := shadowTotal - shRecentTotal; val >= 0 {
+ 		shadowTotalClean = val
+ 	} else {
+ 		shadowTotalClean = 0
+ 	}
+ 
+ 	masterTotalClean := masterTotal
+ 	if val := masterTotal - msRecentTotal; val >= 0 {
+ 		masterTotalClean = val
+ 	} else {
+ 		masterTotalClean = 0
+ 	}
+ 	*/
+ 
+-	diff := shadowActive - masterActive
+-	statusStr := "ok"
+ 	var diffTimeJSON []byte
+-	if diff != 0 {
+-		statusStr = "drift"
+-	}
++	diff, masterTotal, masterActive, statusStr := rc.verifySegmentBAtFreezeCutoff(
++		ctx, masterAgent, ref, lo, hi,
++		shadowActive-masterActive, shadowTotal, shadowActive, masterTotal, masterActive,
++	)
+ 
+ 	span.SetAttributes(
+ 		attribute.String("recon.status", statusStr),
+ 		attribute.Int64("recon.diff", diff),
+ 		attribute.Int64("db.row_count.shadow_active", shadowActive),
+ 		attribute.Int64("db.row_count.master_active", masterActive),
+ 	)
+ 
+ 	metrics.MasterTableRowCount.WithLabelValues(masterFQN).Set(float64(masterTotal))
+ 	metrics.MasterActiveRowCount.WithLabelValues(masterFQN).Set(float64(masterActive))
+ 	metrics.ReconDrift.WithLabelValues(masterFQN, "0").Set(float64(abs(diff)))
+ 
+ 	dur := int(time.Since(handle.started).Milliseconds())
+ 	var statusVal float64
+ 	if statusStr == "drift" {
+ 		statusVal = 1
+ 	}
+ 	metrics.ReconSmokeStatus.WithLabelValues("shadow_master", masterFQN).Set(statusVal)
+ 	metrics.ReconSmokeLatency.WithLabelValues("shadow_master", masterFQN).Set(float64(dur))
+ 	metrics.ReconSmokeDrift.WithLabelValues("shadow_master", masterFQN).Set(float64(abs(diff)))
+@@ -873,40 +815,45 @@ func (rc *ReconCore) CheckAllUnified(ctx context.Context) []*recon.SmokeResult {
+ 
+ 	// Đẩy shadow relations từ Segment A
+ 	for _, e := range validEntries {
+ 		addTarget(e.QualifiedTarget(), rc.destAgent, "shadow", e.TargetTable)
+ 	}
+ 	// Đẩy shadow + master relations từ Segment B (nếu trùng shadow → gom)
+ 	for _, r := range validRefs {
+ 		addTarget(r.ShadowRel(), rc.destAgent, "shadow", r.ShadowTable)
+ 		agent, errMA := rc.GetMasterAgent(ctx, r.MasterConnectionKey)
+ 		if errMA != nil || agent == nil {
+ 			agent = rc.masterAgent
+ 		}
+ 		if agent != nil {
+ 			addTarget(r.MasterRel(), agent, "master", r.ShadowTable)
+ 		}
+ 	}
+ 
+ 	span.SetAttributes(attribute.Int("cycle.scan_targets", len(scanTargets)))
+ 
+ 	// ── STEP 3: CHẠY COUNT(*) DUY NHẤT CHO MỖI TARGET ────────────────────────
++	// Xóa snapshot cache cũ trước khi chạy batch COUNT(*) của chu kỳ mới để tránh lệch pha TTL 45s
++	for i := range scanTargets {
++		rc.smokeCountCache.Delete(scanTargets[i].Relation)
++	}
++
+ 	concurrency := rc.cfg.SmokeConcurrency
+ 	if concurrency <= 0 {
+ 		concurrency = 2
+ 	}
+ 	sem := make(chan struct{}, concurrency)
+ 	var wg sync.WaitGroup
+ 
+ 	// Chạy prefetch trực tiếp dưới per-table context (tableCtxs) thay vì scanCtx chung.
+ 	for i := range scanTargets {
+ 		t := &scanTargets[i]
+ 		tCtx := tableCtxs[t.TableKey]
+ 		wg.Add(1)
+ 		go func() {
+ 			defer wg.Done()
+ 			select {
+ 			case sem <- struct{}{}:
+ 			case <-tCtx.Done():
+ 				t.Err = tCtx.Err()
+ 				return
+ 			}
+@@ -942,76 +889,82 @@ func (rc *ReconCore) CheckAllUnified(ctx context.Context) []*recon.SmokeResult {
+ 
+ 	executeGo := func(fn func()) {
+ 		wg2.Add(1)
+ 		go func() {
+ 			defer wg2.Done()
+ 			defer func() {
+ 				if r := recover(); r != nil {
+ 					rc.logger.Error("panic in CheckAllUnified", zap.Any("panic", r))
+ 				}
+ 			}()
+ 			select {
+ 			case sem <- struct{}{}:
+ 			case <-ctx.Done():
+ 				return
+ 			}
+ 			defer func() { <-sem }()
+ 			fn()
+ 		}()
+ 	}
+ 
+-	// Chỉ chạy cho các pipelines đã full (có cả Entry và Ref)
++	// Chỉ chạy cho các pipelines đã full (có cả Entry và Ref).
++	// Dedup Segment A theo shadow relation (entry.QualifiedTarget()) — chỉ chạy 1 RunTotalOnlyA cho mỗi bảng Shadow.
++	seenSegA := make(map[string]bool)
+ 	for _, p := range pipelineList {
+ 		entry := *p.Entry
+ 		ref := *p.Ref
+ 
+-		// --- Segment A: safe lookup ---
+-		idxA, okA := scanIdx[entry.QualifiedTarget()]
+-		if !okA {
+-			rc.logger.Warn("smoke: scanIdx miss for SegA", zap.String("key", entry.QualifiedTarget()))
+-			continue
+-		}
+-		stA := scanTargets[idxA]
+-		tableCtxA := tableCtxs[entry.TargetTable]
+-		csA := connSem(entry.SourceURL)
+-		
+-		executeGo(func() {
+-			select {
+-			case csA <- struct{}{}:
+-			case <-ctx.Done():
+-				return
+-			}
+-			defer func() { <-csA }()
+-
+-			if stA.Err != nil {
+-				mu.Lock()
+-				reports = append(reports, rc.smokeErrorReportA(tableCtxA, entry, fmt.Errorf("shadow count failed: %w", stA.Err), 0))
+-				mu.Unlock()
+-				return
+-			}
+-			lockTime := start
+-			if rA := rc.RunTotalOnlyA(tableCtxA, entry, &ref, stA.Total, stA.Active, lockTime, traceID); rA != nil {
+-				mu.Lock()
+-				reports = append(reports, rA)
+-				mu.Unlock()
++		// --- Segment A: safe lookup (1 lần duy nhất cho mỗi bảng Shadow) ---
++		shadowKey := entry.QualifiedTarget()
++		if !seenSegA[shadowKey] {
++			seenSegA[shadowKey] = true
++			idxA, okA := scanIdx[shadowKey]
++			if !okA {
++				rc.logger.Warn("smoke: scanIdx miss for SegA", zap.String("key", shadowKey))
++			} else {
++				stA := scanTargets[idxA]
++				tableCtxA := tableCtxs[entry.TargetTable]
++				csA := connSem(entry.SourceURL)
++
++				executeGo(func() {
++					select {
++					case csA <- struct{}{}:
++					case <-ctx.Done():
++						return
++					}
++					defer func() { <-csA }()
++
++					if stA.Err != nil {
++						mu.Lock()
++						reports = append(reports, rc.smokeErrorReportA(tableCtxA, entry, fmt.Errorf("shadow count failed: %w", stA.Err), 0))
++						mu.Unlock()
++						return
++					}
++					lockTime := start
++					if rA := rc.RunTotalOnlyA(tableCtxA, entry, nil, stA.Total, stA.Active, lockTime, traceID); rA != nil {
++						mu.Lock()
++						reports = append(reports, rA)
++						mu.Unlock()
++					}
++				})
+ 			}
+-		})
++		}
+ 
+ 		// --- Segment B: safe lookup ---
+ 		idxSh, okSh := scanIdx[ref.ShadowRel()]
+ 		idxMs, okMs := scanIdx[ref.MasterRel()]
+ 		if !okSh || !okMs {
+ 			rc.logger.Warn("smoke: scanIdx miss for SegB",
+ 				zap.String("shadow", ref.ShadowRel()), zap.Bool("okSh", okSh),
+ 				zap.String("master", ref.MasterRel()), zap.Bool("okMs", okMs),
+ 			)
+ 			continue
+ 		}
+ 		shB := scanTargets[idxSh]
+ 		msB := scanTargets[idxMs]
+ 		tableCtxB := tableCtxs[ref.ShadowTable]
+ 
+ 		executeGo(func() {
+ 			lockTime := start
+ 			if rB := rc.RunTotalOnlyB(tableCtxB, &entry, ref, shB.Total, shB.Active, msB.Total, msB.Active, shB.Err, msB.Err, lockTime, traceID); rB != nil {
+ 				mu.Lock()
+ 				reports = append(reports, rB)
+diff --git a/internal/service/recon/recon_window_index_probe.go b/internal/service/recon/recon_window_index_probe.go
+new file mode 100644
+index 0000000..ab7911e
+--- /dev/null
++++ b/internal/service/recon/recon_window_index_probe.go
+@@ -0,0 +1,184 @@
++package recon
++
++import (
++	"context"
++	"encoding/binary"
++	"fmt"
++	"strings"
++	"sync"
++	"time"
++
++	"centralized-data-service/pkgs/observability"
++	"go.mongodb.org/mongo-driver/bson"
++	"go.mongodb.org/mongo-driver/bson/primitive"
++	"go.opentelemetry.io/otel/attribute"
++)
++
++var (
++	pgColIndexCacheMu sync.RWMutex
++	pgColIndexCache   = make(map[string]bool)
++)
++
++// objectIDBoundaryFromTime constructs a deterministic zero-padded ObjectID boundary (TTTT00000000000000000000)
++// for the given timestamp so MongoDB _id and PostgreSQL _source_id range queries share identical boundaries.
++func objectIDBoundaryFromTime(t time.Time) primitive.ObjectID {
++	var oid primitive.ObjectID
++	binary.BigEndian.PutUint32(oid[0:4], uint32(t.UTC().Truncate(time.Second).Unix()))
++	return oid
++}
++
++// HasColumnIndex checks whether a PostgreSQL table has a B-Tree index covering columnName.
++// Results are cached thread-safely to prevent repeated catalog queries.
++func (da *ReconDestAgent) HasColumnIndex(ctx context.Context, tableName, columnName string) bool {
++	if da == nil || da.IsMongo() {
++		return false
++	}
++	col := strings.TrimSpace(columnName)
++	if col == "" {
++		return false
++	}
++	if col == "_gpay_id" || col == "_source_id" || col == "_source_ts" {
++		return true
++	}
++	if err := validateIdent(tableName); err != nil {
++		return false
++	}
++	cacheKey := strings.ToLower(tableName + "." + col)
++	pgColIndexCacheMu.RLock()
++	if indexed, ok := pgColIndexCache[cacheKey]; ok {
++		pgColIndexCacheMu.RUnlock()
++		return indexed
++	}
++	pgColIndexCacheMu.RUnlock()
++
++	schema, table := splitSchemaTable(tableName)
++	qCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
++	defer cancel()
++
++	tx := da.readOnlyDB(qCtx)
++	defer tx.Rollback()
++
++	var count int64
++	sql := `SELECT COUNT(*) FROM pg_indexes WHERE LOWER(schemaname) = LOWER(?) AND LOWER(tablename) = LOWER(?) AND LOWER(indexdef) LIKE ?`
++	pattern := "%(" + strings.ToLower(col) + "%"
++	if err := tx.Raw(sql, schema, table, pattern).Scan(&count).Error; err != nil {
++		return false
++	}
++	indexed := count > 0
++	pgColIndexCacheMu.Lock()
++	pgColIndexCache[cacheKey] = indexed
++	pgColIndexCacheMu.Unlock()
++	return indexed
++}
++
++// HashObjectIDWindow computes (count, xorHash) in [tLo, tHi) using the mandatory MongoDB _id_ B-Tree index.
++// Avoids 15s COLLSCAN when large MongoDB collections (e.g. 15.37M docs) lack an index on the business timestamp field.
++func (sa *ReconSourceAgent) HashObjectIDWindow(ctx context.Context, sourceURL, database, collection string, tLo, tHi time.Time) (*WindowResult, error) {
++	ctx, span := observability.ChildSpan(ctx, fmt.Sprintf("recon.source.oid_window: %s [%s -> %s]",
++		collection, tLo.UTC().Format("15:04:05"), tHi.UTC().Format("15:04:05")),
++		attribute.String("db.database", database),
++		attribute.String("db.collection", collection),
++	)
++	defer span.End()
++
++	qCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
++	defer cancel()
++
++	client, err := sa.getClient(qCtx, sourceURL)
++	if err != nil {
++		return nil, err
++	}
++	coll := sa.secondaryColl(client, database, collection)
++
++	oidLo := objectIDBoundaryFromTime(tLo)
++	oidHi := objectIDBoundaryFromTime(tHi)
++	filter := bson.M{"_id": bson.M{"$gte": oidLo, "$lt": oidHi}}
++	opts := sa.selectOpts(bson.M{"_id": 1})
++
++	cursor, err := coll.Find(qCtx, filter, opts)
++	if err != nil {
++		return nil, err
++	}
++	defer cursor.Close(qCtx)
++
++	var (
++		xorAcc uint64
++		count  int64
++	)
++	for cursor.Next(qCtx) {
++		var raw bson.Raw
++		if err := cursor.Decode(&raw); err != nil {
++			return nil, err
++		}
++		v := raw.Lookup("_id")
++		oid, ok := v.ObjectIDOK()
++		if !ok {
++			continue
++		}
++		idHex := oid.Hex()
++		xorAcc ^= hashIDPlusTsMs(idHex, oid.Timestamp().UnixMilli())
++		count++
++	}
++	if err := cursor.Err(); err != nil {
++		return nil, err
++	}
++	return &WindowResult{Count: count, XorHash: xorAcc}, nil
++}
++
++// HashSourceIDWindow computes the matching (count, xorHash) on PostgreSQL Shadow using the indexed _source_id column.
++// Lexicographical order of 24-char hex ObjectIDs matches binary ObjectID timestamp order 1-to-1.
++func (da *ReconDestAgent) HashSourceIDWindow(ctx context.Context, tableName string, tLo, tHi time.Time) (*WindowResult, error) {
++	ctx, span := observability.ChildSpan(ctx, fmt.Sprintf("pg.source_id_window: %s [%s -> %s]",
++		tableName, tLo.UTC().Format("15:04:05"), tHi.UTC().Format("15:04:05")),
++		attribute.String("db.table", tableName),
++	)
++	defer span.End()
++
++	if err := validateIdent(tableName); err != nil {
++		return nil, err
++	}
++	qCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
++	defer cancel()
++
++	oidLoHex := objectIDBoundaryFromTime(tLo).Hex()
++	oidHiHex := objectIDBoundaryFromTime(tHi).Hex()
++
++	sql := fmt.Sprintf(`
++		SELECT "_source_id"
++		FROM %s
++		WHERE "_source_id" >= ? AND "_source_id" < ?
++		  AND LENGTH("_source_id") = 24
++		  AND NOT "_deleted"`,
++		quoteRelation(tableName),
++	)
++
++	tx := da.readOnlyDB(qCtx)
++	defer tx.Rollback()
++
++	rows, err := tx.Raw(sql, oidLoHex, oidHiHex).Rows()
++	if err != nil {
++		return nil, err
++	}
++	defer rows.Close()
++
++	var (
++		xorAcc uint64
++		count  int64
++	)
++	for rows.Next() {
++		var idHex string
++		if err := rows.Scan(&idHex); err != nil {
++			return nil, err
++		}
++		oid, err := primitive.ObjectIDFromHex(idHex)
++		if err != nil {
++			continue
++		}
++		xorAcc ^= hashIDPlusTsMs(idHex, oid.Timestamp().UnixMilli())
++		count++
++	}
++	if err := rows.Err(); err != nil {
++		return nil, err
++	}
++	return &WindowResult{Count: count, XorHash: xorAcc}, nil
++}
+diff --git a/internal/service/recon/recon_smoke_guard.go b/internal/service/recon/recon_smoke_guard.go
+new file mode 100644
+index 0000000..1ab86ed
+--- /dev/null
++++ b/internal/service/recon/recon_smoke_guard.go
+@@ -0,0 +1,239 @@
++package recon
++
++import (
++	"context"
++	"fmt"
++	"sync"
++	"time"
++
++	"centralized-data-service/internal/model/source"
++	"go.uber.org/zap"
++)
++
++// resolveShadowPKField resolves the actual primary key column name on the PostgreSQL shadow table.
++// For MongoDB sources where PrimaryKeyField is "_id", it probes the shadow table and falls back to "_source_id".
++func (rc *ReconCore) resolveShadowPKField(ctx context.Context, entry source.TableRegistry) string {
++	primary := entry.PrimaryKeyField
++	if primary == "" {
++		primary = "_source_id"
++	}
++	if isPostgres(entry.SourceURL) {
++		return primary
++	}
++	if rc.destAgent != nil {
++		if realCol, err := rc.destAgent.GetRealColumnName(ctx, entry.QualifiedTarget(), primary); err == nil && realCol != "" {
++			return realCol
++		}
++		if realCol, err := rc.destAgent.GetRealColumnName(ctx, entry.QualifiedTarget(), "_source_id"); err == nil && realCol != "" {
++			return realCol
++		}
++	}
++	return "_source_id"
++}
++
++// verifySegmentAAtFreezeCutoff enforces the backward freeze-cutoff [lo, hi] for Segment A (Source <-> Shadow).
++// Runs source and shadow window checks on dedicated contexts, and falls back to indexed _id <-> _source_id
++// window verification when large MongoDB/Shadow tables (e.g. 15.37M rows) lack an index on the business timestamp column.
++func (rc *ReconCore) verifySegmentAAtFreezeCutoff(
++	ctx context.Context,
++	entry source.TableRegistry,
++	lo, hi time.Time,
++	diff int64,
++) (resolvedDiff int64, statusStr string) {
++	if diff == 0 {
++		return 0, "ok"
++	}
++	threshold := rc.cfg.CountDriftThreshold
++	if threshold <= 0 {
++		threshold = 100
++	}
++	if abs(diff) > threshold {
++		return diff, "drift"
++	}
++
++	var (
++		srcTS, dstTS string
++		errTS        error
++		dstPK        string
++		dstIndexed   bool
++	)
++
++	if isPostgres(entry.SourceURL) {
++		if entry.TimestampField != nil && *entry.TimestampField != "" {
++			srcTS = *entry.TimestampField
++			dstTS = *entry.TimestampField
++		} else {
++			srcTS, dstTS, errTS = rc.resolveSourceAndDestTSFields(ctx, entry, "smoke")
++		}
++		dstPK = rc.resolveShadowPKField(ctx, entry)
++		dstIndexed = errTS == nil && srcTS != "" && dstTS != ""
++	} else {
++		metaCtx, metaCancel := context.WithTimeout(ctx, 3*time.Second)
++		srcTS, dstTS, errTS = rc.resolveSourceAndDestTSFields(metaCtx, entry, "smoke")
++		dstPK = rc.resolveShadowPKField(metaCtx, entry)
++		dstIndexed = errTS == nil && dstTS != "" && rc.destAgent.HasColumnIndex(metaCtx, entry.QualifiedTarget(), dstTS)
++		metaCancel()
++	}
++
++	// Path 1: HashWindow on [lo, hi] when dstTS is indexed and shares the same time axis as srcTS
++	if dstIndexed && !(dstTS == "_source_ts" && !isPostgres(entry.SourceURL)) {
++		hashCtx, hashCancel := context.WithTimeout(ctx, 6*time.Second)
++		var (
++			srcHash, dstHash *WindowResult
++			errS, errD       error
++			wg               sync.WaitGroup
++		)
++		wg.Add(2)
++		go func() {
++			defer wg.Done()
++			srcHash, errS = rc.sourceAgent.HashWindow(hashCtx, entry.SourceURL, entry.SourceDB, entry.SourceTable, srcTS, lo, hi)
++		}()
++		go func() {
++			defer wg.Done()
++			dstHash, errD = rc.destAgent.HashWindow(hashCtx, entry.QualifiedTarget(), dstPK, dstTS, lo, hi)
++		}()
++		wg.Wait()
++		hashCancel()
++
++		if errS == nil && errD == nil && srcHash != nil && dstHash != nil {
++			if srcHash.Count == dstHash.Count && srcHash.XorHash == dstHash.XorHash {
++				rc.logger.Info("[smoke-A] Discrepancy resolved via indexed HashWindow match on freeze range",
++					zap.String("table", entry.TargetTable),
++					zap.Int64("estimatedDiff", diff),
++					zap.String("srcTS", srcTS),
++					zap.String("dstTS", dstTS),
++					zap.String("dstPK", dstPK),
++					zap.Time("lo", lo),
++					zap.Time("hi", hi),
++					zap.Int64("windowCount", srcHash.Count),
++				)
++				return 0, "ok"
++			}
++			rc.logger.Warn("[smoke-A] HashWindow mismatch — real drift confirmed on freeze range",
++				zap.String("table", entry.TargetTable),
++				zap.Int64("estimatedDiff", diff),
++				zap.Int64("srcWindowCount", srcHash.Count),
++				zap.Int64("dstWindowCount", dstHash.Count),
++			)
++			return diff, "drift"
++		}
++	}
++
++	// Path 2: For MongoDB sources where business tsField lacks an index (causing 15s COLLSCAN/SeqScan timeout),
++	// verify the backward freeze window [lo, hi] via mandatory B-Tree indexes: MongoDB _id_ <-> Postgres _source_id.
++	if !isPostgres(entry.SourceURL) {
++		oidCtx, oidCancel := context.WithTimeout(ctx, 5*time.Second)
++		defer oidCancel()
++
++		var (
++			srcOid, dstOid *WindowResult
++			errS, errD     error
++			wg             sync.WaitGroup
++		)
++		wg.Add(2)
++		go func() {
++			defer wg.Done()
++			srcOid, errS = rc.sourceAgent.HashObjectIDWindow(oidCtx, entry.SourceURL, entry.SourceDB, entry.SourceTable, lo, hi)
++		}()
++		go func() {
++			defer wg.Done()
++			dstOid, errD = rc.destAgent.HashSourceIDWindow(oidCtx, entry.QualifiedTarget(), lo, hi)
++		}()
++		wg.Wait()
++
++		if errS == nil && errD == nil && srcOid != nil && dstOid != nil &&
++			srcOid.Count == dstOid.Count && srcOid.XorHash == dstOid.XorHash {
++			rc.logger.Info("[smoke-A] Discrepancy resolved via indexed ObjectID/_source_id freeze window match",
++				zap.String("table", entry.TargetTable),
++				zap.Int64("estimatedDiff", diff),
++				zap.Time("lo", lo),
++				zap.Time("hi", hi),
++				zap.Int64("windowCount", srcOid.Count),
++			)
++			return 0, "ok"
++		}
++		rc.logger.Warn("[smoke-A] Freeze window verification did not match",
++			zap.String("table", entry.TargetTable),
++			zap.Int64("estimatedDiff", diff),
++			zap.String("errS", fmt.Sprintf("%v", errS)),
++			zap.String("errD", fmt.Sprintf("%v", errD)),
++		)
++	}
++
++	return diff, "drift"
++}
++
++// verifySegmentBAtFreezeCutoff enforces the backward freeze-cutoff (hi = lockTime - WindowFreezeMargin) for Segment B.
++// Subtracts records arriving after `hi` on indexed `_source_ts` so both Shadow and Master counts are anchored at `hi`.
++func (rc *ReconCore) verifySegmentBAtFreezeCutoff(
++	ctx context.Context,
++	masterAgent *ReconDestAgent,
++	ref MasterBindingRef,
++	lo, hi time.Time,
++	diff, shadowTotal, shadowActive, masterTotal, masterActive int64,
++) (resolvedDiff, outMasterTotal, outMasterActive int64, statusStr string) {
++	outMasterTotal = masterTotal
++	outMasterActive = masterActive
++	if diff == 0 {
++		return 0, outMasterTotal, outMasterActive, "ok"
++	}
++
++	threshold := rc.cfg.CountDriftThreshold
++	if threshold <= 0 {
++		threshold = 100
++	}
++	if abs(diff) > threshold {
++		return diff, outMasterTotal, outMasterActive, "drift"
++	}
++
++	verifyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
++	defer cancel()
++
++	shadowRel, masterRel := ref.ShadowRel(), ref.MasterRel()
++	nowUpper := time.Now().UTC().Add(1 * time.Minute)
++
++	// Step 1: Subtract post-cutoff [hi, nowUpper] records using indexed _source_ts on Shadow and Master
++	shAfterTotal, errSh1 := rc.destAgent.CountInWindow(verifyCtx, shadowRel, "_source_ts", hi, nowUpper)
++	shAfterDel, errSh2 := rc.destAgent.CountRecentDeletedRows(verifyCtx, shadowRel, "_source_ts", hi, nowUpper)
++	msAfterTotal, errMs1 := masterAgent.CountInWindow(verifyCtx, masterRel, "_source_ts", hi, nowUpper)
++	msAfterDel, errMs2 := masterAgent.CountRecentDeletedRows(verifyCtx, masterRel, "_source_ts", hi, nowUpper)
++
++	if errSh1 == nil && errSh2 == nil && errMs1 == nil && errMs2 == nil {
++		shAfterActive := shAfterTotal - shAfterDel
++		msAfterActive := msAfterTotal - msAfterDel
++		shadowAtHi := shadowActive - shAfterActive
++		masterAtHi := masterActive - msAfterActive
++		if shadowAtHi == masterAtHi {
++			rc.logger.Info("[smoke-B] Transient gap resolved via backward freeze-cutoff subtraction at hi",
++				zap.String("shadow", shadowRel),
++				zap.String("master", masterRel),
++				zap.Int64("rawDiff", diff),
++				zap.Int64("shAfterHi", shAfterActive),
++				zap.Int64("msAfterHi", msAfterActive),
++				zap.Int64("countAtHi", shadowAtHi),
++				zap.Time("hi", hi),
++			)
++			return 0, shadowTotal, shadowActive, "ok"
++		}
++	}
++
++	// Step 2: Fallback HashWindow on frozen range [lo, hi] using resolved Segment B PK pair and indexed _source_ts
++	shadowPKCol, masterPKCol, _ := ResolveSegmentBPKPair(verifyCtx, ref, masterAgent)
++	shHash, errH1 := rc.destAgent.HashWindow(verifyCtx, shadowRel, shadowPKCol, "_source_ts", lo, hi)
++	msHash, errH2 := masterAgent.HashWindow(verifyCtx, masterRel, masterPKCol, "_source_ts", lo, hi)
++
++	if errH1 == nil && errH2 == nil && shHash != nil && msHash != nil &&
++		shHash.Count == msHash.Count && shHash.XorHash == msHash.XorHash {
++		rc.logger.Info("[smoke-B] Discrepancy resolved via HashWindow match on frozen range [lo, hi]",
++			zap.String("shadow", shadowRel),
++			zap.String("master", masterRel),
++			zap.Int64("rawDiff", diff),
++			zap.Time("lo", lo),
++			zap.Time("hi", hi),
++			zap.Int64("windowCount", shHash.Count),
++		)
++		return 0, shadowTotal, shadowActive, "ok"
++	}
++
++	return diff, outMasterTotal, outMasterActive, "drift"
++}

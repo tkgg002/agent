@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "claim",
+    "claim": "ApplySourceFieldTypesToBSONDoc loops over optionalNullableFields and calls delete(doc, camelKey) when doc[camelKey] is nil and not in typeMap.",
+    "flow": "ApplySourceFieldTypesToBSONDoc -> delete(doc, camelKey)",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:143-148\n\tfor _, opt := range optionalNullableFields {\n\t\tcamelKey, snakeKey := opt[0], opt[1]\n\t\tif val, exists := doc[camelKey]; exists && val == nil && !hasTypeMeta(typeMap, camelKey, snakeKey) {\n\t\t\tdelete(doc, camelKey)\n\t\t}\n\t}"
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "claim",
+    "claim": "mongoIndexDriver.CreateIndex sets idxOpts using options.Index().SetName(indexName).SetUnique(spec.IsUnique) and only sets PartialFilterExpression when spec.IsPartial and spec.WhereClause are non-empty.",
+    "flow": "mongoIndexDriver.CreateIndex -> options.Index()",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:291-306\n\tidxOpts := options.Index().SetName(indexName).SetUnique(spec.IsUnique)\n\tif spec.IsPartial && strings.TrimSpace(spec.WhereClause) != \"\" {\n\t\tpfe, err := parseMongoPartialFilter(spec.WhereClause)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tidxOpts.SetPartialFilterExpression(pfe)\n\t}\n\n\tcreatedName, err := coll.Indexes().CreateOne(ctx, mongo.IndexModel{\n\t\tKeys:    keys,\n\t\tOptions: idxOpts,\n\t})\n\tif err != nil {\n\t\treturn fmt.Errorf(\"mongo createIndex %s on %s failed: %w\", indexName, coll.Name(), err)\n\t}"
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "claim",
+    "claim": "parseMongoPartialFilter splits whereClause by '=' using strings.SplitN(w, \"=\", 2) and returns an unsupported partial filter error if it is not JSON or field = value.",
+    "flow": "parseMongoPartialFilter",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:126-152\nfunc parseMongoPartialFilter(whereClause string) (bson.M, error) {\n\tw := strings.TrimSpace(whereClause)\n\tif strings.HasPrefix(w, \"{\") {\n\t\tvar m bson.M\n\t\tif err := json.Unmarshal([]byte(w), &m); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"invalid partialFilterExpression JSON: %w\", err)\n\t\t}\n\t\treturn m, nil\n\t}\n\tw = strings.TrimPrefix(strings.TrimSuffix(w, \")\"), \"(\")\n\tif parts := strings.SplitN(w, \"=\", 2); len(parts) == 2 {\n\t\tfield := strings.TrimSpace(parts[0])\n\t\tvalRaw := strings.TrimSpace(parts[1])\n\t\tif !IsSafeMongoIndexField(field) {\n\t\t\treturn nil, fmt.Errorf(\"invalid field in WHERE clause: %s\", field)\n\t\t}\n\t\tif strings.EqualFold(valRaw, \"true\") {\n\t\t\treturn bson.M{field: true}, nil\n\t\t}\n\t\tif strings.EqualFold(valRaw, \"false\") {\n\t\t\treturn bson.M{field: false}, nil\n\t\t}\n\t\tvalClean := strings.Trim(valRaw, \"'\\\"\")\n\t\treturn bson.M{field: valClean}, nil\n\t}\n\treturn nil, fmt.Errorf(\"unsupported partial filter %q (use JSON like {\\\"_deleted\\\": true} or field = value)\", whereClause)\n}"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "mongoIndexDriver.Engine returns 'mongodb' and IsAsyncCreate returns false.",
+    "flow": "mongoIndexDriver.Engine",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:30-31\nfunc (d *mongoIndexDriver) Engine() string      { return \"mongodb\" }\nfunc (d *mongoIndexDriver) IsAsyncCreate() bool { return false }"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "mongoIndexDriver.Engine returns 'clickhouse' and IsAsyncCreate returns true.",
+    "flow": "mongoIndexDriver.Engine",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:30-31\nfunc (d *mongoIndexDriver) Engine() string      { return \"mongodb\" }\nfunc (d *mongoIndexDriver) IsAsyncCreate() bool { return false }"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "mongoIndexDriver.CreateIndex always uses prefix 'pk' when spec.IsUnique is true.",
+    "flow": "mongoIndexDriver.CreateIndex",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:282-286\n\tprefix := \"idx\"\n\tif spec.IsUnique {\n\t\tprefix = \"ux\"\n\t}\n\tindexName := fmt.Sprintf(\"%s_%s_%s\", prefix, coll.Name(), strings.Join(nameParts, \"_\"))"
+  }
+]

@@ -1,0 +1,105 @@
+{
+  "mode": "claim",
+  "stage": "dg3",
+  "workspace": "audit-duplicate-source-ts-upsert-2026-10-29",
+  "ts": "20261029T174736",
+  "trusted_rounds": [
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-duplicate-source-ts-upsert-2026-10-29/06_laya_raw_dg3_20261029T174736.json",
+  "claims": [
+    {
+      "id": "A-F1-1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "processDiscoveryRows only skips _raw_data, _synced_at, and _source, while sourceRepoGorm.UpdateRegistry updates all unapproved mapping_rule_v2 rows for source_object_id and shadow_binding_id to approved without filtering out system columns.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3914
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.0869
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6447
+        }
+      }
+    },
+    {
+      "id": "A-F2-1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "BuildBatchUpsertSQLsInSchema appends dataCols and then appends metaCols from getMetadataInsertCols into allCols without deduplicating _source_ts, and single-row fallback calls BuildUpsertSQLInSchema which has the same allCols construction.",
+      "decision": "FLAG",
+      "resolved": "Verified in schema_adapter.go (lines 352-374 and 575-582) where allCols appends dataCols and metaCols from getMetadataInsertCols (694-697) without deduplicating _source_ts. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:575-582",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.1098
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2242
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.0435
+        }
+      }
+    },
+    {
+      "id": "A-F3-1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "SnapshotRunner.runSnapshot calls r.eventHandler.FlushBatchBuffer(ctx) after each batch, which invokes FlushWithContext on the shared BatchBuffer and trips the circuit breaker if flushErr is non-nil.",
+      "decision": "FLAG",
+      "resolved": "Verified in snapshot_runner_handler.go (lines 853-858) where FlushBatchBuffer(ctx) flushes the shared BatchBuffer across all tables and trips circuit breaker on flushErr. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:853-858",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.7861
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.0479
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.1681
+        }
+      }
+    },
+    {
+      "id": "A-F4-1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "BatchBuffer.timerLoop calls bb.Flush() on ticker.C and bb.flushCh and discards the returned error using blank identifiers.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2007
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.2362
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.5153
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

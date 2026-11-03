@@ -1,0 +1,51 @@
+[
+  {
+    "id": "A-F1",
+    "kind": "target",
+    "claim": "In mongo_bson_restorer.go, ApplySourceFieldTypesToBSONDoc deletes source_field_types and sourceFieldTypes from doc, but does not delete source_field_values or sourceFieldValues.",
+    "flow": "CoerceRecordToBSONDoc calls ApplySourceFieldTypesToBSONDoc(doc).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:64-72\n\trawMeta, hasSnake := doc[\"source_field_types\"]\n\tif !hasSnake {\n\t\trawMeta = doc[\"sourceFieldTypes\"]\n\t}\n\tdelete(doc, \"source_field_types\")\n\tdelete(doc, \"sourceFieldTypes\")\n\tif rawMeta == nil {\n\t\treturn\n\t}"
+  },
+  {
+    "id": "A-F2",
+    "kind": "target",
+    "claim": "In mongo_type_converter.go, convertMapToBSONM iterates over m and assigns out[k] = convertNestedElement(v) without unwrapping MongoDB Extended JSON wrappers such as $numberInt.",
+    "flow": "coerceNestedBSON calls unmarshalJSONBytesToBSON which calls convertMapToBSONM.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_type_converter.go:292-313\nfunc convertMapToBSONM(m map[string]any) bson.M {\n\tout := make(bson.M, len(m))\n\tfor k, v := range m {\n\t\tout[k] = convertNestedElement(v)\n\t}\n\treturn out\n}\n\nfunc convertSliceToBSONA(s []any) bson.A {\n\tout := make(bson.A, len(s))\n\tfor i, v := range s {\n\t\tout[i] = convertNestedElement(v)\n\t}\n\treturn out\n}\n\nfunc convertNestedElement(v any) any {\n\tswitch x := v.(type) {\n\tcase map[string]any:\n\t\treturn convertMapToBSONM(x)\n\tcase []any:\n\t\treturn convertSliceToBSONA(x)"
+  },
+  {
+    "id": "A-F3",
+    "kind": "target",
+    "claim": "In mongo_bson_restorer.go, snakeToCamelCoreMap omits request_id, is_delete, and idempotency_key, while denormalizedFlatColumns includes request_id and is_delete.",
+    "flow": "ApplySourceFieldTypesToBSONDoc normalizes snakeToCamelCoreMap and deletes denormalizedFlatColumns not found in typeMap[col].",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:19-37\nvar snakeToCamelCoreMap = [][2]string{\n\t{\"trans_id\", \"transId\"},\n\t{\"sys_trans\", \"sysTrans\"},\n\t{\"original_trans_his_id\", \"originalTransHisId\"},\n\t{\"trans_type\", \"transType\"},\n\t{\"service_code\", \"serviceCode\"},\n\t{\"channel_id\", \"channelId\"},\n\t{\"created_at\", \"createdAt\"},\n\t{\"updated_at\", \"updatedAt\"},\n}\n\nvar denormalizedFlatColumns = []string{\n\t\"transaction_history_id\", \"transactionHistoryId\", \"is_delete\", \"isDelete\",\n\t\"request_id\", \"bill_id\", \"order_id\", \"fee\", \"partner_code\", \"master_merchant_code\",\n\t\"sender_customer_id\", \"sender_full_name\", \"sender_phone\",\n\t\"receiver_customer_id\", \"receiver_full_name\", \"receiver_phone\", \"receiver_email\",\n\t\"receiver_merchant_id\", \"receiver_merchant_code\", \"receiver_credit\",\n\t\"merchant_info_id\", \"merchant_info_name\", \"merchant_info_email\",\n}"
+  },
+  {
+    "id": "A-F4",
+    "kind": "target",
+    "claim": "In mongo_stale_field_pruner.go, StaleMongoKeysToPrune iterates over rec and appends non-system keys that are no longer present in doc.",
+    "flow": "BuildMongoOCCBulkModels uses StaleMongoKeysToPrune to emit $$REMOVE or $unset.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_stale_field_pruner.go:14-29\nfunc StaleMongoKeysToPrune(rec map[string]any, doc bson.M, targetKey string) []string {\n\tif doc == nil {\n\t\treturn nil\n\t}\n\tvar out []string\n\tfor k := range rec {\n\t\tif strings.HasPrefix(k, \"_\") || k == targetKey || k == \"source_field_types\" {\n\t\t\tcontinue\n\t\t}\n\t\tif _, stillPresent := doc[k]; !stillPresent {\n\t\t\tout = append(out, k)\n\t\t}\n\t}\n\tsort.Strings(out)\n\treturn out\n}"
+  },
+  {
+    "id": "CTRL-T-1",
+    "kind": "control_true",
+    "claim": "In BuildMongoOCCBulkModels, when k == \"_id\", the loop continues without adding \"_id\" to setStage.",
+    "flow": "Positive control for BuildMongoOCCBulkModels.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_mongo.go:245-248\n\t\t\tfor k, v := range doc {\n\t\t\t\tif k == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}"
+  },
+  {
+    "id": "CTRL-F-1",
+    "kind": "control_false",
+    "claim": "In BuildMongoOCCBulkModels, when k == \"_id\", the loop panics and aborts the entire batch.",
+    "flow": "Negative control for BuildMongoOCCBulkModels.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_mongo.go:245-248\n\t\t\tfor k, v := range doc {\n\t\t\t\tif k == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}"
+  },
+  {
+    "id": "CTRL-F-2",
+    "kind": "control_false",
+    "claim": "CoerceToBSONValue always returns a non-nil error whenever val is nil.",
+    "flow": "Negative control for CoerceToBSONValue nil handling.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_type_converter.go:24-27\nfunc CoerceToBSONValue(val any, dataType string, sourceFormat string) (any, error) {\n\tif val == nil {\n\t\treturn nil, nil\n\t}"
+  }
+]

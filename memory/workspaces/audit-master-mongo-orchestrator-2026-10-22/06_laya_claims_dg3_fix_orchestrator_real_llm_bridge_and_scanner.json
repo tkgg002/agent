@@ -1,0 +1,44 @@
+[
+  {
+    "id": "A-ISO-01",
+    "kind": "real",
+    "basis": "code",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:888-904\nfunc (s *Server) FindMatchingAgentWorkspace(qt queue.QueuedTask) (wsDir, tasks08File, sol09File, req01File string) {\n\tif !isMasterMongoDestinationTask(qt) {\n\t\treturn \"\", \"\", \"\", \"\"\n\t}",
+    "claim": "FindMatchingAgentWorkspace returns empty strings immediately when isMasterMongoDestinationTask(qt) is false, isolating non-Master-Mongo tasks like cdc-01 from memory/workspaces/."
+  },
+  {
+    "id": "A-TASKKEY-01",
+    "kind": "real",
+    "basis": "code",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1091-1102\n\t\tlowerKey := strings.ToLower(taskKey)\n\t\tfor i := range all {\n\t\t\tif strings.Contains(strings.ToLower(all[i].ExternalID), lowerKey) ||\n\t\t\t\tstrings.Contains(strings.ToLower(all[i].Title), lowerKey) {\n\t\t\t\treturn &all[i], nil\n\t\t\t}\n\t\t}\n\t\treturn nil, fmt.Errorf(\"task %q not found in queue\", taskKey)\n\t}",
+    "claim": "When a non-empty taskKey does not match any task in queue, findQueuedTask returns an explicit error instead of falling back to the first non-DONE task."
+  },
+  {
+    "id": "A-DISCUSS-01",
+    "kind": "real",
+    "basis": "code",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_chat_knowledge.go:70-89\n\tvar rootCauses, solutions []string\n\tvar codeSnippet string\n\tif llmRes, err := s.invokeArchitectLLM(context.Background(), qt, subTasks, cleanMsg, selectedModel, \"discuss\"); err == nil && llmRes != nil {\n\t\trootCauses = llmRes.RootCauses\n\t\tsolutions = llmRes.Solutions\n\t\tcodeSnippet = strings.TrimSpace(llmRes.CodeDemo)\n\t}",
+    "claim": "renderContextualDiscussReply invokes invokeArchitectLLM first for every discuss message before using extractTaskDeepKnowledge as a fallback."
+  },
+  {
+    "id": "CTRL-TRUE-01",
+    "kind": "control_true",
+    "basis": "code",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_bridge.go:26-34\nfunc isSkippedBuildOrVendorDir(name string) bool {\n\tlower := strings.ToLower(strings.TrimSpace(name))\n\tswitch lower {\n\tcase \".git\", \".orchestrator\", \"vendor\", \"node_modules\", \"scratch\",\n\t\t\"dist\", \"build\", \"out\", \".next\", \"coverage\", \"target\", \".cache\", \"tmp\", \".turbo\", \"backups_20260929_bson\":\n\t\treturn true\n\t}",
+    "claim": "isSkippedBuildOrVendorDir returns true for dist, build, node_modules, and vendor directories."
+  },
+  {
+    "id": "CTRL-FALSE-01",
+    "kind": "control_false",
+    "basis": "code",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:888-904\nfunc (s *Server) FindMatchingAgentWorkspace(qt queue.QueuedTask) (wsDir, tasks08File, sol09File, req01File string) {\n\tif !isMasterMongoDestinationTask(qt) {\n\t\treturn \"\", \"\", \"\", \"\"\n\t}",
+    "claim": "FindMatchingAgentWorkspace scans all workspace directories for every task even when isMasterMongoDestinationTask(qt) is false."
+  },
+  {
+    "id": "CTRL-FALSE-02",
+    "kind": "control_false",
+    "basis": "code",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1091-1102\n\t\treturn nil, fmt.Errorf(\"task %q not found in queue\", taskKey)\n\t}",
+    "claim": "findQueuedTask always returns nil error and the first task in queue when taskKey is not found."
+  }
+]

@@ -1,0 +1,129 @@
+{
+  "mode": "claim",
+  "stage": "dg2",
+  "workspace": "audit-daily-flow-vs-daily-count-2026-10-27",
+  "ts": "20261027T102901",
+  "trusted_rounds": [
+    "r2"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-daily-flow-vs-daily-count-2026-10-27/06_laya_raw_dg1_20261027T102901.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Tại activity_log_read_repo_gorm.go:426, GetDailyFlow cắt ngày stat_date theo to_char((e.started_at AT TIME ZONE 'Asia/Ho_Chi_Minh'), 'YYYY-MM-DD') cho từng dòng log độc lập, khiến mẻ ghi Shadow lúc 23:59:59 nhưng qua TableDebouncer ghi Master lúc 00:00:00 bị tách sang 2 ngày khác nhau.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "trích dẫn không khớp /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:424-427: exec_daily AS (",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.518
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.2958
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7486
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Tại batch_buffer_fanout.go:41-47, publishTransmuteTrigger đã truyền SourceTs: r.SourceTsMs trong từng TransmuteEventItem khi bắn NATS sang TransmuteHandler.",
+      "decision": "FLAG",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0497
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.2241
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.435
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Tại transmute_handler.go:508-530, groupDebouncedTasks hiện chỉ tách mẻ debounce theo (master_binding_id, triggered_by) và runDebouncedGroup gọi h.activity.Start('transmute', masterTable, triggeredBy) lấy StartedAt = time.Now().",
+      "decision": "FLAG",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2687
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.288
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8635
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Tại batch_buffer.go:726-732, trước khi chạy SQL Upsert vào Shadow, hàm dedupByConflictKey(sc.Records) gộp các bản ghi trùng khóa chính trong cùng subChunk.",
+      "decision": "FLAG",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0733
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1588
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0145
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "Trong Code Demo tại 09_tasks_solution_daily_flow_audit.md:38-50, debounceRunKey bổ sung trường eventDate và hàm resolveEventDateHCM quy đổi tsMs sang ngày theo múi giờ GMT+7.",
+      "decision": "FLAG",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "INCORRECT",
+          "confidence": 0.3115
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.412
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7979
+        }
+      }
+    }
+  ],
+  "gate": "BLOCK",
+  "summary_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-daily-flow-vs-daily-count-2026-10-27/06_laya_summary_dg1_20261027T102901.json"
+}

@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "claim": "In ScanService.ScanArrayFields in scan_service.go, when masterBindingID != nil, the query joins cdc_system.master_binding mb with cdc_system.shadow_binding sb on sb.id = mb.shadow_binding_id and overwrites targetTable = sb.ShadowTable.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:198-215\n\tif masterBindingID != nil {\n\t\tvar sb struct {\n\t\t\tShadowSchema string `gorm:\"column:shadow_schema\"`\n\t\t\tShadowTable  string `gorm:\"column:shadow_table\"`\n\t\t}\n\t\tif err := s.db.WithContext(ctx).Raw(`\n            SELECT sb.shadow_schema, sb.shadow_table\n              FROM cdc_system.master_binding mb\n              JOIN cdc_system.shadow_binding sb ON sb.id = mb.shadow_binding_id\n             WHERE mb.id = ?`, *masterBindingID).Scan(&sb).Error; err == nil {\n\t\t\tif strings.TrimSpace(sb.ShadowTable) != \"\" {\n\t\t\t\ttargetTable = sb.ShadowTable\n\t\t\t}\n\t\t\tif strings.TrimSpace(sb.ShadowSchema) != \"\" {\n\t\t\t\tschemaName = sb.ShadowSchema\n\t\t\t}\n\t\t}\n\t}",
+    "flow": "ScanArrayFields queries JOIN cdc_system.shadow_binding sb ON sb.id = mb.shadow_binding_id WHERE mb.id = ? and sets targetTable = sb.ShadowTable."
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "claim": "In ScanService.resolveMasterBindingForShadow in scan_master_binding_resolver.go, the SQL query matches either shadow_binding_id = ? or transform_type = 'multi_shadow' with jsonb_path_exists on transform_spec $.shadow_sources[*].",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_master_binding_resolver.go:15-28\n\terr := s.db.WithContext(ctx).Raw(`\n\t\tSELECT id FROM cdc_system.master_binding\n\t\t WHERE shadow_binding_id = ?\n\t\t    OR (\n\t\t        transform_type = 'multi_shadow'\n\t\t        AND jsonb_path_exists(\n\t\t            COALESCE(transform_spec, '{}'::jsonb),\n\t\t            '$.shadow_sources[*] ? (@.shadow_binding_id == $id || @.shadow_table == $tbl)',\n\t\t            jsonb_build_object('id', ?::bigint, 'tbl', ?::text)\n\t\t        )\n\t\t    )\n\t\t ORDER BY (shadow_binding_id = ?) DESC, id ASC\n\t\t LIMIT 1\n\t`, shadowBindingID, shadowBindingID, shadowTable, shadowBindingID).Scan(&mb).Error",
+    "flow": "resolveMasterBindingForShadow queries cdc_system.master_binding checking shadow_binding_id = ? or transform_type = 'multi_shadow' with jsonb_path_exists on transform_spec."
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "claim": "In ScanService.ScanArrayFields in scan_service.go, when hasAfter is true and explodePath does not have prefix \"after.\", it prepends \"after.\" to explodePath before computing basePath at line 310.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:256-260\n\tif hasAfter && !strings.HasPrefix(explodePath, \"after.\") && explodePath != \"after\" {\n\t\texplodePath = \"after.\" + explodePath\n\t}\n\n\tpgPath, isArrayExplode, err := explodePathToPGPath(explodePath)",
+    "flow": "When hasAfter is true, ScanArrayFields sets explodePath = \"after.\" + explodePath and passes explodePath to explodePathToPGPath."
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "claim": "In mappingRuleRepoGorm.GetApprovedJSONFieldsByMasterBindingID in mapping_rule_repo_gorm.go, the function queries SELECT target_column FROM cdc_system.mapping_rule_v2 WHERE master_binding_id = ? AND status = 'approved' AND is_active = TRUE AND UPPER(data_type) IN ('JSON', 'JSONB').",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/mapping_rule_repo_gorm.go:359-368\nfunc (r *mappingRuleRepoGorm) GetApprovedJSONFieldsByMasterBindingID(ctx context.Context, masterBindingID int64) ([]string, error) {\n\tvar fields []string\n\terr := r.db.WithContext(ctx).Raw(`\n\t\tSELECT target_column FROM cdc_system.mapping_rule_v2\n\t\tWHERE master_binding_id = ?\n\t\t  AND status = 'approved'\n\t\t  AND is_active = TRUE\n\t\t  AND UPPER(data_type) IN ('JSON', 'JSONB')\n\t`, masterBindingID).Scan(&fields).Error",
+    "flow": "GetApprovedJSONFieldsByMasterBindingID executes a raw SQL query selecting target_column from cdc_system.mapping_rule_v2 filtered by master_binding_id, status = 'approved', is_active = TRUE, and UPPER(data_type) IN ('JSON', 'JSONB')."
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "claim": "In MasterMappingFieldsPage.tsx, handleScanArray posts to /api/introspection/scan-array/${binding.shadow_table} with body { explode_path: path, master_binding_id: masterBindingID }.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx:402-407\n    try {\n      const { data: res } = await cmsApi.post(\n        `/api/introspection/scan-array/${binding.shadow_table}`,\n        { explode_path: path, master_binding_id: masterBindingID },\n      );\n      const newCount = (res.new_rules || []).length;",
+    "flow": "handleScanArray calls cmsApi.post(`/api/introspection/scan-array/${binding.shadow_table}`, { explode_path: path, master_binding_id: masterBindingID })."
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "claim": "In ScanService.ScanArrayFields in scan_service.go, when pathType == \"string\", the function returns a map with status \"skipped\" and reason \"Dữ liệu đang là 'string' (stringified JSON).\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:302-307\n\tif pathType == \"string\" {\n\t\treturn map[string]interface{}{\n\t\t\t\"status\": \"skipped\",\n\t\t\t\"reason\": \"Dữ liệu đang là 'string' (stringified JSON).\",\n\t\t}, nil\n\t}",
+    "flow": "When pathType == \"string\", ScanArrayFields returns map[string]interface{}{\"status\": \"skipped\", \"reason\": \"Dữ liệu đang là 'string' (stringified JSON).\"}."
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "claim": "In TransmuterModule.extractColumns in transmuter.go, path defaults to r.SourceField, uses *r.SourcePath when non-empty, or prepends \"after.\" when r.SourceFormat == \"debezium_after\", and then calls gjson.Get(rawStr, path).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1768-1774\n\t\tpath := r.SourceField\n\t\tif r.SourcePath != nil && *r.SourcePath != \"\" {\n\t\t\tpath = *r.SourcePath\n\t\t} else if r.SourceFormat == \"debezium_after\" {\n\t\t\tpath = \"after.\" + r.SourceField\n\t\t}\n\t\tgres := gjson.Get(rawStr, path)",
+    "flow": "extractColumns resolves path from r.SourcePath or r.SourceField and calls gjson.Get(rawStr, path)."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In validScanIdent in scan_service.go, the function returns false when s is empty or len(s) > 64.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:523-526\nfunc validScanIdent(s string) bool {\n\tif s == \"\" || len(s) > 64 {\n\t\treturn false\n\t}",
+    "flow": "validScanIdent checks if s == \"\" || len(s) > 64 and returns false."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In validScanIdent in scan_service.go, the function always returns true when s is empty or len(s) > 64.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:523-526\nfunc validScanIdent(s string) bool {\n\tif s == \"\" || len(s) > 64 {\n\t\treturn false\n\t}",
+    "flow": "validScanIdent returns false when s == \"\" or len(s) > 64."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In IntrospectionHandler.ScanArray in introspection_handler.go, when body.ExplodePath is empty, the handler deletes the master binding and panics.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:327-329\n\tif body.ExplodePath == \"\" {\n\t\treturn c.Status(fiber.StatusBadRequest).JSON(fiber.Map{\"error\": \"explode_path_required\"})\n\t}",
+    "flow": "When body.ExplodePath == \"\", ScanArray returns HTTP 400 with error \"explode_path_required\"."
+  }
+]

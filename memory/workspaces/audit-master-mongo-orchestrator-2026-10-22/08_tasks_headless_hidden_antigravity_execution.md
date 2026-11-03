@@ -1,0 +1,25 @@
+# 08 Tasks — Điều Tra & Thiết Kế Giải Pháp Chạy Ẩn (Headless / Hidden Execution) Cho `gemini-4-argon (antigravity)`
+
+- [x] **TASK-HIDE-01 (S1 & S2 — Điều tra cơ chế nội bộ của `language_server` / `agentapi` và cờ `hideFromConversationList` trên máy):**
+  - **Context (`file:line`):** `/Applications/Antigravity.app/Contents/Resources/bin/language_server`, `/Users/trainguyen/.gemini/antigravity/bin/agentapi`, `/Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:333-570`.
+  - **Mô tả:** Phân tích chuỗi binary/symbol, env vars, tham số CLI và giao thức Connect-RPC/HTTP nội bộ của `language_server` (cổng local, header `x-codeium-csrf-token`, cấu trúc request `StartCascade` / `NewConversation` / `hideFromConversationList` / `DeleteCascadeTrajectory`). Kiểm chứng thực tế trên máy xem cách nào gọi `gemini-4-argon` của Antigravity mà hoàn toàn **ẩn khỏi danh sách Conversation trên Antigravity IDE** (hoặc tự động ẩn/dọn sau khi lấy kết quả).
+  - **Logs/Test:** Chạy lệnh kiểm tra symbol/strings và thử nghiệm read-only API nội bộ của `language_server`.
+  - **Definition of Done:** Xác định chính xác 100% cơ chế vật lý (`VERIFIED` bằng output thật trên máy) để gọi Model 4.0 của Antigravity chạy ẩn không làm rác IDE.
+
+- [x] **TASK-HIDE-02 (S2.5 Pre-Plan Critique `DG0` & S3 Single-Best Solution + `DG1/DG2`):**
+  - **Context (`file:line`):** `10_preplan_critique_headless_hidden_antigravity_execution.md`, `09_tasks_solution_headless_hidden_antigravity_execution.md`.
+  - **Mô tả:** Phản biện `DG0` các giả định về CLI/API ẩn của Antigravity, trình bày **1 phương án kỹ thuật tối ưu nhất** kèm Code Demo trong `09_tasks_solution_headless_hidden_antigravity_execution.md`, chạy `laya_gate.py run --stage dg0` và `--stage dg1` đạt `PASS`, giữ nguyên **Propose-Only** trình User duyệt.
+  - **Logs/Test:** `laya_gate.py run --stage dg0` & `laya_gate.py run --stage dg1` đạt `PASS`.
+  - **Definition of Done:** Hoàn tất hồ sơ `S1 -> S2 -> S2.5 (DG0) -> S3 -> DG1/DG2`, trình bày rõ ràng cho User và chờ lệnh `APPROVE`.
+
+- [x] **TASK-HIDE-03 (S4 Execute & S5/S6 Audit — Triển khai `Headless Ephemeral Hidden Execution` trong `internal/runner/antigravity.go`):**
+  - **Context (`file:line`):** `/Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:399-656`, `/Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity_test.go:124-243`.
+  - **Mô tả:** Triển khai `resolveAntigravityLSConnection()`, `buildHiddenAntigravityEnv()`, `cleanupHiddenAntigravityConversation()`, `cleanupLegacySessionFile()`, và cập nhật `completeWithAntigravityAgentAPI` để chạy ẩn 100% (`ANTIGRAVITY_SOURCE_METADATA={"hideFromConversationList":true}`) + xoá sạch trajectory (`DeleteCascadeTrajectory`) và `brain/<convID>` ngay khi hoàn tất.
+  - **Logs/Test:** `EV-20261028T112236-a8db` (`unit`), `EV-20261028T112559-138d` (`integration`), `EV-20261028T112751-8012` (`runtime`).
+  - **Definition of Done:** 100% unit/integration/runtime PASS, dọn sạch các session cũ, qua cổng `DG3 PASS` và `verify_governance.py` `PASSED 🟢`.
+
+- [x] **TASK-HIDE-04 (S5 -> S3 -> S4 -> S5 Self-Healing Audit Remediation — Tách Module Đơn Trách Nhiệm `antigravity_agentapi_hidden.go`, Sửa `readRawAgentAPIConversationID` & Kiểm Chứng E2E Thực Tế Không-Mock Trên `agentapi` + `language_server`):**
+  - **Context (`file:line`):** `/Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:1-713`, `/Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity_agentapi_hidden.go`, `/Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity_test.go:124-243`.
+  - **Mô tả:** Khắc phục 3 điểm phát hiện khi Audit phản biện (`SA-HIDE-01 .. SA-HIDE-03`): (1) Tách toàn bộ giao thức `agentapi` & Connect-RPC (`resolveAntigravityLSConnection`, `buildHiddenAntigravityEnv`, `cleanupHiddenAntigravityConversation`, `cleanupLegacySessionFile`, `readRawAgentAPIConversationID`, `completeWithAntigravityAgentAPI`) sang file riêng đúng trách nhiệm đơn `internal/runner/antigravity_agentapi_hidden.go`, giảm kích thước `internal/runner/antigravity.go` từ `713` dòng xuống `341` dòng (`<= HEAD = 525` dòng); (2) Sửa `cleanupLegacySessionFile` gọi `readRawAgentAPIConversationID(sessionFile)` để luôn gọi `DeleteCascadeTrajectory` trên `language_server` ngay cả khi thư mục `brain/<convID>` đã xoá khỏi đĩa; (3) Bổ sung bài test E2E không-mock (`TestAntigravityRunner_RealHostLanguageServerHiddenE2E`) gọi trực tiếp binary `/Users/trainguyen/.gemini/antigravity/bin/agentapi` và `language_server` thật trên máy, xác minh bằng `agentapi get-conversation-metadata` rằng phiên ẩn đã xoá sạch 100% sau khi stream xong.
+  - **Logs/Test:** Chạy `evidence_run.py` cho `unit` (bao gồm `TestAntigravityRunner_RealHostLanguageServerHiddenE2E`), `integration`, và `runtime`.
+  - **Definition of Done:** `internal/runner/antigravity.go` `<= 350` dòng (`<< HEAD 525`), `antigravity_agentapi_hidden.go` tách biệt rõ ràng, E2E test thật với `agentapi` + `language_server` PASS 100%, qua cổng `DG1` & `DG3` (`run --stage dg3` + `review`).

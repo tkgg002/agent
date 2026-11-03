@@ -1,0 +1,37 @@
+[
+  {
+    "id": "A-DECIMAL128-INT32",
+    "kind": "claim",
+    "claim": "Hàm coerceDefaultInt32IfInRange trong mongo_extjson_unwrapper.go đã được bổ sung nhánh primitive.Decimal128 và string sử dụng strconv.ParseInt(..., 10, 64) để thu hẹp số nguyên trong dải [math.MinInt32, math.MaxInt32] về int32.",
+    "flow": "CoerceRecordToBSONDoc -> ApplySourceFieldTypesToBSONDoc -> coerceDefaultInt32IfInRange",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_extjson_unwrapper.go:334-345\n\tcase primitive.Decimal128:\n\t\tif i, err := strconv.ParseInt(strings.TrimSpace(v.String()), 10, 64); err == nil && i >= math.MinInt32 && i <= math.MaxInt32 {\n\t\t\treturn int32(i), true\n\t\t}\n\tcase string:\n\t\tif i, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); err == nil && i >= math.MinInt32 && i <= math.MaxInt32 {\n\t\t\treturn int32(i), true\n\t\t}\n\t}\n\treturn val, false\n}"
+  },
+  {
+    "id": "A-TEST-NUMERIC-FRAC",
+    "kind": "claim",
+    "claim": "Bài kiểm thử TestApplySourceFieldTypesToBSONDoc_ShadowWithoutUpdatedAtAndSubsetFields kiểm chứng cả trường hợp value kiểu NUMERIC nguyên (thu hẹp về int32) lẫn trường hợp thập phân 9999.50 (giữ nguyên primitive.Decimal128).",
+    "flow": "TestApplySourceFieldTypesToBSONDoc_ShadowWithoutUpdatedAtAndSubsetFields -> CoerceRecordToBSONDoc",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_extjson_unwrapper_test.go:220-228\n\trecFrac := map[string]any{\"id\": \"66c7557fb4b3fa830aeb1598\", \"value\": \"9999.50\"}\n\tdocFrac, err := CoerceRecordToBSONDoc(recFrac, map[string]string{\"value\": \"NUMERIC\"})\n\tif err != nil {\n\t\tt.Fatalf(\"CoerceRecordToBSONDoc(recFrac) failed: %v\", err)\n\t}\n\tif _, isDec := docFrac[\"value\"].(primitive.Decimal128); !isDec {\n\t\tt.Fatalf(\"expected fractional NUMERIC 9999.50 to stay primitive.Decimal128, got %T(%v)\", docFrac[\"value\"], docFrac[\"value\"])\n\t}"
+  },
+  {
+    "id": "CTRL-T1",
+    "kind": "control_true",
+    "claim": "Hàm ApplySourceFieldTypesToBSONDoc gọi ensureReconstructedMongoTimestamps(doc, typeMap) ở cuối thân hàm.",
+    "flow": "ApplySourceFieldTypesToBSONDoc -> ensureReconstructedMongoTimestamps",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:165-172\n\tif rawVal, hasVal := doc[\"value\"]; hasVal && rawVal != nil && !hasTypeMeta(typeMap, \"value\") {\n\t\tif v32, ok := coerceDefaultInt32IfInRange(rawVal); ok {\n\t\t\tdoc[\"value\"] = v32\n\t\t}\n\t}\n\n\tensureReconstructedMongoTimestamps(doc, typeMap)\n}"
+  },
+  {
+    "id": "CTRL-F1",
+    "kind": "control_false",
+    "claim": "Hàm coerceDefaultInt32IfInRange làm tròn số thực có phần thập phân sang int32 bằng math.Round.",
+    "flow": "coerceDefaultInt32IfInRange",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_extjson_unwrapper.go:334-345\n\tcase primitive.Decimal128:\n\t\tif i, err := strconv.ParseInt(strings.TrimSpace(v.String()), 10, 64); err == nil && i >= math.MinInt32 && i <= math.MaxInt32 {\n\t\t\treturn int32(i), true\n\t\t}\n\tcase string:\n\t\tif i, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); err == nil && i >= math.MinInt32 && i <= math.MaxInt32 {\n\t\t\treturn int32(i), true\n\t\t}\n\t}\n\treturn val, false\n}"
+  },
+  {
+    "id": "CTRL-F2",
+    "kind": "control_false",
+    "claim": "Hàm ApplySourceFieldTypesToBSONDoc luôn ghi đè doc[\"value\"] bằng nil bất kể giá trị đầu vào.",
+    "flow": "ApplySourceFieldTypesToBSONDoc",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:165-170\n\tif rawVal, hasVal := doc[\"value\"]; hasVal && rawVal != nil && !hasTypeMeta(typeMap, \"value\") {\n\t\tif v32, ok := coerceDefaultInt32IfInRange(rawVal); ok {\n\t\t\tdoc[\"value\"] = v32\n\t\t}\n\t}"
+  }
+]

@@ -1,0 +1,50 @@
+[
+  {
+    "id": "S-RC-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Re-Audit Fix Root Cause F2: HEAD kiem tra Laya rieng va chay ensure_laya_up.sh",
+    "claim": "In the HEAD version, RunBootProtocolS0 sets rep.LayaUp only from checkLayaHealthHTTP(rep.LayaURL) and runs ensure_laya_up.sh when Laya is down.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/upgrade-laya-to-vegaml-2026-10-29/09_tasks_solution_vegaml_upgrade_2026_10_29.md:299-310\nfunc (g *Gatekeeper) ensureLayaUp(ctx context.Context) bool {\n\tif checkLayaHealthHTTP(DefaultLayaHealthURL) {\n\t\treturn true\n\t}\n\tensureScript := filepath.Join(g.AgentCoreDir, \"scripts\", \"ensure_laya_up.sh\")\n\tif _, err := os.Stat(ensureScript); err == nil {\n\t\tcmd := executil.CommandContext(ctx, \"bash\", ensureScript)\n\t\tcmd.Dir = g.AgentCoreDir\n\t\t_ = cmd.Run()\n\t}\n\treturn checkLayaHealthHTTP(DefaultLayaHealthURL)\n}"
+  },
+  {
+    "id": "D-BEHAV-01",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Re-Audit Fix Demo F2: EnsureDualNeuralGates tra trang thai rieng re",
+    "claim": "EnsureDualNeuralGates returns layaUp from ensureLayaUp and vegaUp from EnsureVegaSidecarUp as two separate values.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/upgrade-laya-to-vegaml-2026-10-29/09_tasks_solution_vegaml_upgrade_2026_10_29.md:313-314\nfunc (g *Gatekeeper) EnsureDualNeuralGates(ctx context.Context) (layaUp, vegaUp bool) {\n\treturn g.ensureLayaUp(ctx), g.EnsureVegaSidecarUp(ctx)"
+  },
+  {
+    "id": "D-BEHAV-02",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Re-Audit Fix Demo F3: chi gui nhan tu nguoi duyet",
+    "claim": "The fixed labels map only contains c_req_check and dg0_dg1_routing, without architecture_safety_score.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/upgrade-laya-to-vegaml-2026-10-29/09_tasks_solution_vegaml_upgrade_2026_10_29.md:338-338\n\tlabels := map[string]any{\"c_req_check\": approved, \"dg0_dg1_routing\": \"PASS_TO_HUMAN_GATE\"}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Control False 1",
+    "claim": "EnsureDualNeuralGates returns a single combined boolean computed as layaUp OR vegaUp.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/upgrade-laya-to-vegaml-2026-10-29/09_tasks_solution_vegaml_upgrade_2026_10_29.md:313-314\nfunc (g *Gatekeeper) EnsureDualNeuralGates(ctx context.Context) (layaUp, vegaUp bool) {\n\treturn g.ensureLayaUp(ctx), g.EnsureVegaSidecarUp(ctx)"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Control False 2",
+    "claim": "The fixed labels map sets architecture_safety_score to 3 for every approval.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/upgrade-laya-to-vegaml-2026-10-29/09_tasks_solution_vegaml_upgrade_2026_10_29.md:338-338\n\tlabels := map[string]any{\"c_req_check\": approved, \"dg0_dg1_routing\": \"PASS_TO_HUMAN_GATE\"}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "Control True",
+    "claim": "ensureLayaUp returns true immediately when checkLayaHealthHTTP(DefaultLayaHealthURL) succeeds.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/upgrade-laya-to-vegaml-2026-10-29/09_tasks_solution_vegaml_upgrade_2026_10_29.md:299-302\nfunc (g *Gatekeeper) ensureLayaUp(ctx context.Context) bool {\n\tif checkLayaHealthHTTP(DefaultLayaHealthURL) {\n\t\treturn true\n\t}"
+  }
+]

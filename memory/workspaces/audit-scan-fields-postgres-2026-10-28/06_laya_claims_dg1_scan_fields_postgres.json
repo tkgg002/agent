@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "claim": "In DiscoverHandler.scanFieldsSQLSource in discover_handler_sql.go, cols is returned by InferSourceColumnsWithError or InferSourceColumns and returns an error when len(cols) == 0.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_sql.go:36-53\n\tif h.sourceInferrer == nil {\n\t\treturn 0, 0, fmt.Errorf(\"sourceInferrer is not initialized\")\n\t}\n\tvar cols []shadow.BusinessColumn\n\tvar inferErr error\n\tif errInferrer, ok := h.sourceInferrer.(interface {\n\t\tInferSourceColumnsWithError(ctx context.Context, sourceID int64, pkColumn string) ([]shadow.BusinessColumn, error)\n\t}); ok {\n\t\tcols, inferErr = errInferrer.InferSourceColumnsWithError(ctx, registry.ID, pkColumn)\n\t} else {\n\t\tcols = h.sourceInferrer.InferSourceColumns(ctx, registry.ID, pkColumn)\n\t}\n\tif len(cols) == 0 {\n\t\tif inferErr != nil {\n\t\t\treturn 0, 0, fmt.Errorf(\"SQL source DDL detection failed: %w\", inferErr)\n\t\t}\n\t\treturn 0, 0, fmt.Errorf(\"SQL source returned 0 columns or connection failed\")\n\t}",
+    "flow": "scanFieldsSQLSource calls InferSourceColumnsWithError(ctx, registry.ID, pkColumn) and returns an error when len(cols) == 0."
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "claim": "In extractCredentialsAsOptions in system_connectors_handler.go, database.password is only assigned to opts[\"password\"] when !isKeepOrMaskedSecret(pass) is true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_handler.go:572-583\nfunc extractCredentialsAsOptions(cfg map[string]string) []byte {\n\topts := make(map[string]string)\n\t// Postgres / Mysql / SQL Server\n\tif user, ok := cfg[\"database.user\"]; ok && strings.TrimSpace(user) != \"\" {\n\t\topts[\"username\"] = strings.TrimSpace(user)\n\t}\n\tif pass, ok := cfg[\"database.password\"]; ok && !isKeepOrMaskedSecret(pass) {\n\t\topts[\"password\"] = pass\n\t}\n\tif sslmode, ok := cfg[\"database.sslmode\"]; ok && strings.TrimSpace(sslmode) != \"\" {\n\t\topts[\"sslmode\"] = strings.TrimSpace(sslmode)\n\t}",
+    "flow": "extractCredentialsAsOptions checks !isKeepOrMaskedSecret(pass) before assigning opts[\"password\"] = pass."
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "claim": "In SourceInferrer.inferPGCols in discovery_utils.go, the function connects via pgx.Connect(ctx, dsn) and queries column_name, data_type, COALESCE(udt_name, ''), is_nullable from information_schema.columns.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discovery_utils.go:217-230\n\tconn, err := pgx.Connect(ctx, dsn)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"dial source pg: %w\", err)\n\t}\n\tdefer conn.Close(ctx)\n\n\tqueryCols := func(targetSchema string) ([]shadow.BusinessColumn, error) {\n\t\trows, qErr := conn.Query(ctx,\n\t\t\t`SELECT column_name, data_type, COALESCE(udt_name, ''), is_nullable\n\t\t\t   FROM information_schema.columns\n\t\t\t  WHERE table_schema = $1 AND table_name = $2\n\t\t\t  ORDER BY ordinal_position`,\n\t\t\ttargetSchema, table)",
+    "flow": "inferPGCols calls pgx.Connect(ctx, dsn) and queries column_name, data_type, COALESCE(udt_name, ''), is_nullable from information_schema.columns."
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "claim": "In CreateMasterHandler.Handle in create_master.go, when isMongoConn is true, masterSchema is assigned mongoDB and masterDatabase is assigned &mongoDB.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/create_master.go:167-180\n\tif isMongoConn {\n\t\t// Quy tắc 1 Kết nối Master Mongo = 1 Database: bắt buộc dùng default_database của kết nối\n\t\tmongoDB := \"\"\n\t\tif defaultDB != nil && strings.TrimSpace(*defaultDB) != \"\" {\n\t\t\tmongoDB = strings.TrimSpace(*defaultDB)\n\t\t} else if connItem.DefaultDatabase != nil && strings.TrimSpace(*connItem.DefaultDatabase) != \"\" {\n\t\t\tmongoDB = strings.TrimSpace(*connItem.DefaultDatabase)\n\t\t}\n\t\tif mongoDB == \"\" {\n\t\t\treturn nil, errors.New(\"invalid_mongo_master_database_required\")\n\t\t}\n\t\tmasterSchema = mongoDB\n\t\tmasterDatabase = &mongoDB\n\t}",
+    "flow": "When isMongoConn is true, CreateMasterHandler.Handle sets masterSchema = mongoDB and masterDatabase = &mongoDB."
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "claim": "In MasterDDLGenerator.applyMongoCollectionAndIndexes in master_ddl_generator.go, dbName is resolved via g.connMgr.ResolveMasterMongoDatabase(ctx, reg.MasterConnectionKey, reg.DefaultDatabase) and only falls back to reg.MasterSchema if dbName is empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator.go:492-501\n\tdbName := g.connMgr.ResolveMasterMongoDatabase(ctx, reg.MasterConnectionKey, reg.DefaultDatabase)\n\tif dbName == \"\" {\n\t\tdbName = reg.MasterSchema\n\t}\n\tif dbName == \"\" || dbName == \"public\" {\n\t\tdbName = \"gpay_master\"\n\t}\n\n\tmongoDB := client.Database(dbName)",
+    "flow": "applyMongoCollectionAndIndexes calls g.connMgr.ResolveMasterMongoDatabase(ctx, reg.MasterConnectionKey, reg.DefaultDatabase) and only uses reg.MasterSchema when dbName == \"\"."
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "claim": "In SourceInferrer.pickSourceDSN in discovery_utils.go, if connectionCode != \"\" and si.registry != nil, it calls si.registry.GetSourceDSN(ctx, connectionCode) and returns dsn if err == nil and dsn != \"\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discovery_utils.go:188-194\nfunc (si *SourceInferrer) pickSourceDSN(ctx context.Context, connectionID int64, connectionCode string, fallbackEnv string) string {\n\tif connectionCode != \"\" && si.registry != nil {\n\t\tif dsn, err := si.registry.GetSourceDSN(ctx, connectionCode); err == nil && dsn != \"\" {\n\t\t\treturn dsn\n\t\t}\n\t}",
+    "flow": "pickSourceDSN calls si.registry.GetSourceDSN(ctx, connectionCode) and returns dsn when err == nil and dsn != \"\"."
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "claim": "In SourceObjectActionsHandler.ScanFieldsV2 in source_object_actions_handler.go, cmd is constructed as source.ScanFieldsCommand with SourceObjectID, ShadowBindingID, TargetTable, SourceTable, SyncEngine, and SourceType.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/source_object_actions_handler.go:372-381\n\tbid := parseBindingIDQuery(c)\n\tcmd := source.ScanFieldsCommand{\n\t\tSourceObjectID:  id,\n\t\tShadowBindingID: bid,\n\t\tTargetTable:     scope.TargetTable,\n\t\tSourceTable:     scope.SourceTable,\n\t\tSyncEngine:      \"debezium\",\n\t\tSourceType:      scope.SourceType,\n\t}\n\tif _, derr := h.bus.Dispatch(ctx, cmd); derr != nil {",
+    "flow": "ScanFieldsV2 builds source.ScanFieldsCommand and dispatches it via h.bus.Dispatch(ctx, cmd)."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In isSQLSource in discover_handler_sql.go, the function converts sourceType to lowercase trimmed string and returns true for postgres, postgresql, pg, mysql, or mariadb.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_sql.go:108-111\nfunc isSQLSource(sourceType string) bool {\n\tst := strings.ToLower(strings.TrimSpace(sourceType))\n\treturn st == \"postgres\" || st == \"postgresql\" || st == \"pg\" || st == \"mysql\" || st == \"mariadb\"\n}",
+    "flow": "isSQLSource normalizes sourceType with strings.ToLower(strings.TrimSpace(sourceType)) and checks postgres, postgresql, pg, mysql, mariadb."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In isSQLSource in discover_handler_sql.go, the function always returns false for postgresql and only returns true for sftp.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_sql.go:108-111\nfunc isSQLSource(sourceType string) bool {\n\tst := strings.ToLower(strings.TrimSpace(sourceType))\n\treturn st == \"postgres\" || st == \"postgresql\" || st == \"pg\" || st == \"mysql\" || st == \"mariadb\"\n}",
+    "flow": "isSQLSource returns true for postgres, postgresql, pg, mysql, and mariadb."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In DiscoverHandler.scanFieldsSQLSource in discover_handler_sql.go, when h.sourceInferrer is nil, the function drops the database table and panics.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_sql.go:35-38\n\tif h.sourceInferrer == nil {\n\t\treturn 0, 0, fmt.Errorf(\"sourceInferrer is not initialized\")\n\t}\n\tvar cols []shadow.BusinessColumn",
+    "flow": "When h.sourceInferrer == nil, scanFieldsSQLSource returns 0, 0, fmt.Errorf(\"sourceInferrer is not initialized\")."
+  }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "target",
+    "basis": "code",
+    "claim": "loadTelegramPersistedConfig in internal/webui/telegram_bridge.go reads the settings file with os.ReadFile and unmarshals JSON while ignoring the error return value.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:138-150\nfunc (s *Server) loadTelegramPersistedConfig() telegramPersistedConfig {\n\tp := s.telegramSettingsPath()\n\tcfg := telegramPersistedConfig{\n\t\tEnabled:          true,\n\t\tNotifyOnS3:       true,\n\t\tAutoRunOnApprove: true,\n\t\tBotUsername:      \"@tk001sea_bot\",\n\t\tTaskThreadIDs:    make(map[string]int64),\n\t}\n\tif raw, err := os.ReadFile(p); err == nil && len(raw) > 0 {\n\t\t_ = json.Unmarshal(raw, &cfg)\n\t}"
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "target",
+    "basis": "code",
+    "claim": "restoreSmokeCompletedUserTasks in internal/webui/task_inspector.go skips any task whose ExternalID has prefix TASK-, length 6, and fifth character between 1 and 7.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:3245-3253\n\tfor _, qt := range all {\n\t\tif deletedSet[strings.ToUpper(strings.TrimSpace(qt.ExternalID))] {\n\t\t\t_, _ = s.QueueStore.DeleteTask(ctx, qt.ExternalID)\n\t\t\tcontinue\n\t\t}\n\t\tif strings.HasPrefix(qt.ExternalID, \"TASK-\") && len(qt.ExternalID) == 6 && qt.ExternalID[5] >= '1' && qt.ExternalID[5] <= '7' {\n\t\t\tcontinue\n\t\t}\n\t\tmeta := s.buildTaskIsolationMeta(qt.ExternalID)"
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "target",
+    "basis": "code",
+    "claim": "saveTelegramPersistedConfig in internal/webui/telegram_bridge.go marshals cfg with json.MarshalIndent and writes directly to path p using os.WriteFile.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:160-177\nfunc (s *Server) saveTelegramPersistedConfig(cfg telegramPersistedConfig) error {\n\tp := s.telegramSettingsPath()\n\tif err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {\n\t\treturn err\n\t}\n\tif len(cfg.RecentEvents) > 20 {\n\t\tcfg.RecentEvents = cfg.RecentEvents[len(cfg.RecentEvents)-20:]\n\t}\n\tif cfg.TaskThreadIDs == nil {\n\t\tcfg.TaskThreadIDs = make(map[string]int64)\n\t}\n\tcfg.MaskedBotToken = maskTelegramBotToken(cfg.BotTokenEncrypted)\n\traw, err := json.MarshalIndent(cfg, \"\", \"  \")\n\tif err != nil {\n\t\treturn err\n\t}\n\treturn os.WriteFile(p, raw, 0o644)\n}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "ensureTelegramApprovePoller in internal/webui/telegram_bridge.go returns early when cfg.Enabled is false, cfg.AutoRunOnApprove is false, or cfg.BotTokenEncrypted is empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:2552-2562\nfunc (s *Server) ensureTelegramApprovePoller() {\n\ts.mu.Lock()\n\tif s.telegramPollerRunning {\n\t\ts.mu.Unlock()\n\t\treturn\n\t}\n\tcfg := s.loadTelegramPersistedConfig()\n\tif !cfg.Enabled || !cfg.AutoRunOnApprove || strings.TrimSpace(cfg.BotTokenEncrypted) == \"\" {\n\t\ts.mu.Unlock()\n\t\treturn\n\t}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "ensureTelegramApprovePoller in internal/webui/telegram_bridge.go starts the polling goroutine only when cfg.BotTokenEncrypted is empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:2552-2562\nfunc (s *Server) ensureTelegramApprovePoller() {\n\ts.mu.Lock()\n\tif s.telegramPollerRunning {\n\t\ts.mu.Unlock()\n\t\treturn\n\t}\n\tcfg := s.loadTelegramPersistedConfig()\n\tif !cfg.Enabled || !cfg.AutoRunOnApprove || strings.TrimSpace(cfg.BotTokenEncrypted) == \"\" {\n\t\ts.mu.Unlock()\n\t\treturn\n\t}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "saveTelegramPersistedConfig in internal/webui/telegram_bridge.go truncates RecentEvents to at most 5 items.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:165-167\n\tif len(cfg.RecentEvents) > 20 {\n\t\tcfg.RecentEvents = cfg.RecentEvents[len(cfg.RecentEvents)-20:]\n\t}"
+  }
+]

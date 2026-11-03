@@ -1,0 +1,48 @@
+{
+  "stage": "dg0",
+  "workspace": "audit-mongo-createindex-dupkey-2026-11-02",
+  "claims": [
+    {
+      "id": "C-REQ",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "ApplySourceFieldTypesToBSONDoc loops over optionalNullableFields and calls delete(doc, camelKey) when doc[camelKey] is nil and not in typeMap.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:143-148\n143: \tfor _, opt := range optionalNullableFields {\n144: \t\tcamelKey, snakeKey := opt[0], opt[1]\n145: \t\tif val, exists := doc[camelKey]; exists && val == nil && !hasTypeMeta(typeMap, camelKey, snakeKey) {\n146: \t\t\tdelete(doc, camelKey)\n147: \t\t}\n148: \t}"
+    },
+    {
+      "id": "C-REALITY",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "mongoIndexDriver.CreateIndex sets idxOpts using options.Index().SetName(indexName).SetUnique(spec.IsUnique) and only sets PartialFilterExpression when spec.IsPartial and spec.WhereClause are non-empty.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:291-306\n291: \tidxOpts := options.Index().SetName(indexName).SetUnique(spec.IsUnique)\n292: \tif spec.IsPartial && strings.TrimSpace(spec.WhereClause) != \"\" {\n293: \t\tpfe, err := parseMongoPartialFilter(spec.WhereClause)\n294: \t\tif err != nil {\n295: \t\t\treturn err\n296: \t\t}\n297: \t\tidxOpts.SetPartialFilterExpression(pfe)\n298: \t}\n299: \n300: \tcreatedName, err := coll.Indexes().CreateOne(ctx, mongo.IndexModel{\n301: \t\tKeys:    keys,\n302: \t\tOptions: idxOpts,\n303: \t})\n304: \tif err != nil {\n305: \t\treturn fmt.Errorf(\"mongo createIndex %s on %s failed: %w\", indexName, coll.Name(), err)\n306: \t}"
+    },
+    {
+      "id": "C-CONTRA",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "parseMongoPartialFilter splits whereClause by '=' using strings.SplitN(w, \"=\", 2) and returns an unsupported partial filter error if it is not JSON or field = value.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:126-152\n126: func parseMongoPartialFilter(whereClause string) (bson.M, error) {\n127: \tw := strings.TrimSpace(whereClause)\n128: \tif strings.HasPrefix(w, \"{\") {\n129: \t\tvar m bson.M\n130: \t\tif err := json.Unmarshal([]byte(w), &m); err != nil {\n131: \t\t\treturn nil, fmt.Errorf(\"invalid partialFilterExpression JSON: %w\", err)\n132: \t\t}\n133: \t\treturn m, nil\n134: \t}\n135: \tw = strings.TrimPrefix(strings.TrimSuffix(w, \")\"), \"(\")\n136: \tif parts := strings.SplitN(w, \"=\", 2); len(parts) == 2 {\n150: \t}\n151: \treturn nil, fmt.Errorf(\"unsupported partial filter %q (use JSON like {\\\"_deleted\\\": true} or field = value)\", whereClause)\n152: }"
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "kind": "control_true",
+      "basis": "code",
+      "claim": "mongoIndexDriver.Engine returns 'mongodb' and IsAsyncCreate returns false.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:30-31\n30: func (d *mongoIndexDriver) Engine() string      { return \"mongodb\" }\n31: func (d *mongoIndexDriver) IsAsyncCreate() bool { return false }"
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "kind": "control_false",
+      "basis": "code",
+      "claim": "mongoIndexDriver.Engine returns 'clickhouse' and IsAsyncCreate returns true.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:30-31\n30: func (d *mongoIndexDriver) Engine() string      { return \"mongodb\" }\n31: func (d *mongoIndexDriver) IsAsyncCreate() bool { return false }"
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "kind": "control_false",
+      "basis": "code",
+      "claim": "mongoIndexDriver.CreateIndex always uses prefix 'pk' when spec.IsUnique is true.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:282-286\n282: \tprefix := \"idx\"\n283: \tif spec.IsUnique {\n284: \t\tprefix = \"ux\"\n285: \t}\n286: \tindexName := fmt.Sprintf(\"%s_%s_%s\", prefix, coll.Name(), strings.Join(nameParts, \"_\"))"
+    }
+  ]
+}

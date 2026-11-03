@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "critique",
+    "claim": "In Client.CreateOrUpdateChildPage in client.go, it calls c.findPageByTitle(ctx, req.BaseURL, req.SpaceKey, req.Title, authHeader) and returns fmt.Errorf(\"check existing confluence page failed: %w\", err) when findPageByTitle fails.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/confluence/client.go:219-222\n\texistingPage, err := c.findPageByTitle(ctx, req.BaseURL, req.SpaceKey, req.Title, authHeader)\n\tif err != nil {\n\t\treturn \"\", fmt.Errorf(\"check existing confluence page failed: %w\", err)\n\t}\n",
+    "flow": "CreateOrUpdateChildPage calls c.findPageByTitle(ctx, req.BaseURL, req.SpaceKey, req.Title, authHeader) and wraps any non-nil err with fmt.Errorf(\"check existing confluence page failed: %w\", err)."
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "critique",
+    "claim": "In Client.findPageByTitle in client.go, it queries /wiki/rest/api/content?spaceKey=%s&title=%s&expand=version,body.storage and returns fmt.Errorf(\"search content returned status %d: %s\", resp.StatusCode, bodyText) when resp.StatusCode != http.StatusOK.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/confluence/client.go:234-253\nfunc (c *Client) findPageByTitle(ctx context.Context, baseURL, spaceKey, title, authHeader string) (*PageContentItem, error) {\n\tqueryURL := fmt.Sprintf(\"%s/wiki/rest/api/content?spaceKey=%s&title=%s&expand=version,body.storage\",\n\t\tbaseURL, url.QueryEscape(spaceKey), url.QueryEscape(title))\n\n\tresp, err := c.doWithRetry(ctx, authHeader, func() (*http.Request, error) {\n\t\treturn http.NewRequestWithContext(ctx, http.MethodGet, queryURL, nil)\n\t})\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tdefer resp.Body.Close()\n\n\trespBytes, _ := io.ReadAll(resp.Body)\n\tif resp.StatusCode != http.StatusOK {\n\t\tbodyText := strings.TrimSpace(string(respBytes))\n\t\tif bodyText != \"\" {\n\t\t\treturn nil, fmt.Errorf(\"search content returned status %d: %s\", resp.StatusCode, bodyText)\n\t\t}\n\t\treturn nil, fmt.Errorf(\"search content returned status %d\", resp.StatusCode)\n\t}\n",
+    "flow": "findPageByTitle calls GET /wiki/rest/api/content with spaceKey and title, and returns fmt.Errorf(\"search content returned status %d: %s\", resp.StatusCode, bodyText) when status is not 200 OK."
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "critique",
+    "claim": "In ConfluenceReportRunner.Run in confluence_runner.go, when params.Confluence.SpaceKey is empty, it defaults to ~712020a3dcebcbe93646fea464f119dd38b08c and ParentPageID defaults to 500432919.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/confluence/confluence_runner.go:633-638\n\tif params.Confluence.SpaceKey == \"\" {\n\t\tparams.Confluence.SpaceKey = \"~712020a3dcebcbe93646fea464f119dd38b08c\"\n\t}\n\tif params.Confluence.ParentPageID == \"\" {\n\t\tparams.Confluence.ParentPageID = \"500432919\" // Daily Data Report - Core Trans Proxy History Service\n\t}\n",
+    "flow": "ConfluenceReportRunner.Run sets default SpaceKey to ~712020a3dcebcbe93646fea464f119dd38b08c and default ParentPageID to 500432919."
+  },
+  {
+    "id": "CTRL-TRUE-DG0",
+    "kind": "control_true",
+    "claim": "In shouldRetryStatus in client.go, it returns true for http.StatusForbidden, http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, and http.StatusGatewayTimeout.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/confluence/client.go:68-80\nfunc shouldRetryStatus(statusCode int) bool {\n\tswitch statusCode {\n\tcase http.StatusForbidden,\n\t\thttp.StatusTooManyRequests,\n\t\thttp.StatusInternalServerError,\n\t\thttp.StatusBadGateway,\n\t\thttp.StatusServiceUnavailable,\n\t\thttp.StatusGatewayTimeout:\n\t\treturn true\n\tdefault:\n\t\treturn false\n\t}\n}\n",
+    "flow": "shouldRetryStatus returns true for 403, 429, 500, 502, 503, and 504, and false otherwise."
+  },
+  {
+    "id": "CTRL-FALSE-DG0-1",
+    "kind": "control_false",
+    "claim": "In shouldRetryStatus in client.go, it returns true for http.StatusOK and http.StatusNotFound and returns false for http.StatusTooManyRequests.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/confluence/client.go:68-80\nfunc shouldRetryStatus(statusCode int) bool {\n\tswitch statusCode {\n\tcase http.StatusForbidden,\n\t\thttp.StatusTooManyRequests,\n\t\thttp.StatusInternalServerError,\n\t\thttp.StatusBadGateway,\n\t\thttp.StatusServiceUnavailable,\n\t\thttp.StatusGatewayTimeout:\n\t\treturn true\n\tdefault:\n\t\treturn false\n\t}\n}\n",
+    "flow": "shouldRetryStatus only returns true for 403, 429, 500, 502, 503, and 504."
+  },
+  {
+    "id": "CTRL-FALSE-DG0-2",
+    "kind": "control_false",
+    "claim": "In Client.CreateOrUpdateChildPage in client.go, when req.BaseURL is empty, the function panics and deletes the Confluence space.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/confluence/client.go:211-214\n\treq.BaseURL = strings.TrimRight(req.BaseURL, \"/\")\n\tif req.BaseURL == \"\" {\n\t\treq.BaseURL = \"https://goopay.atlassian.net\"\n\t}\n",
+    "flow": "When req.BaseURL is empty, CreateOrUpdateChildPage defaults req.BaseURL to https://goopay.atlassian.net."
+  }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "A-M11-CMS",
+    "kind": "audit",
+    "claim": "In normalizeMasterMongoURI in master_registry_handler_connections.go, when u.Host does not contain a comma and q.Get(\"directConnection\") is empty, q.Set(\"directConnection\", \"true\") is applied.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections.go:57-74\nfunc normalizeMasterMongoURI(rawURI string) string {\n\ttrimmed := strings.TrimSpace(rawURI)\n\tif !strings.HasPrefix(trimmed, \"mongodb://\") {\n\t\treturn trimmed\n\t}\n\tu, err := url.Parse(trimmed)\n\tif err != nil || u.Host == \"\" {\n\t\treturn trimmed\n\t}\n\tif !strings.Contains(u.Host, \",\") {\n\t\tq := u.Query()\n\t\tif q.Get(\"directConnection\") == \"\" {\n\t\t\tq.Set(\"directConnection\", \"true\")\n\t\t\tu.RawQuery = q.Encode()\n\t\t}\n\t}\n\treturn u.String()\n}",
+    "flow": "normalizeMasterMongoURI checks !strings.Contains(u.Host, \",\") and q.Get(\"directConnection\") == \"\", then sets directConnection=true."
+  },
+  {
+    "id": "A-M11-CDS",
+    "kind": "audit",
+    "claim": "In resolveMasterMongoURI in connection_manager.go, the function returns normalizeMasterMongoURI(uri) and defaultDB.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:248-269\n\treturn normalizeMasterMongoURI(uri), defaultDB\n}\n\nfunc normalizeMasterMongoURI(rawURI string) string {\n\ttrimmed := strings.TrimSpace(rawURI)\n\tif !strings.HasPrefix(trimmed, \"mongodb://\") {\n\t\treturn trimmed\n\t}\n\tu, err := url.Parse(trimmed)\n\tif err != nil || u.Host == \"\" {\n\t\treturn trimmed\n\t}\n\tif !strings.Contains(u.Host, \",\") {\n\t\tq := u.Query()\n\t\tif q.Get(\"directConnection\") == \"\" {\n\t\t\tq.Set(\"directConnection\", \"true\")\n\t\t\tu.RawQuery = q.Encode()\n\t\t}\n\t}\n\treturn u.String()\n}",
+    "flow": "resolveMasterMongoURI returns normalizeMasterMongoURI(uri), defaultDB."
+  },
+  {
+    "id": "A-M12-PG",
+    "kind": "audit",
+    "claim": "In validatePostgresConnectorPrereqs in system_connectors_handler.go, if both roleInfo.RolSuper and roleInfo.RolReplication are false, an error containing ALTER ROLE %q WITH REPLICATION; is returned.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_handler.go:497-512\n\tvar roleInfo struct {\n\t\tRolSuper       bool `gorm:\"column:rolsuper\"`\n\t\tRolReplication bool `gorm:\"column:rolreplication\"`\n\t}\n\tif err := db.WithContext(ctx).Raw(\n\t\t`SELECT rolsuper, rolreplication FROM pg_roles WHERE rolname = current_user LIMIT 1`,\n\t).Scan(&roleInfo).Error; err == nil {\n\t\tif !roleInfo.RolSuper && !roleInfo.RolReplication {\n\t\t\treturn fmt.Errorf(\n\t\t\t\t\"PostgreSQL user %q on %s:%s lacks REPLICATION privilege required by Debezium WAL sender. Run as superuser (postgres): ALTER ROLE %q WITH REPLICATION;\",\n\t\t\t\tuser, host, port, user,\n\t\t\t)\n\t\t}\n\t}\n\treturn nil\n}",
+    "flow": "When !roleInfo.RolSuper && !roleInfo.RolReplication, validatePostgresConnectorPrereqs returns an error with ALTER ROLE %q WITH REPLICATION;."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In validatePostgresConnectorPrereqs in system_connectors_handler.go, if connector.class does not contain PostgresConnector, the function returns nil.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_handler.go:470-474\nfunc validatePostgresConnectorPrereqs(ctx context.Context, cfg map[string]string) error {\n\tif !strings.Contains(cfg[\"connector.class\"], \"PostgresConnector\") {\n\t\treturn nil\n\t}",
+    "flow": "When !strings.Contains(cfg[\"connector.class\"], \"PostgresConnector\"), validatePostgresConnectorPrereqs returns nil."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In normalizeMasterMongoURI in master_registry_handler_connections.go, directConnection=true is set only when u.Host contains a comma.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections.go:66-73\n\tif !strings.Contains(u.Host, \",\") {\n\t\tq := u.Query()\n\t\tif q.Get(\"directConnection\") == \"\" {\n\t\t\tq.Set(\"directConnection\", \"true\")\n\t\t\tu.RawQuery = q.Encode()\n\t\t}\n\t}\n\treturn u.String()",
+    "flow": "directConnection=true is set when !strings.Contains(u.Host, \",\"), not when u.Host contains a comma."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In validatePostgresConnectorPrereqs in system_connectors_handler.go, when roleInfo.RolReplication is true, the function returns an error.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_handler.go:501-511\n\tif err := db.WithContext(ctx).Raw(\n\t\t`SELECT rolsuper, rolreplication FROM pg_roles WHERE rolname = current_user LIMIT 1`,\n\t).Scan(&roleInfo).Error; err == nil {\n\t\tif !roleInfo.RolSuper && !roleInfo.RolReplication {\n\t\t\treturn fmt.Errorf(\n\t\t\t\t\"PostgreSQL user %q on %s:%s lacks REPLICATION privilege required by Debezium WAL sender. Run as superuser (postgres): ALTER ROLE %q WITH REPLICATION;\",\n\t\t\t\tuser, host, port, user,\n\t\t\t)\n\t\t}\n\t}\n\treturn nil",
+    "flow": "When roleInfo.RolReplication is true, validatePostgresConnectorPrereqs returns nil, not an error."
+  }
+]

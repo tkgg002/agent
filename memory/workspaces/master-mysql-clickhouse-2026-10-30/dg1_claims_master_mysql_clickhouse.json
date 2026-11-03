@@ -1,0 +1,86 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "claim",
+    "claim": "ConnectionManager.GetMasterDB opens the master connection by calling m.reg.OpenGorm(dsn, 'master:'+key).",
+    "function_workflow": "GetMasterDB resolves DSN from overrides or connection_registry and calls m.reg.OpenGorm.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:399-406\n\t// 4. Open GORM connection with standard pool configuration\n\tdb, err := m.reg.OpenGorm(dsn, \"master:\"+key)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"open master db connection for %q: %w\", key, err)\n\t}\n\n\tm.masterDBPool[key] = db\n\treturn db, nil"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "claim",
+    "claim": "MasterDDLGenerator.Apply checks if the binding is MongoDB and calls applyMongoCollectionAndIndexes, otherwise calls GetMasterDB.",
+    "function_workflow": "MasterDDLGenerator.Apply branches by engine type before executing DDL.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator.go:352-357\n\tif strings.EqualFold(reg.EngineType, \"mongodb\") || strings.EqualFold(reg.EngineType, \"mongo\") ||\n\t\t(g.connMgr != nil && g.connMgr.IsMongoMasterConnection(ctx, reg.MasterConnectionKey)) {\n\t\treturn g.applyMongoCollectionAndIndexes(ctx, reg, res)\n\t}\n\tdb, err := g.connMgr.GetMasterDB(ctx, reg.MasterConnectionKey)"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "claim",
+    "claim": "TransmuterModule.bulkUpsertMaster checks binding.IsMongoDestination(ctx, t.connMgr) and delegates to t.bulkUpsertMongoMaster.",
+    "function_workflow": "bulkUpsertMaster routes MongoDB master bindings to bulkUpsertMongoMaster.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1588-1591\n\tif binding.IsMongoDestination(ctx, t.connMgr) {\n\t\tins, upd, occSkip, err = t.bulkUpsertMongoMaster(ctx, binding, records, colTypes, isFullSync)\n\t\treturn ins, upd, occSkip, err\n\t}"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "claim",
+    "claim": "NewIndexManagerWithConn initializes the drivers map and registers newPostgresIndexDriver and newMongoIndexDriver.",
+    "function_workflow": "NewIndexManagerWithConn registers pluggable IndexEngineDriver implementations.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_registry.go:116-124\n\tim := &IndexManager{\n\t\tconnMgr: connMgr,\n\t\tlogger:  logger,\n\t\tdrivers: make(map[string]IndexEngineDriver),\n\t}\n\tim.RegisterDriver(newPostgresIndexDriver(im, connMgr))\n\tim.RegisterDriver(newMongoIndexDriver(connMgr, logger))\n\treturn im"
+  },
+  {
+    "id": "S-RECON-TX",
+    "kind": "claim",
+    "claim": "ReconDestAgent.readOnlyDB starts a transaction with da.replica.WithContext(ctx).Begin() and executes SET TRANSACTION READ ONLY.",
+    "function_workflow": "ReconDestAgent.readOnlyDB opens a read-only transaction on the PostgreSQL replica.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_dest_agent.go:121-125\nfunc (da *ReconDestAgent) readOnlyDB(ctx context.Context) *gorm.DB {\n\ttx := da.replica.WithContext(ctx).Begin()\n\ttx.Exec(\"SET TRANSACTION READ ONLY\")\n\treturn tx\n}"
+  },
+  {
+    "id": "S-CMS-DB-SCOPE",
+    "kind": "claim",
+    "claim": "In create_master.go, when isMongoConn is true, Handle sets masterSchema = mongoDB and masterDatabase = &mongoDB from the connection's default_database.",
+    "function_workflow": "CreateMasterHandler enforces the 1-connection-1-database rule for database-scoped master connections.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/create_master.go:176-191\n\tisMongoConn := connItem != nil && strings.EqualFold(strings.TrimSpace(connItem.EngineType), \"mongodb\")\n\n\tif isMongoConn {\n\t\t// Quy tắc 1 Kết nối Master Mongo = 1 Database: bắt buộc dùng default_database của kết nối\n\t\tmongoDB := \"\"\n\t\tif defaultDB != nil && strings.TrimSpace(*defaultDB) != \"\" {\n\t\t\tmongoDB = strings.TrimSpace(*defaultDB)\n\t\t} else if connItem.DefaultDatabase != nil && strings.TrimSpace(*connItem.DefaultDatabase) != \"\" {\n\t\t\tmongoDB = strings.TrimSpace(*connItem.DefaultDatabase)\n\t\t}\n\t\tif mongoDB == \"\" {\n\t\t\treturn nil, errors.New(\"invalid_mongo_master_database_required\")\n\t\t}\n\t\tmasterSchema = mongoDB\n\t\tmasterDatabase = &mongoDB\n\t}"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "claim": "ResolveGormDialector returns mysql.Open(cleanDSN) when engineType is 'mysql' or 'mariadb', clickhouse.Open(trimmedDSN) when engineType is 'clickhouse' or 'ch', and postgres.Open(trimmedDSN) as default.",
+    "function_workflow": "ResolveGormDialector selects the GORM dialector based on engineType and DSN prefix.",
+    "evidence": "DEMO:\nfunc ResolveGormDialector(dsn, engineType string) gorm.Dialector {\n\teng := strings.ToLower(strings.TrimSpace(engineType))\n\ttrimmedDSN := strings.TrimSpace(dsn)\n\tswitch {\n\tcase eng == \"mysql\" || eng == \"mariadb\" || strings.Contains(trimmedDSN, \"@tcp(\") || strings.HasPrefix(trimmedDSN, \"mysql://\"):\n\t\tcleanDSN := strings.TrimPrefix(trimmedDSN, \"mysql://\")\n\t\treturn mysql.Open(cleanDSN)\n\tcase eng == \"clickhouse\" || eng == \"ch\" || strings.HasPrefix(trimmedDSN, \"clickhouse://\") || strings.HasPrefix(trimmedDSN, \"tcp://\"):\n\t\treturn clickhouse.Open(trimmedDSN)\n\tdefault:\n\t\treturn postgres.Open(trimmedDSN)\n\t}\n}"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "claim": "FilterClickHouseOCCRecords skips records where prevTs > incomingTs + clickhouseOCCClockSkewToleranceMs when isFullSync is false and increments occSkipped.",
+    "function_workflow": "FilterClickHouseOCCRecords enforces OCC with clock skew tolerance before inserting into ClickHouse.",
+    "evidence": "DEMO:\n\t\tif !isFullSync && existingSourceTs != nil {\n\t\t\tif prevTs, exists := existingSourceTs[keyStr]; exists && incomingTs > 0 && prevTs > incomingTs+clickhouseOCCClockSkewToleranceMs {\n\t\t\t\toccSkipped++\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "claim": "defaultMasterPortForEngine returns 27017 for 'mongodb', 3306 for 'mysql', 9000 for 'clickhouse', and 5432 as default.",
+    "function_workflow": "defaultMasterPortForEngine maps normalized master engine type to its default TCP port.",
+    "evidence": "DEMO:\nfunc defaultMasterPortForEngine(engineType string) int {\n\tswitch normalizeMasterEngineType(engineType) {\n\tcase \"mongodb\":\n\t\treturn 27017\n\tcase \"mysql\":\n\t\treturn 3306\n\tcase \"clickhouse\":\n\t\treturn 9000\n\tdefault:\n\t\treturn 5432\n\t}\n}"
+  },
+  {
+    "id": "CTRL-TRUE-01",
+    "kind": "control_true",
+    "claim": "IsMongoMasterConnection checks whether ResolveMasterEngineType(ctx, key) equals 'mongodb'.",
+    "function_workflow": "IsMongoMasterConnection delegates to ResolveMasterEngineType.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:140-142\nfunc (m *ConnectionManager) IsMongoMasterConnection(ctx context.Context, key string) bool {\n\treturn m.ResolveMasterEngineType(ctx, key) == \"mongodb\"\n}"
+  },
+  {
+    "id": "CTRL-FALSE-01",
+    "kind": "control_false",
+    "claim": "IsMongoMasterConnection always returns true regardless of the engine type returned by ResolveMasterEngineType.",
+    "function_workflow": "IsMongoMasterConnection delegates to ResolveMasterEngineType.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:140-142\nfunc (m *ConnectionManager) IsMongoMasterConnection(ctx context.Context, key string) bool {\n\treturn m.ResolveMasterEngineType(ctx, key) == \"mongodb\"\n}"
+  },
+  {
+    "id": "CTRL-FALSE-02",
+    "kind": "control_false",
+    "claim": "normalizeEngineName returns 'oracle' when the input raw string is 'mongodb'.",
+    "function_workflow": "normalizeEngineName normalizes raw engine string.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:126-137\nfunc normalizeEngineName(raw string) string {\n\tswitch strings.ToLower(strings.TrimSpace(raw)) {\n\tcase \"mongodb\", \"mongo\":\n\t\treturn \"mongodb\"\n\tcase \"clickhouse\", \"ch\":\n\t\treturn \"clickhouse\"\n\tcase \"mysql\", \"mariadb\":\n\t\treturn \"mysql\"\n\tdefault:\n\t\treturn \"postgresql\"\n\t}\n}"
+  }
+]

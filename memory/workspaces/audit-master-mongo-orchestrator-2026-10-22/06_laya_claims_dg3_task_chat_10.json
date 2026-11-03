@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "target",
+    "basis": "code",
+    "claim": "sendTelegramPromptWithForceReply in internal/webui/telegram_message_format.go:144-162 sends reply_markup with force_reply: true, selective: true, and input_field_placeholder so Telegram automatically opens the Reply box to @tk001sea_bot.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_message_format.go:157-161\n\tforceReplyMarkup := map[string]any{\n\t\t\"force_reply\":             true,\n\t\t\"selective\":               true,\n\t\t\"input_field_placeholder\": placeholder,\n\t}"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "target",
+    "basis": "code",
+    "claim": "processIncomingTelegramCommandWithReply in internal/webui/telegram_bridge.go:861-885 strips @tk001sea_bot via stripBotUsernameFromCommand, resolves the target task via resolveInboundTelegramFeedbackTarget, and routes feedback to handleTelegramReviseSolutionCommand or handleTelegramReviseSubTaskSolutionCommand.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:861-865\n\tif !isTelegramApproveCommand(cleanText) {\n\t\tcfg := s.loadTelegramPersistedConfig()\n\t\tfeedbackBody := stripBotUsernameFromCommand(cleanText)\n\t\tif !strings.HasPrefix(feedbackBody, \"/\") && feedbackBody != \"\" {\n\t\t\ttargetRef, subID := s.resolveInboundTelegramFeedbackTarget(ctx, explicitTaskKey, feedbackBody, replyContext, cfg)"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "target",
+    "basis": "code",
+    "claim": "handleTelegramViewPlanCommand in internal/webui/telegram_bridge.go:1912-1921 updates s.selectedTaskKey = qt.ExternalID, cfg.LastNotifiedTask = qt.ExternalID, and syncs cfg.PendingRevisionTaskKey = qt.ExternalID when switching tasks.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1912-1921\n\ts.mu.Lock()\n\ts.selectedTaskKey = qt.ExternalID\n\ts.mu.Unlock()\n\n\tcfg := s.loadTelegramPersistedConfig()\n\tcfg.LastNotifiedTask = qt.ExternalID\n\tif cfg.PendingRevisionTaskKey != \"\" && !strings.EqualFold(cfg.PendingRevisionTaskKey, qt.ExternalID) {\n\t\tcfg.PendingRevisionTaskKey = qt.ExternalID\n\t\tcfg.PendingRevisionSubTaskID = \"\"\n\t}"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "target",
+    "basis": "code",
+    "claim": "buildTelegramApprovalRequiredMessage in internal/webui/telegram_bridge.go:1179-1181 delegates S3 Plan formatting to s.formatTelegramCompactApprovalCard in internal/webui/telegram_message_format.go.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:1179-1181\nfunc (s *Server) buildTelegramApprovalRequiredMessage(ctx context.Context, qt queue.QueuedTask, isoMeta TaskIsolationDTO, subTasks []SubTaskDTO, reasonLabel string) (string, [][]map[string]string) {\n\treturn s.formatTelegramCompactApprovalCard(ctx, qt, isoMeta, subTasks, reasonLabel)\n}"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "target",
+    "basis": "code",
+    "claim": "ensureTelegramApprovePoller in internal/webui/telegram_bridge.go:2592-2600 reloads latestCfg := s.loadTelegramPersistedConfig() before saving LastUpdateID so PendingRevisionTaskKey and LastNotifiedTask are never overwritten.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:2592-2600\n\t\t\t\tfor _, upd := range result.Result {\n\t\t\t\t\tif upd.UpdateID > cfg.LastUpdateID {\n\t\t\t\t\t\tcfg.LastUpdateID = upd.UpdateID\n\t\t\t\t\t\tlatestCfg := s.loadTelegramPersistedConfig()\n\t\t\t\t\t\tif upd.UpdateID > latestCfg.LastUpdateID {\n\t\t\t\t\t\t\tlatestCfg.LastUpdateID = upd.UpdateID\n\t\t\t\t\t\t\t_ = s.saveTelegramPersistedConfig(latestCfg)\n\t\t\t\t\t\t}\n\t\t\t\t\t}"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "target",
+    "basis": "code",
+    "claim": "cleanCompactTelegramBullet in internal/webui/telegram_message_format.go:205-243 strips UDF-v1 metadata noise, generic executive summary boilerplate, long filesystem paths, and Markdown table syntax, capping each bullet to 110 runes.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_message_format.go:212-223\n\tfor _, skipSub := range []string{\n\t\t\"*task:*\", \"**task:**\",\n\t\t\"*target repo:*\", \"**target repo:**\",\n\t\t\"*hồ sơ kiến trúc:*\", \"**hồ sơ kiến trúc:**\",\n\t\t\"*trạng thái:*\", \"**trạng thái:**\",\n\t\t\"chẩn đoán trọng tâm\", \"nguyên tắc thực thi & cô lập\", \"trạng thái cổng\",\n\t\t\"| field\", \"| :---\", \"|---\", \"| bước\", \"| sub-task\", \"| hạng mục\",\n\t} {\n\t\tif strings.Contains(lower, skipSub) {\n\t\t\treturn \"\"\n\t\t}\n\t}"
+  },
+  {
+    "id": "D-API",
+    "kind": "target",
+    "basis": "code",
+    "claim": "handleTelegramTechnicalQuestion in internal/webui/telegram_forum_topic.go:240-246 formats outbound Co-Architect answers via formatTelegramCoArchitectReply(*qt, replyText) before sending to Telegram.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_forum_topic.go:240-246\n\tcfg := s.loadTelegramPersistedConfig()\n\tcfg.LastNotifiedTask = qt.ExternalID\n\t_ = s.saveTelegramPersistedConfig(cfg)\n\tcompactReply := formatTelegramCoArchitectReply(*qt, replyText)\n\tdelivery := s.sendTelegramChunkedMessageWithCustomKeyboard(ctx, cfg, compactReply, nil)\n\ts.appendTelegramEvent(\"OUTBOUND_QA_REPLY\", qt.ExternalID, fmt.Sprintf(\"💬 Đã trả lời câu hỏi kỹ thuật của @%s trên Sub-Topic %s (%s)\", fromUser, qt.ExternalID, delivery), delivery)"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "sendTelegramPromptWithForceReply sets force_reply to false and disables selective reply mode.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_message_format.go:157-161\n\tforceReplyMarkup := map[string]any{\n\t\t\"force_reply\":             true,\n\t\t\"selective\":               true,\n\t\t\"input_field_placeholder\": placeholder,\n\t}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "stripBotUsernameFromCommand leaves @tk001sea_bot untouched and never calls stripBotMentionAnywhere.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:645-647\nfunc stripBotUsernameFromCommand(text string) string {\n\treturn stripBotMentionAnywhere(text)\n}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "stripBotUsernameFromCommand in internal/webui/telegram_bridge.go:645-647 calls stripBotMentionAnywhere(text).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:645-647\nfunc stripBotUsernameFromCommand(text string) string {\n\treturn stripBotMentionAnywhere(text)\n}"
+  }
+]

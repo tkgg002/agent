@@ -1,0 +1,48 @@
+{
+  "stage": "dg0",
+  "workspace": "audit-transmute-full-20903-2026-11-02",
+  "claims": [
+    {
+      "id": "C-REQ",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "TransmuterModule.Run calls t.countShadowRows(ctx, masterRow, 0) when onlySourceIDs is empty to compute totalShadowRows.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:209-219\n209: \t// Đếm trước tổng số bản ghi shadow cần transmute\n210: \tvar totalShadowRows int64\n211: \tif len(onlySourceIDs) > 0 {\n212: \t\ttotalShadowRows = int64(len(onlySourceIDs))\n213: \t} else {\n214: \t\ttotalShadowRows, _ = t.countShadowRows(ctx, masterRow, 0)\n215: \t}"
+    },
+    {
+      "id": "C-REALITY",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "TransmuterModule.loadRules skips any mapping rule where t.typeRes.Validate(r.DataType) returns false.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:946-955\n946: \t\tif !t.typeRes.Validate(r.DataType) {\n947: \t\t\tt.logger.Warn(\"loadRules: skipping rule with invalid DataType\",\n948: \t\t\t\tzap.String(\"master\", row.MasterTable),\n949: \t\t\t\tzap.String(\"source_field\", r.SourceField),\n950: \t\t\t\tzap.String(\"target_column\", r.TargetColumn),\n951: \t\t\t\tzap.String(\"data_type\", r.DataType),\n952: \t\t\t)\n953: \t\t\tmetrics.RulesDropped.WithLabelValues(row.MasterTable, r.SourceField, r.TargetColumn, \"invalid_data_type\").Inc()\n954: \t\t\tcontinue\n955: \t\t}"
+    },
+    {
+      "id": "C-CONTRA",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "resolveConflictTarget returns '_gpay_id' when pk is not found in colTypes.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:85-98\n85: func resolveConflictTarget(binding *masterBindingRuntime, colTypes map[string]string) string {\n86: \tif binding != nil && len(binding.TransformSpec) > 0 {\n87: \t\tpk := parsePKFromSpec(binding.TransformSpec)\n88: \t\tif pk != \"\" && pk != \"_gpay_id\" && ddlIdentRe.MatchString(pk) {\n89: \t\t\tif colTypes == nil {\n90: \t\t\t\treturn pk\n91: \t\t\t}\n92: \t\t\tif _, ok := colTypes[pk]; ok {\n93: \t\t\t\treturn pk\n94: \t\t\t}\n95: \t\t}\n96: \t}\n97: \treturn \"_gpay_id\"\n98: }"
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "kind": "control_true",
+      "basis": "code",
+      "claim": "NewTransmuterModule initializes batchSize to 2000 and cacheTTL to 60 seconds.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:146-153\n146: \t\tlogger:               logger,\n147: \t\tbatchSize:            2000,\n148: \t\tcache:                make(map[string]cachedRules),\n149: \t\tshadowCache:          make(map[string]shadowState),\n150: \t\tensuredMasters:       make(map[string]bool),\n151: \t\tensuredShadowIndexes: make(map[string]bool),\n152: \t\tcacheTTL:             60 * time.Second,\n153: \t}"
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "kind": "control_false",
+      "basis": "code",
+      "claim": "NewTransmuterModule initializes batchSize to 50 and cacheTTL to 1 hour.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:146-153\n146: \t\tlogger:               logger,\n147: \t\tbatchSize:            2000,\n148: \t\tcache:                make(map[string]cachedRules),\n149: \t\tshadowCache:          make(map[string]shadowState),\n150: \t\tensuredMasters:       make(map[string]bool),\n151: \t\tensuredShadowIndexes: make(map[string]bool),\n152: \t\tcacheTTL:             60 * time.Second,\n153: \t}"
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "kind": "control_false",
+      "basis": "code",
+      "claim": "resolveConflictTarget always returns 'uuid_primary' when colTypes is empty.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:85-98\n85: func resolveConflictTarget(binding *masterBindingRuntime, colTypes map[string]string) string {\n97: \treturn \"_gpay_id\"\n98: }"
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "target",
+    "claim": "Trong ConfirmDestructiveModal.tsx:11-13, hàm getRoundedEndTime() trả về dayjs().subtract(5, 'minute').second(0).millisecond(0), lùi thời gian kết thúc đi 5 phút và đặt second(0), millisecond(0).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ConfirmDestructiveModal.tsx:11-13\nconst getRoundedEndTime = () => {\n  return dayjs().subtract(5, 'minute').second(0).millisecond(0);\n};"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "target",
+    "claim": "Trong ReconJobWorker.ProcessJob (recon_job_worker.go:401-411), struct modelrecon.ReconciliationReport đang được khởi tạo với trường Status: status cùng các trường Diff: diffVal, MissingCount: missingCount, StaleCount: staleCount, OrphanCount: orphanCount.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_job_worker.go:401-411\n\t\t\tDiff:         diffVal,\n\t\t\tMissingCount: missingCount,\n\t\t\tMissingIDs:   missingRaw,\n\t\t\tStaleCount:   staleCount,\n\t\t\tStaleIDs:     staleRaw,\n\t\t\tOrphanCount:  orphanCount,\n\t\t\t// Check metadata\n\t\t\tSegment:        reqSegment,\n\t\t\tCheckType:      checkTypeVal,\n\t\t\tStatus:         status,\n\t\t\tDurationMs:     &durationMs,"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "target",
+    "claim": "Trong ExecuteHealHandler.executeHealSegB (recon_execute_heal_segb.go:78-95), khi opts.HealMissingDest bật và missingGpayIDs không rỗng, handler gọi resolveSourceIDsForSegmentB rồi publishTransmuteChunked với danh sách sourceIDs để đồng bộ lại các bản ghi thiếu từ Shadow sang Master.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:78-95\n\tif opts.HealMissingDest && len(missingGpayIDs) > 0 {\n\t\tstart := time.Now()\n\t\tvar sourceIDs []string\n\t\tvar err error\n\t\tsourceIDs, err = h.resolveSourceIDsForSegmentB(ctx, shadowRel, missingGpayIDs, rpt.TargetTable, idType, ref)\n\t\tif err == nil {\n\t\t\tprocessed, err := h.publishTransmuteChunked(ctx, rpt.TargetTable, sourceIDs, \"execute-heal-b\", masterBindingID)\n\t\t\tif err == nil {\n\t\t\t\trpt.HealedMissingDestCount = processed\n\t\t\t\thealed += processed\n\t\t\t} else {\n\t\t\t\tobservability.Ctx(ctx, h.logger).Error(\"[execute-heal-b] transmute failed for missing dest\", zap.Error(err))\n\t\t\t}\n\t\t} else {\n\t\t\tobservability.Ctx(ctx, h.logger).Error(\"[execute-heal-b] resolveSourceIDsForSegmentB failed for missing dest\", zap.Error(err))\n\t\t}\n\t\trpt.HealedMissingDestDurationMs = int(time.Since(start).Milliseconds())\n\t}"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "target",
+    "claim": "Trong reconReadRepoGorm.ListUnhealedReports (recon_read_repo_gorm.go:564-574), truy vấn lấy các báo cáo chưa heal theo điều kiện healed_at IS NULL và (missing_count > 0 OR stale_count > 0 OR orphan_count > 0).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/recon/recon_read_repo_gorm.go:564-574\n\tvar reports []reconmodel.ReconciliationReport\n\tq := r.db.WithContext(ctx).\n\t\tTable(\"cdc_system.cdc_reconciliation_report\").\n\t\tWhere(\"(shadow_table = ? OR master_table = ?)\", table, table).\n\t\tWhere(\"healed_at IS NULL\").\n\t\tWhere(\"(missing_count > 0 OR stale_count > 0 OR orphan_count > 0)\")\n\tif shadowSchema != \"\" {\n\t\tq = q.Where(\"shadow_schema = ?\", shadowSchema)\n\t}\n\terr := q.Order(\"checked_at DESC\").Find(&reports).Error\n\treturn reports, err"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "target",
+    "claim": "Trong Code Demo tại 09_tasks_solution_payment_bills_missing_2.md:33-44, hàm getRoundedEndTime() được cập nhật trả về dayjs() thay vì dayjs().subtract(5, 'minute').second(0).millisecond(0).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-payment-bills-master-missing-2-2026-10-27/09_tasks_solution_payment_bills_missing_2.md:33-44\n### 3.1. File 1: `cdc-cms-web/src/components/ConfirmDestructiveModal.tsx` (`L11-L13`)\n```tsx\n// TRƯỚC KHI SỬA:\nconst getRoundedEndTime = () => {\n  return dayjs().subtract(5, 'minute').second(0).millisecond(0);\n};\n\n// SAU KHI SỬA:\nconst getRoundedEndTime = () => {\n  return dayjs();\n};\n```"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "target",
+    "claim": "Trong Code Demo tại 09_tasks_solution_payment_bills_missing_2.md:53-58, biến reportStatus được gán 'error' khi engineErr != nil, 'drift' khi diffVal != 0 || missingCount > 0 || staleCount > 0 || orphanCount > 0, và 'ok' khi mặc định.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-payment-bills-master-missing-2-2026-10-27/09_tasks_solution_payment_bills_missing_2.md:53-58\n\t\treportStatus := \"ok\"\n\t\tif engineErr != nil {\n\t\t\treportStatus = \"error\"\n\t\t} else if diffVal != 0 || missingCount > 0 || staleCount > 0 || orphanCount > 0 {\n\t\t\treportStatus = \"drift\"\n\t\t}"
+  },
+  {
+    "id": "D-API",
+    "kind": "target",
+    "claim": "Trong ReconPipelineGrid.tsx:638-641, cột Kết quả của HistoryTable kiểm tra s === 'ok' để hiển thị tag màu xanh 'KHỚP' và s === 'drift' để hiển thị tag màu đỏ 'LỆCH', khớp với giá trị reportStatus ('ok' / 'drift') trong Code Demo.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:638-641\n        {\n          title: 'Kết quả', dataIndex: 'status', width: 90,\n          render: (s: string) => <Tag color={s === 'ok' ? 'green' : s === 'drift' ? 'red' : 'volcano'}>{s === 'ok' ? 'KHỚP' : s === 'drift' ? 'LỆCH' : s.toUpperCase()}</Tag>,\n        },"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "Trong ConfirmDestructiveModal.tsx, hằng số MIN_REASON_LENGTH được gán giá trị là 10.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ConfirmDestructiveModal.tsx:9-13\nconst MIN_REASON_LENGTH = 10;\n\nconst getRoundedEndTime = () => {\n  return dayjs().subtract(5, 'minute').second(0).millisecond(0);\n};"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "Trong ConfirmDestructiveModal.tsx, hằng số MIN_REASON_LENGTH được gán giá trị là 500.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ConfirmDestructiveModal.tsx:9-13\nconst MIN_REASON_LENGTH = 10;\n\nconst getRoundedEndTime = () => {\n  return dayjs().subtract(5, 'minute').second(0).millisecond(0);\n};"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "Trong ReconPipelineGrid.tsx:638-641, khi s === 'ok' thì cột Kết quả hiển thị chữ 'LỆCH' màu đỏ.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:638-641\n        {\n          title: 'Kết quả', dataIndex: 'status', width: 90,\n          render: (s: string) => <Tag color={s === 'ok' ? 'green' : s === 'drift' ? 'red' : 'volcano'}>{s === 'ok' ? 'KHỚP' : s === 'drift' ? 'LỆCH' : s.toUpperCase()}</Tag>,\n        },"
+  }
+]

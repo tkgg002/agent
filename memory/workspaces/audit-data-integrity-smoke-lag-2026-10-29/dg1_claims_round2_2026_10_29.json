@@ -1,0 +1,51 @@
+[
+  {
+    "id": "S-FIX-R2-1",
+    "kind": "claim",
+    "claim": "The round 2 spec moves the HasColumnIndex cache to per-agent fields idxColMu and idxCol on ReconDestAgent and lazily initializes idxCol before storing.",
+    "flow": "HasColumnIndex -> da.idxCol",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-data-integrity-smoke-lag-2026-10-29/09_tasks_solution_2026_10_29.md:670-675\n\tda.idxColMu.Lock()\n\tif da.idxCol == nil {\n\t\tda.idxCol = make(map[string]bool)\n\t}\n\tda.idxCol[cacheKey] = indexed\n\tda.idxColMu.Unlock()"
+  },
+  {
+    "id": "S-FIX-R2-2",
+    "kind": "claim",
+    "claim": "The round 2 spec builds a case-insensitive regex that only matches the column right after USING <method> ( in the index definition.",
+    "flow": "HasColumnIndex -> leadingIndexColumnPattern",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-data-integrity-smoke-lag-2026-10-29/09_tasks_solution_2026_10_29.md:679-681\nfunc leadingIndexColumnPattern(col string) string {\n\treturn `using\\s+\\w+\\s+\\(\\s*\"?` + regexp.QuoteMeta(strings.ToLower(col)) + `\"?\\s*[,) ]`\n}"
+  },
+  {
+    "id": "S-RC-R2-1",
+    "kind": "claim",
+    "claim": "The existing ReconDestAgent caches column types per agent using colTypesMu and colTypes struct fields.",
+    "flow": "ReconDestAgent struct",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_dest_agent.go:26-27\n\tcolTypesMu    sync.RWMutex\n\tcolTypes      map[string]bool"
+  },
+  {
+    "id": "D-BEHAV-R2-1",
+    "kind": "claim",
+    "claim": "The round 2 spec captures rawMasterTotal and rawMasterActive before calling verifySegmentBAtFreezeCutoff so metrics use measured master counts.",
+    "flow": "RunTotalOnlyB -> metrics",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-data-integrity-smoke-lag-2026-10-29/09_tasks_solution_2026_10_29.md:687-688\n\trawMasterTotal, rawMasterActive := masterTotal, masterActive\n\tvar diffTimeJSON []byte"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "ReconDestAgent has a colTypes map field protected by colTypesMu.",
+    "flow": "ReconDestAgent struct",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_dest_agent.go:26-27\n\tcolTypesMu    sync.RWMutex\n\tcolTypes      map[string]bool"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "ReconDestAgent stores column types in a package-level global variable without a mutex.",
+    "flow": "ReconDestAgent struct",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_dest_agent.go:26-27\n\tcolTypesMu    sync.RWMutex\n\tcolTypes      map[string]bool"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "The round 2 spec writes shadowTotal into metrics before verifySegmentBAtFreezeCutoff is called.",
+    "flow": "RunTotalOnlyB",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-data-integrity-smoke-lag-2026-10-29/09_tasks_solution_2026_10_29.md:687-688\n\trawMasterTotal, rawMasterActive := masterTotal, masterActive\n\tvar diffTimeJSON []byte"
+  }
+]

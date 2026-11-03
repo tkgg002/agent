@@ -1,0 +1,44 @@
+[
+  {
+    "id": "A-R3-S4-1",
+    "kind": "claim",
+    "claim": "NewWorkerServer creates a dedicated healBatchBuffer and healEventHandler and passes healEventHandler to ExecuteHealHandler via WithEventHandler so healing flushes are isolated from snapshotBatchBuffer.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:158-159\n\tsnapshotBatchBuffer := newConfiguredBatchBuffer(ws, snapshotBatchSize, 5*time.Second, true, db, schemaAdapter, connectionManager, maskingSvc, natsClient, failedSyncLogRepo, logger)\n\thealBatchBuffer := newConfiguredBatchBuffer(ws, snapshotBatchSize, 5*time.Second, true, db, schemaAdapter, connectionManager, maskingSvc, natsClient, failedSyncLogRepo, logger)\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:457-461\n\texecuteHealHandler := handlerrecon.NewExecuteHealHandler(reconBase, reportRepo).\n\t\tWithShadowDB(shadowDB).\n\t\tWithConnectionManager(connectionManager).\n\t\tWithNatsPublisher(natsClient.Conn).\n\t\tWithEventHandler(healEventHandler)",
+    "flow": "NewWorkerServer -> healBatchBuffer -> healEventHandler -> ExecuteHealHandler.WithEventHandler"
+  },
+  {
+    "id": "A-R3-S4-2",
+    "kind": "claim",
+    "claim": "SnapshotRunner.runSnapshot calls r.resetSnapshotTableErrors(targetTable, scopedBinding, routes) before the cursor loop, which invokes DiscardAsyncFlushErrors to clear stale background flush errors for that target table.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:560-563\n\t\tctx = handlershadow.WithBindingScope(ctx, scopedBinding.ID)\n\t}\n\tr.resetSnapshotTableErrors(targetTable, scopedBinding, routes)\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_async_err.go:75-79\nfunc (bb *BatchBuffer) DiscardAsyncFlushErrors(targetTable string) {\n\tbb.mu.Lock()\n\tdefer bb.mu.Unlock()\n\t_ = bb.popAsyncFlushErrorLocked(targetTable)\n}",
+    "flow": "SnapshotRunner.runSnapshot -> resetSnapshotTableErrors -> EventHandler.DiscardTableAsyncErrors -> BatchBuffer.DiscardAsyncFlushErrors"
+  },
+  {
+    "id": "A-R3-S4-3",
+    "kind": "claim",
+    "claim": "cloneAllShadowRulesTx in master_multi_shadow_repo_gorm.go filters v2.target_column using domainShadow.ReservedShadowSystemColumns() with LOWER(TRIM(v2.target_column)) NOT IN (?).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:44-60\n\treservedCols := domainShadow.ReservedShadowSystemColumns()\n\tfor idx, sbID := range shadowIDs {\n\t\tif sbID <= 0 {\n\t\t\tcontinue\n\t\t}\n\t\tif err := db.WithContext(ctx).Exec(`\n\t\t\tINSERT INTO `+masterRuleTable+`\n\t\t\t  (master_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by)\n\t\t\tSELECT ?, v2.id, v2.target_column, true, 'pending', ?, ?\n\t\t\t  FROM `+v2Table+` v2\n\t\t\t WHERE v2.shadow_binding_id = ?\n\t\t\t   AND COALESCE(v2.is_active, true) = true\n\t\t\t   AND NOT EXISTS (\n\t\t\t     SELECT 1 FROM `+masterRuleTable+` mm\n\t\t\t      WHERE mm.master_binding_id = ? AND mm.mapping_v2_id = v2.id)\n\t\t\t   AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,",
+    "flow": "masterRepoGorm.cloneAllShadowRulesTx -> domainShadow.ReservedShadowSystemColumns()"
+  },
+  {
+    "id": "CTRL-TRUE-S4",
+    "kind": "control_true",
+    "claim": "DiscardAsyncFlushErrors acquires bb.mu.Lock() and calls bb.popAsyncFlushErrorLocked(targetTable).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_async_err.go:75-79\nfunc (bb *BatchBuffer) DiscardAsyncFlushErrors(targetTable string) {\n\tbb.mu.Lock()\n\tdefer bb.mu.Unlock()\n\t_ = bb.popAsyncFlushErrorLocked(targetTable)\n}",
+    "flow": "BatchBuffer.DiscardAsyncFlushErrors"
+  },
+  {
+    "id": "CTRL-FALSE-S4-1",
+    "kind": "control_false",
+    "claim": "ExecuteHealHandler is still configured with snapshotEventHandler instead of healEventHandler.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:457-461\n\texecuteHealHandler := handlerrecon.NewExecuteHealHandler(reconBase, reportRepo).\n\t\tWithShadowDB(shadowDB).\n\t\tWithConnectionManager(connectionManager).\n\t\tWithNatsPublisher(natsClient.Conn).\n\t\tWithEventHandler(healEventHandler)",
+    "flow": "NewWorkerServer -> ExecuteHealHandler"
+  },
+  {
+    "id": "CTRL-FALSE-S4-2",
+    "kind": "control_false",
+    "claim": "DiscardAsyncFlushErrors clears all async flush errors across all tables by calling popAllAsyncFlushErrorsLocked.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_async_err.go:75-79\nfunc (bb *BatchBuffer) DiscardAsyncFlushErrors(targetTable string) {\n\tbb.mu.Lock()\n\tdefer bb.mu.Unlock()\n\t_ = bb.popAsyncFlushErrorLocked(targetTable)\n}",
+    "flow": "BatchBuffer.DiscardAsyncFlushErrors"
+  }
+]

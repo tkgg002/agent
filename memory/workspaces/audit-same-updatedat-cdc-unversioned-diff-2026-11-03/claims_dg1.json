@@ -1,0 +1,65 @@
+[
+  {
+    "id": "S-RC-1",
+    "kind": "claim",
+    "claim": "In internal/handler/shadow/utils.go, extractSourceTsMs reads raw := m[\"ts_ms\"] from the source map after calling unwrapAvroUnion(source).",
+    "flow": "Debezium MongoDB emits two events in the same second -> both events have identical ts_ms -> extractSourceTsMs reads m[\"ts_ms\"].",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/utils.go:72-84\nfunc extractSourceTsMs(source interface{}) int64 {\n\tsource = unwrapAvroUnion(source)\n\tm, ok := source.(map[string]interface{})\n\tif !ok {\n\t\treturn 0\n\t}\n\traw := m[\"ts_ms\"]"
+  },
+  {
+    "id": "S-RC-2",
+    "kind": "claim",
+    "claim": "In internal/service/shadow/schema_adapter.go, buildOCCWhereClause uses strict inequality _source_ts < EXCLUDED._source_ts and only allows equal _source_ts when existing _source equals 'snapshot:v2'.",
+    "flow": "First CDC event inserts row with _source='debezium' and _source_ts=T -> second CDC event in same second with _source='debezium' and _source_ts=T arrives in a subsequent upsert statement -> WHERE clause evaluates to FALSE and drops the update.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:771-783\n\t\tif _, hasSourceCol := schema.Columns[\"_source\"]; hasSourceCol {\n\t\t\ttimeClause = fmt.Sprintf(\n\t\t\t\t`(%s.\"_source_ts\" IS NULL `+\n\t\t\t\t\t`OR %s.\"_source_ts\" < EXCLUDED.\"_source_ts\" `+\n\t\t\t\t\t`OR (%s.\"_source_ts\" = EXCLUDED.\"_source_ts\" `+\n\t\t\t\t\t`    AND %s.\"_source\" = 'snapshot:v2' `+\n\t\t\t\t\t`    AND EXCLUDED.\"_source\" <> 'snapshot:v2'))`,\n\t\t\t\tqualifiedTable, qualifiedTable, qualifiedTable, qualifiedTable,\n\t\t\t)\n\t\t} else {\n\t\t\ttimeClause = fmt.Sprintf(`(%s.\"_source_ts\" IS NULL OR %s.\"_source_ts\" < EXCLUDED.\"_source_ts\")`,\n\t\t\t\tqualifiedTable, qualifiedTable)\n\t\t}"
+  },
+  {
+    "id": "S-FIX-1",
+    "kind": "claim",
+    "claim": "In internal/handler/shadow/batch_buffer_utils.go, dedupByConflictKey already uses >= (r.SourceTsMs >= records[prevIdx].SourceTsMs and r.SourceTsMs >= maxTs[pk]) when two events share the same batch, whereas buildOCCWhereClause in schema_adapter.go uses < across separate SQL executions.",
+    "flow": "In-memory batch deduplication keeps the later event on equal SourceTsMs via >=, while SQL OCC rejects the later event on equal _source_ts via <.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go:100-103\n\t\tif prevIdx, exists := lastIdx[r.PrimaryKeyValue]; !exists || r.SourceTsMs >= records[prevIdx].SourceTsMs {\n\t\t\tlastIdx[r.PrimaryKeyValue] = i\n\t\t}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go:127-131\n\t\tif r.SourceTsMs >= maxTs[pk] {\n\t\t\tmaxTs[pk] = r.SourceTsMs\n\t\t\tfor k, v := range r.MappedData {\n\t\t\t\tm[k] = v\n\t\t\t}\n\t\t}"
+  },
+  {
+    "id": "S-IMPACT-1",
+    "kind": "claim",
+    "claim": "In internal/service/master/transmuter.go, the Master table upsert SQL already uses >= with clockSkewToleranceMs (COALESCE(EXCLUDED._source_ts, 0) >= COALESCE(qt._source_ts, 0) - clockSkewToleranceMs).",
+    "flow": "Shadow table triggers transmuter -> transmuter upserts into Master table allowing equal _source_ts.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1695-1701\n\t\tconst clockSkewToleranceMs = 2000\n\t\tsqlText = fmt.Sprintf(`INSERT INTO %s (%s) VALUES %s\n\t\t\tON CONFLICT (%s) DO UPDATE SET %s\n\t\t\tWHERE COALESCE(EXCLUDED._source_ts, 0) >= COALESCE(%s._source_ts, 0) - %d\n\t\t\tRETURNING (xmax = 0) AS inserted`,\n\t\t\tqt, strings.Join(cols, \", \"), strings.Join(placeholders, \", \"),\n\t\t\tconflictIdent, strings.Join(sets, \", \"), qt, clockSkewToleranceMs)"
+  },
+  {
+    "id": "S-PATTERN-1",
+    "kind": "claim",
+    "claim": "In core-trans-proxy-service/publish/cashin.publish.ts, createTransHis and updateTransHis mutate the shared transHisParam object in place and invoke handlePromise(ctx.call(...)) without await.",
+    "flow": "CashInPublish calls createTransHis and updateTransHis asynchronously without awaiting completion.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/core-trans-proxy-service/publish/cashin.publish.ts:34-44\n\tprivate static createTransHis(ctx: Context, transHisParam, status, error: any = null) {\n\t\ttransHisParam.error = generateTransHisError(error);\n\t\ttransHisParam.status = status;\n\t\thandlePromise(ctx.call(`${SVC_ENV.get().CORE_TRANS_PROXY_HISTORY_SERVICE}.createTransHis`, transHisParam, { meta: ctx.meta }))\n\t}\n\n\tprivate static updateTransHis(ctx: Context, transHisParam, status, error: any = null) {\n\t\ttransHisParam.error = generateTransHisError(error);\n\t\ttransHisParam.status = status;\n\t\thandlePromise(ctx.call(`${SVC_ENV.get().CORE_TRANS_PROXY_HISTORY_SERVICE}.updateTransHisStatus`, transHisParam, { meta: ctx.meta }))\n\t}"
+  },
+  {
+    "id": "D-BEHAV-1",
+    "kind": "demo",
+    "claim": "The proposed demo in buildOCCWhereClause allows updates when _source_ts = EXCLUDED._source_ts provided EXCLUDED._source <> 'snapshot:v2' while still requiring _hash or _deleted to be distinct.",
+    "flow": "When two CDC events share the same _source_ts but have different payload hashes, changeClause is TRUE and timeClause is TRUE so the newer event updates the shadow row.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:751-783\n\tvar changeConditions []string\n\tif hasHash {\n\t\tchangeConditions = append(changeConditions, fmt.Sprintf(`%s.\"_hash\" IS DISTINCT FROM EXCLUDED.\"_hash\"`, qualifiedTable))\n\t}\n\tif hasDeleted {\n\t\tchangeConditions = append(changeConditions, fmt.Sprintf(`%s.\"_deleted\" IS DISTINCT FROM EXCLUDED.\"_deleted\"`, qualifiedTable))\n\t}\nDEMO:\ntimeClause = fmt.Sprintf(\n\t`(%s.\"_source_ts\" IS NULL `+\n\t\t`OR %s.\"_source_ts\" < EXCLUDED.\"_source_ts\" `+\n\t\t`OR (%s.\"_source_ts\" = EXCLUDED.\"_source_ts\" `+\n\t\t`    AND EXCLUDED.\"_source\" <> 'snapshot:v2'))`,\n\tqualifiedTable, qualifiedTable, qualifiedTable,\n)"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In internal/service/shadow/schema_adapter.go, buildOCCWhereClause checks hasHash and appends _hash IS DISTINCT FROM EXCLUDED._hash to changeConditions.",
+    "flow": "buildOCCWhereClause constructs changeConditions slice.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:751-754\n\tvar changeConditions []string\n\tif hasHash {\n\t\tchangeConditions = append(changeConditions, fmt.Sprintf(`%s.\"_hash\" IS DISTINCT FROM EXCLUDED.\"_hash\"`, qualifiedTable))\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In internal/service/shadow/schema_adapter.go, buildOCCWhereClause only updates a row when _hash is equal to EXCLUDED._hash.",
+    "flow": "buildOCCWhereClause constructs changeConditions slice.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:751-754\n\tvar changeConditions []string\n\tif hasHash {\n\t\tchangeConditions = append(changeConditions, fmt.Sprintf(`%s.\"_hash\" IS DISTINCT FROM EXCLUDED.\"_hash\"`, qualifiedTable))\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In core-trans-proxy-service/publish/cashin.publish.ts, createTransHis awaits ctx.call synchronously and returns the created document.",
+    "flow": "createTransHis calls CORE_TRANS_PROXY_HISTORY_SERVICE.createTransHis.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/core-trans-proxy-service/publish/cashin.publish.ts:34-38\n\tprivate static createTransHis(ctx: Context, transHisParam, status, error: any = null) {\n\t\ttransHisParam.error = generateTransHisError(error);\n\t\ttransHisParam.status = status;\n\t\thandlePromise(ctx.call(`${SVC_ENV.get().CORE_TRANS_PROXY_HISTORY_SERVICE}.createTransHis`, transHisParam, { meta: ctx.meta }))\n\t}"
+  }
+]

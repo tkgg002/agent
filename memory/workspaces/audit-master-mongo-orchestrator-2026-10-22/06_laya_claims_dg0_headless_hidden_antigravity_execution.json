@@ -1,0 +1,47 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "completeWithAntigravityAgentAPI hiện gửi send-message nối đuôi vào cùng convID",
+    "claim": "Tại hàm completeWithAntigravityAgentAPI, khi convID != \"\", code tạo sendArgs gồm \"send-message\", \"--title=\" + sessionTitle, convID, fullPrompt.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:449-454\n\tif convID != \"\" {\n\t\tprevMaxStep = readMaxTranscriptStepIndex(convID)\n\t\tsendArgs := []string{\"send-message\", \"--title=\" + sessionTitle, convID, fullPrompt}\n\t\tif strings.HasSuffix(agyBin, \"language_server\") {\n\t\t\tsendArgs = append([]string{\"agentapi\"}, sendArgs...)\n\t\t}"
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "completeWithAntigravityAgentAPI gọi new-conversation chưa truyền biến môi trường ẩn",
+    "claim": "Tại hàm completeWithAntigravityAgentAPI, khi convID == \"\", lệnh executil.CommandContext(ctx, agyBin, newArgs...).CombinedOutput() được gọi trực tiếp mà chưa gán cmd.Env.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:463-468\n\tif convID == \"\" {\n\t\tnewArgs := []string{\"new-conversation\", \"--model=\" + tier, \"--title=\" + sessionTitle, fullPrompt}\n\t\tif strings.HasSuffix(agyBin, \"language_server\") {\n\t\t\tnewArgs = append([]string{\"agentapi\"}, newArgs...)\n\t\t}\n\t\tout, err := executil.CommandContext(ctx, agyBin, newArgs...).CombinedOutput()"
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Phản biện DG0 ghi nhận cờ hideFromConversationList trong ANTIGRAVITY_SOURCE_METADATA",
+    "claim": "Trong tài liệu phản biện 10_preplan_critique, Giả định 2 ghi nhận agentapi new-conversation hỗ trợ biến môi trường ANTIGRAVITY_SOURCE_METADATA='{\"hideFromConversationList\":true}'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/10_preplan_critique_headless_hidden_antigravity_execution.md:17-18\n  - Kiểm tra thực tế binary `language_server` cho thấy `agentapi new-conversation` hỗ trợ chính thức biến môi trường `ANTIGRAVITY_SOURCE_METADATA='{\"hideFromConversationList\":true}'` ánh xạ trực tiếp vào protobuf `exa.cortex_pb.SourceMetadata.HideFromConversationList` (field 3).\n  - Khi bật `hideFromConversationList: true`, phiên thực thi hoàn toàn vô hình trên danh sách Conversation của Antigravity IDE nhưng vẫn chạy model Antigravity 4.0 thật và ghi kết quả vào `transcript_full.jsonl`."
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "flow": "Control false: sai tên subcommand khi tạo phiên mới",
+    "claim": "Trong hàm completeWithAntigravityAgentAPI, khi convID == \"\", biến newArgs bắt đầu bằng chuỗi \"delete-all-conversations\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:463-465\n\tif convID == \"\" {\n\t\tnewArgs := []string{\"new-conversation\", \"--model=\" + tier, \"--title=\" + sessionTitle, fullPrompt}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "flow": "Control false: sai giá trị tier mặc định",
+    "claim": "Trong hàm completeWithAntigravityAgentAPI, biến tier mặc định được gán bằng chuỗi \"ultra_999\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:433-434\n\ttier := \"pro\"\n\tlower := strings.ToLower(model)"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "flow": "Control true: khớp nguyên văn giá trị tier mặc định",
+    "claim": "Trong hàm completeWithAntigravityAgentAPI, biến tier mặc định được khởi tạo bằng chuỗi \"pro\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:433-434\n\ttier := \"pro\"\n\tlower := strings.ToLower(model)"
+  }
+]

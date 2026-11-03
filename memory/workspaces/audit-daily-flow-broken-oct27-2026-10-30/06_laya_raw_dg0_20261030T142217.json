@@ -1,0 +1,911 @@
+[
+  {
+    "id": "C-REQ-1",
+    "kind": "claim",
+    "claim": "GetDailyFlow computes dlq_count by summing cdc_activity_log rows with status = 'error' and split_retry IS NOT TRUE, and filters snapshot transmute rows using only triggered_by <> 'snapshot-hook'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:454-465\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'written')::bigint, NULLIF(e.rows_affected, 0), COALESCE((e.details->>'inserted')::bigint, 0) + COALESCE((e.details->>'updated')::bigint, 0) + COALESCE((e.details->>'deleted')::bigint, 0)) ELSE 0 END) AS master_written,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'inserted')::bigint, 0) ELSE 0 END) AS master_inserted,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'updated')::bigint, 0) ELSE 0 END) AS master_updated,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'deleted')::bigint, 0) ELSE 0 END) AS master_deleted,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'skipped')::bigint, 0) ELSE 0 END) AS master_skipped,\n\t\t\tSUM(CASE WHEN e.status = 'error' AND (e.details->>'split_retry')::boolean IS NOT TRUE THEN 1 ELSE 0 END) AS dlq_count",
+    "flow": "GetDailyFlow aggregates activity logs per day for Snapshot, Kafka, Shadow, Master, and DLQ columns.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.2665,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3497,
+                "INCORRECT": 0.6072,
+                "UNSUPPORTED": 0.0431
+              },
+              "confidence": 0.2665,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 790,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "GetDailyFlow computes dlq_count by summing cdc_activity_log rows with status = 'error' and split_retry IS NOT TRUE, and filters snapshot transmute rows using only triggered_by <> 'snapshot-hook'.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:454-465\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'written')::bigint, NULLIF(e.rows_affected, 0), COALESCE((e.details->>'inserted')::bigint, 0) + COALESCE((e.details->>'updated')::bigint, 0) + COALESCE((e.details->>'deleted')::bigint, 0)) ELSE 0 END) AS master_written,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'inserted')::bigint, 0) ELSE 0 END) AS master_inserted,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'updated')::bigint, 0) ELSE 0 END) AS master_updated,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'deleted')::bigint, 0) ELSE 0 END) AS master_deleted,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'skipped')::bigint, 0) ELSE 0 END) AS master_skipped,\n\t\t\tSUM(CASE WHEN e.status = 'error' AND (e.details->>'split_retry')::boolean IS NOT TRUE THEN 1 ELSE 0 END) AS dlq_count",
+          "flow": "GetDailyFlow aggregates activity logs per day for Snapshot, Kafka, Shadow, Master, and DLQ columns."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.2426,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2371,
+                "INCORRECT": 0.6691,
+                "UNSUPPORTED": 0.0938
+              },
+              "confidence": 0.2426,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 794,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "GetDailyFlow aggregates activity logs per day for Snapshot, Kafka, Shadow, Master, and DLQ columns.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:454-465\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'written')::bigint, NULLIF(e.rows_affected, 0), COALESCE((e.details->>'inserted')::bigint, 0) + COALESCE((e.details->>'updated')::bigint, 0) + COALESCE((e.details->>'deleted')::bigint, 0)) ELSE 0 END) AS master_written,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'inserted')::bigint, 0) ELSE 0 END) AS master_inserted,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'updated')::bigint, 0) ELSE 0 END) AS master_updated,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'deleted')::bigint, 0) ELSE 0 END) AS master_deleted,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'skipped')::bigint, 0) ELSE 0 END) AS master_skipped,\n\t\t\tSUM(CASE WHEN e.status = 'error' AND (e.details->>'split_retry')::boolean IS NOT TRUE THEN 1 ELSE 0 END) AS dlq_count",
+          "claim": "GetDailyFlow computes dlq_count by summing cdc_activity_log rows with status = 'error' and split_retry IS NOT TRUE, and filters snapshot transmute rows using only triggered_by <> 'snapshot-hook'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.0814,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.6664,
+                "NO": 0.3336
+              },
+              "confidence": 0.0814,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 705,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:454-465\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'written')::bigint, NULLIF(e.rows_affected, 0), COALESCE((e.details->>'inserted')::bigint, 0) + COALESCE((e.details->>'updated')::bigint, 0) + COALESCE((e.details->>'deleted')::bigint, 0)) ELSE 0 END) AS master_written,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'inserted')::bigint, 0) ELSE 0 END) AS master_inserted,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'updated')::bigint, 0) ELSE 0 END) AS master_updated,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'deleted')::bigint, 0) ELSE 0 END) AS master_deleted,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'skipped')::bigint, 0) ELSE 0 END) AS master_skipped,\n\t\t\tSUM(CASE WHEN e.status = 'error' AND (e.details->>'split_retry')::boolean IS NOT TRUE THEN 1 ELSE 0 END) AS dlq_count",
+          "claim": "GetDailyFlow computes dlq_count by summing cdc_activity_log rows with status = 'error' and split_retry IS NOT TRUE, and filters snapshot transmute rows using only triggered_by <> 'snapshot-hook'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "C-REALITY-1",
+    "kind": "claim",
+    "claim": "The Log Transmute tab in ReconPipelineGrid.tsx queries only 'transmute,transmute_sub' and omits 'transmute_poison_pill', hiding isolated poison pill error logs from the pipeline drawer.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:485-489\n  // Transmute activity log — cho tab nhật ký gần nhất trong Drawer\n  const { data: transmuteLog, isLoading: isLoadingTransmute } = usePipelineActivityLog(historyMaster, 'transmute,transmute_sub', sourceDb, historySchema, LOG_FETCH_LIMIT);\n  // Kafka consumer activity log tab — cho tab nhật ký gần nhất trong Drawer\n  const { data: kafkaLog, isLoading: isLoadingKafka } = usePipelineActivityLog(historyTable, 'kafka-consumer', sourceDb, historySchema, LOG_FETCH_LIMIT);",
+    "flow": "DrillDown fetches transmuteLog for the Log Transmute tab in the pipeline drawer.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3299,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6903,
+                "INCORRECT": 0.2706,
+                "UNSUPPORTED": 0.0391
+              },
+              "confidence": 0.3299,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 347,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "The Log Transmute tab in ReconPipelineGrid.tsx queries only 'transmute,transmute_sub' and omits 'transmute_poison_pill', hiding isolated poison pill error logs from the pipeline drawer.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:485-489\n  // Transmute activity log — cho tab nhật ký gần nhất trong Drawer\n  const { data: transmuteLog, isLoading: isLoadingTransmute } = usePipelineActivityLog(historyMaster, 'transmute,transmute_sub', sourceDb, historySchema, LOG_FETCH_LIMIT);\n  // Kafka consumer activity log tab — cho tab nhật ký gần nhất trong Drawer\n  const { data: kafkaLog, isLoading: isLoadingKafka } = usePipelineActivityLog(historyTable, 'kafka-consumer', sourceDb, historySchema, LOG_FETCH_LIMIT);",
+          "flow": "DrillDown fetches transmuteLog for the Log Transmute tab in the pipeline drawer."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1229,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4831,
+                "INCORRECT": 0.4043,
+                "UNSUPPORTED": 0.1127
+              },
+              "confidence": 0.1229,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 352,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "DrillDown fetches transmuteLog for the Log Transmute tab in the pipeline drawer.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:485-489\n  // Transmute activity log — cho tab nhật ký gần nhất trong Drawer\n  const { data: transmuteLog, isLoading: isLoadingTransmute } = usePipelineActivityLog(historyMaster, 'transmute,transmute_sub', sourceDb, historySchema, LOG_FETCH_LIMIT);\n  // Kafka consumer activity log tab — cho tab nhật ký gần nhất trong Drawer\n  const { data: kafkaLog, isLoading: isLoadingKafka } = usePipelineActivityLog(historyTable, 'kafka-consumer', sourceDb, historySchema, LOG_FETCH_LIMIT);",
+          "claim": "The Log Transmute tab in ReconPipelineGrid.tsx queries only 'transmute,transmute_sub' and omits 'transmute_poison_pill', hiding isolated poison pill error logs from the pipeline drawer."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8722,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9824,
+                "NO": 0.0176
+              },
+              "confidence": 0.8722,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 267,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:485-489\n  // Transmute activity log — cho tab nhật ký gần nhất trong Drawer\n  const { data: transmuteLog, isLoading: isLoadingTransmute } = usePipelineActivityLog(historyMaster, 'transmute,transmute_sub', sourceDb, historySchema, LOG_FETCH_LIMIT);\n  // Kafka consumer activity log tab — cho tab nhật ký gần nhất trong Drawer\n  const { data: kafkaLog, isLoading: isLoadingKafka } = usePipelineActivityLog(historyTable, 'kafka-consumer', sourceDb, historySchema, LOG_FETCH_LIMIT);",
+          "claim": "The Log Transmute tab in ReconPipelineGrid.tsx queries only 'transmute,transmute_sub' and omits 'transmute_poison_pill', hiding isolated poison pill error logs from the pipeline drawer."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "C-CONTRA-1",
+    "kind": "claim",
+    "claim": "In BuildMongoOCCBulkModels, the aggregation pipeline update passes v directly inside $cond without wrapping in $literal, causing MongoDB to evaluate nested maps with $-prefixed keys such as $numberInt as aggregation expressions.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_mongo.go:245-259\n\t\t\tfor k, v := range doc {\n\t\t\t\tif k == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tif k == \"_gpay_id\" && targetKey != \"_gpay_id\" {\n\t\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\t\"$ifNull\": bson.A{\"$_gpay_id\", v},\n\t\t\t\t\t}\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\"$cond\": bson.A{occCond, v, \"$\" + k},\n\t\t\t\t}\n\t\t\t}",
+    "flow": "BuildMongoOCCBulkModels builds MongoDB 4.2+ aggregation pipeline updates when !isFullSync && incomingTs > 0.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.2826,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.1933,
+                "INCORRECT": 0.0974,
+                "UNSUPPORTED": 0.7093
+              },
+              "confidence": 0.2826,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 475,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In BuildMongoOCCBulkModels, the aggregation pipeline update passes v directly inside $cond without wrapping in $literal, causing MongoDB to evaluate nested maps with $-prefixed keys such as $numberInt as aggregation expressions.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_mongo.go:245-259\n\t\t\tfor k, v := range doc {\n\t\t\t\tif k == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tif k == \"_gpay_id\" && targetKey != \"_gpay_id\" {\n\t\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\t\"$ifNull\": bson.A{\"$_gpay_id\", v},\n\t\t\t\t\t}\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\"$cond\": bson.A{occCond, v, \"$\" + k},\n\t\t\t\t}\n\t\t\t}",
+          "flow": "BuildMongoOCCBulkModels builds MongoDB 4.2+ aggregation pipeline updates when !isFullSync && incomingTs > 0."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3097,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6763,
+                "INCORRECT": 0.2797,
+                "UNSUPPORTED": 0.044
+              },
+              "confidence": 0.3097,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 480,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "BuildMongoOCCBulkModels builds MongoDB 4.2+ aggregation pipeline updates when !isFullSync && incomingTs > 0.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_mongo.go:245-259\n\t\t\tfor k, v := range doc {\n\t\t\t\tif k == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tif k == \"_gpay_id\" && targetKey != \"_gpay_id\" {\n\t\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\t\"$ifNull\": bson.A{\"$_gpay_id\", v},\n\t\t\t\t\t}\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\"$cond\": bson.A{occCond, v, \"$\" + k},\n\t\t\t\t}\n\t\t\t}",
+          "claim": "In BuildMongoOCCBulkModels, the aggregation pipeline update passes v directly inside $cond without wrapping in $literal, causing MongoDB to evaluate nested maps with $-prefixed keys such as $numberInt as aggregation expressions."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.1217,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.7024,
+                "NO": 0.2976
+              },
+              "confidence": 0.1217,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 387,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_mongo.go:245-259\n\t\t\tfor k, v := range doc {\n\t\t\t\tif k == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tif k == \"_gpay_id\" && targetKey != \"_gpay_id\" {\n\t\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\t\"$ifNull\": bson.A{\"$_gpay_id\", v},\n\t\t\t\t\t}\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\"$cond\": bson.A{occCond, v, \"$\" + k},\n\t\t\t\t}\n\t\t\t}",
+          "claim": "In BuildMongoOCCBulkModels, the aggregation pipeline update passes v directly inside $cond without wrapping in $literal, causing MongoDB to evaluate nested maps with $-prefixed keys such as $numberInt as aggregation expressions."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "When binarySearchSplit isolates a single poison pill task, it logs an activity entry with operation 'transmute_poison_pill' and hardcoded error message 'poison pill isolated'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:701-710\n\t\tif h.activity != nil {\n\t\t\teventDate := taskEventDate(task, time.Now())\n\t\t\tlogEntry := h.activity.Start(\"transmute_poison_pill\", masterTable, task.Req.TriggeredBy)\n\t\t\th.activity.FailWithDetails(logEntry, \"poison pill isolated\", 1, map[string]interface{}{\n\t\t\t\t\"master_binding_id\": task.Req.MasterBindingID,\n\t\t\t\t\"event_date\":        eventDate,\n\t\t\t\t\"poison_pill\":       true,\n\t\t\t\t\"source_ids\":        isolatedIDs,\n\t\t\t})\n\t\t}",
+    "flow": "binarySearchSplit logs transmute_poison_pill when len(batch) == 1 and a single record is isolated.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.2573,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.0363,
+                "INCORRECT": 0.5434,
+                "UNSUPPORTED": 0.4204
+              },
+              "confidence": 0.2573,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 435,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "When binarySearchSplit isolates a single poison pill task, it logs an activity entry with operation 'transmute_poison_pill' and hardcoded error message 'poison pill isolated'.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:701-710\n\t\tif h.activity != nil {\n\t\t\teventDate := taskEventDate(task, time.Now())\n\t\t\tlogEntry := h.activity.Start(\"transmute_poison_pill\", masterTable, task.Req.TriggeredBy)\n\t\t\th.activity.FailWithDetails(logEntry, \"poison pill isolated\", 1, map[string]interface{}{\n\t\t\t\t\"master_binding_id\": task.Req.MasterBindingID,\n\t\t\t\t\"event_date\":        eventDate,\n\t\t\t\t\"poison_pill\":       true,\n\t\t\t\t\"source_ids\":        isolatedIDs,\n\t\t\t})\n\t\t}",
+          "flow": "binarySearchSplit logs transmute_poison_pill when len(batch) == 1 and a single record is isolated."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2855,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6592,
+                "INCORRECT": 0.2901,
+                "UNSUPPORTED": 0.0507
+              },
+              "confidence": 0.2855,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 439,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "binarySearchSplit logs transmute_poison_pill when len(batch) == 1 and a single record is isolated.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:701-710\n\t\tif h.activity != nil {\n\t\t\teventDate := taskEventDate(task, time.Now())\n\t\t\tlogEntry := h.activity.Start(\"transmute_poison_pill\", masterTable, task.Req.TriggeredBy)\n\t\t\th.activity.FailWithDetails(logEntry, \"poison pill isolated\", 1, map[string]interface{}{\n\t\t\t\t\"master_binding_id\": task.Req.MasterBindingID,\n\t\t\t\t\"event_date\":        eventDate,\n\t\t\t\t\"poison_pill\":       true,\n\t\t\t\t\"source_ids\":        isolatedIDs,\n\t\t\t})\n\t\t}",
+          "claim": "When binarySearchSplit isolates a single poison pill task, it logs an activity entry with operation 'transmute_poison_pill' and hardcoded error message 'poison pill isolated'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6625,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9375,
+                "NO": 0.0625
+              },
+              "confidence": 0.6625,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 347,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:701-710\n\t\tif h.activity != nil {\n\t\t\teventDate := taskEventDate(task, time.Now())\n\t\t\tlogEntry := h.activity.Start(\"transmute_poison_pill\", masterTable, task.Req.TriggeredBy)\n\t\t\th.activity.FailWithDetails(logEntry, \"poison pill isolated\", 1, map[string]interface{}{\n\t\t\t\t\"master_binding_id\": task.Req.MasterBindingID,\n\t\t\t\t\"event_date\":        eventDate,\n\t\t\t\t\"poison_pill\":       true,\n\t\t\t\t\"source_ids\":        isolatedIDs,\n\t\t\t})\n\t\t}",
+          "claim": "When binarySearchSplit isolates a single poison pill task, it logs an activity entry with operation 'transmute_poison_pill' and hardcoded error message 'poison pill isolated'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "The Log Transmute tab in ReconPipelineGrid.tsx already includes 'transmute_poison_pill' in the operation filter passed to usePipelineActivityLog.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:485-489\n  // Transmute activity log — cho tab nhật ký gần nhất trong Drawer\n  const { data: transmuteLog, isLoading: isLoadingTransmute } = usePipelineActivityLog(historyMaster, 'transmute,transmute_sub', sourceDb, historySchema, LOG_FETCH_LIMIT);\n  // Kafka consumer activity log tab — cho tab nhật ký gần nhất trong Drawer\n  const { data: kafkaLog, isLoading: isLoadingKafka } = usePipelineActivityLog(historyTable, 'kafka-consumer', sourceDb, historySchema, LOG_FETCH_LIMIT);",
+    "flow": "ReconPipelineGrid calls usePipelineActivityLog with operation 'transmute,transmute_sub'.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7892,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9492,
+                "INCORRECT": 0.036,
+                "UNSUPPORTED": 0.0148
+              },
+              "confidence": 0.7892,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 337,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "The Log Transmute tab in ReconPipelineGrid.tsx already includes 'transmute_poison_pill' in the operation filter passed to usePipelineActivityLog.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:485-489\n  // Transmute activity log — cho tab nhật ký gần nhất trong Drawer\n  const { data: transmuteLog, isLoading: isLoadingTransmute } = usePipelineActivityLog(historyMaster, 'transmute,transmute_sub', sourceDb, historySchema, LOG_FETCH_LIMIT);\n  // Kafka consumer activity log tab — cho tab nhật ký gần nhất trong Drawer\n  const { data: kafkaLog, isLoading: isLoadingKafka } = usePipelineActivityLog(historyTable, 'kafka-consumer', sourceDb, historySchema, LOG_FETCH_LIMIT);",
+          "flow": "ReconPipelineGrid calls usePipelineActivityLog with operation 'transmute,transmute_sub'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.4187,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.0116,
+                "INCORRECT": 0.7226,
+                "UNSUPPORTED": 0.2658
+              },
+              "confidence": 0.4187,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 343,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "ReconPipelineGrid calls usePipelineActivityLog with operation 'transmute,transmute_sub'.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:485-489\n  // Transmute activity log — cho tab nhật ký gần nhất trong Drawer\n  const { data: transmuteLog, isLoading: isLoadingTransmute } = usePipelineActivityLog(historyMaster, 'transmute,transmute_sub', sourceDb, historySchema, LOG_FETCH_LIMIT);\n  // Kafka consumer activity log tab — cho tab nhật ký gần nhất trong Drawer\n  const { data: kafkaLog, isLoading: isLoadingKafka } = usePipelineActivityLog(historyTable, 'kafka-consumer', sourceDb, historySchema, LOG_FETCH_LIMIT);",
+          "claim": "The Log Transmute tab in ReconPipelineGrid.tsx already includes 'transmute_poison_pill' in the operation filter passed to usePipelineActivityLog."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.6437,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0675,
+                "NO": 0.9325
+              },
+              "confidence": 0.6437,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 256,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:485-489\n  // Transmute activity log — cho tab nhật ký gần nhất trong Drawer\n  const { data: transmuteLog, isLoading: isLoadingTransmute } = usePipelineActivityLog(historyMaster, 'transmute,transmute_sub', sourceDb, historySchema, LOG_FETCH_LIMIT);\n  // Kafka consumer activity log tab — cho tab nhật ký gần nhất trong Drawer\n  const { data: kafkaLog, isLoading: isLoadingKafka } = usePipelineActivityLog(historyTable, 'kafka-consumer', sourceDb, historySchema, LOG_FETCH_LIMIT);",
+          "claim": "The Log Transmute tab in ReconPipelineGrid.tsx already includes 'transmute_poison_pill' in the operation filter passed to usePipelineActivityLog."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "GetDailyFlow already checks both triggered_by = 'snapshot' and triggered_by = 'snapshot-hook' when computing snapshot_master.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:438-439\n\t\t\tSUM(CASE WHEN e.triggered_by = 'snapshot-hook' AND e.operation IN ('transmute','transmute_sub') AND e.status <> 'error'\n\t\t\t         THEN COALESCE((e.details->>'inserted')::bigint, 0) + COALESCE((e.details->>'updated')::bigint, 0) + COALESCE((e.details->>'deleted')::bigint, 0) + e.rows_affected ELSE 0 END) AS snapshot_master,",
+    "flow": "GetDailyFlow computes snapshot_master using e.triggered_by = 'snapshot-hook'.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.8427,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9641,
+                "INCORRECT": 0.0285,
+                "UNSUPPORTED": 0.0074
+              },
+              "confidence": 0.8427,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 351,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "GetDailyFlow already checks both triggered_by = 'snapshot' and triggered_by = 'snapshot-hook' when computing snapshot_master.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:438-439\n\t\t\tSUM(CASE WHEN e.triggered_by = 'snapshot-hook' AND e.operation IN ('transmute','transmute_sub') AND e.status <> 'error'\n\t\t\t         THEN COALESCE((e.details->>'inserted')::bigint, 0) + COALESCE((e.details->>'updated')::bigint, 0) + COALESCE((e.details->>'deleted')::bigint, 0) + e.rows_affected ELSE 0 END) AS snapshot_master,",
+          "flow": "GetDailyFlow computes snapshot_master using e.triggered_by = 'snapshot-hook'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.252,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3045,
+                "INCORRECT": 0.6343,
+                "UNSUPPORTED": 0.0612
+              },
+              "confidence": 0.252,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 357,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "GetDailyFlow computes snapshot_master using e.triggered_by = 'snapshot-hook'.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:438-439\n\t\t\tSUM(CASE WHEN e.triggered_by = 'snapshot-hook' AND e.operation IN ('transmute','transmute_sub') AND e.status <> 'error'\n\t\t\t         THEN COALESCE((e.details->>'inserted')::bigint, 0) + COALESCE((e.details->>'updated')::bigint, 0) + COALESCE((e.details->>'deleted')::bigint, 0) + e.rows_affected ELSE 0 END) AS snapshot_master,",
+          "claim": "GetDailyFlow already checks both triggered_by = 'snapshot' and triggered_by = 'snapshot-hook' when computing snapshot_master."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4601,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8763,
+                "NO": 0.1237
+              },
+              "confidence": 0.4601,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 270,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:438-439\n\t\t\tSUM(CASE WHEN e.triggered_by = 'snapshot-hook' AND e.operation IN ('transmute','transmute_sub') AND e.status <> 'error'\n\t\t\t         THEN COALESCE((e.details->>'inserted')::bigint, 0) + COALESCE((e.details->>'updated')::bigint, 0) + COALESCE((e.details->>'deleted')::bigint, 0) + e.rows_affected ELSE 0 END) AS snapshot_master,",
+          "claim": "GetDailyFlow already checks both triggered_by = 'snapshot' and triggered_by = 'snapshot-hook' when computing snapshot_master."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

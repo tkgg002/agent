@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 """harness2_engine.py — 3-Tier Integration of Google Research Harness² (F1–F6) with /agent Kernel.
 
-Implements the 6 approved architectural solutions from 09_tasks_solution_harness2_recursive_integration.md:
+Implements the 6 approved architectural solutions + Global Lesson Hygiene Guards:
   - F1 (Task 1): Two-Level Recursion Engine (Task-Level Propose-Probe-Compose agg/seq + Domain Harness Library)
   - F2 (Task 2): Orthogonal Proposer Axes (INV vs DOM) + Context-Budget Hierarchy & KEEP_BASE
-  - F3 (Task 3): AgentSurfaceValidator & Auto-Trigger Compiler for /agent (GEMINI.md, OPERATOR_MAP.md, skills, scripts)
+  - F3 (Task 3): AgentSurfaceValidator & Auto-Trigger Compiler for /agent (GEMINI.md, OPERATOR_MAP.md, skills, scripts, lessons hygiene)
   - F4 (Task 4): Evidence ContextTree + Pre-Flight Clean-Room Leak/Verdict Tripwire & EVIDENCE_BOUNDARY
   - F5 (Task 5): Blind Anonymized Selection (SHA-1 seeded A, B, C...) + Pairwise Line-Jaccard Diversity + Laya DG3
   - F6 (Task 6): Deterministic Recursion Ledger Identity (R=4k, P=3k, zero dupes) + SHA-256 Session Cache + flock
@@ -48,6 +48,8 @@ from tooling.build_lessons_index import (  # noqa: E402
     DEFAULT_SOURCE,
     MAX_INDEX_BYTES,
     build_index,
+    parse_lessons,
+    validate_global_hygiene,
 )
 from tooling.laya_gate import BLOCK_CONF, DEBATE_APPROVE_CONF, DECISIVE_CONF  # noqa: E402
 from tooling.mutation_gate import DEFAULT_WS_ROOT, MIN_MUTANTS  # noqa: E402
@@ -62,6 +64,27 @@ DEFAULT_LIBRARY_ROOT = AGENT_ROOT / "memory" / "global" / "harness_library"
 DEFAULT_LAYA_PREDICT_URL = os.environ.get(
     "LAYA_PREDICT_URL", "http://127.0.0.1:8200/v1/predict"
 )
+
+# Bảo vệ các hàm chốt chặn cốt lõi không bao giờ bị INV Proposer xóa mất khi tối ưu hóa đệ quy
+CORE_INVARIANT_SYMBOLS: Dict[str, Tuple[str, ...]] = {
+    "tooling/build_lessons_index.py": (
+        "validate_global_hygiene",
+        "parse_lessons",
+        "build_tripwires",
+        "build_index",
+    ),
+    "hooks/agy/agy_guard.py": (
+        "validate_lesson_append_hygiene",
+        "code_tripwire_violations",
+        "tripwire_violations",
+        "handle_pre_write",
+        "handle_stop",
+    ),
+    "tooling/verify_governance.py": (
+        "verify_global_lessons_integrity",
+        "verify_workspace_docs",
+    ),
+}
 
 GRADER_VERDICT_MARKERS: Tuple[str, ...] = (
     "deterministic_eval_summary",
@@ -90,6 +113,25 @@ def _extract_yaml_frontmatter(src: str) -> str:
 def _has_skill_trigger_token(body: str, sname: str) -> bool:
     """Đóng AF-04: Kiểm tra tên skill theo ranh giới từ/token, tránh dương tính giả do chuỗi con."""
     return bool(re.search(rf"(?<![\w\-]){re.escape(sname)}(?![\w\-])", body))
+
+
+def _resolve_latest_workspace_dir(ws_root: Path = DEFAULT_WS_ROOT) -> Path:
+    """Phân giải động thư mục workspace có hồ sơ S3 hợp lệ mới nhất (Agnostic Core — không hardcode tên cũ)."""
+    if not ws_root.is_dir():
+        return ws_root
+    candidates: List[Tuple[float, Path]] = []
+    for d in ws_root.iterdir():
+        if not d.is_dir():
+            continue
+        sols = list(d.glob("09_tasks_solution*.md"))
+        if sols:
+            newest_mtime = max(p.stat().st_mtime for p in sols)
+            candidates.append((newest_mtime, d))
+    if candidates:
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        return candidates[0][1]
+    dirs = [d for d in ws_root.iterdir() if d.is_dir()]
+    return max(dirs, key=lambda d: d.stat().st_mtime) if dirs else ws_root
 
 
 # ============================================================================
@@ -130,8 +172,12 @@ def load_agent_surface_tree(agent_root: Path = AGENT_ROOT) -> Tree:
     return tree
 
 
-def validate_agent_surface(surface: AgentSurfaceSpec, tree: Tree) -> List[str]:
-    """Đóng F3 & AF-04: Kiểm tra trần UTF-8 bytes always_on_max, YAML frontmatter SKILL.md, token trigger và compile .py."""
+def validate_agent_surface(
+    surface: AgentSurfaceSpec,
+    tree: Tree,
+    lessons_source: Optional[Path] = None,
+) -> List[str]:
+    """Đóng F3, AF-04 & Global Hygiene: Kiểm tra always_on_max, SKILL.md, compile .py, Core Symbols và lessons.md."""
     errs: List[str] = []
     body = "\n\n".join(tree.get(a, "") for a in surface.always_on)
     body_bytes = len(body.encode("utf-8"))
@@ -166,12 +212,29 @@ def validate_agent_surface(surface: AgentSurfaceSpec, tree: Tree) -> List[str]:
             except SyntaxError as exc:
                 errs.append(f"{rel} lỗi cú pháp Python tại dòng {exc.lineno}: {exc.msg}")
 
+            # Kiểm tra bảo toàn các hàm bảo vệ cấu trúc cốt lõi (Core Invariant Symbols Guard)
+            if rel in CORE_INVARIANT_SYMBOLS:
+                for req_sym in CORE_INVARIANT_SYMBOLS[rel]:
+                    if not re.search(rf"\bdef\s+{re.escape(req_sym)}\b", src):
+                        errs.append(
+                            f"{rel} bị mất hàm bảo vệ cốt lõi '{req_sym}()' (Core Invariant Violation)"
+                        )
+
         if m or rel in surface.always_on:
             for ref in script_ref_rx.findall(src):
                 if ref not in tree:
                     errs.append(
                         f"{rel} gọi script '{ref}' nhưng file này không tồn tại trong cây cấu hình"
                     )
+
+    # Nếu truyền lessons_source (khi chạy validate-surface trên repo thật), kiểm tra luôn Global Hygiene
+    if lessons_source is not None and lessons_source.is_file():
+        try:
+            l_entries = parse_lessons(lessons_source.read_text(encoding="utf-8"))
+            validate_global_hygiene(l_entries)
+        except Exception as exc:
+            errs.append(f"lessons.md Global Hygiene Error: {exc}")
+
     return errs
 
 
@@ -586,7 +649,6 @@ def laya_blind_selector(
     spec = surface or AgentSurfaceSpec()
     base = base_tree if base_tree is not None else candidate_trees.get("base", {})
 
-    # Kiểm tra nếu có rollout dùng test stub cũ truyền trường score bị suy thoái so với base
     base_ro = rollout_outputs.get("base") or {}
     base_legacy_score = base_ro.get("score")
 
@@ -832,7 +894,6 @@ class SubprocessHarnessRunner:
             if marker not in cur_src:
                 target_path.write_text(cur_src.rstrip() + "\n" + marker, encoding="utf-8")
         elif dim == "DOM":
-            # Ưu tiên tinh chỉnh domain skill sẵn có (ví dụ reverse-engineer-anything) để giữ trần always-on bytes
             existing_dom_skills = sorted(
                 k
                 for k in base_tree
@@ -1198,10 +1259,8 @@ class RecursiveHarnessEngine:
         chosen_label = id_map[best_anon_id]
         winning_tree = candidate_trees[chosen_label]
 
-        # Đóng AF-05: Quét danh sách file thật từ workspace_dir thay vì mảng giả tự thỏa mãn
-        ws_target = workspace_dir or (
-            DEFAULT_WS_ROOT / "feature-harness2-recursive-integration-2026-10-20"
-        )
+        # Đóng AF-05 & L02: Phân giải động workspace_dir thay vì hardcode tên workspace cũ
+        ws_target = workspace_dir or _resolve_latest_workspace_dir(DEFAULT_WS_ROOT)
         s3_docs: List[str] = (
             sorted(p.name for p in ws_target.iterdir() if p.is_file())
             if ws_target.is_dir()
@@ -1237,7 +1296,9 @@ class RecursiveHarnessEngine:
             library_slot = str(slot)
             if sync_lessons_index and lessons_source.is_file():
                 lessons_index_stats = build_index(
-                    source_path=lessons_source, out_dir=lessons_out_dir
+                    source_path=lessons_source,
+                    out_dir=lessons_out_dir,
+                    enforce_hygiene=True,
                 )
 
         return {
@@ -1265,7 +1326,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    p_val = sub.add_parser("validate-surface", help="Validate /agent surface (F3 & AF-04)")
+    p_val = sub.add_parser("validate-surface", help="Validate /agent surface & Global Lessons Hygiene")
     p_val.add_argument("--agent-root", default=str(AGENT_ROOT), help="Path to /agent root")
     p_val.add_argument("--always-on-max", type=int, default=24000, help="Max UTF-8 bytes for always-on files")
 
@@ -1283,8 +1344,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p_rec.add_argument("--k", type=int, default=2, help="Branch/round budget k")
     p_rec.add_argument(
         "--workspace-dir",
-        default=str(DEFAULT_WS_ROOT / "feature-harness2-recursive-integration-2026-10-20"),
-        help="Workspace directory to verify real S3 docs",
+        default="",
+        help="Workspace directory to verify real S3 docs (auto-resolves latest active workspace if empty)",
     )
     p_rec.add_argument(
         "--library-root",
@@ -1314,7 +1375,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         root = Path(args.agent_root).resolve()
         spec = AgentSurfaceSpec(always_on_max=args.always_on_max)
         tree = load_agent_surface_tree(root)
-        errs = validate_agent_surface(spec, tree)
+        lessons_file = root / "memory" / "global" / "lessons.md"
+        errs = validate_agent_surface(
+            spec,
+            tree,
+            lessons_source=lessons_file if lessons_file.is_file() else None,
+        )
         always_on_body = "\n\n".join(tree.get(a, "") for a in spec.always_on)
         report = {
             "status": "VALIDATED" if not errs else "FAILED",
@@ -1371,6 +1437,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return 2
         lib_root = Path(args.library_root).resolve()
         lib = DomainHarnessLibrary(lib_root)
+        ws_dir = (
+            Path(args.workspace_dir).resolve()
+            if args.workspace_dir
+            else _resolve_latest_workspace_dir(root / "memory" / "workspaces")
+        )
         with tempfile.TemporaryDirectory(prefix="harness2-session-cache-") as tmpdir:
             engine = RecursiveHarnessEngine(
                 surface=AgentSurfaceSpec(always_on_max=24000),
@@ -1389,7 +1460,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 base_tree=base_tree,
                 proposer_fn=runner.run_proposer,
                 rollout_fn=runner.run_rollout,
-                workspace_dir=Path(args.workspace_dir).resolve(),
+                workspace_dir=ws_dir,
                 sync_lessons_index=bool(args.sync_lessons),
             )
             winning = res.pop("winning_tree", {})

@@ -1,0 +1,176 @@
+{
+  "mode": "claim",
+  "stage": "dg2",
+  "workspace": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-mongo-master-schema-trans-his-2026-10-28",
+  "ts": "20261030T172043",
+  "trusted_rounds": [
+    "r2",
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-mongo-master-schema-trans-his-2026-10-28/06_laya_raw_dg1_20261030T172043.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In mongo_bson_restorer.go, ApplySourceFieldTypesToBSONDoc normalizes snakeToCamelCoreMap pairs from Primary Shadow before calling extractSourceFieldValuesMetadata(doc, typeMap), so Primary Shadow columns are not overwritten by stale camelCase values in source_field_values.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:92-110 — Verified snakeToCamelCoreMap runs before extractSourceFieldValuesMetadata",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3834
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1926
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.1702
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In mongo_extjson_unwrapper.go, ensureReconstructedMongoTimestamps synthesizes createdAt and updatedAt as primitive.DateTime from _id ObjectID or _source_ts when missing, and coerces __v to int32(0).",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_extjson_unwrapper.go:361-395 — Verified ensureReconstructedMongoTimestamps synthesizes createdAt and updatedAt",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3145
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1717
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4497
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In recon_engine_segment_b.go, resolveSegmentBTSCol only sets tsCol = dstTS when errTS == nil && dstTS != \"\" && dstTS != \"_id_only\", preserving tsCol = \"_source_ts\" when a Shadow table has no timestamp_field.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_engine_segment_b.go:129-143 — Verified dstTS != _id_only check in resolveSegmentBTSCol",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.564
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2357
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.2918
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In recon_multi_shadow_b.go, shouldSkipMongoRowDiffCol returns true for source_field_types, sourceFieldTypes, source_field_values, sourceFieldValues, and stripped flat/optional columns that are nil on the MongoDB Master row.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.737
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.557
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.9007
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In mongo_bson_restorer.go, when doc[nestedKey] is a JSON string starting with { or [, ApplySourceFieldTypesToBSONDoc calls coerceNestedBSON(s) to unmarshal and unwrap Extended JSON.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:111-122 — Verified coerceNestedBSON unmarshals JSON string nestedKey",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.1884
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1441
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.3329
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In mongo_extjson_unwrapper_test.go, TestMongoOCCBulkModels_ShadowWithoutUpdatedAtAndPruneLeakedSourceFieldValues_LiveMongo loads config-local.yml and connects via connMgr.GetMasterMongoClient(ctx, mongoConnCode).",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_extjson_unwrapper_test.go:285-323 — Verified live MongoDB connection via config-local.yml",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.671
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3412
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4055
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In schema_ddl_handler.go, HandleCreateDefaultColumns only creates the timestamp index when reg.TimestampField != nil and strings.TrimSpace(*reg.TimestampField) != \"\".",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5737
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.0353
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8497
+        }
+      }
+    }
+  ],
+  "gate": "PASS",
+  "summary_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-mongo-master-schema-trans-his-2026-10-28/06_laya_summary_dg1_20261030T172043.json"
+}

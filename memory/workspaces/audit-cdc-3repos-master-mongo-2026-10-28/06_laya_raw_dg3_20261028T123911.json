@@ -1,0 +1,1063 @@
+[
+  {
+    "id": "A-MONGO-1",
+    "kind": "audit",
+    "claim": "In centralized-data-service transmuter_mongo.go, BuildMongoOCCBulkModels preserves _gpay_id on existing MongoDB documents when targetKey != _gpay_id by using $ifNull in OCC pipeline updates and $setOnInsert in full-sync updates.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_mongo.go:246-280\n\t\t\tfor k, v := range doc {\n\t\t\t\tif k == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tif k == \"_gpay_id\" && targetKey != \"_gpay_id\" {\n\t\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\t\"$ifNull\": bson.A{\"$_gpay_id\", v},\n\t\t\t\t\t}\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\"$cond\": bson.A{occCond, v, \"$\" + k},\n\t\t\t\t}\n\t\t\t}\n\t\t\tupdate = []bson.M{{\"$set\": setStage}}\n\t\t} else {\n\t\t\tsetDoc := bson.M{}\n\t\t\tsetOnInsertDoc := bson.M{\n\t\t\t\t\"_created_at\": now,\n\t\t\t}\n\t\t\tfor k, v := range doc {\n\t\t\t\tif k == \"_id\" && targetKey == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tif k == \"_gpay_id\" && targetKey != \"_gpay_id\" {\n\t\t\t\t\tsetOnInsertDoc[k] = v\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tsetDoc[k] = v\n\t\t\t}\n\t\t\tupdate = bson.M{\n\t\t\t\t\"$set\":         setDoc,\n\t\t\t\t\"$setOnInsert\": setOnInsertDoc,\n\t\t\t}\n\t\t}",
+    "flow": "When targetKey != _gpay_id, BuildMongoOCCBulkModels sets _gpay_id via $ifNull: [$_gpay_id, v] in OCC pipeline mode and via $setOnInsert in non-OCC mode.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5675,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8534,
+                "INCORRECT": 0.1265,
+                "UNSUPPORTED": 0.02
+              },
+              "confidence": 0.5675,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 825,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In centralized-data-service transmuter_mongo.go, BuildMongoOCCBulkModels preserves _gpay_id on existing MongoDB documents when targetKey != _gpay_id by using $ifNull in OCC pipeline updates and $setOnInsert in full-sync updates.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_mongo.go:246-280\n\t\t\tfor k, v := range doc {\n\t\t\t\tif k == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tif k == \"_gpay_id\" && targetKey != \"_gpay_id\" {\n\t\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\t\"$ifNull\": bson.A{\"$_gpay_id\", v},\n\t\t\t\t\t}\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\"$cond\": bson.A{occCond, v, \"$\" + k},\n\t\t\t\t}\n\t\t\t}\n\t\t\tupdate = []bson.M{{\"$set\": setStage}}\n\t\t} else {\n\t\t\tsetDoc := bson.M{}\n\t\t\tsetOnInsertDoc := bson.M{\n\t\t\t\t\"_created_at\": now,\n\t\t\t}\n\t\t\tfor k, v := range doc {\n\t\t\t\tif k == \"_id\" && targetKey == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tif k == \"_gpay_id\" && targetKey != \"_gpay_id\" {\n\t\t\t\t\tsetOnInsertDoc[k] = v\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tsetDoc[k] = v\n\t\t\t}\n\t\t\tupdate = bson.M{\n\t\t\t\t\"$set\":         setDoc,\n\t\t\t\t\"$setOnInsert\": setOnInsertDoc,\n\t\t\t}\n\t\t}",
+          "flow": "When targetKey != _gpay_id, BuildMongoOCCBulkModels sets _gpay_id via $ifNull: [$_gpay_id, v] in OCC pipeline mode and via $setOnInsert in non-OCC mode."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4287,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7729,
+                "INCORRECT": 0.1954,
+                "UNSUPPORTED": 0.0317
+              },
+              "confidence": 0.4287,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 830,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "When targetKey != _gpay_id, BuildMongoOCCBulkModels sets _gpay_id via $ifNull: [$_gpay_id, v] in OCC pipeline mode and via $setOnInsert in non-OCC mode.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_mongo.go:246-280\n\t\t\tfor k, v := range doc {\n\t\t\t\tif k == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tif k == \"_gpay_id\" && targetKey != \"_gpay_id\" {\n\t\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\t\"$ifNull\": bson.A{\"$_gpay_id\", v},\n\t\t\t\t\t}\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\"$cond\": bson.A{occCond, v, \"$\" + k},\n\t\t\t\t}\n\t\t\t}\n\t\t\tupdate = []bson.M{{\"$set\": setStage}}\n\t\t} else {\n\t\t\tsetDoc := bson.M{}\n\t\t\tsetOnInsertDoc := bson.M{\n\t\t\t\t\"_created_at\": now,\n\t\t\t}\n\t\t\tfor k, v := range doc {\n\t\t\t\tif k == \"_id\" && targetKey == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tif k == \"_gpay_id\" && targetKey != \"_gpay_id\" {\n\t\t\t\t\tsetOnInsertDoc[k] = v\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tsetDoc[k] = v\n\t\t\t}\n\t\t\tupdate = bson.M{\n\t\t\t\t\"$set\":         setDoc,\n\t\t\t\t\"$setOnInsert\": setOnInsertDoc,\n\t\t\t}\n\t\t}",
+          "claim": "In centralized-data-service transmuter_mongo.go, BuildMongoOCCBulkModels preserves _gpay_id on existing MongoDB documents when targetKey != _gpay_id by using $ifNull in OCC pipeline updates and $setOnInsert in full-sync updates."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.85,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9785,
+                "NO": 0.0215
+              },
+              "confidence": 0.85,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 713,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_mongo.go:246-280\n\t\t\tfor k, v := range doc {\n\t\t\t\tif k == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tif k == \"_gpay_id\" && targetKey != \"_gpay_id\" {\n\t\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\t\"$ifNull\": bson.A{\"$_gpay_id\", v},\n\t\t\t\t\t}\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\"$cond\": bson.A{occCond, v, \"$\" + k},\n\t\t\t\t}\n\t\t\t}\n\t\t\tupdate = []bson.M{{\"$set\": setStage}}\n\t\t} else {\n\t\t\tsetDoc := bson.M{}\n\t\t\tsetOnInsertDoc := bson.M{\n\t\t\t\t\"_created_at\": now,\n\t\t\t}\n\t\t\tfor k, v := range doc {\n\t\t\t\tif k == \"_id\" && targetKey == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tif k == \"_gpay_id\" && targetKey != \"_gpay_id\" {\n\t\t\t\t\tsetOnInsertDoc[k] = v\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tsetDoc[k] = v\n\t\t\t}\n\t\t\tupdate = bson.M{\n\t\t\t\t\"$set\":         setDoc,\n\t\t\t\t\"$setOnInsert\": setOnInsertDoc,\n\t\t\t}\n\t\t}",
+          "claim": "In centralized-data-service transmuter_mongo.go, BuildMongoOCCBulkModels preserves _gpay_id on existing MongoDB documents when targetKey != _gpay_id by using $ifNull in OCC pipeline updates and $setOnInsert in full-sync updates."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "A-MONGO-2",
+    "kind": "audit",
+    "claim": "In centralized-data-service master_ddl_generator.go, applyMongoCollectionAndIndexes creates an index on the dynamic business PK from TransformSpec and only sets in_master = true for mapping rules where is_active = true AND status = 'approved'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator.go:537-576\n\tif len(reg.TransformSpec) > 0 {\n\t\tvar spec struct {\n\t\t\tPK string `json:\"pk\"`\n\t\t}\n\t\tif err := json.Unmarshal(reg.TransformSpec, &spec); err == nil {\n\t\t\tpk := strings.TrimSpace(spec.PK)\n\t\t\tif pk != \"\" && !seenIdxCols[pk] {\n\t\t\t\tseenIdxCols[pk] = true\n\t\t\t\tindexModels = append(indexModels, mongo.IndexModel{\n\t\t\t\t\tKeys:    bson.D{{Key: pk, Value: 1}},\n\t\t\t\t\tOptions: options.Index().SetName(fmt.Sprintf(\"ix_%s_pk_%s\", reg.MasterTable, pk)),\n\t\t\t\t})\n\t\t\t}\n\t\t}\n\t}\n\n\tfor _, finCol := range res.FinancialCols {\n\t\tcol := strings.TrimSpace(finCol)\n\t\tif col == \"\" || seenIdxCols[col] {\n\t\t\tcontinue\n\t\t}\n\t\tseenIdxCols[col] = true\n\t\tindexModels = append(indexModels, mongo.IndexModel{\n\t\t\tKeys:    bson.D{{Key: col, Value: 1}},\n\t\t\tOptions: options.Index().SetName(fmt.Sprintf(\"ix_%s_%s\", reg.MasterTable, col)),\n\t\t})\n\t}\n\n\tif _, iErr := mongoDB.Collection(reg.MasterTable).Indexes().CreateMany(ctx, indexModels); iErr != nil {\n\t\tres.Err = iErr.Error()\n\t\tg.markDDLStatus(ctx, reg.ID, \"failed\", iErr)\n\t\treturn res, fmt.Errorf(\"create mongo indexes on %s.%s: %w\", dbName, reg.MasterTable, iErr)\n\t}\n\n\tif g.systemDB != nil {\n\t\t_ = g.systemDB.WithContext(ctx).Exec(\n\t\t\t`UPDATE cdc_system.mapping_rule_master SET in_master = true WHERE master_binding_id = ? AND is_active = true AND status = 'approved'`,\n\t\t\treg.ID,\n\t\t).Error\n\t}",
+    "flow": "applyMongoCollectionAndIndexes parses reg.TransformSpec for pk to append ix_<table>_pk_<pk> and updates mapping_rule_master with status = 'approved'.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2564,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6594,
+                "INCORRECT": 0.2688,
+                "UNSUPPORTED": 0.0718
+              },
+              "confidence": 0.2564,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 871,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In centralized-data-service master_ddl_generator.go, applyMongoCollectionAndIndexes creates an index on the dynamic business PK from TransformSpec and only sets in_master = true for mapping rules where is_active = true AND status = 'approved'.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator.go:537-576\n\tif len(reg.TransformSpec) > 0 {\n\t\tvar spec struct {\n\t\t\tPK string `json:\"pk\"`\n\t\t}\n\t\tif err := json.Unmarshal(reg.TransformSpec, &spec); err == nil {\n\t\t\tpk := strings.TrimSpace(spec.PK)\n\t\t\tif pk != \"\" && !seenIdxCols[pk] {\n\t\t\t\tseenIdxCols[pk] = true\n\t\t\t\tindexModels = append(indexModels, mongo.IndexModel{\n\t\t\t\t\tKeys:    bson.D{{Key: pk, Value: 1}},\n\t\t\t\t\tOptions: options.Index().SetName(fmt.Sprintf(\"ix_%s_pk_%s\", reg.MasterTable, pk)),\n\t\t\t\t})\n\t\t\t}\n\t\t}\n\t}\n\n\tfor _, finCol := range res.FinancialCols {\n\t\tcol := strings.TrimSpace(finCol)\n\t\tif col == \"\" || seenIdxCols[col] {\n\t\t\tcontinue\n\t\t}\n\t\tseenIdxCols[col] = true\n\t\tindexModels = append(indexModels, mongo.IndexModel{\n\t\t\tKeys:    bson.D{{Key: col, Value: 1}},\n\t\t\tOptions: options.Index().SetName(fmt.Sprintf(\"ix_%s_%s\", reg.MasterTable, col)),\n\t\t})\n\t}\n\n\tif _, iErr := mongoDB.Collection(reg.MasterTable).Indexes().CreateMany(ctx, indexModels); iErr != nil {\n\t\tres.Err = iErr.Error()\n\t\tg.markDDLStatus(ctx, reg.ID, \"failed\", iErr)\n\t\treturn res, fmt.Errorf(\"create mongo indexes on %s.%s: %w\", dbName, reg.MasterTable, iErr)\n\t}\n\n\tif g.systemDB != nil {\n\t\t_ = g.systemDB.WithContext(ctx).Exec(\n\t\t\t`UPDATE cdc_system.mapping_rule_master SET in_master = true WHERE master_binding_id = ? AND is_active = true AND status = 'approved'`,\n\t\t\treg.ID,\n\t\t).Error\n\t}",
+          "flow": "applyMongoCollectionAndIndexes parses reg.TransformSpec for pk to append ix_<table>_pk_<pk> and updates mapping_rule_master with status = 'approved'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.2385,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.4509,
+                "INCORRECT": 0.5071,
+                "UNSUPPORTED": 0.042
+              },
+              "confidence": 0.2385,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 876,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "applyMongoCollectionAndIndexes parses reg.TransformSpec for pk to append ix_<table>_pk_<pk> and updates mapping_rule_master with status = 'approved'.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator.go:537-576\n\tif len(reg.TransformSpec) > 0 {\n\t\tvar spec struct {\n\t\t\tPK string `json:\"pk\"`\n\t\t}\n\t\tif err := json.Unmarshal(reg.TransformSpec, &spec); err == nil {\n\t\t\tpk := strings.TrimSpace(spec.PK)\n\t\t\tif pk != \"\" && !seenIdxCols[pk] {\n\t\t\t\tseenIdxCols[pk] = true\n\t\t\t\tindexModels = append(indexModels, mongo.IndexModel{\n\t\t\t\t\tKeys:    bson.D{{Key: pk, Value: 1}},\n\t\t\t\t\tOptions: options.Index().SetName(fmt.Sprintf(\"ix_%s_pk_%s\", reg.MasterTable, pk)),\n\t\t\t\t})\n\t\t\t}\n\t\t}\n\t}\n\n\tfor _, finCol := range res.FinancialCols {\n\t\tcol := strings.TrimSpace(finCol)\n\t\tif col == \"\" || seenIdxCols[col] {\n\t\t\tcontinue\n\t\t}\n\t\tseenIdxCols[col] = true\n\t\tindexModels = append(indexModels, mongo.IndexModel{\n\t\t\tKeys:    bson.D{{Key: col, Value: 1}},\n\t\t\tOptions: options.Index().SetName(fmt.Sprintf(\"ix_%s_%s\", reg.MasterTable, col)),\n\t\t})\n\t}\n\n\tif _, iErr := mongoDB.Collection(reg.MasterTable).Indexes().CreateMany(ctx, indexModels); iErr != nil {\n\t\tres.Err = iErr.Error()\n\t\tg.markDDLStatus(ctx, reg.ID, \"failed\", iErr)\n\t\treturn res, fmt.Errorf(\"create mongo indexes on %s.%s: %w\", dbName, reg.MasterTable, iErr)\n\t}\n\n\tif g.systemDB != nil {\n\t\t_ = g.systemDB.WithContext(ctx).Exec(\n\t\t\t`UPDATE cdc_system.mapping_rule_master SET in_master = true WHERE master_binding_id = ? AND is_active = true AND status = 'approved'`,\n\t\t\treg.ID,\n\t\t).Error\n\t}",
+          "claim": "In centralized-data-service master_ddl_generator.go, applyMongoCollectionAndIndexes creates an index on the dynamic business PK from TransformSpec and only sets in_master = true for mapping rules where is_active = true AND status = 'approved'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7223,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.952,
+                "NO": 0.048
+              },
+              "confidence": 0.7223,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 772,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator.go:537-576\n\tif len(reg.TransformSpec) > 0 {\n\t\tvar spec struct {\n\t\t\tPK string `json:\"pk\"`\n\t\t}\n\t\tif err := json.Unmarshal(reg.TransformSpec, &spec); err == nil {\n\t\t\tpk := strings.TrimSpace(spec.PK)\n\t\t\tif pk != \"\" && !seenIdxCols[pk] {\n\t\t\t\tseenIdxCols[pk] = true\n\t\t\t\tindexModels = append(indexModels, mongo.IndexModel{\n\t\t\t\t\tKeys:    bson.D{{Key: pk, Value: 1}},\n\t\t\t\t\tOptions: options.Index().SetName(fmt.Sprintf(\"ix_%s_pk_%s\", reg.MasterTable, pk)),\n\t\t\t\t})\n\t\t\t}\n\t\t}\n\t}\n\n\tfor _, finCol := range res.FinancialCols {\n\t\tcol := strings.TrimSpace(finCol)\n\t\tif col == \"\" || seenIdxCols[col] {\n\t\t\tcontinue\n\t\t}\n\t\tseenIdxCols[col] = true\n\t\tindexModels = append(indexModels, mongo.IndexModel{\n\t\t\tKeys:    bson.D{{Key: col, Value: 1}},\n\t\t\tOptions: options.Index().SetName(fmt.Sprintf(\"ix_%s_%s\", reg.MasterTable, col)),\n\t\t})\n\t}\n\n\tif _, iErr := mongoDB.Collection(reg.MasterTable).Indexes().CreateMany(ctx, indexModels); iErr != nil {\n\t\tres.Err = iErr.Error()\n\t\tg.markDDLStatus(ctx, reg.ID, \"failed\", iErr)\n\t\treturn res, fmt.Errorf(\"create mongo indexes on %s.%s: %w\", dbName, reg.MasterTable, iErr)\n\t}\n\n\tif g.systemDB != nil {\n\t\t_ = g.systemDB.WithContext(ctx).Exec(\n\t\t\t`UPDATE cdc_system.mapping_rule_master SET in_master = true WHERE master_binding_id = ? AND is_active = true AND status = 'approved'`,\n\t\t\treg.ID,\n\t\t).Error\n\t}",
+          "claim": "In centralized-data-service master_ddl_generator.go, applyMongoCollectionAndIndexes creates an index on the dynamic business PK from TransformSpec and only sets in_master = true for mapping rules where is_active = true AND status = 'approved'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "A-MONGO-3",
+    "kind": "audit",
+    "claim": "In centralized-data-service recon_stream_bucket_engine.go, ChunkStreamBucketEngine.GetMasterAgent checks e.connMgr.IsMongoMasterConnection(ctx, connectionKey) and returns NewReconDestMongoAgent for MongoDB master destinations.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_stream_bucket_engine.go:155-175\n\tif e.connMgr == nil {\n\t\tif e.masterAgent != nil {\n\t\t\treturn e.masterAgent, nil\n\t\t}\n\t\treturn nil, fmt.Errorf(\"connection manager not configured in chunkStreamBucketEngine\")\n\t}\n\n\tif e.connMgr.IsMongoMasterConnection(ctx, connectionKey) {\n\t\tmClient, errM := e.connMgr.GetMasterMongoClient(ctx, connectionKey)\n\t\tif errM != nil {\n\t\t\treturn nil, fmt.Errorf(\"failed to get master mongo client for %s: %w\", connectionKey, errM)\n\t\t}\n\t\tdbName := e.connMgr.ResolveMasterMongoDatabase(ctx, connectionKey, \"\")\n\t\tagent := NewReconDestMongoAgent(mClient, dbName, ReconDestAgentConfig{}, e.logger)\n\t\tif e.masterAgents == nil {\n\t\t\te.masterAgents = make(map[string]*ReconDestAgent)\n\t\t}\n\t\te.masterAgents[connectionKey] = agent\n\t\treturn agent, nil\n\t}",
+    "flow": "ChunkStreamBucketEngine.GetMasterAgent branches on IsMongoMasterConnection, obtains mClient via GetMasterMongoClient, and caches NewReconDestMongoAgent.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.0589,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5018,
+                "INCORRECT": 0.2826,
+                "UNSUPPORTED": 0.2156
+              },
+              "confidence": 0.0589,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 540,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In centralized-data-service recon_stream_bucket_engine.go, ChunkStreamBucketEngine.GetMasterAgent checks e.connMgr.IsMongoMasterConnection(ctx, connectionKey) and returns NewReconDestMongoAgent for MongoDB master destinations.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_stream_bucket_engine.go:155-175\n\tif e.connMgr == nil {\n\t\tif e.masterAgent != nil {\n\t\t\treturn e.masterAgent, nil\n\t\t}\n\t\treturn nil, fmt.Errorf(\"connection manager not configured in chunkStreamBucketEngine\")\n\t}\n\n\tif e.connMgr.IsMongoMasterConnection(ctx, connectionKey) {\n\t\tmClient, errM := e.connMgr.GetMasterMongoClient(ctx, connectionKey)\n\t\tif errM != nil {\n\t\t\treturn nil, fmt.Errorf(\"failed to get master mongo client for %s: %w\", connectionKey, errM)\n\t\t}\n\t\tdbName := e.connMgr.ResolveMasterMongoDatabase(ctx, connectionKey, \"\")\n\t\tagent := NewReconDestMongoAgent(mClient, dbName, ReconDestAgentConfig{}, e.logger)\n\t\tif e.masterAgents == nil {\n\t\t\te.masterAgents = make(map[string]*ReconDestAgent)\n\t\t}\n\t\te.masterAgents[connectionKey] = agent\n\t\treturn agent, nil\n\t}",
+          "flow": "ChunkStreamBucketEngine.GetMasterAgent branches on IsMongoMasterConnection, obtains mClient via GetMasterMongoClient, and caches NewReconDestMongoAgent."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2525,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6464,
+                "INCORRECT": 0.2866,
+                "UNSUPPORTED": 0.067
+              },
+              "confidence": 0.2525,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 545,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "ChunkStreamBucketEngine.GetMasterAgent branches on IsMongoMasterConnection, obtains mClient via GetMasterMongoClient, and caches NewReconDestMongoAgent.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_stream_bucket_engine.go:155-175\n\tif e.connMgr == nil {\n\t\tif e.masterAgent != nil {\n\t\t\treturn e.masterAgent, nil\n\t\t}\n\t\treturn nil, fmt.Errorf(\"connection manager not configured in chunkStreamBucketEngine\")\n\t}\n\n\tif e.connMgr.IsMongoMasterConnection(ctx, connectionKey) {\n\t\tmClient, errM := e.connMgr.GetMasterMongoClient(ctx, connectionKey)\n\t\tif errM != nil {\n\t\t\treturn nil, fmt.Errorf(\"failed to get master mongo client for %s: %w\", connectionKey, errM)\n\t\t}\n\t\tdbName := e.connMgr.ResolveMasterMongoDatabase(ctx, connectionKey, \"\")\n\t\tagent := NewReconDestMongoAgent(mClient, dbName, ReconDestAgentConfig{}, e.logger)\n\t\tif e.masterAgents == nil {\n\t\t\te.masterAgents = make(map[string]*ReconDestAgent)\n\t\t}\n\t\te.masterAgents[connectionKey] = agent\n\t\treturn agent, nil\n\t}",
+          "claim": "In centralized-data-service recon_stream_bucket_engine.go, ChunkStreamBucketEngine.GetMasterAgent checks e.connMgr.IsMongoMasterConnection(ctx, connectionKey) and returns NewReconDestMongoAgent for MongoDB master destinations."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6601,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9368,
+                "NO": 0.0632
+              },
+              "confidence": 0.6601,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 447,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_stream_bucket_engine.go:155-175\n\tif e.connMgr == nil {\n\t\tif e.masterAgent != nil {\n\t\t\treturn e.masterAgent, nil\n\t\t}\n\t\treturn nil, fmt.Errorf(\"connection manager not configured in chunkStreamBucketEngine\")\n\t}\n\n\tif e.connMgr.IsMongoMasterConnection(ctx, connectionKey) {\n\t\tmClient, errM := e.connMgr.GetMasterMongoClient(ctx, connectionKey)\n\t\tif errM != nil {\n\t\t\treturn nil, fmt.Errorf(\"failed to get master mongo client for %s: %w\", connectionKey, errM)\n\t\t}\n\t\tdbName := e.connMgr.ResolveMasterMongoDatabase(ctx, connectionKey, \"\")\n\t\tagent := NewReconDestMongoAgent(mClient, dbName, ReconDestAgentConfig{}, e.logger)\n\t\tif e.masterAgents == nil {\n\t\t\te.masterAgents = make(map[string]*ReconDestAgent)\n\t\t}\n\t\te.masterAgents[connectionKey] = agent\n\t\treturn agent, nil\n\t}",
+          "claim": "In centralized-data-service recon_stream_bucket_engine.go, ChunkStreamBucketEngine.GetMasterAgent checks e.connMgr.IsMongoMasterConnection(ctx, connectionKey) and returns NewReconDestMongoAgent for MongoDB master destinations."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "A-MONGO-4",
+    "kind": "audit",
+    "claim": "In centralized-data-service recon_execute_heal_segb.go, resolveSourceIDsForSegmentB checks h.isMongoMasterRef(ctx, ref) to resolve missingGpayIDs via resolveSourceIDsFromMongoMasterByGpayIDs instead of querying PostgreSQL masterDB.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:876-885\n\t\t\t\t\tif len(missingGpayIDs) > 0 {\n\t\t\t\t\t\tif h.isMongoMasterRef(ctx, ref) {\n\t\t\t\t\t\t\tif mongoMapped := h.resolveSourceIDsFromMongoMasterByGpayIDs(ctx, targetTable, ref, missingGpayIDs); len(mongoMapped) > 0 {\n\t\t\t\t\t\t\t\tout = append(out, mongoMapped...)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t} else if masterDB := h.resolveMasterDBForRef(ctx, ref); masterDB != nil {\n\t\t\t\t\t\t\tpkCol, _ := h.resolveMasterPKFromSpec(ctx, masterDB, ref)",
+    "flow": "When len(missingGpayIDs) > 0 and h.isMongoMasterRef(ctx, ref) is true, resolveSourceIDsForSegmentB calls resolveSourceIDsFromMongoMasterByGpayIDs.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.823,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9591,
+                "INCORRECT": 0.0301,
+                "UNSUPPORTED": 0.0108
+              },
+              "confidence": 0.823,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 487,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In centralized-data-service recon_execute_heal_segb.go, resolveSourceIDsForSegmentB checks h.isMongoMasterRef(ctx, ref) to resolve missingGpayIDs via resolveSourceIDsFromMongoMasterByGpayIDs instead of querying PostgreSQL masterDB.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:876-885\n\t\t\t\t\tif len(missingGpayIDs) > 0 {\n\t\t\t\t\t\tif h.isMongoMasterRef(ctx, ref) {\n\t\t\t\t\t\t\tif mongoMapped := h.resolveSourceIDsFromMongoMasterByGpayIDs(ctx, targetTable, ref, missingGpayIDs); len(mongoMapped) > 0 {\n\t\t\t\t\t\t\t\tout = append(out, mongoMapped...)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t} else if masterDB := h.resolveMasterDBForRef(ctx, ref); masterDB != nil {\n\t\t\t\t\t\t\tpkCol, _ := h.resolveMasterPKFromSpec(ctx, masterDB, ref)",
+          "flow": "When len(missingGpayIDs) > 0 and h.isMongoMasterRef(ctx, ref) is true, resolveSourceIDsForSegmentB calls resolveSourceIDsFromMongoMasterByGpayIDs."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.6755,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.909,
+                "INCORRECT": 0.0679,
+                "UNSUPPORTED": 0.0231
+              },
+              "confidence": 0.6755,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 492,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "When len(missingGpayIDs) > 0 and h.isMongoMasterRef(ctx, ref) is true, resolveSourceIDsForSegmentB calls resolveSourceIDsFromMongoMasterByGpayIDs.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:876-885\n\t\t\t\t\tif len(missingGpayIDs) > 0 {\n\t\t\t\t\t\tif h.isMongoMasterRef(ctx, ref) {\n\t\t\t\t\t\t\tif mongoMapped := h.resolveSourceIDsFromMongoMasterByGpayIDs(ctx, targetTable, ref, missingGpayIDs); len(mongoMapped) > 0 {\n\t\t\t\t\t\t\t\tout = append(out, mongoMapped...)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t} else if masterDB := h.resolveMasterDBForRef(ctx, ref); masterDB != nil {\n\t\t\t\t\t\t\tpkCol, _ := h.resolveMasterPKFromSpec(ctx, masterDB, ref)",
+          "claim": "In centralized-data-service recon_execute_heal_segb.go, resolveSourceIDsForSegmentB checks h.isMongoMasterRef(ctx, ref) to resolve missingGpayIDs via resolveSourceIDsFromMongoMasterByGpayIDs instead of querying PostgreSQL masterDB."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.2065,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.7609,
+                "NO": 0.2391
+              },
+              "confidence": 0.2065,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 381,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:876-885\n\t\t\t\t\tif len(missingGpayIDs) > 0 {\n\t\t\t\t\t\tif h.isMongoMasterRef(ctx, ref) {\n\t\t\t\t\t\t\tif mongoMapped := h.resolveSourceIDsFromMongoMasterByGpayIDs(ctx, targetTable, ref, missingGpayIDs); len(mongoMapped) > 0 {\n\t\t\t\t\t\t\t\tout = append(out, mongoMapped...)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t} else if masterDB := h.resolveMasterDBForRef(ctx, ref); masterDB != nil {\n\t\t\t\t\t\t\tpkCol, _ := h.resolveMasterPKFromSpec(ctx, masterDB, ref)",
+          "claim": "In centralized-data-service recon_execute_heal_segb.go, resolveSourceIDsForSegmentB checks h.isMongoMasterRef(ctx, ref) to resolve missingGpayIDs via resolveSourceIDsFromMongoMasterByGpayIDs instead of querying PostgreSQL masterDB."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB in recon_execute_heal_segb.go, when len(out) == 0 and effectiveIDType == gpay, the function returns nil, nil instead of returning inputIDs.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:920-927\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+    "flow": "resolveSourceIDsForSegmentB checks if len(out) == 0; if effectiveIDType == gpay, it returns nil, nil.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6857,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9018,
+                "INCORRECT": 0.0916,
+                "UNSUPPORTED": 0.0066
+              },
+              "confidence": 0.6857,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 324,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB in recon_execute_heal_segb.go, when len(out) == 0 and effectiveIDType == gpay, the function returns nil, nil instead of returning inputIDs.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:920-927\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+          "flow": "resolveSourceIDsForSegmentB checks if len(out) == 0; if effectiveIDType == gpay, it returns nil, nil."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.4094,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.288,
+                "INCORRECT": 0.703,
+                "UNSUPPORTED": 0.0091
+              },
+              "confidence": 0.4094,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 329,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "resolveSourceIDsForSegmentB checks if len(out) == 0; if effectiveIDType == gpay, it returns nil, nil.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:920-927\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+          "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB in recon_execute_heal_segb.go, when len(out) == 0 and effectiveIDType == gpay, the function returns nil, nil instead of returning inputIDs."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6357,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9304,
+                "NO": 0.0696
+              },
+              "confidence": 0.6357,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 232,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:920-927\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+          "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB in recon_execute_heal_segb.go, when len(out) == 0 and effectiveIDType == gpay, the function returns nil, nil instead of returning inputIDs."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB in recon_execute_heal_segb.go, when len(out) == 0 and effectiveIDType == gpay, the function always panics instead of returning.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:920-927\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+    "flow": "resolveSourceIDsForSegmentB returns nil, nil when len(out) == 0 and effectiveIDType == gpay; it never panics.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5814,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8542,
+                "INCORRECT": 0.1325,
+                "UNSUPPORTED": 0.0133
+              },
+              "confidence": 0.5814,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 322,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB in recon_execute_heal_segb.go, when len(out) == 0 and effectiveIDType == gpay, the function always panics instead of returning.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:920-927\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+          "flow": "resolveSourceIDsForSegmentB returns nil, nil when len(out) == 0 and effectiveIDType == gpay; it never panics."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.5868,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.0964,
+                "INCORRECT": 0.8721,
+                "UNSUPPORTED": 0.0316
+              },
+              "confidence": 0.5868,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 327,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "resolveSourceIDsForSegmentB returns nil, nil when len(out) == 0 and effectiveIDType == gpay; it never panics.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:920-927\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+          "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB in recon_execute_heal_segb.go, when len(out) == 0 and effectiveIDType == gpay, the function always panics instead of returning."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.4487,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.1278,
+                "NO": 0.8722
+              },
+              "confidence": 0.4487,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 229,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:920-927\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+          "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB in recon_execute_heal_segb.go, when len(out) == 0 and effectiveIDType == gpay, the function always panics instead of returning."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In ChunkStreamBucketEngine.GetMasterAgent in recon_stream_bucket_engine.go, when e.connMgr is nil, the function drops the MongoDB database.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_stream_bucket_engine.go:155-160\n\tif e.connMgr == nil {\n\t\tif e.masterAgent != nil {\n\t\t\treturn e.masterAgent, nil\n\t\t}\n\t\treturn nil, fmt.Errorf(\"connection manager not configured in chunkStreamBucketEngine\")\n\t}",
+    "flow": "When e.connMgr == nil, GetMasterAgent returns e.masterAgent if non-nil or returns an error; it never drops any database.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4373,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7842,
+                "INCORRECT": 0.1803,
+                "UNSUPPORTED": 0.0355
+              },
+              "confidence": 0.4373,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 308,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In ChunkStreamBucketEngine.GetMasterAgent in recon_stream_bucket_engine.go, when e.connMgr is nil, the function drops the MongoDB database.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_stream_bucket_engine.go:155-160\n\tif e.connMgr == nil {\n\t\tif e.masterAgent != nil {\n\t\t\treturn e.masterAgent, nil\n\t\t}\n\t\treturn nil, fmt.Errorf(\"connection manager not configured in chunkStreamBucketEngine\")\n\t}",
+          "flow": "When e.connMgr == nil, GetMasterAgent returns e.masterAgent if non-nil or returns an error; it never drops any database."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.1439,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3417,
+                "INCORRECT": 0.5475,
+                "UNSUPPORTED": 0.1108
+              },
+              "confidence": 0.1439,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 313,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "When e.connMgr == nil, GetMasterAgent returns e.masterAgent if non-nil or returns an error; it never drops any database.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_stream_bucket_engine.go:155-160\n\tif e.connMgr == nil {\n\t\tif e.masterAgent != nil {\n\t\t\treturn e.masterAgent, nil\n\t\t}\n\t\treturn nil, fmt.Errorf(\"connection manager not configured in chunkStreamBucketEngine\")\n\t}",
+          "claim": "In ChunkStreamBucketEngine.GetMasterAgent in recon_stream_bucket_engine.go, when e.connMgr is nil, the function drops the MongoDB database."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.0854,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.6703,
+                "NO": 0.3297
+              },
+              "confidence": 0.0854,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 215,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_stream_bucket_engine.go:155-160\n\tif e.connMgr == nil {\n\t\tif e.masterAgent != nil {\n\t\t\treturn e.masterAgent, nil\n\t\t}\n\t\treturn nil, fmt.Errorf(\"connection manager not configured in chunkStreamBucketEngine\")\n\t}",
+          "claim": "In ChunkStreamBucketEngine.GetMasterAgent in recon_stream_bucket_engine.go, when e.connMgr is nil, the function drops the MongoDB database."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

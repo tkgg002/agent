@@ -1,0 +1,58 @@
+[
+  {
+    "id": "S-RC-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "executeAllSubTasksWaveByWave gate in server.go",
+    "claim": "In internal/webui/server.go lines 1208-1213, executeAllSubTasksWaveByWave is currently gated on len(subTasks) > 0 && action == \"approve_all\" before calling runAutonomousS4S5WithSelfHealing.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1208-1213\n\t\tsubTasks := s.loadOrGenerateSubTasks(*qt)\n\t\tif len(subTasks) > 0 && action == \"approve_all\" {\n\t\t\tsubTasks = s.executeAllSubTasksWaveByWave(execCtx, *qt, subTasks, stepDelay)\n\t\t\t_ = s.saveTaskSubTasks(qt.ExternalID, subTasks)\n\t\t}\n\t\treturn s.runAutonomousS4S5WithSelfHealing(execCtx, qt.ExternalID, activeRunner, stepDelay)"
+  },
+  {
+    "id": "S-FIX-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "extractMatchingCandidateDiffSections in telegram_bridge.go",
+    "claim": "In internal/webui/telegram_bridge.go lines 2916-2921, extractMatchingCandidateDiffSections returns allSections when len(matched) > 0 and includeAllWhenAnyMatch is true, otherwise it returns matched.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:2916-2921\n\t}\n\tif len(matched) > 0 && includeAllWhenAnyMatch {\n\t\treturn allSections\n\t}\n\treturn matched\n}"
+  },
+  {
+    "id": "S-IMPACT-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "VerifySubTaskCodeOnDisk in task_inspector.go",
+    "claim": "In internal/webui/task_inspector.go lines 1423-1428, VerifySubTaskCodeOnDisk sets candidateOK = true and appends to verifiedEvidences when combinedPatch contains ' b/'+cleanRel.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:1423-1428\n\t\tif strings.TrimSpace(combinedPatch) != \"\" && cleanRel != \"\" {\n\t\t\tif !strings.HasSuffix(rel, \"/\") {\n\t\t\t\tif strings.Contains(combinedPatch, \" b/\"+cleanRel) || strings.Contains(combinedPatch, \"\\n+++ b/\"+cleanRel) || strings.Contains(combinedPatch, \" a/\"+cleanRel) {\n\t\t\t\t\tcandidateOK = true\n\t\t\t\t\tverifiedEvidences = append(verifiedEvidences, fmt.Sprintf(\"%s:%s (in diff.patch)\", filepath.Base(repoDir), rel))\n\t\t\t\t}"
+  },
+  {
+    "id": "D-BEHAV-01",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "synthesizeIsolatedRemediationDiffIfApproved in telegram_bridge.go",
+    "claim": "In internal/webui/telegram_bridge.go lines 2925-2928, synthesizeIsolatedRemediationDiffIfApproved sets approvedMarker to filepath.Join(isoMeta.ArtifactDir, \".user-approved\"), checks os.Stat(approvedMarker), and sets safeParent to sanitizeTaskKeyPath(qt.ExternalID).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:2925-2928\nfunc (s *Server) synthesizeIsolatedRemediationDiffIfApproved(ctx context.Context, qt queue.QueuedTask, isoMeta TaskIsolationDTO, subTasks []SubTaskDTO) bool {\n\tapprovedMarker := filepath.Join(isoMeta.ArtifactDir, \".user-approved\")\n\t_, parentApprovedErr := os.Stat(approvedMarker)\n\tsafeParent := sanitizeTaskKeyPath(qt.ExternalID)"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "server.go line 1208",
+    "claim": "In internal/webui/server.go lines 1208-1213, loadOrGenerateSubTasks does not exist and runAutonomousS4S5WithSelfHealing is never called.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1208-1213\n\t\tsubTasks := s.loadOrGenerateSubTasks(*qt)\n\t\tif len(subTasks) > 0 && action == \"approve_all\" {\n\t\t\tsubTasks = s.executeAllSubTasksWaveByWave(execCtx, *qt, subTasks, stepDelay)\n\t\t\t_ = s.saveTaskSubTasks(qt.ExternalID, subTasks)\n\t\t}\n\t\treturn s.runAutonomousS4S5WithSelfHealing(execCtx, qt.ExternalID, activeRunner, stepDelay)"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "telegram_bridge.go line 2916",
+    "claim": "In internal/webui/telegram_bridge.go lines 2916-2921, extractMatchingCandidateDiffSections always panics and never returns matched.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:2916-2921\n\t}\n\tif len(matched) > 0 && includeAllWhenAnyMatch {\n\t\treturn allSections\n\t}\n\treturn matched\n}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "telegram_bridge.go line 2925",
+    "claim": "In internal/webui/telegram_bridge.go lines 2925-2928, synthesizeIsolatedRemediationDiffIfApproved builds approvedMarker as filepath.Join(isoMeta.ArtifactDir, \".user-approved\") and calls os.Stat(approvedMarker).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:2925-2928\nfunc (s *Server) synthesizeIsolatedRemediationDiffIfApproved(ctx context.Context, qt queue.QueuedTask, isoMeta TaskIsolationDTO, subTasks []SubTaskDTO) bool {\n\tapprovedMarker := filepath.Join(isoMeta.ArtifactDir, \".user-approved\")\n\t_, parentApprovedErr := os.Stat(approvedMarker)\n\tsafeParent := sanitizeTaskKeyPath(qt.ExternalID)"
+  }
+]

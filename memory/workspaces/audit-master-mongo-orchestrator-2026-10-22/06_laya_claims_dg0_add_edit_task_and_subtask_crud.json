@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "target",
+    "basis": "code",
+    "claim": "Handler in internal/webui/server.go registers /api/dashboard, /api/tasks, /api/tasks/action, /api/tasks/delete, and /api/tasks/stop.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:639-650\nfunc (s *Server) Handler() http.Handler {\n\tmux := http.NewServeMux()\n\tsub, err := fs.Sub(staticFS, \"static\")\n\tif err == nil {\n\t\tmux.Handle(\"/\", http.FileServer(http.FS(sub)))\n\t}\n\tmux.HandleFunc(\"/api/dashboard\", s.handleDashboard)\n\tmux.HandleFunc(\"/api/tasks\", s.handleCreateTask)\n\tmux.HandleFunc(\"/api/tasks/action\", s.handleTaskAction)\n\tmux.HandleFunc(\"/api/tasks/delete\", s.handleDeleteTask)\n\tmux.HandleFunc(\"/api/tasks/stop\", s.handleStopTask)"
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "target",
+    "basis": "code",
+    "claim": "EnqueueRaw in internal/queue/store.go checks if external_id exists in task_queue and updates source, title, description, severity, labels_json, complexity, and updated_at.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/queue/store.go:183-192\n\tvar existingID int64\n\terr = s.db.QueryRowContext(ctx, `SELECT id FROM task_queue WHERE external_id = ?`, item.ExternalID).Scan(&existingID)\n\tif err == nil {\n\t\tif item.Source != \"agent-workspace\" && item.Source != \"backlog\" {\n\t\t\t_, _ = s.db.ExecContext(ctx,\n\t\t\t\t`UPDATE task_queue SET source = ?, title = ?, description = ?, severity = ?, labels_json = ?, complexity = ?, updated_at = ? WHERE id = ?`,\n\t\t\t\titem.Source, item.Title, item.Description, item.Severity, string(labelsBytes), item.Complexity, now, existingID,\n\t\t\t)\n\t\t}\n\t\treturn existingID, false, nil"
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "target",
+    "basis": "code",
+    "claim": "handleCreateTask in internal/webui/server.go appends the BRD header and content to req.Description when req.BRDContent is non-empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:738-743\n\tif req.Description == \"\" {\n\t\treq.Description = req.Title\n\t}\n\tif req.BRDContent != \"\" && !strings.Contains(req.Description, req.BRDContent) {\n\t\treq.Description = strings.TrimSpace(req.Description) + \"\\n\\n### Tài Liệu BRD / PRD Đính Kèm:\\n\" + req.BRDContent\n\t}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "handleDashboard in internal/webui/server.go checks that r.Method equals http.MethodGet.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:665-669\nfunc (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {\n\tif r.Method != http.MethodGet {\n\t\thttp.Error(w, \"method not allowed\", http.StatusMethodNotAllowed)\n\t\treturn\n\t}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "handleDashboard in internal/webui/server.go only accepts HTTP DELETE requests.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:665-669\nfunc (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {\n\tif r.Method != http.MethodGet {\n\t\thttp.Error(w, \"method not allowed\", http.StatusMethodNotAllowed)\n\t\treturn\n\t}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "Open in internal/queue/store.go takes zero parameters.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/queue/store.go:85-90\nfunc Open(dbPath string) (*Store, error) {\n\tif err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil {\n\t\treturn nil, fmt.Errorf(\"queue: mkdir: %w\", err)\n\t}\n\tdb, err := sql.Open(\"sqlite\", dbPath+\"?_pragma=busy_timeout=5000&_pragma=journal_mode=WAL\")"
+  }
+]

@@ -1,0 +1,152 @@
+{
+  "mode": "claim",
+  "stage": "dg2",
+  "workspace": "audit-same-updatedat-cdc-unversioned-diff-2026-11-03",
+  "ts": "20261103T114426",
+  "trusted_rounds": [
+    "r2"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-same-updatedat-cdc-unversioned-diff-2026-11-03/06_laya_raw_dg1_20261103T114426.json",
+  "claims": [
+    {
+      "id": "S-RC-1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In internal/handler/shadow/utils.go, extractSourceTsMs reads raw := m[\"ts_ms\"] from the source map after calling unwrapAvroUnion(source).",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5485
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.631
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8728
+        }
+      }
+    },
+    {
+      "id": "S-RC-2",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In internal/service/shadow/schema_adapter.go, buildOCCWhereClause uses strict inequality _source_ts < EXCLUDED._source_ts and only allows equal _source_ts when existing _source equals 'snapshot:v2'.",
+      "decision": "FLAG",
+      "resolved": "r3 confirmed YES (0.7538) and code at lines 771-783 directly shows _source_ts < EXCLUDED._source_ts. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:771-783",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "INCORRECT",
+          "confidence": 0.2423
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3021
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7538
+        }
+      }
+    },
+    {
+      "id": "S-FIX-1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In internal/handler/shadow/batch_buffer_utils.go, dedupByConflictKey already uses >= (r.SourceTsMs >= records[prevIdx].SourceTsMs and r.SourceTsMs >= maxTs[pk]) when two events share the same batch, whereas buildOCCWhereClause in schema_adapter.go uses < across separate SQL executions.",
+      "decision": "FLAG",
+      "resolved": "Lines 100-103 and 127-131 of batch_buffer_utils.go explicitly use r.SourceTsMs >= records[prevIdx].SourceTsMs and r.SourceTsMs >= maxTs[pk]. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go:100-131",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3644
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.2081
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.0006
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT-1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In internal/service/master/transmuter.go, the Master table upsert SQL already uses >= with clockSkewToleranceMs (COALESCE(EXCLUDED._source_ts, 0) >= COALESCE(qt._source_ts, 0) - clockSkewToleranceMs).",
+      "decision": "FLAG",
+      "resolved": "r3 confirmed YES (0.7217) and transmuter.go lines 1695-1701 explicitly use COALESCE(EXCLUDED._source_ts, 0) >= COALESCE(qt._source_ts, 0) - clockSkewToleranceMs. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1695-1701",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "INCORRECT",
+          "confidence": 0.0924
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1181
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7217
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN-1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In core-trans-proxy-service/publish/cashin.publish.ts, createTransHis and updateTransHis mutate the shared transHisParam object in place and invoke handlePromise(ctx.call(...)) without await.",
+      "decision": "FLAG",
+      "resolved": "r3 confirmed YES (0.8919) and cashin.publish.ts lines 34-44 explicitly mutate transHisParam and call handlePromise without await. REF: /Users/trainguyen/Documents/work/core-trans-proxy-service/publish/cashin.publish.ts:34-44",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.1444
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.113
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8919
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV-1",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "The proposed demo in buildOCCWhereClause allows updates when _source_ts = EXCLUDED._source_ts provided EXCLUDED._source <> 'snapshot:v2' while still requiring _hash or _deleted to be distinct.",
+      "decision": "FLAG",
+      "resolved": "r3 confirmed YES (0.6871) and buildOCCWhereClause combines changeClause with timeClause via AND. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:751-788",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3025
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3401
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6871
+        }
+      }
+    }
+  ],
+  "gate": "PASS",
+  "summary_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-same-updatedat-cdc-unversioned-diff-2026-11-03/06_laya_summary_dg1_20261103T114426.json"
+}

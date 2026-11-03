@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "critique",
+    "claim": "In SystemConnectorsHandler.Create in system_connectors_handler.go, validateMongoConnectionString(req.Config) is called before executing CreateSystemConnectorCommand on the bus.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_handler.go:150-156\n\tif err := validateMongoConnectionString(req.Config); err != nil {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_mongodb_connection_string\", \"detail\": err.Error()})\n\t}\n\tif h.bus == nil {\n\t\treturn c.Status(503).JSON(fiber.Map{\"error\": \"command bus not ready\"})\n\t}\n\th.injectDebeziumSignalDefaults(req.Name, req.Config)",
+    "flow": "Create calls validateMongoConnectionString(req.Config) and returns 400 if it fails."
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "critique",
+    "claim": "In validateMongoConnectionString in system_connectors_handler.go, if connector.class does not contain MongoDb, the function returns nil immediately.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_handler.go:437-445\nfunc validateMongoConnectionString(cfg map[string]string) error {\n\tif !strings.Contains(cfg[\"connector.class\"], \"MongoDb\") {\n\t\treturn nil\n\t}\n\tconn := strings.TrimSpace(cfg[\"mongodb.connection.string\"])\n\tif conn == \"\" {\n\t\treturn errors.New(\"mongodb.connection.string is required for MongoDb connectors\")\n\t}",
+    "flow": "validateMongoConnectionString checks !strings.Contains(cfg[\"connector.class\"], \"MongoDb\") and returns nil."
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "critique",
+    "claim": "In parseFingerprint in system_connectors_handler.go, when connector.class contains Postgres, fp.sourceType is set to postgresql and fp.serverAddress is set to joinHostPort(cfg[\"database.hostname\"], cfg[\"database.port\"]).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_handler.go:369-374\n\tcase strings.Contains(cls, \"Postgres\"):\n\t\tfp.sourceType = \"postgresql\"\n\t\tfp.serverAddress = joinHostPort(cfg[\"database.hostname\"], cfg[\"database.port\"])\n\t\tfp.dbList = cfg[\"database.dbname\"]\n\t\tfp.collectionList = cfg[\"table.include.list\"]",
+    "flow": "When strings.Contains(cls, \"Postgres\"), parseFingerprint sets sourceType = \"postgresql\" and serverAddress = joinHostPort(cfg[\"database.hostname\"], cfg[\"database.port\"])."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In joinHostPort in system_connectors_handler.go, if host is empty, the function returns an empty string.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_handler.go:490-498\nfunc joinHostPort(host, port string) string {\n\tif host == \"\" {\n\t\treturn \"\"\n\t}\n\tif port == \"\" {\n\t\treturn host\n\t}\n\treturn host + \":\" + port\n}",
+    "flow": "When host == \"\", joinHostPort returns \"\"."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In joinHostPort in system_connectors_handler.go, if host is empty, the function returns localhost:5432.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_handler.go:490-498\nfunc joinHostPort(host, port string) string {\n\tif host == \"\" {\n\t\treturn \"\"\n\t}\n\tif port == \"\" {\n\t\treturn host\n\t}\n\treturn host + \":\" + port\n}",
+    "flow": "When host == \"\", joinHostPort returns \"\", not \"localhost:5432\"."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In parseFingerprint in system_connectors_handler.go, when connector.class contains Postgres, fp.sourceType is set to mongodb.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_handler.go:369-374\n\tcase strings.Contains(cls, \"Postgres\"):\n\t\tfp.sourceType = \"postgresql\"\n\t\tfp.serverAddress = joinHostPort(cfg[\"database.hostname\"], cfg[\"database.port\"])\n\t\tfp.dbList = cfg[\"database.dbname\"]\n\t\tfp.collectionList = cfg[\"table.include.list\"]",
+    "flow": "When strings.Contains(cls, \"Postgres\"), fp.sourceType is set to \"postgresql\", not \"mongodb\"."
+  }
+]

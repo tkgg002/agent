@@ -1,0 +1,587 @@
+diff --git a/internal/handler/orchestration/snapshot_runner_utils.go b/internal/handler/orchestration/snapshot_runner_utils.go
+index 3f678cb..440e2d0 100644
+--- a/internal/handler/orchestration/snapshot_runner_utils.go
++++ b/internal/handler/orchestration/snapshot_runner_utils.go
+@@ -7,6 +7,10 @@ import (
+ 	"strings"
+ 	"time"
+ 
++	"centralized-data-service/internal/model/shadow"
++	"centralized-data-service/internal/service/metadata"
++	"centralized-data-service/pkgs/observability"
++
+ 	"github.com/jackc/pgx/v5"
+ 	"go.mongodb.org/mongo-driver/bson"
+ 	"go.mongodb.org/mongo-driver/bson/primitive"
+@@ -197,3 +201,119 @@ func scanPGXRowsAsJSON(rows pgx.Rows) ([]string, error) {
+ 	return result, nil
+ }
+ 
++func qualifyShadowBindingTable(sb *shadow.ShadowBinding, fallbackTable string) string {
++	tbl := strings.TrimSpace(fallbackTable)
++	if sb != nil && strings.TrimSpace(sb.ShadowTable) != "" {
++		tbl = strings.TrimSpace(sb.ShadowTable)
++	}
++	if sb != nil && strings.TrimSpace(sb.ShadowSchema) != "" && tbl != "" && !strings.Contains(tbl, ".") {
++		return strings.TrimSpace(sb.ShadowSchema) + "." + tbl
++	}
++	return tbl
++}
++
++func (r *SnapshotRunner) flushSnapshotTables(
++	ctx context.Context,
++	targetTable string,
++	scopedBinding *shadow.ShadowBinding,
++	routes []*metadata.ResolvedSourceRoute,
++) (int, error) {
++	tableFlusher, hasTableFlush := r.eventHandler.(interface {
++		FlushTableBatchBuffer(ctx context.Context, targetTable string) (int, error)
++	})
++	if scopedBinding != nil {
++		targetTable = qualifyShadowBindingTable(scopedBinding, targetTable)
++	} else if len(routes) == 1 && routes[0] != nil {
++		if routes[0].TableConfig != nil && strings.TrimSpace(routes[0].TableConfig.TargetTable) != "" {
++			targetTable = strings.TrimSpace(routes[0].TableConfig.TargetTable)
++		}
++		targetTable = qualifyShadowBindingTable(routes[0].ShadowBinding, targetTable)
++	}
++	if !hasTableFlush || strings.TrimSpace(targetTable) == "" {
++		return r.eventHandler.FlushBatchBuffer(ctx)
++	}
++	if scopedBinding != nil || len(routes) <= 1 {
++		return tableFlusher.FlushTableBatchBuffer(ctx, targetTable)
++	}
++	totalFlushed := 0
++	seenTables := make(map[string]bool, len(routes))
++	for _, rt := range routes {
++		tName := targetTable
++		if rt != nil && rt.TableConfig != nil && rt.TableConfig.TargetTable != "" {
++			tName = rt.TableConfig.TargetTable
++		}
++		if rt != nil {
++			tName = qualifyShadowBindingTable(rt.ShadowBinding, tName)
++		}
++		if seenTables[tName] {
++			continue
++		}
++		seenTables[tName] = true
++		n, fErr := tableFlusher.FlushTableBatchBuffer(ctx, tName)
++		totalFlushed += n
++		if fErr != nil {
++			return totalFlushed, fErr
++		}
++	}
++	return totalFlushed, nil
++}
++
++func (r *SnapshotRunner) reloadRegistryBeforeSnapshot(ctx context.Context, sourceObjectID int64) {
++	reloader, ok := r.registrySvc.(interface {
++		ReloadAll(context.Context) error
++	})
++	if !ok {
++		return
++	}
++	if err := reloader.ReloadAll(ctx); err != nil {
++		observability.Ctx(ctx, r.logger).Warn("snapshot.v2 pre-flight registry reload failed (proceeding with stale cache)",
++			zap.Int64("source_object_id", sourceObjectID),
++			zap.Error(err))
++	}
++	if r.eventHandler != nil {
++		r.eventHandler.FlushCache()
++	}
++}
++
++func (r *SnapshotRunner) resetSnapshotTableErrors(
++	targetTable string,
++	scopedBinding *shadow.ShadowBinding,
++	routes []*metadata.ResolvedSourceRoute,
++) {
++	discarder, ok := r.eventHandler.(interface {
++		DiscardTableAsyncErrors(targetTable string)
++	})
++	if !ok {
++		return
++	}
++	if scopedBinding != nil {
++		discarder.DiscardTableAsyncErrors(qualifyShadowBindingTable(scopedBinding, targetTable))
++		return
++	}
++	if len(routes) <= 1 {
++		if len(routes) == 1 && routes[0] != nil {
++			if routes[0].TableConfig != nil && strings.TrimSpace(routes[0].TableConfig.TargetTable) != "" {
++				targetTable = strings.TrimSpace(routes[0].TableConfig.TargetTable)
++			}
++			targetTable = qualifyShadowBindingTable(routes[0].ShadowBinding, targetTable)
++		}
++		if strings.TrimSpace(targetTable) != "" {
++			discarder.DiscardTableAsyncErrors(targetTable)
++		}
++		return
++	}
++	for _, rt := range routes {
++		tName := targetTable
++		if rt != nil && rt.TableConfig != nil && rt.TableConfig.TargetTable != "" {
++			tName = rt.TableConfig.TargetTable
++		}
++		if rt != nil {
++			tName = qualifyShadowBindingTable(rt.ShadowBinding, tName)
++		}
++		if strings.TrimSpace(tName) != "" {
++			discarder.DiscardTableAsyncErrors(tName)
++		}
++	}
++}
++
++
+diff --git a/internal/handler/shadow/batch_buffer.go b/internal/handler/shadow/batch_buffer.go
+index 991e7de..f0e6d01 100644
+--- a/internal/handler/shadow/batch_buffer.go
++++ b/internal/handler/shadow/batch_buffer.go
+@@ -53,6 +53,7 @@ type BatchBuffer struct {
+ 	piCache  sync.Map // shadowSchema|shadowTable -> postIngestCacheEntry (gate cache 30s)
+ 	onCommitOffsets func(context.Context, map[TopicPartition]int64)
+ 	watermarkTracker *StatefulWatermarkTracker // Task 1: Quản lý con trỏ commit có nhớ
++	asyncFlushErrs   []asyncTableFlushError
+ }
+ 
+ 
+@@ -255,9 +256,9 @@ func (bb *BatchBuffer) timerLoop() {
+ 			_, _ = bb.Flush() // best-effort drain on shutdown; err already logged inside Flush
+ 			return
+ 		case <-ticker.C:
+-			_, _ = bb.Flush()
++			bb.flushFromBackground()
+ 		case <-bb.flushCh:
+-			_, _ = bb.Flush()
++			bb.flushFromBackground()
+ 		}
+ 	}
+ }
+@@ -279,9 +280,10 @@ func (bb *BatchBuffer) FlushTableWithContext(parentCtx context.Context, targetTa
+ 	defer dbCancel()
+ 
+ 	bb.mu.Lock()
++	priorAsyncErr := bb.popAsyncFlushErrorLocked(targetTable)
+ 	if len(bb.records) == 0 {
+ 		bb.mu.Unlock()
+-		return 0, nil
++		return 0, priorAsyncErr
+ 	}
+ 
+ 	matched := make([]*shadow.UpsertRecord, 0)
+@@ -298,7 +300,7 @@ func (bb *BatchBuffer) FlushTableWithContext(parentCtx context.Context, targetTa
+ 	bb.mu.Unlock()
+ 
+ 	if len(matched) == 0 {
+-		return 0, nil
++		return 0, priorAsyncErr
+ 	}
+ 
+ 	byTable := make(map[string][]*shadow.UpsertRecord)
+@@ -306,7 +308,10 @@ func (bb *BatchBuffer) FlushTableWithContext(parentCtx context.Context, targetTa
+ 		byTable[bb.groupKey(r)] = append(byTable[bb.groupKey(r)], r)
+ 	}
+ 
+-	w, groupResults, gerr := bb.executeFlushGroupsWithResults(dbCtx, byTable)
++	w, groupResults, gerr := bb.executeFlushGroupsWithResultsMode(dbCtx, byTable, false)
++	if gerr == nil {
++		gerr = priorAsyncErr
++	}
+ 
+ 	// VÁ BUG 1: Cứu hộ Kafka Offset cho các bản ghi CDC vô tình đi cùng mẻ xả của bảng đó
+ 	if !bb.isSnapshotBuffer && bb.onCommitOffsets != nil && len(groupResults) > 0 {
+@@ -335,29 +340,12 @@ func (bb *BatchBuffer) FlushTableWithContext(parentCtx context.Context, targetTa
+ 	return w, gerr
+ }
+ 
+-func matchTargetTable(r *shadow.UpsertRecord, targetTable string) bool {
+-	if r == nil {
+-		return false
+-	}
+-	t := strings.TrimSpace(strings.ToLower(targetTable))
+-	tClean := strings.Trim(strings.TrimPrefix(t, "public."), "\"")
+-
+-	rTable := strings.TrimSpace(strings.ToLower(r.TableName))
+-	rTableClean := strings.Trim(strings.TrimPrefix(rTable, "public."), "\"")
+-
+-	if rTableClean == tClean || rTable == t {
+-		return true
+-	}
+-
+-	rFQN := strings.TrimSpace(strings.ToLower(r.PhysicalTableFQN))
+-	rFQNClean := strings.Trim(strings.TrimPrefix(rFQN, "\"public\"."), "\"")
+-	rFQNClean = strings.Trim(strings.TrimPrefix(rFQNClean, "public."), "\"")
+-
+-	return rFQNClean == tClean || rFQN == t
+-}
+-
+ // FlushWithContext drains the buffer synchronously using parentCtx
+ func (bb *BatchBuffer) FlushWithContext(parentCtx context.Context) (written int, err error) {
++	return bb.flushWithContextMode(parentCtx, false)
++}
++
++func (bb *BatchBuffer) flushWithContextMode(parentCtx context.Context, isBackground bool) (written int, err error) {
+ 	if parentCtx == nil {
+ 		parentCtx = context.Background()
+ 	}
+@@ -368,9 +356,13 @@ func (bb *BatchBuffer) FlushWithContext(parentCtx context.Context) (written int,
+ 	defer dbCancel()
+ 
+ 	bb.mu.Lock()
++	var priorAsyncErr error
++	if !isBackground {
++		priorAsyncErr = bb.popAllAsyncFlushErrorsLocked()
++	}
+ 	if len(bb.records) == 0 {
+ 		bb.mu.Unlock()
+-		return 0, nil
++		return 0, priorAsyncErr
+ 	}
+ 	batch := bb.records
+ 	bb.records = make([]*shadow.UpsertRecord, 0, bb.maxSize)
+@@ -398,11 +390,14 @@ func (bb *BatchBuffer) FlushWithContext(parentCtx context.Context) (written int,
+ 
+ 	// 2. Thực thi ghi DB
+ 	if len(byTable) > 0 {
+-		w, groupResults, gerr := bb.executeFlushGroupsWithResults(dbCtx, byTable)
++		w, groupResults, gerr := bb.executeFlushGroupsWithResultsMode(dbCtx, byTable, isBackground)
+ 		written = w
+ 		err = gerr
+ 		allResults = append(allResults, groupResults...)
+ 	}
++	if err == nil {
++		err = priorAsyncErr
++	}
+ 
+ 	// 3. Commit Kafka với Context 5s độc lập (Task 1)
+ 	if !bb.isSnapshotBuffer && bb.onCommitOffsets != nil {
+@@ -417,7 +412,7 @@ func (bb *BatchBuffer) FlushWithContext(parentCtx context.Context) (written int,
+ 	return written, err
+ }
+ 
+-func (bb *BatchBuffer) executeFlushGroupsWithResults(ctx context.Context, byTable map[string][]*shadow.UpsertRecord) (int, []RecordExecutionResult, error) {
++func (bb *BatchBuffer) executeFlushGroupsWithResultsMode(ctx context.Context, byTable map[string][]*shadow.UpsertRecord, isBackground bool) (int, []RecordExecutionResult, error) {
+ 	var mu sync.Mutex
+ 	var resMu sync.Mutex
+ 	var g errgroup.Group
+@@ -440,6 +435,7 @@ func (bb *BatchBuffer) executeFlushGroupsWithResults(ctx context.Context, byTabl
+ 			resMu.Lock()
+ 			allResults = append(allResults, groupResults...)
+ 			resMu.Unlock()
++			bb.recordAsyncFlushErrorIfBackground(isBackground, gk, tableRecs, gerr)
+ 
+ 			mu.Lock()
+ 			written += groupWritten
+diff --git a/internal/handler/shadow/event_handler.go b/internal/handler/shadow/event_handler.go
+index 3f4e289..1486e2d 100644
+--- a/internal/handler/shadow/event_handler.go
++++ b/internal/handler/shadow/event_handler.go
+@@ -91,31 +91,6 @@ func bindingScopeFromCtx(ctx context.Context) int64 {
+ 	return 0
+ }
+ 
+-// FlushBatchBuffer forces the batch buffer to flush immediately and reports
+-// (persisted, err) so callers (snapshot runner) can mark progress with the
+-// destination-accurate count rather than the enqueue count.
+-func (h *EventHandler) FlushBatchBuffer(ctx context.Context) (written int, err error) {
+-	if h.batchBuffer == nil {
+-		return 0, nil
+-	}
+-	return h.batchBuffer.FlushWithContext(ctx)
+-}
+-
+-// FlushTableBatchBuffer forces the batch buffer to flush immediately only for a specific table
+-// and reports (persisted, err). It isolates healing trace context to only the target table.
+-func (h *EventHandler) FlushTableBatchBuffer(ctx context.Context, targetTable string) (written int, err error) {
+-	if h.batchBuffer == nil {
+-		return 0, nil
+-	}
+-	return h.batchBuffer.FlushTableWithContext(ctx, targetTable)
+-}
+-
+-func (h *EventHandler) SetOnCommitOffsets(cb func(context.Context, map[TopicPartition]int64)) {
+-	if h.batchBuffer != nil {
+-		h.batchBuffer.SetOnCommitOffsets(cb)
+-	}
+-}
+-
+ // HandleRaw processes a CDC event from any transport (NATS, Kafka, etc.)
+ func (h *EventHandler) HandleRaw(ctx context.Context, subject string, data []byte) (rows int, err error) {
+ 	start := time.Now()
+diff --git a/internal/handler/source/discover_handler_sql.go b/internal/handler/source/discover_handler_sql.go
+index 8c833b4..d4d1857 100644
+--- a/internal/handler/source/discover_handler_sql.go
++++ b/internal/handler/source/discover_handler_sql.go
+@@ -2,6 +2,7 @@ package source
+ 
+ import (
+ 	mastermodel "centralized-data-service/internal/model/master"
++	modelshadow "centralized-data-service/internal/model/shadow"
+ 	sourcemodel "centralized-data-service/internal/model/source"
+ 	"centralized-data-service/internal/service/shadow"
+ 	"context"
+@@ -75,9 +76,12 @@ func (h *DiscoverHandler) scanFieldsSQLSource(ctx context.Context, registryID in
+ 	added := 0
+ 	insertErrors := 0
+ 	for _, col := range cols {
++		if modelshadow.IsReservedSystemColumn(col.Name) {
++			continue
++		}
+ 		if !mapped[col.Name] {
+ 			targetCol := sanitizeDiscoveredFieldAsColumn(col.Name)
+-			if targetCol == "" {
++			if targetCol == "" || modelshadow.IsReservedSystemColumn(targetCol) {
+ 				continue
+ 			}
+ 			rule := mastermodel.MappingRuleV2{
+diff --git a/internal/handler/source/discover_handler_utils.go b/internal/handler/source/discover_handler_utils.go
+index 9cc208c..86eaa5e 100644
+--- a/internal/handler/source/discover_handler_utils.go
++++ b/internal/handler/source/discover_handler_utils.go
+@@ -2,6 +2,7 @@ package source
+ 
+ import (
+ 	mastermodel "centralized-data-service/internal/model/master"
++	modelshadow "centralized-data-service/internal/model/shadow"
+ 	servicesource "centralized-data-service/internal/service/source"
+ 	"context"
+ 	"encoding/json"
+@@ -25,7 +26,7 @@ func (h *DiscoverHandler) processDiscoveryRows(ctx context.Context, registryID i
+ 			targetMap = after
+ 		}
+ 		for k, v := range targetMap {
+-			if k == "_raw_data" || k == "_synced_at" || k == "_source" {
++			if modelshadow.IsReservedSystemColumn(k) {
+ 				continue
+ 			}
+ 			t := servicesource.InferTypeFromRawData(v)
+diff --git a/internal/handler/source/discovery_utils_sql.go b/internal/handler/source/discovery_utils_sql.go
+index 4b95c17..eb0776f 100644
+--- a/internal/handler/source/discovery_utils_sql.go
++++ b/internal/handler/source/discovery_utils_sql.go
+@@ -6,6 +6,7 @@ import (
+ 	"fmt"
+ 	"strings"
+ 
++	modelshadow "centralized-data-service/internal/model/shadow"
+ 	"centralized-data-service/internal/service/shadow"
+ 
+ 	_ "github.com/go-sql-driver/mysql"
+@@ -50,6 +51,9 @@ func (si *SourceInferrer) inferPGCols(
+ 			if err := rows.Scan(&name, &dataType, &udtName, &isNullable); err != nil {
+ 				return nil, err
+ 			}
++			if modelshadow.IsReservedSystemColumn(name) {
++				continue
++			}
+ 			out = append(out, shadow.BusinessColumn{
+ 				Name:     name,
+ 				DataType: pgSafeTypeWithUDT(dataType, udtName),
+@@ -102,6 +106,9 @@ func (si *SourceInferrer) inferMySQLCols(
+ 		if err := rows.Scan(&name, &dataType, &isNullable); err != nil {
+ 			return nil, err
+ 		}
++		if modelshadow.IsReservedSystemColumn(name) {
++			continue
++		}
+ 		out = append(out, shadow.BusinessColumn{
+ 			Name:     name,
+ 			DataType: mysqlToPGType(dataType),
+diff --git a/internal/server/server_setup.go b/internal/server/server_setup.go
+index 622c949..341d7c1 100644
+--- a/internal/server/server_setup.go
++++ b/internal/server/server_setup.go
+@@ -149,29 +149,14 @@ func NewWorkerServer(cfg *config.AppConfig, logger *zap.Logger) (*WorkerServer,
+ 	schemaInspector.SetMetadataRegistry(registrySvc)
+ 
+ 	schemaAdapter := shadow.NewSchemaAdapter(shadowDB, logger)
+-	cdcBatchBuffer := handlershadow.NewBatchBuffer(cfg.Worker.BatchSize, cfg.Worker.BatchTimeout, db, schemaAdapter, logger)
+-	cdcBatchBuffer.SetConnectionManager(connectionManager)
+-	cdcBatchBuffer.SetMaskingService(maskingSvc)
+-	cdcBatchBuffer.SetNatsConn(natsClient.Conn)
+-	cdcBatchBuffer.SetJetStream(natsClient.JS)
+-	cdcBatchBuffer.SetFailedSyncLogRepo(failedSyncLogRepo)
+-	cdcBatchBuffer.SetSnapshotMode(false)
+-
+-	ws.RegisterOnStop(func() { cdcBatchBuffer.Stop() })
++	cdcBatchBuffer := newConfiguredBatchBuffer(ws, cfg.Worker.BatchSize, cfg.Worker.BatchTimeout, false, db, schemaAdapter, connectionManager, maskingSvc, natsClient, failedSyncLogRepo, logger)
+ 
+ 	snapshotBatchSize := cfg.Worker.BatchSize * 2
+ 	if snapshotBatchSize < 1000 {
+ 		snapshotBatchSize = 1000
+ 	}
+-	snapshotBatchBuffer := handlershadow.NewBatchBuffer(snapshotBatchSize, 5*time.Second, db, schemaAdapter, logger)
+-	snapshotBatchBuffer.SetConnectionManager(connectionManager)
+-	snapshotBatchBuffer.SetMaskingService(maskingSvc)
+-	snapshotBatchBuffer.SetNatsConn(natsClient.Conn)
+-	snapshotBatchBuffer.SetJetStream(natsClient.JS)
+-	snapshotBatchBuffer.SetFailedSyncLogRepo(failedSyncLogRepo)
+-	snapshotBatchBuffer.SetSnapshotMode(true)
+-
+-	ws.RegisterOnStop(func() { snapshotBatchBuffer.Stop() })
++	snapshotBatchBuffer := newConfiguredBatchBuffer(ws, snapshotBatchSize, 5*time.Second, true, db, schemaAdapter, connectionManager, maskingSvc, natsClient, failedSyncLogRepo, logger)
++	healBatchBuffer := newConfiguredBatchBuffer(ws, snapshotBatchSize, 5*time.Second, true, db, schemaAdapter, connectionManager, maskingSvc, natsClient, failedSyncLogRepo, logger)
+ 
+ 	sourceAgent := recon.NewReconSourceAgent(mongoClientShared, logger)
+ 	destAgent := recon.NewReconDestAgentWithConfig(shadowDB, shadowDB, recon.ReconDestAgentConfig{ReadReplicaDSN: cfg.ReadReplica.DSN()}, logger)
+@@ -216,11 +201,9 @@ func NewWorkerServer(cfg *config.AppConfig, logger *zap.Logger) (*WorkerServer,
+ 	dynamicMapper := shadow.NewDynamicMapper(registrySvc, logger, schemaAdapter)
+ 	dynamicMapper.SetMaskingService(maskingSvc)
+ 
+-	cdcEventHandler := handlershadow.NewEventHandler(db, connectionManager, registrySvc, dynamicMapper, schemaInspector, cdcBatchBuffer, logger)
+-	cdcEventHandler.SetChildExplodeService(shadow.NewChildExplodeService(registrySvc, dynamicMapper, logger))
+-
+-	snapshotEventHandler := handlershadow.NewEventHandler(db, connectionManager, registrySvc, dynamicMapper, schemaInspector, snapshotBatchBuffer, logger)
+-	snapshotEventHandler.SetChildExplodeService(shadow.NewChildExplodeService(registrySvc, dynamicMapper, logger))
++	cdcEventHandler := newShadowEventHandler(db, connectionManager, registrySvc, dynamicMapper, schemaInspector, cdcBatchBuffer, logger)
++	snapshotEventHandler := newShadowEventHandler(db, connectionManager, registrySvc, dynamicMapper, schemaInspector, snapshotBatchBuffer, logger)
++	healEventHandler := newShadowEventHandler(db, connectionManager, registrySvc, dynamicMapper, schemaInspector, healBatchBuffer, logger)
+ 
+ 	var consumerPools []*handlershadow.ConsumerPool
+ 	for _, prefix := range cdcPrefixes {
+@@ -237,16 +220,14 @@ func NewWorkerServer(cfg *config.AppConfig, logger *zap.Logger) (*WorkerServer,
+ 	natsClient.Conn.Subscribe("schema.config.reload", func(msg *nats.Msg) {
+ 		registrySvc.ReloadAll(context.Background())
+ 		redisCache.DeletePattern(context.Background(), "schema:*")
+-		cdcBatchBuffer.FlushSchemaCache()
+-		snapshotBatchBuffer.FlushSchemaCache()
++		flushBatchBufferSchemaCaches(cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)
+ 	})
+ 
+ 	natsClient.Conn.Subscribe("connection.config.changed", func(msg *nats.Msg) {
+ 		connKey := strings.TrimSpace(string(msg.Data))
+ 		if connKey != "" {
+ 			connectionManager.InvalidatePool(connKey)
+-			cdcBatchBuffer.FlushSchemaCache()
+-			snapshotBatchBuffer.FlushSchemaCache()
++			flushBatchBufferSchemaCaches(cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)
+ 			logger.Info("connection pool invalidated via NATS signal",
+ 				zap.String("connection_code", connKey))
+ 		}
+@@ -477,7 +458,7 @@ func NewWorkerServer(cfg *config.AppConfig, logger *zap.Logger) (*WorkerServer,
+ 		WithShadowDB(shadowDB).
+ 		WithConnectionManager(connectionManager).
+ 		WithNatsPublisher(natsClient.Conn).
+-		WithEventHandler(snapshotEventHandler)
++		WithEventHandler(healEventHandler)
+ 
+ 	// 3b. Khởi tạo CheckHealHandler (Chuyên đề xuất/check chữa lành)
+ 	checkHealHandler := handlerrecon.NewCheckHealHandler(reconBase, reportRepo, executeHealHandler).
+diff --git a/internal/service/shadow/dynamic_mapper.go b/internal/service/shadow/dynamic_mapper.go
+index 81e846c..630f750 100644
+--- a/internal/service/shadow/dynamic_mapper.go
++++ b/internal/service/shadow/dynamic_mapper.go
+@@ -83,7 +83,7 @@ func (dm *DynamicMapper) MapData(ctx context.Context, bindingID int64, rawData m
+ 	enriched := make(map[string]interface{})
+ 
+ 	for _, rule := range rules {
+-		if !rule.IsActive {
++		if !rule.IsActive || IsReservedShadowSystemColumn(rule.TargetColumn) {
+ 			continue
+ 		}
+ 
+diff --git a/internal/service/shadow/schema_adapter.go b/internal/service/shadow/schema_adapter.go
+index ec65e28..fc88b04 100644
+--- a/internal/service/shadow/schema_adapter.go
++++ b/internal/service/shadow/schema_adapter.go
+@@ -354,10 +354,7 @@ func (sa *SchemaAdapter) BuildUpsertSQLInSchema(schema *TableSchema, schemaName,
+ 	finalValues := []interface{}{pkValue}
+ 
+ 	for col, val := range mappedData {
+-		if col == pkField {
+-			continue
+-		}
+-		if _, exists := schema.Columns[col]; !exists {
++		if !ShouldIncludeDataColumn(schema, col, pkField) {
+ 			continue
+ 		}
+ 		allCols = append(allCols, pgx.Identifier{col}.Sanitize())
+@@ -375,10 +372,7 @@ func (sa *SchemaAdapter) BuildUpsertSQLInSchema(schema *TableSchema, schemaName,
+ 	seenUpdateCols := make(map[string]bool)
+ 	updateSets := []string{}
+ 	for col := range mappedData {
+-		if col == pkField {
+-			continue
+-		}
+-		if _, exists := schema.Columns[col]; !exists {
++		if !ShouldIncludeDataColumn(schema, col, pkField) {
+ 			continue
+ 		}
+ 		ident := pgx.Identifier{col}.Sanitize()
+@@ -555,22 +549,7 @@ func (sa *SchemaAdapter) BuildBatchUpsertSQLsInSchema(schema *TableSchema, schem
+ 	qualifiedTable := quoteQualifiedTable(schemaName, tableName)
+ 	pkIdent := pgx.Identifier{pkField}.Sanitize()
+ 
+-	colsMap := make(map[string]bool)
+-	for _, r := range records {
+-		for col := range r.MappedData {
+-			if schema != nil && schema.Columns != nil {
+-				if _, exists := schema.Columns[col]; exists && col != pkField {
+-					colsMap[col] = true
+-				}
+-			} else if col != pkField {
+-				colsMap[col] = true
+-			}
+-		}
+-	}
+-	var dataCols []string
+-	for col := range colsMap {
+-		dataCols = append(dataCols, col)
+-	}
++	dataCols := collectBatchDataColumns(records, schema, pkField)
+ 
+ 	allCols := []string{pkIdent}
+ 	for _, col := range dataCols {
+diff --git a/internal/service/source/scan_service.go b/internal/service/source/scan_service.go
+index 53eba33..eb16639 100644
+--- a/internal/service/source/scan_service.go
++++ b/internal/service/source/scan_service.go
+@@ -138,16 +138,10 @@ func (s *ScanService) ScanRawData(ctx context.Context, targetTable string) (map[
+ 		mappedFields[r.SourceField] = true
+ 	}
+ 
+-	skipFields := map[string]bool{
+-		"_id": true, "_raw_data": true, "_source": true, "_synced_at": true,
+-		"_version": true, "_hash": true, "_deleted": true, "_created_at": true, "_updated_at": true,
+-		"id": true, "_debezium_ab_id": true, "_debezium_emitted_at": true, "_debezium_extracted_at": true, "_debezium_meta": true,
+-	}
+-
+ 	var unmappedFields []string
+ 	for _, f := range rawFields {
+ 		key := f.Key
+-		if !mappedFields[key] && !skipFields[key] {
++		if !mappedFields[key] && !shouldSkipTopLevelScanField(key) {
+ 			unmappedFields = append(unmappedFields, key)
+ 
+ 			pgType := "TEXT"
+@@ -282,7 +276,7 @@ func (s *ScanService) ScanArrayFields(ctx context.Context, targetTable, explodeP
+ 			Scan(&transformType)
+ 	}
+ 
+-	if transformType == "copy_1_to_1" || transformType == "" {
++	if transformType == "copy_1_to_1" || transformType == "multi_shadow" || transformType == "" {
+ 		isArrayExplode = false
+ 	}
+ 
+@@ -394,12 +388,6 @@ func (s *ScanService) ScanArrayFields(ctx context.Context, targetTable, explodeP
+ 		}
+ 	}
+ 
+-	skipFields := map[string]bool{
+-		"_id": true, "_raw_data": true, "_source": true, "_synced_at": true,
+-		"_source_ts": true, "_deleted": true, "_created_at": true, "_updated_at": true,
+-		"_parent_source_id": true, "_array_index": true, "id": true,
+-	}
+-
+ 	var newFields []string
+ 	var rulesToInsert []master.MappingRuleV2
+ 	type masterNestedRow struct{ target, srcField, srcPath, dataType string }
+@@ -407,7 +395,7 @@ func (s *ScanService) ScanArrayFields(ctx context.Context, targetTable, explodeP
+ 	var newRules []CreatedRuleDTO
+ 
+ 	for relPath, pgType := range discoveredFields {
+-		if skipFields[relPath] {
++		if shouldSkipNestedScanField(relPath) {
+ 			continue
+ 		}
+ 

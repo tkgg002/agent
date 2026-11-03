@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "claim",
+    "claim": "Hàm ApplySourceFieldTypesToBSONDoc khai báo optionalNullableFields gồm requestId và idempotencyKey, và xóa trường khỏi doc khi giá trị là nil và không có trong typeMap.",
+    "flow": "ApplySourceFieldTypesToBSONDoc -> optionalNullableFields",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:45-48\nvar optionalNullableFields = [][2]string{\n\t{\"requestId\", \"request_id\"},\n\t{\"idempotencyKey\", \"idempotency_key\"},\n}"
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "claim",
+    "claim": "Hàm CreateIndex trong mongoIndexDriver khởi tạo idxOpts bằng options.Index().SetName(indexName).SetUnique(spec.IsUnique) mà không bật SetSparse(true) khi tạo unique index.",
+    "flow": "mongoIndexDriver.CreateIndex -> options.Index().SetName().SetUnique()",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:291-306\n\tidxOpts := options.Index().SetName(indexName).SetUnique(spec.IsUnique)\n\tif spec.IsPartial && strings.TrimSpace(spec.WhereClause) != \"\" {\n\t\tpfe, err := parseMongoPartialFilter(spec.WhereClause)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tidxOpts.SetPartialFilterExpression(pfe)\n\t}\n\n\tcreatedName, err := coll.Indexes().CreateOne(ctx, mongo.IndexModel{\n\t\tKeys:    keys,\n\t\tOptions: idxOpts,\n\t})\n\tif err != nil {\n\t\treturn fmt.Errorf(\"mongo createIndex %s on %s failed: %w\", indexName, coll.Name(), err)\n\t}"
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "claim",
+    "claim": "Hàm parseMongoPartialFilter hiện chỉ hỗ trợ chuỗi JSON hoặc phép gán bằng dấu = (strings.SplitN(w, \"=\", 2)), chưa hỗ trợ biểu thức kiểm tra khác null và trả về lỗi unsupported partial filter cho các định dạng khác.",
+    "flow": "mongoIndexDriver.CreateIndex -> parseMongoPartialFilter",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:135-152\n\tw = strings.TrimPrefix(strings.TrimSuffix(w, \")\"), \"(\")\n\tif parts := strings.SplitN(w, \"=\", 2); len(parts) == 2 {\n\t\tfield := strings.TrimSpace(parts[0])\n\t\tvalRaw := strings.TrimSpace(parts[1])\n\t\tif !IsSafeMongoIndexField(field) {\n\t\t\treturn nil, fmt.Errorf(\"invalid field in WHERE clause: %s\", field)\n\t\t}\n\t\tif strings.EqualFold(valRaw, \"true\") {\n\t\t\treturn bson.M{field: true}, nil\n\t\t}\n\t\tif strings.EqualFold(valRaw, \"false\") {\n\t\t\treturn bson.M{field: false}, nil\n\t\t}\n\t\tvalClean := strings.Trim(valRaw, \"'\\\"\")\n\t\treturn bson.M{field: valClean}, nil\n\t}\n\treturn nil, fmt.Errorf(\"unsupported partial filter %q (use JSON like {\\\"_deleted\\\": true} or field = value)\", whereClause)\n}"
+  },
+  {
+    "id": "CTRL-T1",
+    "kind": "control_true",
+    "claim": "Hàm Engine của mongoIndexDriver trả về chuỗi hằng số mongodb.",
+    "flow": "mongoIndexDriver.Engine",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:30-31\nfunc (d *mongoIndexDriver) Engine() string      { return \"mongodb\" }\nfunc (d *mongoIndexDriver) IsAsyncCreate() bool { return false }"
+  },
+  {
+    "id": "CTRL-F1",
+    "kind": "control_false",
+    "claim": "Hàm IsAsyncCreate của mongoIndexDriver luôn trả về true để chạy ngầm.",
+    "flow": "mongoIndexDriver.IsAsyncCreate",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:30-31\nfunc (d *mongoIndexDriver) Engine() string      { return \"mongodb\" }\nfunc (d *mongoIndexDriver) IsAsyncCreate() bool { return false }"
+  },
+  {
+    "id": "CTRL-F2",
+    "kind": "control_false",
+    "claim": "Hàm CreateIndex trong mongoIndexDriver luôn dùng tiền tố pk_ cho mọi unique index được tạo.",
+    "flow": "mongoIndexDriver.CreateIndex",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:282-286\n\tprefix := \"idx\"\n\tif spec.IsUnique {\n\t\tprefix = \"ux\"\n\t}\n\tindexName := fmt.Sprintf(\"%s_%s_%s\", prefix, coll.Name(), strings.Join(nameParts, \"_\"))"
+  }
+]

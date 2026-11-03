@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "claim",
+    "claim": "mongoIndexDriver.CreateIndex sets idxOpts using options.Index().SetName(indexName).SetUnique(spec.IsUnique) without setting SetSparse(true) when spec.IsPartial is false.",
+    "flow": "mongoIndexDriver.CreateIndex -> options.Index()",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:291-306\n\tidxOpts := options.Index().SetName(indexName).SetUnique(spec.IsUnique)\n\tif spec.IsPartial && strings.TrimSpace(spec.WhereClause) != \"\" {\n\t\tpfe, err := parseMongoPartialFilter(spec.WhereClause)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tidxOpts.SetPartialFilterExpression(pfe)\n\t}\n\n\tcreatedName, err := coll.Indexes().CreateOne(ctx, mongo.IndexModel{\n\t\tKeys:    keys,\n\t\tOptions: idxOpts,\n\t})\n\tif err != nil {\n\t\treturn fmt.Errorf(\"mongo createIndex %s on %s failed: %w\", indexName, coll.Name(), err)\n\t}"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "claim",
+    "claim": "In the solution Code Demo, CreateIndex calls idxOpts.SetSparse(true) when spec.IsUnique is true and hasPartial is false, and retries with SetPartialFilterExpression(buildMongoUniqueNonNullFilter(keys, sampleDoc)) when isMongoDuplicateNullKeyErr(err) is true.",
+    "flow": "mongoIndexDriver.CreateIndex -> SetSparse(true) / SetPartialFilterExpression",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-mongo-createindex-dupkey-2026-11-02/09_tasks_solution_mongo_createindex_dupkey.md:269-294\n\tidxOpts := options.Index().SetName(indexName).SetUnique(spec.IsUnique)\n\thasPartial := spec.IsPartial && strings.TrimSpace(spec.WhereClause) != \"\"\n\tif hasPartial {\n\t\tpfe, err := parseMongoPartialFilter(spec.WhereClause, sampleDoc)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tidxOpts.SetPartialFilterExpression(pfe)\n\t} else if spec.IsUnique {\n\t\tidxOpts.SetSparse(true)\n\t}\n\n\tcreatedName, err := coll.Indexes().CreateOne(ctx, mongo.IndexModel{\n\t\tKeys:    keys,\n\t\tOptions: idxOpts,\n\t})\n\tif err != nil && spec.IsUnique && !hasPartial && isMongoDuplicateNullKeyErr(err) {\n\t\tfallbackOpts := options.Index().\n\t\t\tSetName(indexName).\n\t\t\tSetUnique(true).\n\t\t\tSetPartialFilterExpression(buildMongoUniqueNonNullFilter(keys, sampleDoc))\n\t\tcreatedName, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{\n\t\t\tKeys:    keys,\n\t\t\tOptions: fallbackOpts,\n\t\t})\n\t}"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "claim",
+    "claim": "IndexHandler.HandleCreateIndex passes CreateIndexSpec with Columns, IsUnique, IsPartial, and WhereClause to driver.CreateIndex(ctx, target, spec).",
+    "flow": "IndexHandler.HandleCreateIndex -> driver.CreateIndex",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/governance/index_handler.go:114-126\n\tspec := governance.CreateIndexSpec{\n\t\tColumns:     payload.Columns,\n\t\tIsUnique:    payload.IsUnique,\n\t\tIsPartial:   payload.IsPartial,\n\t\tWhereClause: payload.WhereClause,\n\t}\n\n\tif !driver.IsAsyncCreate() {\n\t\tdefer span.End()\n\t\tif err := driver.CreateIndex(ctx, target, spec); err != nil {\n\t\t\th.PublishResult(ctx, msg, base.CommandResult{Command: \"create-index\", TargetTable: target.Table, Status: \"error\", Error: err.Error()})\n\t\t\treturn\n\t\t}"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "claim",
+    "claim": "In the solution Code Demo, ListIndexes reads sparse from raw[\"sparse\"].(bool) and sets prefix to 'UNIQUE SPARSE INDEX' when unique and sparse are both true.",
+    "flow": "mongoIndexDriver.ListIndexes -> prefix",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-mongo-createindex-dupkey-2026-11-02/09_tasks_solution_mongo_createindex_dupkey.md:224-242\n\t\tunique, _ := raw[\"unique\"].(bool)\n\t\tsparse, _ := raw[\"sparse\"].(bool)\n\t\tvar keyParts, colNames []string\n\t\tif keyDoc, ok := raw[\"key\"].(bson.M); ok {\n\t\t\tfor k, v := range keyDoc {\n\t\t\t\tcolNames = append(colNames, k)\n\t\t\t\tkeyParts = append(keyParts, fmt.Sprintf(\"%q: %v\", k, v))\n\t\t\t}\n\t\t}\n\t\tprefix := \"INDEX\"\n\t\tif unique || name == \"_id_\" {\n\t\t\tif sparse {\n\t\t\t\tprefix = \"UNIQUE SPARSE INDEX\"\n\t\t\t} else {\n\t\t\t\tprefix = \"UNIQUE INDEX\"\n\t\t\t}\n\t\t} else if sparse {\n\t\t\tprefix = \"SPARSE INDEX\"\n\t\t}"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "claim",
+    "claim": "In the solution Code Demo, parseMongoPartialFilter checks if upperW ends with ' IS NOT NULL', resolves the field via parseMongoIndexColumnSpec, and returns buildMongoNonNullFieldFilter(field, sampleDoc).",
+    "flow": "parseMongoPartialFilter -> buildMongoNonNullFieldFilter",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-mongo-createindex-dupkey-2026-11-02/09_tasks_solution_mongo_createindex_dupkey.md:108-116\n\tupperW := strings.ToUpper(w)\n\tif strings.HasSuffix(upperW, \" IS NOT NULL\") {\n\t\trawField := strings.TrimSpace(w[:len(w)-len(\" IS NOT NULL\")])\n\t\tfield, _, err := parseMongoIndexColumnSpec(rawField, sampleDoc)\n\t\tif err != nil {\n\t\t\treturn nil, fmt.Errorf(\"invalid field in WHERE clause: %s\", rawField)\n\t\t}\n\t\treturn buildMongoNonNullFieldFilter(field, sampleDoc), nil\n\t}"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "claim",
+    "claim": "In the solution Code Demo, resolveMongoSampleDocForColumns queries coll.FindOne with bson.M{cand: bson.M{\"$exists\": true, \"$ne\": nil}} when the candidate column is nil in sampleDoc.",
+    "flow": "resolveMongoSampleDocForColumns -> coll.FindOne",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-mongo-createindex-dupkey-2026-11-02/09_tasks_solution_mongo_createindex_dupkey.md:203-216\n\t\tcandidates := []string{base}\n\t\tif camel != base {\n\t\t\tcandidates = []string{camel, base}\n\t\t}\n\t\tfor _, cand := range candidates {\n\t\t\tvar docWithField bson.M\n\t\t\terr := coll.FindOne(ctx, bson.M{cand: bson.M{\"$exists\": true, \"$ne\": nil}}).Decode(&docWithField)\n\t\t\tif err == nil && docWithField[cand] != nil {\n\t\t\t\tsampleDoc[cand] = docWithField[cand]\n\t\t\t\tbreak\n\t\t\t}\n\t\t}\n\t}\n\treturn sampleDoc"
+  },
+  {
+    "id": "D-API",
+    "kind": "claim",
+    "claim": "In the solution Code Demo, parseMongoPartialFilter accepts optional sampleDocs ...bson.M so existing single-argument callers remain compatible.",
+    "flow": "parseMongoPartialFilter signature",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-mongo-createindex-dupkey-2026-11-02/09_tasks_solution_mongo_createindex_dupkey.md:94-106\nfunc parseMongoPartialFilter(whereClause string, sampleDocs ...bson.M) (bson.M, error) {\n\tw := strings.TrimSpace(whereClause)\n\tif strings.HasPrefix(w, \"{\") {\n\t\tvar m bson.M\n\t\tif err := json.Unmarshal([]byte(w), &m); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"invalid partialFilterExpression JSON: %w\", err)\n\t\t}\n\t\treturn m, nil\n\t}\n\tvar sampleDoc bson.M\n\tif len(sampleDocs) > 0 {\n\t\tsampleDoc = sampleDocs[0]\n\t}"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "mongoIndexDriver.DropIndex returns a protected MongoDB index error when indexName is '_id_' or starts with 'ux_'.",
+    "flow": "mongoIndexDriver.DropIndex",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:318-321\n\tindexName = strings.TrimSpace(indexName)\n\tif indexName == \"\" || indexName == \"_id_\" || strings.HasPrefix(indexName, \"ux_\") {\n\t\treturn fmt.Errorf(\"protected MongoDB index cannot be dropped: %s\", indexName)\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "mongoIndexDriver.DropIndex allows dropping '_id_' without any error.",
+    "flow": "mongoIndexDriver.DropIndex",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_driver_mongo.go:318-321\n\tindexName = strings.TrimSpace(indexName)\n\tif indexName == \"\" || indexName == \"_id_\" || strings.HasPrefix(indexName, \"ux_\") {\n\t\treturn fmt.Errorf(\"protected MongoDB index cannot be dropped: %s\", indexName)\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In the solution Code Demo, buildMongoNonNullFieldFilter always returns nil for every field.",
+    "flow": "buildMongoNonNullFieldFilter",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-mongo-createindex-dupkey-2026-11-02/09_tasks_solution_mongo_createindex_dupkey.md:148-162\nfunc buildMongoNonNullFieldFilter(field string, sampleDoc bson.M) bson.M {\n\tif len(sampleDoc) > 0 {\n\t\tif v, ok := sampleDoc[field]; ok && v != nil {\n\t\t\tswitch v.(type) {\n\t\t\tcase string:\n\t\t\t\treturn bson.M{field: bson.M{\"$gt\": \"\"}}\n\t\t\tcase int, int32, int64, float64:\n\t\t\t\treturn bson.M{field: bson.M{\"$type\": \"number\"}}\n\t\t\tcase bool:\n\t\t\t\treturn bson.M{field: bson.M{\"$type\": \"bool\"}}\n\t\t\t}\n\t\t}\n\t}\n\treturn bson.M{field: bson.M{\"$gt\": \"\"}}\n}"
+  }
+]

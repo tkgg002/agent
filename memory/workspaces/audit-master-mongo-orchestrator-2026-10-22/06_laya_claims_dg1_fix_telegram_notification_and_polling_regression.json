@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "target",
+    "basis": "code",
+    "claim": "updateTelegramPersistedConfig in 09_tasks_solution_fix_telegram_notification_and_polling_regression.md locks telegramCfgMu, calls loadTelegramPersistedConfigLocked, runs mutator(&cfg), and calls saveTelegramPersistedConfigLocked.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_fix_telegram_notification_and_polling_regression.md:247-256\n   func (s *Server) updateTelegramPersistedConfig(mutator func(cfg *telegramPersistedConfig)) telegramPersistedConfig {\n       telegramCfgMu.Lock()\n       defer telegramCfgMu.Unlock()\n       cfg := s.loadTelegramPersistedConfigLocked()\n       if mutator != nil {\n           mutator(&cfg)\n       }\n       _ = s.saveTelegramPersistedConfigLocked(cfg)\n       return cfg\n   }"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "target",
+    "basis": "code",
+    "claim": "saveTelegramPersistedConfigLocked in 09_tasks_solution_fix_telegram_notification_and_polling_regression.md writes the marshaled JSON to a temporary file tmp and renames tmp to p using os.Rename.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_fix_telegram_notification_and_polling_regression.md:220-229\n\traw, err := json.MarshalIndent(cfg, \"\", \"  \")\n\tif err != nil {\n\t\treturn err\n\t}\n\ttmp := fmt.Sprintf(\"%s.tmp.%d\", p, time.Now().UnixNano())\n\tif err := os.WriteFile(tmp, raw, 0o600); err != nil {\n\t\treturn err\n\t}\n\treturn os.Rename(tmp, p)\n}"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "target",
+    "basis": "code",
+    "claim": "saveTelegramPersistedConfigLocked in 09_tasks_solution_fix_telegram_notification_and_polling_regression.md preserves existing.BotTokenEncrypted or bak.BotTokenEncrypted when cfg.BotTokenEncrypted is empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_fix_telegram_notification_and_polling_regression.md:191-197\n\tif strings.TrimSpace(cfg.BotTokenEncrypted) == \"\" {\n\t\tif strings.TrimSpace(existing.BotTokenEncrypted) != \"\" {\n\t\t\tcfg.BotTokenEncrypted = existing.BotTokenEncrypted\n\t\t} else if bak.BotTokenEncrypted != \"\" {\n\t\t\tcfg.BotTokenEncrypted = bak.BotTokenEncrypted\n\t\t}\n\t}"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "target",
+    "basis": "code",
+    "claim": "loadTelegramPersistedConfig in 09_tasks_solution_fix_telegram_notification_and_polling_regression.md acquires telegramCfgMu.Lock(), defers telegramCfgMu.Unlock(), and returns s.loadTelegramPersistedConfigLocked().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_fix_telegram_notification_and_polling_regression.md:126-130\nfunc (s *Server) loadTelegramPersistedConfig() telegramPersistedConfig {\n\ttelegramCfgMu.Lock()\n\tdefer telegramCfgMu.Unlock()\n\treturn s.loadTelegramPersistedConfigLocked()\n}"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "target",
+    "basis": "code",
+    "claim": "loadTelegramPersistedConfigLocked in 09_tasks_solution_fix_telegram_notification_and_polling_regression.md restores cfg.BotTokenEncrypted and cfg.ChatID from bak when they are empty and calls saveTelegramPersistedConfigLocked when healed is true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_fix_telegram_notification_and_polling_regression.md:150-169\n\tbak := s.loadTelegramCredentialsBackupLocked()\n\thealed := false\n\tif strings.TrimSpace(cfg.BotTokenEncrypted) == \"\" && bak.BotTokenEncrypted != \"\" {\n\t\tcfg.BotTokenEncrypted = bak.BotTokenEncrypted\n\t\thealed = true\n\t}\n\tif strings.TrimSpace(cfg.ChatID) == \"\" && bak.ChatID != \"\" {\n\t\tcfg.ChatID = bak.ChatID\n\t\thealed = true\n\t}\n\tif strings.TrimSpace(cfg.BotUsername) == \"\" && bak.BotUsername != \"\" {\n\t\tcfg.BotUsername = bak.BotUsername\n\t}\n\tif cfg.Enabled && strings.TrimSpace(cfg.BotTokenEncrypted) != \"\" && !cfg.NotifyOnS3 {\n\t\tcfg.NotifyOnS3 = true\n\t}\n\tcfg.MaskedBotToken = maskTelegramBotToken(cfg.BotTokenEncrypted)\n\tif healed {\n\t\t_ = s.saveTelegramPersistedConfigLocked(cfg)\n\t}"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "target",
+    "basis": "code",
+    "claim": "saveTelegramCredentialsBackupLocked in 09_tasks_solution_fix_telegram_notification_and_polling_regression.md returns early without writing when token or chatID is empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_fix_telegram_notification_and_polling_regression.md:104-109\nfunc (s *Server) saveTelegramCredentialsBackupLocked(token, chatID, username string) {\n\ttoken = strings.TrimSpace(token)\n\tchatID = strings.TrimSpace(chatID)\n\tif token == \"\" || chatID == \"\" {\n\t\treturn\n\t}"
+  },
+  {
+    "id": "D-API",
+    "kind": "target",
+    "basis": "code",
+    "claim": "saveTelegramPersistedConfigLocked in 09_tasks_solution_fix_telegram_notification_and_polling_regression.md merges non-zero thread IDs from existing.TaskThreadIDs into cfg.TaskThreadIDs.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_fix_telegram_notification_and_polling_regression.md:208-212\n\tfor k, v := range existing.TaskThreadIDs {\n\t\tif cfg.TaskThreadIDs[k] == 0 && v > 0 {\n\t\t\tcfg.TaskThreadIDs[k] = v\n\t\t}\n\t}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "telegramSettingsPath in 09_tasks_solution_fix_telegram_notification_and_polling_regression.md joins root, .orchestrator, and telegram_settings.json.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_fix_telegram_notification_and_polling_regression.md:74-80\nfunc (s *Server) telegramSettingsPath() string {\n\troot := s.Root\n\tif root == \"\" {\n\t\troot = \".\"\n\t}\n\treturn filepath.Join(root, \".orchestrator\", \"telegram_settings.json\")\n}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "telegramSettingsPath in 09_tasks_solution_fix_telegram_notification_and_polling_regression.md returns /etc/passwd.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_fix_telegram_notification_and_polling_regression.md:74-80\nfunc (s *Server) telegramSettingsPath() string {\n\troot := s.Root\n\tif root == \"\" {\n\t\troot = \".\"\n\t}\n\treturn filepath.Join(root, \".orchestrator\", \"telegram_settings.json\")\n}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "saveTelegramCredentialsBackupLocked in 09_tasks_solution_fix_telegram_notification_and_polling_regression.md deletes the backup file when token is non-empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_fix_telegram_notification_and_polling_regression.md:104-124\nfunc (s *Server) saveTelegramCredentialsBackupLocked(token, chatID, username string) {\n\ttoken = strings.TrimSpace(token)\n\tchatID = strings.TrimSpace(chatID)\n\tif token == \"\" || chatID == \"\" {\n\t\treturn\n\t}\n\tbakPath := s.telegramCredentialsBackupPath()\n\t_ = os.MkdirAll(filepath.Dir(bakPath), 0o755)\n\tbak := telegramCredentialsBackup{\n\t\tBotTokenEncrypted: token,\n\t\tChatID:            chatID,\n\t\tBotUsername:       strings.TrimSpace(username),\n\t\tUpdatedAt:         time.Now().Format(time.RFC3339),\n\t}\n\tif raw, err := json.MarshalIndent(bak, \"\", \"  \"); err == nil {\n\t\ttmp := fmt.Sprintf(\"%s.tmp.%d\", bakPath, time.Now().UnixNano())\n\t\tif os.WriteFile(tmp, raw, 0o600) == nil {\n\t\t\t_ = os.Rename(tmp, bakPath)\n\t\t}\n\t}\n}"
+  }
+]

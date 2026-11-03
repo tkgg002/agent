@@ -1,0 +1,105 @@
+{
+  "mode": "claim",
+  "stage": "dg1",
+  "workspace": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-daily-flow-broken-oct27-2026-10-30",
+  "ts": "20261030T154853",
+  "trusted_rounds": [
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-daily-flow-broken-oct27-2026-10-30/06_laya_raw_dg1_20261030T154853.json",
+  "claims": [
+    {
+      "id": "S-RC-1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Trong ApplySourceFieldTypesToBSONDoc, doc['_id'] chỉ được gán khi chuỗi id hoặc _source_id dài đúng 24 ký tự hex (ObjectID), khiến các bản ghi có id kiểu UUID 36 ký tự không có doc['_id'] và bị BuildMongoOCCBulkModels fallback targetKey về '_gpay_id'.",
+      "decision": "FLAG",
+      "resolved": "ApplySourceFieldTypesToBSONDoc chỉ kiểm tra len == 24 trước khi gán doc['_id'] = oid. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:53-62",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5996
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2765
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4701
+        }
+      }
+    },
+    {
+      "id": "S-FIX-1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Hàm resolveEffectiveMongoConflictTarget hiện chỉ trả về '_id' khi ct == 'id' và có bản ghi chứa source_field_types hoặc sourceFieldTypes khác nil, còn nếu batch chỉ có bản ghi Primary (chưa có source_field_types) thì trả về 'id'.",
+      "decision": "FLAG",
+      "resolved": "resolveEffectiveMongoConflictTarget chỉ trả về '_id' khi ct == 'id' và có bản ghi chứa source_field_types khác nil. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:387-400",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.304
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.4818
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.1219
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT-1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Trong queryMultiShadowRowsForTable, khi secondaryJoinField không thuộc isDefaultIDJoin, hàm chỉ chạy truy vấn WHERE (_raw_data ->> ?) IN (?) mà chưa thử khớp nhanh trên cột _source_id.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3104
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2721
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6356
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV-1",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "Code Demo trong ApplySourceFieldTypesToBSONDoc và resolveEffectiveMongoConflictTarget chuẩn hóa doc['_id'] cho cả chuỗi 24-char hex (ObjectID) và chuỗi id khác rỗng (như UUID), đồng thời trả về '_id' nhất quán khi ct == 'id'.",
+      "decision": "FLAG",
+      "resolved": "Code Demo chuẩn hóa doc['_id'] cho cả 24-char hex và UUID string id, đồng thời trả về '_id' nhất quán. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:47-63",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.8873
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2889
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.0438
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

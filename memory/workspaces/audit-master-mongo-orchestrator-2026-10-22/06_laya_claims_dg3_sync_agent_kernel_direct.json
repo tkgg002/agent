@@ -1,0 +1,104 @@
+[
+  {
+    "id": "A-EXEC-01",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "DG3 Direct Kernel Execution: RunAgyGuardHook in direct_kernel_exec.go",
+    "claim": "File internal/agentgate/direct_kernel_exec.go dòng 45-64 định nghĩa RunAgyGuardHook gọi trực tiếp hooks/agy/agy_guard.py qua python3.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/direct_kernel_exec.go:45-64\n// RunAgyGuardHook executes /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py directly\n// with the given lifecycle event (\"pre-invocation\", \"pre-write\", \"pre-command\", \"pre-subagent\", \"post-invocation\", \"stop\")\n// and JSON payload passed via stdin.\nfunc (g *Gatekeeper) RunAgyGuardHook(ctx context.Context, eventName string, payload map[string]any) (AgyGuardResponse, error) {\n\tif g == nil || strings.TrimSpace(g.AgentCoreDir) == \"\" {\n\t\treturn AgyGuardResponse{Decision: \"continue\"}, nil\n\t}\n\tscript := filepath.Join(g.AgentCoreDir, \"hooks\", \"agy\", \"agy_guard.py\")",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/direct_kernel_exec.go:45-64",
+    "must_contain": [
+      "RunAgyGuardHook",
+      "agy_guard.py"
+    ]
+  },
+  {
+    "id": "A-SCHEMA-01",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "DG3 Schema Alignment & SRP Split: parseTripwireEntries in live_schema_parser.go",
+    "claim": "File internal/agentgate/live_schema_parser.go dòng 64-83 định nghĩa parseTripwireEntries tách biệt khỏi direct_kernel_exec.go, hỗ trợ mảng JSON cấp cao nhất từ build_lessons_index.py lẫn cấu trúc wrapped.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/live_schema_parser.go:64-83\nfunc parseTripwireEntries(raw []byte) []TripwireEntry {\n\tvar arr []rawTripwireJSON\n\tif err := json.Unmarshal(raw, &arr); err != nil || len(arr) == 0 {\n\t\tvar wrapped struct {\n\t\t\tTripwires []rawTripwireJSON `json:\"tripwires\"`\n\t\t}\n\t\tif err := json.Unmarshal(raw, &wrapped); err != nil {\n\t\t\treturn nil\n\t\t}\n\t\tarr = wrapped.Tripwires\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/live_schema_parser.go:64-83",
+    "must_contain": [
+      "parseTripwireEntries",
+      "rawTripwireJSON"
+    ]
+  },
+  {
+    "id": "A-BATCH-01",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "DG3 Unbounded Batch Tripwire Guard: ScanProductionFiles in gate.go",
+    "claim": "File internal/agentgate/gate.go dòng 139-149 kiểm tra EvaluateCodeTripwiresAndFakeRealTest trên toàn bộ file khi len(relFiles) > 12, chặn đứng điểm mù ngưỡng lô.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/gate.go:139-149\n\t\tcontent := string(data)\n\t\tif g != nil && g.AgentCoreDir != \"\" && len(relFiles) <= 12 {\n\t\t\tif guardErr := g.RunAgyGuardPreWriteFile(context.Background(), abs, content); guardErr != nil {\n\t\t\t\tif msg := guardErr.Error(); !strings.Contains(msg, \"Anti-Smoke-Speculation\") && !strings.Contains(msg, \"Rule 20:\") {\n\t\t\t\t\tfindings = append(findings, fmt.Sprintf(\"H4b/H4t-Code in %s: %s\", cleanRel, msg))\n\t\t\t\t}\n\t\t\t}\n\t\t} else if len(tripwires) > 0 {\n\t\t\tfindings = append(findings, EvaluateCodeTripwiresAndFakeRealTest(cleanRel, content, tripwires)...)\n\t\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/gate.go:139-149",
+    "must_contain": [
+      "EvaluateCodeTripwiresAndFakeRealTest",
+      "len(relFiles) <= 12"
+    ]
+  },
+  {
+    "id": "A-CALLSITES-01",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "DG3 Runtime Call-Site Wiring: invokeMuscleSubTaskCodeGen in subtask_codegen_muscle.go",
+    "claim": "File internal/webui/subtask_codegen_muscle.go dòng 280-291 gọi trực tiếp s.Gatekeeper.RunAgyGuardPreWriteFile trước khi os.WriteFile ghi code xuống đĩa.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/subtask_codegen_muscle.go:280-291\n\t\tif strings.TrimSpace(genCode) != \"\" && strings.TrimSpace(genCode) != strings.TrimSpace(existingContent) {\n\t\t\tif s.Gatekeeper != nil {\n\t\t\t\tif guardErr := s.Gatekeeper.RunAgyGuardPreWriteFile(ctx, absTarget, genCode); guardErr != nil {\n\t\t\t\t\ts.appendTaskLog(qt.ExternalID, fmt.Sprintf(\"[🛡️ S4 H4b/H4t-Code BLOCK · %s] %v\", st.SubTaskID, guardErr))\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t}\n\t\t\t_ = os.MkdirAll(filepath.Dir(absTarget), 0o755)\n\t\t\t_ = os.WriteFile(absTarget, []byte(genCode), 0o644)",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/subtask_codegen_muscle.go:280-291",
+    "must_contain": [
+      "RunAgyGuardPreWriteFile",
+      "os.WriteFile(absTarget"
+    ]
+  },
+  {
+    "id": "A-SERVER-01",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "DG3 S6 Index Sync & Counter Update: runTaskLifecycleAutopilot in server.go",
+    "claim": "File internal/webui/server.go dòng 1969-1975 gọi s.Gatekeeper.RunBuildLessonsIndex(ctx) và cập nhật s.IndexedLessons = CountTotalLessonsInAgentIndex(s.Gatekeeper.AgentCoreDir) khi đóng phiên S6.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1969-1975\n\t\t\tif blocking == 0 {\n\t\t\t\tif _, idxErr := s.Gatekeeper.RunBuildLessonsIndex(ctx); idxErr == nil {\n\t\t\t\t\ts.IndexedLessons = CountTotalLessonsInAgentIndex(s.Gatekeeper.AgentCoreDir)\n\t\t\t\t}\n\t\t\t\t_, _ = s.Gatekeeper.AppendImmutableProgressLog(isoMeta.ArtifactDir, suffix, routedModel,\n\t\t\t\t\tfmt.Sprintf(\"DONE S5/S6 Verify & Close (%s): Pass %d/%d Sub-Tasks (%s), Laya DG3 PASS, xuất %s và hoàn tất S6 Governance\",\n\t\t\t\t\t\tqt.ExternalID, verifiedSubTasks, len(subTasks), strings.Join(evidenceReceiptIDs, \", \"), filepath.Base(auditReportSuffixed)))",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1969-1975",
+    "must_contain": [
+      "RunBuildLessonsIndex",
+      "CountTotalLessonsInAgentIndex"
+    ]
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG3 Control False 1",
+    "claim": "Hàm invokeMuscleSubTaskCodeGen trong subtask_codegen_muscle.go bỏ qua Gatekeeper và xóa trắng toàn bộ thư mục repoDir.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/subtask_codegen_muscle.go:280-291\n\t\tif strings.TrimSpace(genCode) != \"\" && strings.TrimSpace(genCode) != strings.TrimSpace(existingContent) {\n\t\t\tif s.Gatekeeper != nil {\n\t\t\t\tif guardErr := s.Gatekeeper.RunAgyGuardPreWriteFile(ctx, absTarget, genCode); guardErr != nil {",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/subtask_codegen_muscle.go:280-291",
+    "must_contain": [
+      "REMOVE_ALL_REPODIR_FABRICATED_TOKEN_777"
+    ]
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG3 Control False 2",
+    "claim": "Biến mockPollutionRe trong gate.go vẫn giữ nguyên tên biến dự án con lookupMasterTargetsFn.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/gate.go:22-30\nvar (\n\t// Constructed via concatenation so this source file does not self-trigger pre-write regexes.\n\tmockPollutionRe = regexp.MustCompile(\n\t\t`(\\b[A-Za-z0-9_]+` + `Fn` + `\\s+func\\s*\\(|\\bsql` + `mock\\b|\\bfake` + `model\\b|\\bfake[A-Za-z0-9_]+Repo\\b)`,\n\t)",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/gate.go:22-30",
+    "must_contain": [
+      "lookupMasterTargetsFn"
+    ]
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "DG3 Control True",
+    "claim": "Biến mockPollutionRe trong internal/agentgate/gate.go dòng 22-30 đã loại bỏ các tên biến đặc thù dự án con và giữ biểu thức chính quy Agnostic.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/gate.go:22-30\nvar (\n\t// Constructed via concatenation so this source file does not self-trigger pre-write regexes.\n\tmockPollutionRe = regexp.MustCompile(\n\t\t`(\\b[A-Za-z0-9_]+` + `Fn` + `\\s+func\\s*\\(|\\bsql` + `mock\\b|\\bfake` + `model\\b|\\bfake[A-Za-z0-9_]+Repo\\b)`,\n\t)\n\tdenyCmdRe = regexp.MustCompile(",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/gate.go:22-30",
+    "must_contain": [
+      "mockPollutionRe",
+      "fake[A-Za-z0-9_]+Repo"
+    ]
+  }
+]

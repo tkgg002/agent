@@ -1,0 +1,128 @@
+{
+  "mode": "claim",
+  "stage": "dg3",
+  "workspace": "audit-daily-flow-vs-daily-count-2026-10-27",
+  "ts": "20261027T142702",
+  "trusted_rounds": [
+    "r2"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-daily-flow-vs-daily-count-2026-10-27/06_laya_raw_dg3_20261027T142702.json",
+  "claims": [
+    {
+      "id": "G7-DIFF-1",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Tại cdc_event_date.go:9-29, ResolveEventDateHCM quy đổi tsMs > 0 sang ngày YYYY-MM-DD theo múi giờ GMT+7 (locHCM) và ResolveBatchEventDateHCM duyệt tìm bản ghi dữ liệu thật đầu tiên (bỏ qua IsMarker hoặc SourceTsMs <= 0).",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5997
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.5987
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.9
+        }
+      }
+    },
+    {
+      "id": "G7-DIFF-2",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Tại batch_buffer_event_date.go:17-50, splitRecordsByEventDate và flushTableGroupByEventDate tách tuần tự các bản ghi trong cùng goroutine của bảng theo event_date và giữ bản ghi IsMarker đi kèm đúng sub-batch liền kề.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_event_date.go:17-50 — splitRecordsByEventDate tách tuần tự theo event_date và giữ bản ghi IsMarker đi kèm sub-batch hiện tại.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6356
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4418
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.2718
+        }
+      }
+    },
+    {
+      "id": "G7-DIFF-3",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Tại transmute_event_date_split.go:59-79, splitTaskByEventDate dùng bộ đếm atomic.AddInt32(&remaining, -1) và sync.Once để chỉ gọi t.complete(finalErr) sau khi toàn bộ các nhóm sự kiện theo ngày đã hoàn tất.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_event_date_split.go:59-79 — splitTaskByEventDate dùng atomic.AddInt32(&remaining, -1) và sync.Once để chỉ gọi t.complete(finalErr) khi tất cả nhóm ngày hoàn tất.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.524
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1679
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8374
+        }
+      }
+    },
+    {
+      "id": "G7-DIFF-4",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Tại transmuter_events_batch.go:67-77, 143-146, runEventBatches gộp các bản ghi trùng khóa chính qua dedupMasterEventRecords, cộng số dòng DB vật lý vào res.Written, đếm riêng res.Inserted/res.Updated theo từng sự kiện và khi xóa chỉ cộng res.Written += delCnt.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_events_batch.go:67-77 — runEventBatches gộp bản ghi trùng khóa chính qua dedupMasterEventRecords, cộng số dòng DB vật lý vào res.Written và chỉ cộng delCnt thực tế khi xóa.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6839
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1533
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0639
+        }
+      }
+    },
+    {
+      "id": "G7-DIFF-5",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Tại activity_log_read_repo_gorm.go:406-447, act_filtered lọc al.created_at >= NOW() - ((? + 1) * INTERVAL '1 day') và act_daily gom nhóm theo COALESCE(NULLIF(e.details->>'event_date', ''), ...) đồng thời tính master_written từ COALESCE((e.details->>'written')::bigint, NULLIF(e.rows_affected, 0), ...).",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:425-447 — act_daily gom nhóm theo COALESCE(NULLIF(e.details->>'event_date', ''), ...) và đọc master_written.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3501
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4273
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8202
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

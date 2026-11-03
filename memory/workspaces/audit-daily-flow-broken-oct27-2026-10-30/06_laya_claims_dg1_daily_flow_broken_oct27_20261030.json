@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC-1",
+    "kind": "claim",
+    "claim": "In cdc_event_date.go, ResolveEventDateHCM returns time.UnixMilli(tsMs).In(locHCM).Format(\"2006-01-02\") whenever tsMs > 0.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/model/shadow/cdc_event_date.go:9-17\nfunc ResolveEventDateHCM(tsMs int64, fallback time.Time) string {\n\tif tsMs > 0 {\n\t\treturn time.UnixMilli(tsMs).In(locHCM).Format(\"2006-01-02\")\n\t}\n\tif fallback.IsZero() {\n\t\tfallback = time.Now()\n\t}\n\treturn fallback.In(locHCM).Format(\"2006-01-02\")\n}",
+    "flow": "ResolveEventDateHCM converts tsMs to YYYY-MM-DD in locHCM when tsMs > 0."
+  },
+  {
+    "id": "S-FIX-1",
+    "kind": "claim",
+    "claim": "In batch_buffer.go, batchUpsert computes eventDate := shadow.ResolveBatchEventDateHCM(records, logEntry.StartedAt) and records event_date in details even when bb.isSnapshotBuffer is true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:597-607\n\tdefer func() {\n\t\tif act != nil && logEntry != nil {\n\t\t\teventDate := shadow.ResolveBatchEventDateHCM(records, logEntry.StartedAt)\n\t\t\tif err != nil {\n\t\t\t\t// Ghi định danh pipeline cả ở nhánh lỗi để CMS cách ly đúng connector trùng tên bảng.\n\t\t\t\tact.FailWithDetails(logEntry, err.Error(), 0, map[string]any{\n\t\t\t\t\t\"shadow_schema\": schemaName,\n\t\t\t\t\t\"buffer_type\":   bufferType,\n\t\t\t\t\t\"is_snapshot\":   bb.isSnapshotBuffer,\n\t\t\t\t\t\"event_date\":    eventDate,\n\t\t\t\t})",
+    "flow": "BatchBuffer.batchUpsert resolves eventDate via ResolveBatchEventDateHCM regardless of bb.isSnapshotBuffer."
+  },
+  {
+    "id": "S-IMPACT-1",
+    "kind": "claim",
+    "claim": "In activity_log_read_repo_gorm.go, GetDailyFlow selects COALESCE(NULLIF(e.details->>'event_date', ''), TO_CHAR(e.started_at AT TIME ZONE 'UTC' + (? * INTERVAL '1 minute'), 'YYYY-MM-DD')) AS day_str in act_daily.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:425-428\n\tact_daily AS (\n\t\tSELECT\n\t\t\tCOALESCE(NULLIF(e.details->>'event_date', ''), TO_CHAR(e.started_at AT TIME ZONE 'UTC' + (? * INTERVAL '1 minute'), 'YYYY-MM-DD')) AS day_str,",
+    "flow": "GetDailyFlow groups activity logs by day_str using details->>'event_date' when non-empty."
+  },
+  {
+    "id": "S-PATTERN-1",
+    "kind": "claim",
+    "claim": "In sinkworker/utils.go, extractSourceTsMs unwraps envelope[\"source\"] using unwrapAvroUnion(envelope[\"source\"]) before checking src[\"ts_ms\"].",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/sinkworker/utils.go:88-96\nfunc extractSourceTsMs(envelope map[string]any) int64 {\n\tsrcRaw := unwrapAvroUnion(envelope[\"source\"])\n\tif src, ok := srcRaw.(map[string]any); ok && src != nil {\n\t\tif ts := numericMs(unwrapAvroUnion(src[\"ts_ms\"])); ts > 0 {\n\t\t\treturn ts\n\t\t}\n\t}\n\treturn numericMs(unwrapAvroUnion(envelope[\"ts_ms\"]))\n}",
+    "flow": "sinkworker extractSourceTsMs calls unwrapAvroUnion on envelope[\"source\"] and src[\"ts_ms\"]."
+  },
+  {
+    "id": "D-BEHAV-1",
+    "kind": "demo",
+    "claim": "In the code excerpt, MidnightFlushGraceWindow is defined as 15 * time.Minute and ResolveEventDateHCM returns fbDate when tsMs <= 0.",
+    "evidence": "DEMO:\nconst MidnightFlushGraceWindow = 15 * time.Minute\nfunc ResolveEventDateHCM(tsMs int64, fallback time.Time) string {\n\tif fallback.IsZero() {\n\t\tfallback = time.Now()\n\t}\n\tfbHCM := fallback.In(locHCM)\n\tfbDate := fbHCM.Format(\"2006-01-02\")\n\tif tsMs <= 0 {\n\t\treturn fbDate\n\t}",
+    "flow": "MidnightFlushGraceWindow is 15 * time.Minute and ResolveEventDateHCM returns fbDate if tsMs <= 0."
+  },
+  {
+    "id": "D-EDGE-1",
+    "kind": "demo",
+    "claim": "In the code excerpt, splitRecordsByEventDate(tableRecs, now) is only called inside the if !bb.isSnapshotBuffer branch.",
+    "evidence": "DEMO:\n\tsubGroups := [][]*shadow.UpsertRecord{tableRecs}\n\tif !bb.isSnapshotBuffer {\n\t\tsubGroups = splitRecordsByEventDate(tableRecs, now)\n\t}",
+    "flow": "Snapshot buffers skip splitRecordsByEventDate."
+  },
+  {
+    "id": "D-API-1",
+    "kind": "demo",
+    "claim": "In the proposed ReconPipelineGrid.tsx demo, cell index 14 renders totals.masterDeleted and cell index 15 renders totals.masterSkipped.",
+    "evidence": "DEMO:\n<Table.Summary.Cell index={14} align=\"right\">{pipeline?.masterName ? <span style={{ color: '#ff4d4f' }}>{fmtNum(totals.masterDeleted)}</span> : <Text type=\"secondary\">—</Text>}</Table.Summary.Cell>\n<Table.Summary.Cell index={15} align=\"right\">{pipeline?.masterName ? <Text type=\"secondary\">{fmtNum(totals.masterSkipped)}</Text> : <Text type=\"secondary\">—</Text>}</Table.Summary.Cell>",
+    "flow": "ReconPipelineGrid summary row includes totals.masterDeleted at index 14 and totals.masterSkipped at index 15."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In kafka_consumer.go, op, afterRaw, and beforeRaw are unwrapped with unwrapAvroUnion, whereas sourceRaw is assigned event[\"source\"] directly.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/kafka_consumer.go:583-586\n\top := unwrapAvroUnion(event[\"op\"])\n\tafterRaw := unwrapAvroUnion(event[\"after\"])\n\tbeforeRaw := unwrapAvroUnion(event[\"before\"])\n\tsourceRaw := event[\"source\"]",
+    "flow": "KafkaConsumer.processMessage extracts op, afterRaw, beforeRaw, and sourceRaw."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In cdc_event_date.go, ResolveEventDateHCM returns an empty string whenever tsMs > 0.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/model/shadow/cdc_event_date.go:9-17\nfunc ResolveEventDateHCM(tsMs int64, fallback time.Time) string {\n\tif tsMs > 0 {\n\t\treturn time.UnixMilli(tsMs).In(locHCM).Format(\"2006-01-02\")\n\t}\n\tif fallback.IsZero() {\n\t\tfallback = time.Now()\n\t}\n\treturn fallback.In(locHCM).Format(\"2006-01-02\")\n}",
+    "flow": "ResolveEventDateHCM formats tsMs as YYYY-MM-DD."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In sinkworker/utils.go, extractSourceTsMs never calls unwrapAvroUnion and always returns -1.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/sinkworker/utils.go:88-96\nfunc extractSourceTsMs(envelope map[string]any) int64 {\n\tsrcRaw := unwrapAvroUnion(envelope[\"source\"])\n\tif src, ok := srcRaw.(map[string]any); ok && src != nil {\n\t\tif ts := numericMs(unwrapAvroUnion(src[\"ts_ms\"])); ts > 0 {\n\t\t\treturn ts\n\t\t}\n\t}\n\treturn numericMs(unwrapAvroUnion(envelope[\"ts_ms\"]))\n}",
+    "flow": "extractSourceTsMs unwraps source and ts_ms."
+  }
+]

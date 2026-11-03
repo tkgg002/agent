@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ-1",
+    "kind": "claim",
+    "claim": "GetDailyFlow computes dlq_count by summing cdc_activity_log rows with status = 'error' and split_retry IS NOT TRUE, and filters snapshot transmute rows using only triggered_by <> 'snapshot-hook'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:454-465\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'written')::bigint, NULLIF(e.rows_affected, 0), COALESCE((e.details->>'inserted')::bigint, 0) + COALESCE((e.details->>'updated')::bigint, 0) + COALESCE((e.details->>'deleted')::bigint, 0)) ELSE 0 END) AS master_written,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'inserted')::bigint, 0) ELSE 0 END) AS master_inserted,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'updated')::bigint, 0) ELSE 0 END) AS master_updated,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'deleted')::bigint, 0) ELSE 0 END) AS master_deleted,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'skipped')::bigint, 0) ELSE 0 END) AS master_skipped,\n\t\t\tSUM(CASE WHEN e.status = 'error' AND (e.details->>'split_retry')::boolean IS NOT TRUE THEN 1 ELSE 0 END) AS dlq_count",
+    "flow": "GetDailyFlow aggregates activity logs per day for Snapshot, Kafka, Shadow, Master, and DLQ columns."
+  },
+  {
+    "id": "C-REALITY-1",
+    "kind": "claim",
+    "claim": "The Log Transmute tab in ReconPipelineGrid.tsx queries only 'transmute,transmute_sub' and omits 'transmute_poison_pill', hiding isolated poison pill error logs from the pipeline drawer.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:485-489\n  // Transmute activity log — cho tab nhật ký gần nhất trong Drawer\n  const { data: transmuteLog, isLoading: isLoadingTransmute } = usePipelineActivityLog(historyMaster, 'transmute,transmute_sub', sourceDb, historySchema, LOG_FETCH_LIMIT);\n  // Kafka consumer activity log tab — cho tab nhật ký gần nhất trong Drawer\n  const { data: kafkaLog, isLoading: isLoadingKafka } = usePipelineActivityLog(historyTable, 'kafka-consumer', sourceDb, historySchema, LOG_FETCH_LIMIT);",
+    "flow": "DrillDown fetches transmuteLog for the Log Transmute tab in the pipeline drawer."
+  },
+  {
+    "id": "C-CONTRA-1",
+    "kind": "claim",
+    "claim": "In BuildMongoOCCBulkModels, the aggregation pipeline update passes v directly inside $cond without wrapping in $literal, causing MongoDB to evaluate nested maps with $-prefixed keys such as $numberInt as aggregation expressions.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_mongo.go:245-259\n\t\t\tfor k, v := range doc {\n\t\t\t\tif k == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tif k == \"_gpay_id\" && targetKey != \"_gpay_id\" {\n\t\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\t\"$ifNull\": bson.A{\"$_gpay_id\", v},\n\t\t\t\t\t}\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\"$cond\": bson.A{occCond, v, \"$\" + k},\n\t\t\t\t}\n\t\t\t}",
+    "flow": "BuildMongoOCCBulkModels builds MongoDB 4.2+ aggregation pipeline updates when !isFullSync && incomingTs > 0."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "When binarySearchSplit isolates a single poison pill task, it logs an activity entry with operation 'transmute_poison_pill' and hardcoded error message 'poison pill isolated'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:701-710\n\t\tif h.activity != nil {\n\t\t\teventDate := taskEventDate(task, time.Now())\n\t\t\tlogEntry := h.activity.Start(\"transmute_poison_pill\", masterTable, task.Req.TriggeredBy)\n\t\t\th.activity.FailWithDetails(logEntry, \"poison pill isolated\", 1, map[string]interface{}{\n\t\t\t\t\"master_binding_id\": task.Req.MasterBindingID,\n\t\t\t\t\"event_date\":        eventDate,\n\t\t\t\t\"poison_pill\":       true,\n\t\t\t\t\"source_ids\":        isolatedIDs,\n\t\t\t})\n\t\t}",
+    "flow": "binarySearchSplit logs transmute_poison_pill when len(batch) == 1 and a single record is isolated."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "The Log Transmute tab in ReconPipelineGrid.tsx already includes 'transmute_poison_pill' in the operation filter passed to usePipelineActivityLog.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:485-489\n  // Transmute activity log — cho tab nhật ký gần nhất trong Drawer\n  const { data: transmuteLog, isLoading: isLoadingTransmute } = usePipelineActivityLog(historyMaster, 'transmute,transmute_sub', sourceDb, historySchema, LOG_FETCH_LIMIT);\n  // Kafka consumer activity log tab — cho tab nhật ký gần nhất trong Drawer\n  const { data: kafkaLog, isLoading: isLoadingKafka } = usePipelineActivityLog(historyTable, 'kafka-consumer', sourceDb, historySchema, LOG_FETCH_LIMIT);",
+    "flow": "ReconPipelineGrid calls usePipelineActivityLog with operation 'transmute,transmute_sub'."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "GetDailyFlow already checks both triggered_by = 'snapshot' and triggered_by = 'snapshot-hook' when computing snapshot_master.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:438-439\n\t\t\tSUM(CASE WHEN e.triggered_by = 'snapshot-hook' AND e.operation IN ('transmute','transmute_sub') AND e.status <> 'error'\n\t\t\t         THEN COALESCE((e.details->>'inserted')::bigint, 0) + COALESCE((e.details->>'updated')::bigint, 0) + COALESCE((e.details->>'deleted')::bigint, 0) + e.rows_affected ELSE 0 END) AS snapshot_master,",
+    "flow": "GetDailyFlow computes snapshot_master using e.triggered_by = 'snapshot-hook'."
+  }
+]

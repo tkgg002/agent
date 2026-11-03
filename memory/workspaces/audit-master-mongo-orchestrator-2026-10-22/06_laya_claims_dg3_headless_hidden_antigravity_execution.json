@@ -1,0 +1,47 @@
+[
+  {
+    "id": "A-1",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "buildHiddenAntigravityEnv buộc gắn ANTIGRAVITY_SOURCE_METADATA ẩn vào môi trường chạy",
+    "claim": "Tại hàm buildHiddenAntigravityEnv trong internal/runner/antigravity_agentapi_hidden.go, hệ thống lọc bỏ biến ANTIGRAVITY_SOURCE_METADATA cũ và nối chuỗi \"ANTIGRAVITY_SOURCE_METADATA=\"+hiddenAntigravitySourceMetadata vào slice filtered.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity_agentapi_hidden.go:18-18\nconst hiddenAntigravitySourceMetadata = `{\"hideFromConversationList\":true}`\nREF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity_agentapi_hidden.go:145-168\nfunc buildHiddenAntigravityEnv(lsAddr, csrfToken string) []string {\n\tbase := os.Environ()\n\tfiltered := make([]string, 0, len(base)+3)\n\tfor _, kv := range base {\n\t\tif strings.HasPrefix(kv, \"ANTIGRAVITY_SOURCE_METADATA=\") {\n\t\t\tcontinue\n\t\t}\n\t\tif lsAddr != \"\" && strings.HasPrefix(kv, \"ANTIGRAVITY_LS_ADDRESS=\") {\n\t\t\tcontinue\n\t\t}\n\t\tif csrfToken != \"\" && strings.HasPrefix(kv, \"ANTIGRAVITY_CSRF_TOKEN=\") {\n\t\t\tcontinue\n\t\t}\n\t\tfiltered = append(filtered, kv)\n\t}\n\tfiltered = append(filtered, \"ANTIGRAVITY_SOURCE_METADATA=\"+hiddenAntigravitySourceMetadata)\n\tif lsAddr != \"\" {\n\t\tfiltered = append(filtered, \"ANTIGRAVITY_LS_ADDRESS=\"+lsAddr)\n\t}\n\tif csrfToken != \"\" {\n\t\tfiltered = append(filtered, \"ANTIGRAVITY_CSRF_TOKEN=\"+csrfToken)\n\t}\n\treturn filtered\n}"
+  },
+  {
+    "id": "A-2",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "cleanupLegacySessionFile dùng readRawAgentAPIConversationID để luôn xoá trajectory cũ trên language_server",
+    "claim": "Tại hàm cleanupLegacySessionFile trong internal/runner/antigravity_agentapi_hidden.go, hệ thống gọi readRawAgentAPIConversationID(sessionFile) rồi gọi cleanupHiddenAntigravityConversation(lsAddr, csrfToken, oldConvID) và os.Remove(sessionFile).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity_agentapi_hidden.go:197-205\nfunc cleanupLegacySessionFile(sessionFile, lsAddr, csrfToken string) {\n\tif strings.TrimSpace(sessionFile) == \"\" {\n\t\treturn\n\t}\n\tif oldConvID := readRawAgentAPIConversationID(sessionFile); oldConvID != \"\" {\n\t\tcleanupHiddenAntigravityConversation(lsAddr, csrfToken, oldConvID)\n\t}\n\t_ = os.Remove(sessionFile)\n}"
+  },
+  {
+    "id": "A-3",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "completeWithAntigravityAgentAPI gọi doCleanup() đồng bộ trước khi phát Token{Done: true}",
+    "claim": "Tại hàm completeWithAntigravityAgentAPI trong internal/runner/antigravity_agentapi_hidden.go, hệ thống gọi doCleanup() ngay trước khi gửi Token{Done: true} vào channel ch để đảm bảo phiên tạm đã được xoá hoàn toàn trước khi stream đóng.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity_agentapi_hidden.go:330-338\n\tdoCleanup()\n\tch <- Token{\n\t\tDone: true,\n\t\tUsage: &TokenUsage{\n\t\t\tInputTokens:  max(1, len(fullPrompt)/4),\n\t\t\tOutputTokens: max(1, len(lastContent)/4),\n\t\t\tEstimated:    true,\n\t\t},\n\t}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "flow": "Control false: sai giá trị hằng số hiddenAntigravitySourceMetadata",
+    "claim": "Hằng số hiddenAntigravitySourceMetadata trong internal/runner/antigravity_agentapi_hidden.go có giá trị bằng `{\"hideFromConversationList\":false}`.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity_agentapi_hidden.go:18-18\nconst hiddenAntigravitySourceMetadata = `{\"hideFromConversationList\":true}`"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "flow": "Control false: sai giá trị tier mặc định trong completeWithAntigravityAgentAPI",
+    "claim": "Tại hàm completeWithAntigravityAgentAPI trong internal/runner/antigravity_agentapi_hidden.go, biến tier mặc định được gán bằng chuỗi \"ultra_999\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity_agentapi_hidden.go:214-215\n\ttier := \"pro\"\n\tlower := strings.ToLower(model)"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "flow": "Control true: khớp nguyên văn giá trị hằng số hiddenAntigravitySourceMetadata",
+    "claim": "Hằng số hiddenAntigravitySourceMetadata trong internal/runner/antigravity_agentapi_hidden.go được khai báo bằng `{\"hideFromConversationList\":true}`.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity_agentapi_hidden.go:18-18\nconst hiddenAntigravitySourceMetadata = `{\"hideFromConversationList\":true}`"
+  }
+]

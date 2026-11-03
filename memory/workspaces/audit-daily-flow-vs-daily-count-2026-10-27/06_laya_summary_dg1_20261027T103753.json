@@ -1,0 +1,128 @@
+{
+  "mode": "claim",
+  "stage": "dg1",
+  "workspace": "audit-daily-flow-vs-daily-count-2026-10-27",
+  "ts": "20261027T103753",
+  "trusted_rounds": [
+    "r2"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-daily-flow-vs-daily-count-2026-10-27/06_laya_raw_dg1_20261027T103753.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Tại activity_log_read_repo_gorm.go:424-426, GetDailyFlow cắt ngày day_str theo TO_CHAR(e.started_at AT TIME ZONE 'UTC' + (? * INTERVAL '1 minute'), 'YYYY-MM-DD') cho từng dòng log độc lập, khiến mẻ ghi Shadow lúc 23:59:59 nhưng qua TableDebouncer ghi Master lúc 00:00:00 bị tách sang 2 ngày khác nhau.",
+      "decision": "ACCEPT",
+      "resolved": "Xác minh trực tiếp tại act_daily CTE: cắt ngày theo e.started_at độc lập. REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:424-426",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4381
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6422
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6427
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Tại batch_buffer_fanout.go:41-47, publishTransmuteTrigger đã truyền SourceTs: r.SourceTsMs trong từng TransmuteEventItem khi bắn NATS sang TransmuteHandler.",
+      "decision": "FLAG",
+      "resolved": "Xác minh trực tiếp tại publishTransmuteTrigger: đã truyền SourceTs: r.SourceTsMs. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:41-47",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0497
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.0998
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.435
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Tại transmute_handler.go:508-530, groupDebouncedTasks hiện chỉ tách mẻ debounce theo (master_binding_id, triggered_by) và runDebouncedGroup gọi h.activity.Start('transmute', masterTable, triggeredBy) lấy StartedAt = time.Now().",
+      "decision": "ACCEPT",
+      "resolved": "Xác minh trực tiếp tại groupDebouncedTasks: hiện chỉ tách theo master_binding_id và triggered_by. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:510-528",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2687
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.7373
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8635
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Tại batch_buffer.go:726-732, trước khi chạy SQL Upsert vào Shadow, hàm dedupByConflictKey(sc.Records) gộp các bản ghi trùng khóa chính trong cùng subChunk.",
+      "decision": "FLAG",
+      "resolved": "Xác minh trực tiếp tại batchUpsert: dedupByConflictKey(sc.Records). REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:726-732",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0733
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4286
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0145
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "Trong Code Demo tại 09_tasks_solution_daily_flow_audit.md:28-45, hàm ResolveEventDateHCM quy đổi tsMs sang ngày theo múi giờ GMT+7 và TransmuteEventItem bổ sung trường EventDate.",
+      "decision": "ACCEPT",
+      "resolved": "Xác minh trực tiếp tại Code Demo: ResolveEventDateHCM và TransmuteEventItem.EventDate. REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-daily-flow-vs-daily-count-2026-10-27/09_tasks_solution_daily_flow_audit.md:28-45",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "INCORRECT",
+          "confidence": 0.1037
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.769
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.9401
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

@@ -1,0 +1,51 @@
+[
+  {
+    "id": "A-MONGO-1",
+    "kind": "audit",
+    "claim": "In centralized-data-service transmuter_mongo.go, BuildMongoOCCBulkModels preserves _gpay_id on existing MongoDB documents when targetKey != _gpay_id by using $ifNull in OCC pipeline updates and $setOnInsert in full-sync updates.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_mongo.go:246-280\n\t\t\tfor k, v := range doc {\n\t\t\t\tif k == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tif k == \"_gpay_id\" && targetKey != \"_gpay_id\" {\n\t\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\t\"$ifNull\": bson.A{\"$_gpay_id\", v},\n\t\t\t\t\t}\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tsetStage[k] = bson.M{\n\t\t\t\t\t\"$cond\": bson.A{occCond, v, \"$\" + k},\n\t\t\t\t}\n\t\t\t}\n\t\t\tupdate = []bson.M{{\"$set\": setStage}}\n\t\t} else {\n\t\t\tsetDoc := bson.M{}\n\t\t\tsetOnInsertDoc := bson.M{\n\t\t\t\t\"_created_at\": now,\n\t\t\t}\n\t\t\tfor k, v := range doc {\n\t\t\t\tif k == \"_id\" && targetKey == \"_id\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tif k == \"_gpay_id\" && targetKey != \"_gpay_id\" {\n\t\t\t\t\tsetOnInsertDoc[k] = v\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tsetDoc[k] = v\n\t\t\t}\n\t\t\tupdate = bson.M{\n\t\t\t\t\"$set\":         setDoc,\n\t\t\t\t\"$setOnInsert\": setOnInsertDoc,\n\t\t\t}\n\t\t}",
+    "flow": "When targetKey != _gpay_id, BuildMongoOCCBulkModels sets _gpay_id via $ifNull: [$_gpay_id, v] in OCC pipeline mode and via $setOnInsert in non-OCC mode."
+  },
+  {
+    "id": "A-MONGO-2",
+    "kind": "audit",
+    "claim": "In centralized-data-service master_ddl_generator.go, applyMongoCollectionAndIndexes creates an index on the dynamic business PK from TransformSpec and only sets in_master = true for mapping rules where is_active = true AND status = 'approved'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator.go:537-576\n\tif len(reg.TransformSpec) > 0 {\n\t\tvar spec struct {\n\t\t\tPK string `json:\"pk\"`\n\t\t}\n\t\tif err := json.Unmarshal(reg.TransformSpec, &spec); err == nil {\n\t\t\tpk := strings.TrimSpace(spec.PK)\n\t\t\tif pk != \"\" && !seenIdxCols[pk] {\n\t\t\t\tseenIdxCols[pk] = true\n\t\t\t\tindexModels = append(indexModels, mongo.IndexModel{\n\t\t\t\t\tKeys:    bson.D{{Key: pk, Value: 1}},\n\t\t\t\t\tOptions: options.Index().SetName(fmt.Sprintf(\"ix_%s_pk_%s\", reg.MasterTable, pk)),\n\t\t\t\t})\n\t\t\t}\n\t\t}\n\t}\n\n\tfor _, finCol := range res.FinancialCols {\n\t\tcol := strings.TrimSpace(finCol)\n\t\tif col == \"\" || seenIdxCols[col] {\n\t\t\tcontinue\n\t\t}\n\t\tseenIdxCols[col] = true\n\t\tindexModels = append(indexModels, mongo.IndexModel{\n\t\t\tKeys:    bson.D{{Key: col, Value: 1}},\n\t\t\tOptions: options.Index().SetName(fmt.Sprintf(\"ix_%s_%s\", reg.MasterTable, col)),\n\t\t})\n\t}\n\n\tif _, iErr := mongoDB.Collection(reg.MasterTable).Indexes().CreateMany(ctx, indexModels); iErr != nil {\n\t\tres.Err = iErr.Error()\n\t\tg.markDDLStatus(ctx, reg.ID, \"failed\", iErr)\n\t\treturn res, fmt.Errorf(\"create mongo indexes on %s.%s: %w\", dbName, reg.MasterTable, iErr)\n\t}\n\n\tif g.systemDB != nil {\n\t\t_ = g.systemDB.WithContext(ctx).Exec(\n\t\t\t`UPDATE cdc_system.mapping_rule_master SET in_master = true WHERE master_binding_id = ? AND is_active = true AND status = 'approved'`,\n\t\t\treg.ID,\n\t\t).Error\n\t}",
+    "flow": "applyMongoCollectionAndIndexes parses reg.TransformSpec for pk to append ix_<table>_pk_<pk> and updates mapping_rule_master with status = 'approved'."
+  },
+  {
+    "id": "A-MONGO-3",
+    "kind": "audit",
+    "claim": "In centralized-data-service recon_stream_bucket_engine.go, ChunkStreamBucketEngine.GetMasterAgent checks e.connMgr.IsMongoMasterConnection(ctx, connectionKey) and returns NewReconDestMongoAgent for MongoDB master destinations.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_stream_bucket_engine.go:155-175\n\tif e.connMgr == nil {\n\t\tif e.masterAgent != nil {\n\t\t\treturn e.masterAgent, nil\n\t\t}\n\t\treturn nil, fmt.Errorf(\"connection manager not configured in chunkStreamBucketEngine\")\n\t}\n\n\tif e.connMgr.IsMongoMasterConnection(ctx, connectionKey) {\n\t\tmClient, errM := e.connMgr.GetMasterMongoClient(ctx, connectionKey)\n\t\tif errM != nil {\n\t\t\treturn nil, fmt.Errorf(\"failed to get master mongo client for %s: %w\", connectionKey, errM)\n\t\t}\n\t\tdbName := e.connMgr.ResolveMasterMongoDatabase(ctx, connectionKey, \"\")\n\t\tagent := NewReconDestMongoAgent(mClient, dbName, ReconDestAgentConfig{}, e.logger)\n\t\tif e.masterAgents == nil {\n\t\t\te.masterAgents = make(map[string]*ReconDestAgent)\n\t\t}\n\t\te.masterAgents[connectionKey] = agent\n\t\treturn agent, nil\n\t}",
+    "flow": "ChunkStreamBucketEngine.GetMasterAgent branches on IsMongoMasterConnection, obtains mClient via GetMasterMongoClient, and caches NewReconDestMongoAgent."
+  },
+  {
+    "id": "A-MONGO-4",
+    "kind": "audit",
+    "claim": "In centralized-data-service recon_execute_heal_segb.go, resolveSourceIDsForSegmentB checks h.isMongoMasterRef(ctx, ref) to resolve missingGpayIDs via resolveSourceIDsFromMongoMasterByGpayIDs instead of querying PostgreSQL masterDB.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:876-885\n\t\t\t\t\tif len(missingGpayIDs) > 0 {\n\t\t\t\t\t\tif h.isMongoMasterRef(ctx, ref) {\n\t\t\t\t\t\t\tif mongoMapped := h.resolveSourceIDsFromMongoMasterByGpayIDs(ctx, targetTable, ref, missingGpayIDs); len(mongoMapped) > 0 {\n\t\t\t\t\t\t\t\tout = append(out, mongoMapped...)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t} else if masterDB := h.resolveMasterDBForRef(ctx, ref); masterDB != nil {\n\t\t\t\t\t\t\tpkCol, _ := h.resolveMasterPKFromSpec(ctx, masterDB, ref)",
+    "flow": "When len(missingGpayIDs) > 0 and h.isMongoMasterRef(ctx, ref) is true, resolveSourceIDsForSegmentB calls resolveSourceIDsFromMongoMasterByGpayIDs."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB in recon_execute_heal_segb.go, when len(out) == 0 and effectiveIDType == gpay, the function returns nil, nil instead of returning inputIDs.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:920-927\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+    "flow": "resolveSourceIDsForSegmentB checks if len(out) == 0; if effectiveIDType == gpay, it returns nil, nil."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB in recon_execute_heal_segb.go, when len(out) == 0 and effectiveIDType == gpay, the function always panics instead of returning.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:920-927\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+    "flow": "resolveSourceIDsForSegmentB returns nil, nil when len(out) == 0 and effectiveIDType == gpay; it never panics."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In ChunkStreamBucketEngine.GetMasterAgent in recon_stream_bucket_engine.go, when e.connMgr is nil, the function drops the MongoDB database.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_stream_bucket_engine.go:155-160\n\tif e.connMgr == nil {\n\t\tif e.masterAgent != nil {\n\t\t\treturn e.masterAgent, nil\n\t\t}\n\t\treturn nil, fmt.Errorf(\"connection manager not configured in chunkStreamBucketEngine\")\n\t}",
+    "flow": "When e.connMgr == nil, GetMasterAgent returns e.masterAgent if non-nil or returns an error; it never drops any database."
+  }
+]

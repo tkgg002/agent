@@ -1,0 +1,79 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "cleanupLegacySessionFile hiện gọi loadValidAgentAPIConversationID bị phụ thuộc vào brainDir trên đĩa",
+    "claim": "Tại hàm cleanupLegacySessionFile hiện tại trong internal/runner/antigravity.go, hệ thống gọi loadValidAgentAPIConversationID(sessionFile) trước khi gọi cleanupHiddenAntigravityConversation.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:514-522\nfunc cleanupLegacySessionFile(sessionFile, lsAddr, csrfToken string) {\n\tif strings.TrimSpace(sessionFile) == \"\" {\n\t\treturn\n\t}\n\tif oldConvID := loadValidAgentAPIConversationID(sessionFile); oldConvID != \"\" {\n\t\tcleanupHiddenAntigravityConversation(lsAddr, csrfToken, oldConvID)\n\t}\n\t_ = os.Remove(sessionFile)\n}"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "buildHiddenAntigravityEnv buộc gắn ANTIGRAVITY_SOURCE_METADATA ẩn vào môi trường chạy",
+    "claim": "Tại hàm buildHiddenAntigravityEnv trong internal/runner/antigravity.go, hệ thống lọc bỏ biến ANTIGRAVITY_SOURCE_METADATA cũ và nối chuỗi \"ANTIGRAVITY_SOURCE_METADATA=\"+hiddenAntigravitySourceMetadata vào slice filtered.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:399-399\nconst hiddenAntigravitySourceMetadata = `{\"hideFromConversationList\":true}`\nREF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:462-485\nfunc buildHiddenAntigravityEnv(lsAddr, csrfToken string) []string {\n\tbase := os.Environ()\n\tfiltered := make([]string, 0, len(base)+3)\n\tfor _, kv := range base {\n\t\tif strings.HasPrefix(kv, \"ANTIGRAVITY_SOURCE_METADATA=\") {\n\t\t\tcontinue\n\t\t}\n\t\tif lsAddr != \"\" && strings.HasPrefix(kv, \"ANTIGRAVITY_LS_ADDRESS=\") {\n\t\t\tcontinue\n\t\t}\n\t\tif csrfToken != \"\" && strings.HasPrefix(kv, \"ANTIGRAVITY_CSRF_TOKEN=\") {\n\t\t\tcontinue\n\t\t}\n\t\tfiltered = append(filtered, kv)\n\t}\n\tfiltered = append(filtered, \"ANTIGRAVITY_SOURCE_METADATA=\"+hiddenAntigravitySourceMetadata)\n\tif lsAddr != \"\" {\n\t\tfiltered = append(filtered, \"ANTIGRAVITY_LS_ADDRESS=\"+lsAddr)\n\t}\n\tif csrfToken != \"\" {\n\t\tfiltered = append(filtered, \"ANTIGRAVITY_CSRF_TOKEN=\"+csrfToken)\n\t}\n\treturn filtered\n}"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Complete định tuyến sang completeWithAntigravityAgentAPI cho model Antigravity",
+    "claim": "Tại phương thức AntigravityRunner.Complete, khi useNativeAgy == true và targetAgyBin != \"\", hệ thống khởi chạy goroutine go completeWithAntigravityAgentAPI(ctx, targetAgyBin, prompt, req.SystemPrompt, cleanModel, sessionFile, sessionTitle, ch).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:109-113\n\t\tif targetAgyBin != \"\" {\n\t\t\tch := make(chan Token, 16)\n\t\t\tgo completeWithAntigravityAgentAPI(ctx, targetAgyBin, prompt, req.SystemPrompt, cleanModel, sessionFile, sessionTitle, ch)\n\t\t\treturn withHeartbeat(ch, defaultHeartbeatInterval), nil\n\t\t}"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "resolveAgentAPITranscriptCandidates trả về danh sách đường dẫn transcript_full.jsonl và transcript.jsonl",
+    "claim": "Hàm resolveAgentAPITranscriptCandidates trả về mảng 4 đường dẫn trong thư mục .gemini/antigravity/brain/<convID> và .gemini/antigravity-ide/brain/<convID>.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:365-373\nfunc resolveAgentAPITranscriptCandidates(convID string) []string {\n\thomeDir := os.Getenv(\"HOME\")\n\treturn []string{\n\t\tfilepath.Join(homeDir, \".gemini\", \"antigravity\", \"brain\", convID, \".system_generated\", \"logs\", \"transcript_full.jsonl\"),\n\t\tfilepath.Join(homeDir, \".gemini\", \"antigravity\", \"brain\", convID, \".system_generated\", \"logs\", \"transcript.jsonl\"),\n\t\tfilepath.Join(homeDir, \".gemini\", \"antigravity-ide\", \"brain\", convID, \".system_generated\", \"logs\", \"transcript_full.jsonl\"),\n\t\tfilepath.Join(homeDir, \".gemini\", \"antigravity-ide\", \"brain\", convID, \".system_generated\", \"logs\", \"transcript.jsonl\"),\n\t}\n}"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Code Demo gắn ANTIGRAVITY_SOURCE_METADATA ẩn vào môi trường chạy",
+    "claim": "Trong Code Demo mục 3, hằng số hiddenAntigravitySourceMetadata được khai báo bằng `{\"hideFromConversationList\":true}` và được nối vào slice filtered trong hàm buildHiddenAntigravityEnv.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_headless_hidden_antigravity_execution.md:49-49\nconst hiddenAntigravitySourceMetadata = `{\"hideFromConversationList\":true}`\nREF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_headless_hidden_antigravity_execution.md:127-134\n\tfiltered = append(filtered, \"ANTIGRAVITY_SOURCE_METADATA=\"+hiddenAntigravitySourceMetadata)\n\tif lsAddr != \"\" {\n\t\tfiltered = append(filtered, \"ANTIGRAVITY_LS_ADDRESS=\"+lsAddr)\n\t}\n\tif csrfToken != \"\" {\n\t\tfiltered = append(filtered, \"ANTIGRAVITY_CSRF_TOKEN=\"+csrfToken)\n\t}\n\treturn filtered"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Code Demo dùng readRawAgentAPIConversationID để luôn xoá trajectory của sessionFile cũ",
+    "claim": "Trong Code Demo mục 3, hàm cleanupLegacySessionFile gọi readRawAgentAPIConversationID(sessionFile) rồi gọi cleanupHiddenAntigravityConversation(lsAddr, csrfToken, oldConvID) và os.Remove(sessionFile).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_headless_hidden_antigravity_execution.md:164-172\nfunc cleanupLegacySessionFile(sessionFile, lsAddr, csrfToken string) {\n\tif strings.TrimSpace(sessionFile) == \"\" {\n\t\treturn\n\t}\n\tif oldConvID := readRawAgentAPIConversationID(sessionFile); oldConvID != \"\" {\n\t\tcleanupHiddenAntigravityConversation(lsAddr, csrfToken, oldConvID)\n\t}\n\t_ = os.Remove(sessionFile)\n}"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "Code Demo gọi buildHiddenAntigravityEnv và defer cleanupHiddenAntigravityConversation",
+    "claim": "Trong Code Demo mục 3, hàm completeWithAntigravityAgentAPI gán cmd.Env = buildHiddenAntigravityEnv(lsAddr, csrfToken) trước khi chạy cmd.CombinedOutput() và đăng ký defer cleanupHiddenAntigravityConversation(lsAddr, csrfToken, convID).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_headless_hidden_antigravity_execution.md:216-233\n\tcmd := executil.CommandContext(ctx, agyBin, newArgs...)\n\tcmd.Env = buildHiddenAntigravityEnv(lsAddr, csrfToken)\n\tout, err := cmd.CombinedOutput()\n\tif err != nil {\n\t\tch <- Token{Done: true, Error: fmt.Errorf(\"antigravity native error: %w (%s)\", err, strings.TrimSpace(string(out)))}\n\t\treturn\n\t}\n\tvar resp agentAPIResponse\n\tif err := json.Unmarshal(out, &resp); err != nil {\n\t\tch <- Token{Done: true, Error: fmt.Errorf(\"antigravity parse response: %w (%s)\", err, strings.TrimSpace(string(out)))}\n\t\treturn\n\t}\n\tconvID := strings.TrimSpace(resp.Response.NewConversation.ConversationID)\n\tif convID == \"\" {\n\t\tch <- Token{Done: true, Error: fmt.Errorf(\"antigravity returned empty conversationId: %s\", strings.TrimSpace(string(out)))}\n\t\treturn\n\t}\n\tdefer cleanupHiddenAntigravityConversation(lsAddr, csrfToken, convID)"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "flow": "Control false: sai giá trị hằng số hiddenAntigravitySourceMetadata",
+    "claim": "Trong Code Demo mục 3, hằng số hiddenAntigravitySourceMetadata được khai báo bằng chuỗi `{\"hideFromConversationList\":false}`.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_headless_hidden_antigravity_execution.md:49-49\nconst hiddenAntigravitySourceMetadata = `{\"hideFromConversationList\":true}`"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "flow": "Control false: sai giá trị tier mặc định trong Code Demo",
+    "claim": "Trong Code Demo mục 3, biến tier mặc định được khởi tạo bằng chuỗi \"nano_v1\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_headless_hidden_antigravity_execution.md:196-197\n\ttier := \"pro\"\n\tlower := strings.ToLower(model)"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "flow": "Control true: khớp nguyên văn giá trị hằng số hiddenAntigravitySourceMetadata",
+    "claim": "Trong Code Demo mục 3, hằng số hiddenAntigravitySourceMetadata được khai báo bằng `{\"hideFromConversationList\":true}`.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_headless_hidden_antigravity_execution.md:49-49\nconst hiddenAntigravitySourceMetadata = `{\"hideFromConversationList\":true}`"
+  }
+]

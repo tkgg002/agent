@@ -1,14 +1,86 @@
 [
   {
-    "id": "LS-20261021-prior-workspace-lookup",
-    "trigger": "github\\.com/[\\w.-]+/[\\w.-]+",
-    "check": "Tra `memory/workspaces/*<tên-repo>*` (ls/grep) và đọc 13_analysis/09_tasks_solution/audit_report cũ cùng chủ đề trước khi đánh giá mức tích hợp; trace caller + template CLI mặc định để phân biệt engine thật với stub.",
-    "require": "/memory/workspaces/[^\"\\s]+/(13_analysis|09_tasks_solution|audit_report)_[^\"\\s]*\\.md"
+    "id": "LS-GLOBAL-001-propose-only-gate",
+    "trigger": "\\b(check\\s+diff|audit\\s+lại|kiểm\\s+tra\\s+vì\\s+sao)\\b",
+    "check": "Giữ nguyên chế độ Read-Only (Propose-Only), trình bày phân tích + giải pháp + Code Demo trực tiếp trên chat và dừng chờ lệnh APPROVE tường minh trước khi sửa source code.",
+    "require": "09_tasks_solution"
   },
   {
-    "id": "LS-20261020-readme-only",
+    "id": "LS-GLOBAL-002-agnostic-core",
+    "trigger": "\\.agents/project\\.json|kernel_bridge",
+    "check": "Cấm hardcode danh sách từ khóa công nghệ, tên bảng hay cổng dịch vụ của dự án con vào Core Engine; bắt buộc đọc động từ manifest hoặc đối chiếu ngữ nghĩa trực tiếp.",
+    "require": "(01_requirements|project\\.json)"
+  },
+  {
+    "id": "LS-GLOBAL-003-worktree-isolation",
+    "trigger": "\\.orchestrator/worktrees/|git\\s+stash",
+    "check": "Đảm bảo cô lập tuyệt đối working tree của dự án ngoài và xác nhận git status sạch 100% trước khi thực thi S4.",
+    "require": "git\\s+status"
+  },
+  {
+    "id": "LS-GLOBAL-005-single-conv-session",
+    "trigger": "agentapi\\s+new-conversation",
+    "check": "Cấm gọi cứng agentapi new-conversation ở mỗi request; bắt buộc kiểm tra convID đã lưu của Task và tái sử dụng qua agentapi send-message <convID>.",
+    "require": "send-message"
+  },
+  {
+    "id": "LS-GLOBAL-011-clean-room-guard",
+    "trigger": "clean_room_forbidden_sources",
+    "check": "Cấm đọc file thuộc clean_room_forbidden_sources qua cả view_file lẫn run_command (cat/sed/rg/git show) và cấm truyền vào prompt subagent khi ở pha Clean-Room Builder.",
+    "require": "contaminated_clean_room_reads"
+  },
+  {
+    "id": "LS-GLOBAL-013-prior-workspace-and-deep-read",
     "trigger": "github\\.com/[\\w.-]+/[\\w.-]+",
-    "check": "Không kết luận từ README: clone/mở source thật của repo (scratch hoặc `git clone --depth 1`) và đối chiếu module lõi trước khi ghi 13_analysis/09_tasks_solution.",
-    "require": "(git\\s+clone|/scratch/)"
+    "check": "Tra `memory/workspaces/*` và đọc source code thật của repo tham chiếu (không kết luận chỉ từ README.md) trước khi lập 13_analysis/09_tasks_solution.",
+    "require": "(git\\s+clone|/scratch/|memory/workspaces/)"
+  },
+  {
+    "id": "LS-GLOBAL-016-mutation-pyc-guard",
+    "trigger": "mutation_gate\\.py",
+    "check": "Khi chạy kiểm thử đột biến Python, bắt buộc bật PYTHONDONTWRITEBYTECODE=1, xóa cache .pyc và kiểm tra ast.parse trước khi chạy test.",
+    "require": "PYTHONDONTWRITEBYTECODE"
+  },
+  {
+    "id": "LS-GLOBAL-026-graceful-shutdown-waitgroup",
+    "trigger": "sqlDB\\.Close\\(\\)|redis\\.Close\\(\\)",
+    "check": "Trong hàm Shutdown(), bắt buộc gọi wg.Wait() chờ toàn bộ background goroutines dừng hẳn trước khi gọi redis.Close() và sqlDB.Close().",
+    "require": "WaitGroup|wg\\.Wait\\(\\)"
+  },
+  {
+    "id": "LS-GLOBAL-038-rfc3986-uri-masking",
+    "trigger": "sanitizeConnectionHost|MaskSecrets",
+    "check": "Khi tách user:password@host trong URI theo RFC 3986, bắt buộc dùng strings.LastIndex(..., \"@\") thay vì strings.Index và không mask nhầm format placeholder %s:%s@.",
+    "require": "LastIndex"
+  },
+  {
+    "id": "LS-GLOBAL-030-gorm-slice-in-clause",
+    "trigger": "=\\s*ANY\\s*\\(\\s*\\?\\s*\\)",
+    "check": "Khi truyền slice Go vào GORM Exec/Raw/Where, cấm dùng '= ANY(?)' vì GORM sẽ expand thành 'ANY(($1, $2))' gây lỗi SQLSTATE 42601; bắt buộc dùng 'IN (?)'.",
+    "require": "\\bIN\\s*\\(\\s*\\?\\s*\\)"
+  },
+  {
+    "id": "LS-GLOBAL-015-no-shared-delete-stream",
+    "trigger": "DeleteStream\\s*\\(",
+    "check": "Cấm gọi DeleteStream trong đường chạy tự động của production; nếu ở trong file test (*_test.go) thì bắt buộc phải dùng natsserver.NewServer nhúng cô lập (Port: -1, t.TempDir()).",
+    "require": "(natsserver\\.NewServer|t\\.TempDir\\(\\)|TEST_TMP_)"
+  },
+  {
+    "id": "LS-GLOBAL-041-react-hooks-top-level",
+    "trigger": "Form\\.useWatch\\s*\\(",
+    "check": "Cấm gọi trực tiếp Form.useWatch(...) bên trong nhánh điều kiện JSX gây lỗi 'Rendered more hooks than during the previous render'; bắt buộc khai báo ở đầu Function Component.",
+    "require": "const\\s+\\w+\\s*=\\s*Form\\.useWatch"
+  },
+  {
+    "id": "LS-GLOBAL-042-css-flex-scroll-container",
+    "trigger": "#sri-markdown-content|\\.sri-pre-block",
+    "check": "Khung cuộn full-height bên trong cột Flex/Grid bắt buộc dùng 'flex: 1 1 0; height: 0; overflow-y: auto', cấm dùng 'flex: 1 1 auto; max-height: none' làm mất thanh cuộn.",
+    "require": "flex:\\s*1\\s+1\\s+0"
+  },
+  {
+    "id": "LS-GLOBAL-044-xhr-utf8-header-encode",
+    "trigger": "['\"]X-Action-Reason['\"]\\s*:",
+    "check": "Khi truyền chuỗi tiếng Việt UTF-8 vào HTTP Header 'X-Action-Reason' trên trình duyệt (Frontend), bắt buộc bọc encodeURIComponent(reason) để không làm crash XMLHttpRequest.",
+    "require": "encodeURIComponent"
   }
 ]

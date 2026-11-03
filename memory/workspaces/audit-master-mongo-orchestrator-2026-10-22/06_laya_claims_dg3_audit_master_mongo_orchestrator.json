@@ -1,56 +1,56 @@
 [
   {
-    "id": "A-ORCH-SPLIT",
+    "id": "A-CONV-REUSE",
     "kind": "audit",
     "basis": "code",
-    "flow": "SyncRealWorkspaceState bảo vệ task của User không bị ghi đè bởi agent-workspace",
-    "claim": "Khi tìm thấy task đã tồn tại trong existingByKey[pt.Key], nếu cur.Source khác rỗng và khác agent-workspace thì SyncRealWorkspaceState thực hiện continue không ghi đè.",
-    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/seed_data.go:278-288\n\t\tif cur, ok := existingByKey[pt.Key]; ok {\n\t\t\tif cur.Source != \"\" && cur.Source != \"agent-workspace\" {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\ttargetStage := cur.Stage\n\t\t\tif pt.Done && cur.Stage != queue.StageDone {\n\t\t\t\ttargetStage = queue.StageDone\n\t\t\t}\n\t\t\t_ = s.QueueStore.UpdateWaveAndStage(ctx, cur.ID, waveIdx, targetStage, mdl, pt.Score)\n\t\t\tcontinue\n\t\t}"
+    "flow": "completeWithAntigravityAgentAPI tái sử dụng convID qua send-message",
+    "claim": "Khi convID khác rỗng, hàm completeWithAntigravityAgentAPI đọc prevMaxStep = readMaxTranscriptStepIndex(convID) và tạo sendArgs bắt đầu bằng \"send-message\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:449-454\n\tif convID != \"\" {\n\t\tprevMaxStep = readMaxTranscriptStepIndex(convID)\n\t\tsendArgs := []string{\"send-message\", \"--title=\" + sessionTitle, convID, fullPrompt}\n\t\tif strings.HasSuffix(agyBin, \"language_server\") {\n\t\t\tsendArgs = append([]string{\"agentapi\"}, sendArgs...)\n\t\t}"
   },
   {
-    "id": "A-ORCH-CHAT",
+    "id": "A-STEP-FILTER",
     "kind": "audit",
     "basis": "code",
-    "flow": "classifyChatActionMode tự động nhận diện báo cáo Audit trong Co-Architect Chat",
-    "claim": "Khi tin nhắn chứa mã phát hiện auditFindingCodeRe hoặc remediationTaskRe, hàm classifyChatActionMode trả về ingest_audit_remediation.",
-    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_chat.go:920-929\nfunc classifyChatActionMode(cleanMsg, requestedMode string) string {\n\tlowerMsg := strings.ToLower(cleanMsg)\n\t// Always detect pasted Audit Reports or Remediation Plans regardless of dropdown default\n\tif auditFindingCodeRe.MatchString(cleanMsg) ||\n\t\tremediationTaskRe.MatchString(cleanMsg) ||\n\t\tstrings.Contains(lowerMsg, \"audit_report_\") ||\n\t\tstrings.Contains(lowerMsg, \"09_tasks_solution_audit_\") ||\n\t\t(strings.Contains(lowerMsg, \"lỗ hổng\") && strings.Contains(lowerMsg, \"phương án khắc phục\")) {\n\t\treturn \"ingest_audit_remediation\"\n\t}"
+    "flow": "completeWithAntigravityAgentAPI chỉ đọc các dòng PLANNER_RESPONSE mới có StepIndex > prevMaxStep",
+    "claim": "Trong vòng lặp đọc transcript, hàm kiểm tra line.Type == \"PLANNER_RESPONSE\" && line.StepIndex > prevMaxStep trước khi cập nhật latestContent.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:533-540\n\t\t\t\tif line.Type == \"PLANNER_RESPONSE\" && line.StepIndex > prevMaxStep {\n\t\t\t\t\tif line.Content != \"\" && !strings.Contains(line.Content, \"<truncated\") {\n\t\t\t\t\t\tlatestContent = line.Content\n\t\t\t\t\t\tif line.Status == \"DONE\" {\n\t\t\t\t\t\t\tisStepDone = true\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}"
   },
   {
-    "id": "A-ORCH-ISOLATE",
+    "id": "A-SESSION-FILE",
     "kind": "audit",
     "basis": "code",
-    "flow": "runTaskLifecycleAction cô lập repo ngoài s.Root trong pha implement",
-    "claim": "Khi filepath.Clean(repoPath) khác filepath.Clean(s.Root) và isolatedRepoWT chưa có .git, execDir được gán bằng chuỗi rỗng để không chạy lệnh git trên repo ngoài.",
-    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1136-1144\n\t\t\tisolatedRepoWT := filepath.Join(s.Root, \".orchestrator\", \"worktrees\", safeParent, repoName)\n\t\t\texecDir := repoPath\n\t\t\tif filepath.Clean(repoPath) != filepath.Clean(s.Root) {\n\t\t\t\tif _, wtGitErr := os.Stat(filepath.Join(isolatedRepoWT, \".git\")); wtGitErr == nil {\n\t\t\t\t\texecDir = isolatedRepoWT\n\t\t\t\t} else {\n\t\t\t\t\texecDir = \"\"\n\t\t\t\t}\n\t\t\t}"
+    "flow": "taskAgentAPISessionFile lưu convID theo từng Task trong .orchestrator/tasks/<safeKey>/agentapi_conv_id.txt",
+    "claim": "Hàm taskAgentAPISessionFile tạo thư mục .orchestrator/tasks/<safeKey> và trả về đường dẫn nối với \"agentapi_conv_id.txt\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_bridge.go:193-201\nfunc (s *Server) taskAgentAPISessionFile(taskKey string) string {\n\tsafeKey := sanitizeTaskKeyPath(taskKey)\n\tif safeKey == \"\" {\n\t\tsafeKey = \"default\"\n\t}\n\tdir := filepath.Join(s.Root, \".orchestrator\", \"tasks\", safeKey)\n\t_ = os.MkdirAll(dir, 0o755)\n\treturn filepath.Join(dir, \"agentapi_conv_id.txt\")\n}"
   },
   {
-    "id": "A-SA01-NOPAPER",
+    "id": "A-QA-LLM-WIRE",
     "kind": "audit",
     "basis": "code",
-    "flow": "VerifySubTaskCodeOnDisk bắt buộc mọi candidate path phải có mặt trong diff.patch hoặc trên đĩa và từ chối ngay nếu thiếu",
-    "claim": "Khi candidateOK bằng false và os.Stat(absPath) trả về lỗi err != nil, hàm VerifySubTaskCodeOnDisk trả về false kèm lý do missing on disk and not in diff.patch.",
-    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:1239-1247\n\t\tif candidateOK {\n\t\t\tcontinue\n\t\t}\n\n\t\tabsPath := filepath.Join(repoDir, rel)\n\t\tfi, err := os.Stat(absPath)\n\t\tif err != nil {\n\t\t\treturn false, fmt.Sprintf(\"missing on disk and not in diff.patch: %s:%s\", filepath.Base(repoDir), rel)\n\t\t}"
+    "flow": "invokeQAAuditorLLM gọi AntigravityRunner trên cùng SessionFile của Task",
+    "claim": "Trong invokeQAAuditorLLM, agRunner.SessionFile được gán bằng s.taskAgentAPISessionFile(qt.ExternalID) trước khi gọi agRunner.Complete.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_bridge.go:243-253\n\tagRunner := runner.NewAntigravityRunner(modelName)\n\tagRunner.WorkDir = os.TempDir()\n\tagRunner.SessionFile = s.taskAgentAPISessionFile(qt.ExternalID)\n\tagRunner.SessionTitle = fmt.Sprintf(\"[%s] %s\", qt.ExternalID, qt.Title)\n\tstream, err := agRunner.Complete(llmCtx, runner.CompletionRequest{\n\t\tModel:        modelName,\n\t\tSystemPrompt: sysPrompt,\n\t\tMessages:     []runner.ConvMessage{{Role: \"user\", Content: userMsg}},\n\t\tSessionFile:  agRunner.SessionFile,\n\t\tSessionTitle: agRunner.SessionTitle,\n\t})"
   },
   {
     "id": "K1",
     "kind": "control_false",
-    "flow": "Control false: đảo ngược kết quả trả về của classifyChatActionMode khi gặp auditFindingCodeRe",
-    "claim": "Khi auditFindingCodeRe.MatchString(cleanMsg) bằng true, hàm classifyChatActionMode trả về discuss.",
-    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_chat.go:923-929\n\tif auditFindingCodeRe.MatchString(cleanMsg) ||\n\t\tremediationTaskRe.MatchString(cleanMsg) ||\n\t\tstrings.Contains(lowerMsg, \"audit_report_\") ||\n\t\tstrings.Contains(lowerMsg, \"09_tasks_solution_audit_\") ||\n\t\t(strings.Contains(lowerMsg, \"lỗ hổng\") && strings.Contains(lowerMsg, \"phương án khắc phục\")) {\n\t\treturn \"ingest_audit_remediation\"\n\t}"
+    "flow": "Control false: sai tên file lưu convID trong taskAgentAPISessionFile",
+    "claim": "Hàm taskAgentAPISessionFile trả về đường dẫn kết thúc bằng \"wrong_session_name.json\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_bridge.go:198-201\n\tdir := filepath.Join(s.Root, \".orchestrator\", \"tasks\", safeKey)\n\t_ = os.MkdirAll(dir, 0o755)\n\treturn filepath.Join(dir, \"agentapi_conv_id.txt\")\n}"
   },
   {
     "id": "K2",
     "kind": "control_false",
-    "flow": "Control false: đảo điều kiện isTestTaskOrTempRoot đối với tiền tố TASK-DUAL-",
-    "claim": "Khi strings.HasPrefix(upperID, \"TASK-DUAL-\") bằng true, hàm isTestTaskOrTempRoot trả về false.",
-    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:689-693\nfunc isTestTaskOrTempRoot(root string, externalID string) bool {\n\tupperID := strings.ToUpper(strings.TrimSpace(externalID))\n\tif strings.HasPrefix(upperID, \"TASK-DUAL-\") || strings.HasPrefix(upperID, \"TASK-TEST-\") || strings.HasPrefix(upperID, \"TEST-\") {\n\t\treturn true\n\t}"
+    "flow": "Control false: sai giá trị hằng số mongoOCCClockSkewToleranceMs trong Code Demo",
+    "claim": "Hằng số mongoOCCClockSkewToleranceMs trong Code Demo có giá trị bằng 999999.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_audit_master_mongo_orchestrator.md:153-153\nconst mongoOCCClockSkewToleranceMs int64 = 2000"
   },
   {
     "id": "K3",
     "kind": "control_true",
-    "flow": "Control true: khớp nguyên văn điều kiện isTestTaskOrTempRoot đối với tiền tố TASK-DUAL-",
-    "claim": "Khi strings.HasPrefix(upperID, \"TASK-DUAL-\") là true, hàm isTestTaskOrTempRoot trả về true.",
-    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:689-693\nfunc isTestTaskOrTempRoot(root string, externalID string) bool {\n\tupperID := strings.ToUpper(strings.TrimSpace(externalID))\n\tif strings.HasPrefix(upperID, \"TASK-DUAL-\") || strings.HasPrefix(upperID, \"TASK-TEST-\") || strings.HasPrefix(upperID, \"TEST-\") {\n\t\treturn true\n\t}"
+    "flow": "Control true: khớp nguyên văn giá trị hằng số mongoOCCClockSkewToleranceMs trong Code Demo",
+    "claim": "Hằng số mongoOCCClockSkewToleranceMs trong Code Demo được khai báo kiểu int64 với giá trị 2000.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_audit_master_mongo_orchestrator.md:153-153\nconst mongoOCCClockSkewToleranceMs int64 = 2000"
   }
 ]
 

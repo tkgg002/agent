@@ -1,0 +1,67 @@
+[
+  {
+    "id": "A-COMPOSE-CH",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "DG3 Audit: Service clickhouse (gpay-clickhouse) & Volume clickhouse_data in docker-compose.yml",
+    "claim": "File docker-compose.yml của cdc-docker-dev đã khai báo service clickhouse với container_name gpay-clickhouse, image clickhouse/clickhouse-server:25.5.6, cổng 9000:9000 và 8123:8123, mạng cdc-bridge và volume clickhouse_data.",
+    "evidence": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/docker-compose.yml:163-210\n  # 7. ClickHouse MASTER/DEST — analytics OLAP destination.\n  clickhouse:\n    image: clickhouse/clickhouse-server:25.5.6\n    container_name: gpay-clickhouse",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/docker-compose.yml:163-210",
+    "must_contain": [
+      "image: clickhouse/clickhouse-server:25.5.6",
+      "container_name: gpay-clickhouse",
+      "name: cdc_docker_dev_clickhouse_data"
+    ]
+  },
+  {
+    "id": "A-ENV-README",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "DG3 Audit: .env.example & README.md ClickHouse Configuration",
+    "claim": "File .env.example của cdc-docker-dev đã bổ sung các biến CLICKHOUSE_USER=default, CLICKHOUSE_PASSWORD=root, CLICKHOUSE_DATABASE=goopay_clickhouse.",
+    "evidence": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/.env.example:28-37\n# ---------- ClickHouse (gpay-clickhouse on :9000 TCP / :8123 HTTP) ----------\nCLICKHOUSE_USER=default\nCLICKHOUSE_PASSWORD=root\nCLICKHOUSE_DATABASE=goopay_clickhouse",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/.env.example:28-37",
+    "must_contain": [
+      "CLICKHOUSE_USER=default",
+      "CLICKHOUSE_PASSWORD=root",
+      "CLICKHOUSE_DATABASE=goopay_clickhouse"
+    ]
+  },
+  {
+    "id": "K1",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "DG3 Control True",
+    "claim": "File README.md của cdc-docker-dev liệt kê gpay-clickhouse ở cổng 9000 / 8123.",
+    "evidence": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/README.md:15-19\n| `gpay-mongo` | 17017 | demo MongoDB source (replSet rs0) |\n| `gpay-mysql` | 13306 | demo MySQL source |\n| `gpay-mariadb` | 13307 | demo MariaDB source |\n| `gpay-clickhouse` | 9000 / 8123 | demo ClickHouse destination (`goopay_clickhouse`) |",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/README.md:15-19",
+    "must_contain": [
+      "`gpay-clickhouse`",
+      "9000 / 8123"
+    ]
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG3 Control False 1",
+    "claim": "Service clickhouse trong docker-compose.yml không ánh xạ cổng 9000:9000.",
+    "evidence": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/docker-compose.yml:172-175\n    ports:\n      - \"9000:9000\"\n      - \"8123:8123\"",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/docker-compose.yml:172-175",
+    "must_contain": [
+      "NONEXISTENT_NO_PORT_9000_TOKEN_111"
+    ]
+  },
+  {
+    "id": "K3",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG3 Control False 2",
+    "claim": "Service clickhouse trong docker-compose.yml không có healthcheck.",
+    "evidence": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/docker-compose.yml:181-186\n    healthcheck:\n      test: [ \"CMD\", \"wget\", \"--spider\", \"-q\", \"0.0.0.0:8123/ping\" ]",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/docker-compose.yml:181-186",
+    "must_contain": [
+      "NONEXISTENT_NO_HEALTHCHECK_TOKEN_222"
+    ]
+  }
+]

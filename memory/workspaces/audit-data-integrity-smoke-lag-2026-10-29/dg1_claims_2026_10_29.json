@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC-1",
+    "kind": "claim",
+    "claim": "In RunTotalOnlyB, rc.verifySegmentBAtFreezeCutoff is invoked with shadowActive - masterActive and the backward freeze-cutoff [lo, hi].",
+    "flow": "CheckAllUnified -> RunTotalOnlyB -> verifySegmentBAtFreezeCutoff",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:611-615\n\tvar diffTimeJSON []byte\n\tdiff, masterTotal, masterActive, statusStr := rc.verifySegmentBAtFreezeCutoff(\n\t\tctx, masterAgent, ref, lo, hi,\n\t\tshadowActive-masterActive, shadowTotal, shadowActive, masterTotal, masterActive,\n\t)"
+  },
+  {
+    "id": "S-FIX-1",
+    "kind": "claim",
+    "claim": "In the proposed verifySegmentAAtFreezeCutoff in recon_smoke_guard.go, srcTS and dstTS are resolved via rc.resolveSourceAndDestTSFields, dstPK is resolved via rc.resolveShadowPKField, and dstIndexed is checked via rc.destAgent.HasColumnIndex.",
+    "flow": "RunTotalOnlyA -> verifySegmentAAtFreezeCutoff -> resolveSourceAndDestTSFields & resolveShadowPKField & HasColumnIndex",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-data-integrity-smoke-lag-2026-10-29/09_tasks_solution_2026_10_29.md:386-390\n\tmetaCtx, metaCancel := context.WithTimeout(ctx, 3*time.Second)\n\tsrcTS, dstTS, errTS := rc.resolveSourceAndDestTSFields(metaCtx, entry, \"smoke\")\n\tdstPK := rc.resolveShadowPKField(metaCtx, entry)\n\tdstIndexed := errTS == nil && dstTS != \"\" && rc.destAgent.HasColumnIndex(metaCtx, entry.QualifiedTarget(), dstTS)\n\tmetaCancel()"
+  },
+  {
+    "id": "S-IMPACT-1",
+    "kind": "claim",
+    "claim": "In ReconPipelineGrid.tsx buildPipelines, each bRow (shadow_master) matches its corresponding aRow (source_shadow) by comparing shadow_schema and shadow_table.",
+    "flow": "buildPipelines -> bRows loop -> aRows.find",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:155-164\n    const a = aRows.find((r) => {\n      const aSchema = r.shadow_schema || '';\n      const aTable = r.shadow_table || r.target_table || '';\n      const bSchema = b.shadow_schema || '';\n      const bTable = b.shadow_table || '';\n      if (aSchema && bSchema) {\n        return aTable === bTable && aSchema === bSchema;\n      }\n      return r.target_table === shadowTable;\n    });"
+  },
+  {
+    "id": "S-PATTERN-1",
+    "kind": "claim",
+    "claim": "ChunkStreamBucketEngine.resolvePKFields checks if entry.PrimaryKeyField exists on the destination table via destAgent.ColumnExists and falls back to _source_id for non-Postgres sources.",
+    "flow": "ChunkStreamBucketEngine.resolvePKFields -> destAgent.ColumnExists",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_stream_bucket_engine.go:382-389\n\tif e.destAgent != nil {\n\t\tif exists, err := e.destAgent.ColumnExists(ctx, entry.QualifiedTarget(), primary); err == nil && exists {\n\t\t\treturn srcPK, primary\n\t\t}\n\t\tif exists, err := e.destAgent.ColumnExists(ctx, entry.QualifiedTarget(), \"_source_id\"); err == nil && exists {\n\t\t\treturn srcPK, \"_source_id\"\n\t\t}\n\t}"
+  },
+  {
+    "id": "D-BEHAV-1",
+    "kind": "claim",
+    "claim": "In verifySegmentBAtFreezeCutoff, when shadowAtHi equals masterAtHi after subtracting records in [hi, nowUpper], the function returns resolvedDiff = 0, shadowTotal, shadowActive, and statusStr = 'ok'.",
+    "flow": "RunTotalOnlyB -> verifySegmentBAtFreezeCutoff -> Step 1",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-data-integrity-smoke-lag-2026-10-29/09_tasks_solution_2026_10_29.md:533-546\n\t\tshadowAtHi := shadowActive - shAfterActive\n\t\tmasterAtHi := masterActive - msAfterActive\n\t\tif shadowAtHi == masterAtHi {\n\t\t\trc.logger.Info(\"[smoke-B] Transient gap resolved via backward freeze-cutoff subtraction at hi\",\n\t\t\t\tzap.String(\"shadow\", shadowRel),\n\t\t\t\tzap.String(\"master\", masterRel),\n\t\t\t\tzap.Int64(\"rawDiff\", diff),\n\t\t\t\tzap.Int64(\"shAfterHi\", shAfterActive),\n\t\t\t\tzap.Int64(\"msAfterHi\", msAfterActive),\n\t\t\t\tzap.Int64(\"countAtHi\", shadowAtHi),\n\t\t\t\tzap.Time(\"hi\", hi),\n\t\t\t)\n\t\t\treturn 0, shadowTotal, shadowActive, \"ok\"\n\t\t}"
+  },
+  {
+    "id": "D-EDGE-1",
+    "kind": "claim",
+    "claim": "In verifySegmentBAtFreezeCutoff, if abs(diff) is greater than threshold, it immediately returns diff and 'drift' without running window queries.",
+    "flow": "verifySegmentBAtFreezeCutoff -> threshold guard",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-data-integrity-smoke-lag-2026-10-29/09_tasks_solution_2026_10_29.md:495-501\n\tthreshold := rc.cfg.CountDriftThreshold\n\tif threshold <= 0 {\n\t\tthreshold = 100\n\t}\n\tif abs(diff) > threshold {\n\t\treturn diff, outMasterTotal, outMasterActive, \"drift\"\n\t}"
+  },
+  {
+    "id": "D-API-1",
+    "kind": "claim",
+    "claim": "In the proposed CheckAllUnified update, seenSegA tracks shadowKey (entry.QualifiedTarget()) so RunTotalOnlyA is executed only once per shadow table with ref set to nil.",
+    "flow": "CheckAllUnified -> seenSegA[shadowKey] -> RunTotalOnlyA",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-data-integrity-smoke-lag-2026-10-29/09_tasks_solution_2026_10_29.md:607-634\n\t\tshadowKey := entry.QualifiedTarget()\n\t\tif !seenSegA[shadowKey] {\n\t\t\tseenSegA[shadowKey] = true\n\t\t\tif rA := rc.RunTotalOnlyA(tableCtxA, entry, nil, stA.Total, stA.Active, lockTime, traceID); rA != nil {"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In RunTotalOnlyB, diff is shadowActive minus masterActive, and if diff is not zero, statusStr is set to 'drift'.",
+    "flow": "RunTotalOnlyB",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:611-615\n\tvar diffTimeJSON []byte\n\tdiff, masterTotal, masterActive, statusStr := rc.verifySegmentBAtFreezeCutoff(\n\t\tctx, masterAgent, ref, lo, hi,\n\t\tshadowActive-masterActive, shadowTotal, shadowActive, masterTotal, masterActive,\n\t)"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In RunTotalOnlyB, diff is computed by multiplying shadowActive by masterActive, and statusStr is set to 'skipped' when diff != 0.",
+    "flow": "RunTotalOnlyB",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:611-615\n\tvar diffTimeJSON []byte\n\tdiff, masterTotal, masterActive, statusStr := rc.verifySegmentBAtFreezeCutoff(\n\t\tctx, masterAgent, ref, lo, hi,\n\t\tshadowActive-masterActive, shadowTotal, shadowActive, masterTotal, masterActive,\n\t)"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "verifySegmentBAtFreezeCutoff returns statusStr = 'error' when diff == 0.",
+    "flow": "verifySegmentBAtFreezeCutoff",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-data-integrity-smoke-lag-2026-10-29/09_tasks_solution_2026_10_29.md:491-493\n\tif diff == 0 {\n\t\treturn 0, outMasterTotal, outMasterActive, \"ok\"\n\t}"
+  }
+]

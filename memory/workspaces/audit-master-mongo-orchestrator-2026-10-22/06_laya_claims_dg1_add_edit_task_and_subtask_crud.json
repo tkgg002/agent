@@ -1,0 +1,65 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "target",
+    "basis": "code",
+    "claim": "Handler in internal/webui/server.go registers /api/tasks/detail and /api/tasks/update.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:639-652\nfunc (s *Server) Handler() http.Handler {\n\tmux := http.NewServeMux()\n\tsub, err := fs.Sub(staticFS, \"static\")\n\tif err == nil {\n\t\tmux.Handle(\"/\", http.FileServer(http.FS(sub)))\n\t}\n\tmux.HandleFunc(\"/api/dashboard\", s.handleDashboard)\n\tmux.HandleFunc(\"/api/tasks\", s.handleCreateTask)\n\tmux.HandleFunc(\"/api/tasks/detail\", s.handleTaskDetail)\n\tmux.HandleFunc(\"/api/tasks/update\", s.handleUpdateTask)\n\tmux.HandleFunc(\"/api/tasks/action\", s.handleTaskAction)\n\tmux.HandleFunc(\"/api/tasks/delete\", s.handleDeleteTask)\n\tmux.HandleFunc(\"/api/tasks/stop\", s.handleStopTask)"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "target",
+    "basis": "code",
+    "claim": "UpdateTaskDetails is defined in 09_tasks_solution_add_edit_task_and_subtask_crud.md.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_add_edit_task_and_subtask_crud.md:97-105\nfunc (s *Store) UpdateTaskDetails(ctx context.Context, externalID, title, description, complexity, assignedModel string, labels []string) (QueuedTask, error) {\n\ts.mu.Lock()\n\tdefer s.mu.Unlock()\n\n\texternalID = strings.TrimSpace(externalID)\n\tif externalID == \"\" {\n\t\treturn QueuedTask{}, errors.New(\"queue: external_id is required\")\n\t}"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "target",
+    "basis": "code",
+    "claim": "GetByExternalID is defined in 09_tasks_solution_add_edit_task_and_subtask_crud.md.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_add_edit_task_and_subtask_crud.md:70-77\nfunc (s *Store) GetByExternalID(ctx context.Context, externalID string) (QueuedTask, error) {\n\ts.mu.Lock()\n\tdefer s.mu.Unlock()\n\n\texternalID = strings.TrimSpace(externalID)\n\tif externalID == \"\" {\n\t\treturn QueuedTask{}, errors.New(\"queue: external_id is required\")\n\t}"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "target",
+    "basis": "code",
+    "claim": "handleTaskSubTasks is defined in internal/webui/task_inspector.go.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:1543-1548\nfunc (s *Server) handleTaskSubTasks(w http.ResponseWriter, r *http.Request) {\n\tif r.Method != http.MethodPost {\n\t\thttp.Error(w, \"method not allowed\", http.StatusMethodNotAllowed)\n\t\treturn\n\t}"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "target",
+    "basis": "code",
+    "claim": "splitCleanDescriptionAndBRD is defined in 09_tasks_solution_add_edit_task_and_subtask_crud.md.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_add_edit_task_and_subtask_crud.md:172-180\nfunc splitCleanDescriptionAndBRD(rawDesc, artifactDir string) (string, string) {\n\tconst brdMarker = \"### Tài Liệu BRD / PRD Đính Kèm:\"\n\tcleanDesc := strings.TrimSpace(rawDesc)\n\tvar embeddedBRD string\n\tif idx := strings.Index(cleanDesc, brdMarker); idx >= 0 {\n\t\tembeddedBRD = strings.TrimSpace(cleanDesc[idx+len(brdMarker):])\n\t\tcleanDesc = strings.TrimSpace(cleanDesc[:idx])\n\t}"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "target",
+    "basis": "code",
+    "claim": "taskDetailResponse is defined in 09_tasks_solution_add_edit_task_and_subtask_crud.md.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_add_edit_task_and_subtask_crud.md:152-160\ntype taskDetailResponse struct {\n\tExternalID       string       `json:\"external_id\"`\n\tTitle            string       `json:\"title\"`\n\tCleanDescription string       `json:\"clean_description\"`\n\tBRDContent       string       `json:\"brd_content\"`\n\tTargetRepo       string       `json:\"target_repo\"`\n\tAffectedRepos    []string     `json:\"affected_repos\"`\n\tRunner           string       `json:\"runner\"`\n\tModel            string       `json:\"model\"`"
+  },
+  {
+    "id": "K1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "Open is defined in internal/queue/store.go.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/queue/store.go:85-90\nfunc Open(dbPath string) (*Store, error) {\n\tif err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil {\n\t\treturn nil, fmt.Errorf(\"queue: mkdir: %w\", err)\n\t}\n\tdb, err := sql.Open(\"sqlite\", dbPath+\"?_pragma=busy_timeout=5000&_pragma=journal_mode=WAL\")"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "Open in internal/queue/store.go returns an integer instead of a Store pointer.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/queue/store.go:85-90\nfunc Open(dbPath string) (*Store, error) {\n\tif err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil {\n\t\treturn nil, fmt.Errorf(\"queue: mkdir: %w\", err)\n\t}\n\tdb, err := sql.Open(\"sqlite\", dbPath+\"?_pragma=busy_timeout=5000&_pragma=journal_mode=WAL\")"
+  },
+  {
+    "id": "K3",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "handleTaskSubTasks in internal/webui/task_inspector.go takes zero parameters.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:1543-1548\nfunc (s *Server) handleTaskSubTasks(w http.ResponseWriter, r *http.Request) {"
+  }
+]

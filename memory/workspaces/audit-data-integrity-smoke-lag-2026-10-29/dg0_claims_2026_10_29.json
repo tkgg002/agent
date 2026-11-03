@@ -1,0 +1,44 @@
+[
+    {
+      "id": "C-REQ-1",
+      "kind": "claim",
+      "claim": "In RunTotalOnlyB, the 120-second sliding window count subtraction block is commented out and diff is computed directly as shadowActive - masterActive, marking statusStr as 'drift' whenever diff != 0.",
+      "flow": "CheckAllUnified -> RunTotalOnlyB -> diff := shadowActive - masterActive",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:668-673\n\tdiff := shadowActive - masterActive\n\tstatusStr := \"ok\"\n\tvar diffTimeJSON []byte\n\tif diff != 0 {\n\t\tstatusStr = \"drift\"\n\t}"
+    },
+    {
+      "id": "C-REALITY-1",
+      "kind": "claim",
+      "claim": "In RunTotalOnlyA Guard 1, when entry.TimestampField is non-empty, both srcTS and dstTS are set directly to *entry.TimestampField, bypassing resolveSourceAndDestTSFields, and destAgent.HashWindow is called with entry.PrimaryKeyField.",
+      "flow": "RunTotalOnlyA -> Guard 1 -> HashWindow",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:373-383\n\t\tif entry.TimestampField != nil && *entry.TimestampField != \"\" {\n\t\t\tsrcTS = *entry.TimestampField\n\t\t\tdstTS = *entry.TimestampField\n\t\t} else {\n\t\t\tsrcTS, dstTS, errTS = rc.resolveSourceAndDestTSFields(fastCtx, entry, \"smoke\")\n\t\t}\n\n\t\tif errTS == nil && srcTS != \"\" && dstTS != \"\" {\n\t\t\tsrcHash, errS := rc.sourceAgent.HashWindow(fastCtx, entry.SourceURL, entry.SourceDB, entry.SourceTable, srcTS, lo, hi)\n\t\t\tdstHash, errD := rc.destAgent.HashWindow(fastCtx, entry.QualifiedTarget(), entry.PrimaryKeyField, dstTS, lo, hi)"
+    },
+    {
+      "id": "C-CONTRA-1",
+      "kind": "claim",
+      "claim": "In CheckAllUnified, pipelineList contains one element per MasterBindingRef, and the loop over pipelineList launches an executeGo goroutine calling RunTotalOnlyA for every pipeline item without deduplicating by shadow table.",
+      "flow": "CheckAllUnified -> for _, p := range pipelineList -> executeGo -> RunTotalOnlyA",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:963-997\n\tfor _, p := range pipelineList {\n\t\tentry := *p.Entry\n\t\tref := *p.Ref\n\t\tidxA, okA := scanIdx[entry.QualifiedTarget()]\n\t\tif rA := rc.RunTotalOnlyA(tableCtxA, entry, &ref, stA.Total, stA.Active, lockTime, traceID); rA != nil {"
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "kind": "control_true",
+      "claim": "scanExact checks loadCountSnapshot first and returns snap.total and snap.active when the cached snapshot is valid.",
+      "flow": "CheckAllUnified -> scanExact -> loadCountSnapshot",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:118-121\nfunc (rc *ReconCore) scanExact(ctx context.Context, agent *ReconDestAgent, relation, kind string) (total, active int64, err error) {\n\tif snap, ok := rc.loadCountSnapshot(relation); ok {\n\t\treturn snap.total, snap.active, nil\n\t}"
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "kind": "control_false",
+      "claim": "RunTotalOnlyB always sets statusStr to 'ok' even when shadowActive - masterActive is non-zero.",
+      "flow": "CheckAllUnified -> RunTotalOnlyB",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:668-673\n\tdiff := shadowActive - masterActive\n\tstatusStr := \"ok\"\n\tvar diffTimeJSON []byte\n\tif diff != 0 {\n\t\tstatusStr = \"drift\"\n\t}"
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "kind": "control_false",
+      "claim": "ReconSourceAgent.secondaryColl configures the MongoDB collection with Primary read preference instead of Secondary read preference.",
+      "flow": "EstimatedCount -> secondaryColl",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_source_agent.go:204-208\nfunc (sa *ReconSourceAgent) secondaryColl(client *mongo.Client, database, collection string) *mongo.Collection {\n\treturn client.Database(database).Collection(\n\t\tcollection,\n\t\toptions.Collection().SetReadPreference(readpref.Secondary()),\n\t)\n}"
+    }
+]

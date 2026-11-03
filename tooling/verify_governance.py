@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""verify_governance.py — Process Linter kiểm soát quy trình Agent theo Tier (T0–T3).
+"""verify_governance.py — Process Linter kiểm soát quy trình Agent theo Tier (T0–T3) & Global Lessons Hygiene.
 
 Usage:
   python3 tooling/verify_governance.py --workspace <workspace_name> [--tier T0|T1|T2|T3]
@@ -18,6 +18,9 @@ from typing import List, Optional, Sequence, Tuple
 
 AGENT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_WORKSPACES_DIR = AGENT_ROOT / "memory" / "workspaces"
+DEFAULT_LESSONS_MD = AGENT_ROOT / "memory" / "global" / "lessons.md"
+DEFAULT_INDEX_MD = AGENT_ROOT / "memory" / "global" / "lessons" / "INDEX.md"
+MAX_INDEX_BYTES = 15000
 
 TIER_RE = re.compile(r"^\s*tier\s*:\s*(T[0-3])\b", re.I | re.M)
 CLEAN_ROOM_MODE_RE = re.compile(r"^\s*mode\s*:\s*clean-room\b", re.I | re.M)
@@ -128,6 +131,48 @@ def detect_tier(req_files: Sequence[Path], tier_override: Optional[str] = None) 
         except OSError:
             continue
     return "T2"
+
+
+def verify_global_lessons_integrity(
+    lessons_md: Path = DEFAULT_LESSONS_MD,
+    index_md: Path = DEFAULT_INDEX_MD,
+) -> bool:
+    """Kiểm tra tính toàn vẹn của lessons.md (Global Hygiene) và đồng bộ 1:1 với INDEX.md."""
+    if not lessons_md.is_file():
+        return True
+    try:
+        if str(AGENT_ROOT) not in sys.path:
+            sys.path.insert(0, str(AGENT_ROOT))
+        from tooling.build_lessons_index import parse_lessons, validate_global_hygiene
+
+        source_text = lessons_md.read_text(encoding="utf-8")
+        entries = parse_lessons(source_text)
+        validate_global_hygiene(entries)
+    except Exception as exc:
+        log_error(f"[Global Lessons Hygiene] {exc}")
+        return False
+
+    if not index_md.is_file():
+        log_error(f"[Global Lessons Sync] Thiếu file {index_md}. Hãy chạy `python3 tooling/build_lessons_index.py`.")
+        return False
+
+    idx_text = index_md.read_text(encoding="utf-8")
+    idx_bytes = len(idx_text.encode("utf-8"))
+    idx_count = sum(1 for ln in idx_text.splitlines() if re.match(r"^-\s+L\d{3}\b", ln))
+    if idx_count != len(entries):
+        log_error(
+            f"[Global Lessons Sync] Lệch số lượng bài học giữa lessons.md ({len(entries)}) "
+            f"và INDEX.md ({idx_count}). Hãy chạy `python3 tooling/build_lessons_index.py`!"
+        )
+        return False
+    if idx_bytes >= MAX_INDEX_BYTES:
+        log_error(f"[Global Lessons Sync] INDEX.md ({idx_bytes}B) vượt ngưỡng {MAX_INDEX_BYTES}B.")
+        return False
+
+    log_info(
+        f"✓ [Global Lessons] {len(entries)} bài học đạt chuẩn Global Hygiene & đồng bộ 1:1 với INDEX.md ({idx_bytes}B)."
+    )
+    return True
 
 
 def verify_workspace_docs(
@@ -335,6 +380,11 @@ def verify_workspace_docs(
         return False
 
     log_info(f"✓ File {progress_file.name} hợp lệ và đã cập nhật ngày hôm nay ({today_str}).")
+
+    # Kiểm tra Global Lessons Hygiene & 1:1 Sync khi chạy ở workspace mặc định của /agent
+    if workspaces_dir.resolve() == DEFAULT_WORKSPACES_DIR.resolve():
+        if not verify_global_lessons_integrity():
+            return False
 
     if str(AGENT_ROOT) not in sys.path:
         sys.path.insert(0, str(AGENT_ROOT))

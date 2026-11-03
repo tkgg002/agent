@@ -1,0 +1,42 @@
+{
+  "internal/service/recon/recon_dest_agent.go": {
+    "objective": "Add per-agent index-probe cache fields (idxColMu, idxCol) to ReconDestAgent following the existing colTypesMu/colTypes pattern, so index probe results are never shared across different database connections.",
+    "workflow": "HasColumnIndex (recon_window_index_probe.go) reads/writes da.idxCol under da.idxColMu; lazily initialized like colTypes.",
+    "rounds": [
+      {
+        "objective": "Engineer defense: only two struct fields added, zero logic in this file; mirrors colTypes exactly. Verified on real PostgreSQL by TestLive_HasColumnIndex_LeadingColumnAndPerAgentCache (agent2 sees new index while agent1 keeps cached answer).",
+        "workflow": "Same as above."
+      }
+    ]
+  },
+  "internal/service/recon/recon_smoke.go": {
+    "objective": "Smoke recon orchestrator: delegate Segment A/B freeze-cutoff verification to recon_smoke_guard.go, clear per-cycle COUNT cache, run Segment A once per shadow table, and keep telemetry on measured master counts (rawMasterTotal/rawMasterActive) while the UI row keeps the approved cutoff-normalized values.",
+    "workflow": "CheckAllUnified -> RunTotalOnlyA(ref=nil) -> verifySegmentAAtFreezeCutoff ; RunTotalOnlyB -> capture raw master counts -> verifySegmentBAtFreezeCutoff(lo, hi=lockTime-WindowFreezeMargin) -> span/metrics use raw counts",
+    "rounds": [
+      {
+        "objective": "Engineer defense: RunTotalOnlyB previously computed lo/hi but only attached them to span attributes; delegation now really applies the freeze cutoff. Telemetry falsification found in audit round 2 is fixed (metrics/span use raw measured values). Guard behaviour verified on real PostgreSQL: in-flight gap after hi -> ok, row missing before hi -> drift; mutant inverting the equality was KILLED.",
+        "workflow": "Same as above; package regression suite passes; Live production trace still pending with user."
+      }
+    ]
+  },
+  "internal/service/recon/recon_window_index_probe.go": {
+    "objective": "Data-access probe layer: detect a B-Tree index whose leading key column is the shadow timestamp column (regex anchored after USING <method> (), cache per agent, and hash [lo,hi) windows via Mongo _id_ and Postgres _source_id indexes with deterministic zero-padded ObjectID boundaries.",
+    "workflow": "verifySegmentAAtFreezeCutoff -> HasColumnIndex -> (Path 2) HashObjectIDWindow || HashSourceIDWindow",
+    "rounds": [
+      {
+        "objective": "Engineer defense: read-only transactions, bounded 3-5s contexts, validateIdent + quoteRelation, bind parameters. Verified on real PostgreSQL 15 + MongoDB 6: leading/composite/partial-predicate/prefix cases, Mongo vs Shadow count+xor parity with lo included, hi excluded, soft-deleted excluded, and a negative control. Mutant restoring prefix matching was KILLED. Known limit: cache has no TTL (new index needs worker restart).",
+        "workflow": "Same as above."
+      }
+    ]
+  },
+  "internal/service/recon/recon_smoke_guard.go": {
+    "objective": "Service guard layer: enforce backward freeze cutoff for Segment A (source vs shadow) and Segment B (shadow vs master) within CountDriftThreshold; verification errors never turn into ok.",
+    "workflow": "RunTotalOnlyA -> verifySegmentAAtFreezeCutoff ; RunTotalOnlyB -> verifySegmentBAtFreezeCutoff (Step1 subtract [hi,now] on _source_ts, Step2 HashWindow [lo,hi])",
+    "rounds": [
+      {
+        "objective": "Engineer defense: master copies _source_ts from shadow so subtraction is symmetric; disclosed and spec-documented deviations: Postgres-source branch keeps TimestampField override without HasColumnIndex (residual Seq Scan risk bounded at 6s), Step1 runs sequentially. Verified on real PostgreSQL tables.",
+        "workflow": "Same as above."
+      }
+    ]
+  }
+}

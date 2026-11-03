@@ -1,0 +1,51 @@
+[
+  {
+    "id": "A-F1-1",
+    "kind": "claim",
+    "claim": "processDiscoveryRows skips any field where shadow.IsReservedShadowSystemColumn(k) is true, and sourceRepoGorm.UpdateRegistry excludes all 11 reserved shadow system columns from auto-approval in mapping_rule_v2.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_utils.go:27-31\n\t\tfor k, v := range targetMap {\n\t\t\tif shadow.IsReservedShadowSystemColumn(k) {\n\t\t\t\tcontinue\n\t\t\t}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/source/source_repo_gorm.go:384-393\n\t\t\t\treservedCols := domainshadow.ReservedShadowSystemColumns()\n\t\t\t\tres := tx.Table(\"cdc_system.mapping_rule_v2\").\n\t\t\t\t\tWhere(`source_object_id = ? AND shadow_binding_id = ? AND status != ?\n\t\t\t\t\t\tAND LOWER(TRIM(source_field)) NOT IN (?)\n\t\t\t\t\t\tAND LOWER(TRIM(target_column)) NOT IN (?)`,\n\t\t\t\t\t\tsourceObjectID, shadowBindingID, \"approved\", reservedCols, reservedCols).",
+    "flow": "DiscoverHandler -> processDiscoveryRows -> UpdateRegistry -> mapping_rule_v2"
+  },
+  {
+    "id": "A-F2-1",
+    "kind": "claim",
+    "claim": "ShouldIncludeDataColumn in system_columns.go skips pkField and reserved shadow system columns (while preserving _deleted set by EventHandler), and both BuildUpsertSQLInSchema and BuildBatchUpsertSQLsInSchema filter MappedData with ShouldIncludeDataColumn.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/system_columns.go:19-28\nfunc ShouldIncludeDataColumn(schema *TableSchema, col string, pkField string) bool {\n\tif ShouldSkipDataColumn(col, pkField) {\n\t\treturn false\n\t}\n\tif schema != nil && schema.Columns != nil {\n\t\t_, exists := schema.Columns[col]\n\t\treturn exists\n\t}\n\treturn true\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:356-380\n\tfor col, val := range mappedData {\n\t\tif !ShouldIncludeDataColumn(schema, col, pkField) {\n\t\t\tcontinue\n\t\t}",
+    "flow": "BatchBuffer.batchUpsert -> BuildBatchUpsertSQLsInSchema / BuildUpsertSQLInSchema -> ShouldIncludeDataColumn"
+  },
+  {
+    "id": "A-F3-1",
+    "kind": "claim",
+    "claim": "SnapshotRunner.runSnapshot calls r.flushSnapshotTables(ctx, targetTable, scopedBinding, routes) after each batch and at final drain, which qualifies the binding schema.table and invokes tableFlusher.FlushTableBatchBuffer(ctx, targetTable) to isolate flushes per target table.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:851-858\n\t\tflushDLQ()\n\n\t\t_, flushErr := r.flushSnapshotTables(ctx, targetTable, scopedBinding, routes)\n\t\tif flushErr != nil {\n\t\t\treturn tripBreaker(fmt.Sprintf(\"flush failed: %v\", flushErr))\n\t\t}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_utils.go:214-240\nfunc (r *SnapshotRunner) flushSnapshotTables(\n\tctx context.Context,\n\ttargetTable string,\n\tscopedBinding *shadow.ShadowBinding,\n\troutes []*metadata.ResolvedSourceRoute,\n) (int, error) {\n\ttableFlusher, hasTableFlush := r.eventHandler.(interface {\n\t\tFlushTableBatchBuffer(ctx context.Context, targetTable string) (int, error)\n\t})\n\tif scopedBinding != nil {\n\t\ttargetTable = qualifyShadowBindingTable(scopedBinding, targetTable)\n\t}",
+    "flow": "SnapshotRunner.runSnapshot -> flushSnapshotTables -> EventHandler.FlushTableBatchBuffer -> BatchBuffer.FlushTableWithContext"
+  },
+  {
+    "id": "A-F4-1",
+    "kind": "claim",
+    "claim": "BatchBuffer.timerLoop calls bb.flushFromBackground(), which records per-table background flush errors via recordAsyncFlushError so FlushTableWithContext pops and returns priorAsyncErr for that targetTable.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:248-266\nfunc (bb *BatchBuffer) timerLoop() {\n\tticker := time.NewTicker(bb.timeout)\n\tdefer ticker.Stop()\n\n\tfor {\n\t\tselect {\n\t\tcase <-bb.ctx.Done():\n\t\t\t_, _ = bb.Flush() // best-effort drain on shutdown; err already logged inside Flush\n\t\t\treturn\n\t\tcase <-ticker.C:\n\t\t\tbb.flushFromBackground()\n\t\tcase <-bb.flushCh:\n\t\t\tbb.flushFromBackground()\n\t\t}\n\t}\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:281-287\n\tbb.mu.Lock()\n\tpriorAsyncErr := bb.popAsyncFlushErrorLocked(targetTable)\n\tif len(bb.records) == 0 {\n\t\tbb.mu.Unlock()\n\t\treturn 0, priorAsyncErr\n\t}",
+    "flow": "BatchBuffer.timerLoop -> flushFromBackground -> recordAsyncFlushError -> FlushTableWithContext -> popAsyncFlushErrorLocked"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "getMetadataInsertCols appends \"_source_ts\" to cols when \"_source_ts\" exists in schema.Columns.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:673-676\n\tif _, ok := schema.Columns[\"_source_ts\"]; ok {\n\t\tcols = append(cols, `\"_source_ts\"`)\n\t}\n\treturn cols",
+    "flow": "SchemaAdapter.getMetadataInsertCols"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "getMetadataInsertCols never appends \"_source_ts\" to cols and always returns an empty slice.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:673-676\n\tif _, ok := schema.Columns[\"_source_ts\"]; ok {\n\t\tcols = append(cols, `\"_source_ts\"`)\n\t}\n\treturn cols",
+    "flow": "SchemaAdapter.getMetadataInsertCols"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "DynamicMapper.MapData only processes rules where rule.IsActive is false and skips all active rules.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/dynamic_mapper.go:85-89\n\tfor _, rule := range rules {\n\t\tif !rule.IsActive || IsReservedShadowSystemColumn(rule.TargetColumn) {\n\t\t\tcontinue\n\t\t}",
+    "flow": "DynamicMapper.MapData"
+  }
+]

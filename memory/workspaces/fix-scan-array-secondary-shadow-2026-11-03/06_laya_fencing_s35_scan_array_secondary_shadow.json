@@ -1,0 +1,20 @@
+{
+  "centralized-data-service/internal/service/source/scan_service.go": {
+    "objective": "Support Scan Array (Flatten) on Secondary Shadow table (transaction_history_payload, binding_id=77) while reducing line count in scan_service.go via Single-Responsibility helper file scan_array_target_resolver.go",
+    "workflow": "ScanService.ScanArrayFields delegates target shadow resolution, logical path cleaning, and parentV2ID lookup to scan_array_target_resolver.go",
+    "fencing_objective": "Delegate multi_shadow target table resolution to scan_array_target_resolver.go so scan_service.go decreases by 24 lines and scan_master_binding_resolver.go stays untouched at 33 lines",
+    "fencing_workflow": "100% backward compatible: when masterBindingID is nil or has 1 primary shadow, returns the exact same table and schema as before"
+  },
+  "centralized-data-service/internal/service/master/transmuter.go": {
+    "objective": "Extract GJSON path resolution into pure helper transmuter_gjson_path.go to reduce transmuter.go by 13 lines and support unwrapped multi_shadow, debezium_after, stringified JSON, and lastSeg fallback",
+    "workflow": "TransmuterModule.extractColumns calls resolveRuleGJSONValue(rawStr, r)",
+    "fencing_objective": "Single-line call in transmuter.go delegating to resolveRuleGJSONValue in transmuter_gjson_path.go",
+    "fencing_workflow": "Preserves exact legacy behavior for copy_1_to_1 and lastSeg while adding multi_shadow and stringified JSON fallback"
+  },
+  "cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx": {
+    "objective": "Route Scan Array request to the actual shadow table owning the JSON field (e.g. transaction_history_payload) and extract pure helpers to src/utils/masterScanArray.ts to reduce MasterMappingFieldsPage.tsx by 17 lines",
+    "workflow": "handleScanArray resolves targetShadowTable via resolveShadowTableForExplodePath and posts to /api/introspection/scan-array/${targetShadowTable}",
+    "fencing_objective": "Extract resolveShadowTableForExplodePath and buildScanArrayFieldOptions to src/utils/masterScanArray.ts",
+    "fencing_workflow": "Falls back to binding.shadow_table when no secondary shadow rule matches explodePath"
+  }
+}

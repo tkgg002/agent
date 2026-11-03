@@ -431,3 +431,60 @@ func (s *Server) VerifySubTaskCodeOnDisk(ctx context.Context, it SubTaskDTO) (bo
 }
 ```
 
+---
+
+## 9. Phương Án Duy Nhất Khắc Phục `TASK-A06` (`1 Task = 1 Antigravity Conversation Session` & Đấu Nối AI Model Thật Cho Mọi Bước Wave `S1–S6`)
+
+### 9.1. Root Cause Vật Lý (`REF:` thật trên đĩa)
+1. **Tại sao chỉ bước `"rep update plan"` / chat mở tab `new-conversation` trên Antigravity IDE còn các bước Wave trước của `TASK-2` thì không?**
+   - **Thứ nhất (`internal/webui/task_inspector.go:2848-2851`, `internal/webui/subtask_wave_engine.go:152-186,272-365`, `internal/webui/server.go:1750-1950`):**
+     - Trong `generateDeepTaskArtifacts` (`task_inspector.go:2848-2851`), code kiểm tra `llmRes := s.loadTaskLLMAnalysis(qt.ExternalID); if llmRes == nil { llmRes, _ = s.invokeArchitectLLM(...) }`. Do `TASK-2` có sẵn file `llm_analysis.json` cũ (sinh ra từ nhánh fallback tĩnh chứa `TASK-2-M01..M04` trước khi nối `agentapi`), `llmRes != nil` nên khi chạy bước `Start / S2.5 Critique / Plan (S1-S3)` (`server.go:1374`), hệ thống **bỏ qua không gọi `invokeArchitectLLM`**!
+     - Đồng thời, tại `subtask_wave_engine.go:152-186` (`subtask_plan`), `subtask_wave_engine.go:272-365` (`subtask_qa`) và `server.go:1750-1950` (`case "qa"` — `5B. Semantic Audit`), mặc dù trên UI hiển thị mọi bước đều chạy `gemini-4-argon (antigravity)`, code dưới backend lại chỉ ghi chuỗi tĩnh và gọi `laya_gate.py` mà chưa gọi qua `AntigravityRunner`!
+     - Trong khi đó, khi User bấm/gửi `"rep update plan"` (`executeArchitectReviseSolution` tại `task_revise_workflow.go:165` hoặc `renderContextualDiscussReply` tại `task_chat_knowledge.go:33`), hàm này gọi thẳng `s.invokeArchitectLLM(...)` không qua chốt chặn `if llmRes == nil`.
+   - **Thứ hai (`internal/runner/antigravity.go:362`):**
+     - Trong `completeWithAntigravityAgentAPI` (`internal/runner/antigravity.go:362`), code bị hardcode `args := []string{"new-conversation", "--model=" + tier, fullPrompt}` ở mỗi lần gọi `Complete()`. Do đó cứ mỗi lần gọi Model AI là Antigravity IDE lại bị mở thêm 1 tab conversation mới tinh thay vì tái sử dụng đúng 1 phiên conversation của Task đó qua `agentapi send-message <convID> <prompt>`.
+
+### 9.2. Giải Pháp Kỹ Thuật Duy Nhất & Code Demo (`internal/runner/antigravity.go` & `internal/webui/task_llm_bridge.go`)
+1. **Cơ chế `1 Task = 1 Antigravity Conversation Session` (`SessionFile` = `.orchestrator/tasks/<TaskKey>/agentapi_conv_id.txt`):**
+   - Bổ sung `SessionFile` và `SessionTitle` vào `runner.CompletionRequest` (`internal/runner/runner.go:37-43`) và `runner.AntigravityRunner` (`internal/runner/antigravity.go:33-38`).
+   - Trong `completeWithAntigravityAgentAPI`:
+     - Kiểm tra `existingConvID := loadSavedAgentAPIConversationID(sessionFile)`. Nếu `existingConvID != ""` và thư mục `brain/<existingConvID>` tồn tại:
+       - Ghi nhận `prevMaxStep := readMaxTranscriptStepIndex(existingConvID)` trước khi gửi.
+       - Gọi `agentapi send-message --title=<sessionTitle> <existingConvID> <fullPrompt>` để nối tiếp vào đúng phiên conversation đó (không mở tab mới!).
+       - Trong vòng lặp đọc `transcript_full.jsonl`, chỉ đọc các dòng `PLANNER_RESPONSE` có `line.StepIndex > prevMaxStep` và chỉ đánh dấu `isStepDone = true` khi dòng đó có `line.Content != ""` và `line.Status == "DONE"`.
+     - Chỉ khi Task chưa có `convID` (hoặc `send-message` trả về lỗi) thì mới gọi `agentapi new-conversation` 1 lần duy nhất và lưu `convID` vào `sessionFile`.
+2. **Đấu nối 100% các bước Wave (`S1/S2/S2.5 Critique`, `S3 Plan`, `Sub-Task Plan`, `S4 Muscle`, `5B Semantic Audit`, `S6 Finalize`) vào AI Model thật trên cùng `SessionFile` của Task:**
+   - Bổ sung `isStaleFallbackLLMAnalysis(res *ArchitectLLMAnalysis) bool` tại `task_inspector.go` để tự động phát hiện `llm_analysis.json` fallback cũ (`len(res.SubTasks) == 0` hoặc chứa `[⏳ PENDING (chờ APPROVE S4)]`) và buộc `generateDeepTaskArtifacts` / `subtask_plan` gọi lại `invokeArchitectLLM` thật.
+   - Bổ sung `invokeQAAuditorLLM` trong `task_llm_bridge.go` và gọi ở bước `5B. Semantic Audit & DG3` (`server.go` `case "qa"` & `subtask_wave_engine.go` `case "subtask_qa"`) dùng chung `SessionFile` của Task.
+
+```go
+func completeWithAntigravityAgentAPI(ctx context.Context, agyBin, prompt, systemPrompt, model, sessionFile, sessionTitle string, ch chan<- Token) {
+	defer close(ch)
+	if strings.TrimSpace(sessionFile) == "" {
+		sessionFile = filepath.Join(os.TempDir(), "orchestrator_agentapi_conv_id.txt")
+	}
+	if strings.TrimSpace(sessionTitle) == "" {
+		sessionTitle = "AI-Orchestrator Task Session"
+	}
+	convID := loadValidAgentAPIConversationID(sessionFile)
+	prevMaxStep := -1
+	if convID != "" {
+		prevMaxStep = readMaxTranscriptStepIndex(convID)
+		sendArgs := []string{"send-message", "--title=" + sessionTitle, convID, fullPrompt}
+		if strings.HasSuffix(agyBin, "language_server") {
+			sendArgs = append([]string{"agentapi"}, sendArgs...)
+		}
+		if out, err := executil.CommandContext(ctx, agyBin, sendArgs...).CombinedOutput(); err != nil {
+			_ = out
+			convID = ""
+			prevMaxStep = -1
+		}
+	}
+	if convID == "" {
+		newArgs := []string{"new-conversation", "--model=" + tier, "--title=" + sessionTitle, fullPrompt}
+		// ... create once and persist convID to sessionFile
+	}
+}
+```
+
+

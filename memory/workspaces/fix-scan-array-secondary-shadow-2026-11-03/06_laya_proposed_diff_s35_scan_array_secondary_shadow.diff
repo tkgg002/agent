@@ -1,0 +1,90 @@
+diff --git a/centralized-data-service/internal/service/source/scan_service.go b/centralized-data-service/internal/service/source/scan_service.go
+--- a/centralized-data-service/internal/service/source/scan_service.go
++++ b/centralized-data-service/internal/service/source/scan_service.go
+@@ -191,29 +191,17 @@
+ func (s *ScanService) ScanArrayFields(ctx context.Context, targetTable, explodePath string, masterBindingID *int64, mode string) (map[string]interface{}, error) {
+ 	if mode == "" {
+ 		mode = "sample"
+ 	}
+-
+-	schemaName := metadata.ResolveTargetSchema(s.metadataRegistry, targetTable)
+-
+-	if masterBindingID != nil {
+-		var sb struct {
+-			ShadowSchema string `gorm:"column:shadow_schema"`
+-			ShadowTable  string `gorm:"column:shadow_table"`
+-		}
+-		if err := s.db.WithContext(ctx).Raw(`
+-            SELECT sb.shadow_schema, sb.shadow_table
+-              FROM cdc_system.master_binding mb
+-              JOIN cdc_system.shadow_binding sb ON sb.id = mb.shadow_binding_id
+-             WHERE mb.id = ?`, *masterBindingID).Scan(&sb).Error; err == nil {
+-			if strings.TrimSpace(sb.ShadowTable) != "" {
+-				targetTable = sb.ShadowTable
+-			}
+-			if strings.TrimSpace(sb.ShadowSchema) != "" {
+-				schemaName = sb.ShadowSchema
+-			}
+-		}
+-	}
+-
+ 	execDB := s.db
+ 	if s.shadowDB != nil {
+ 		execDB = s.shadowDB
+ 	}
++	logicalExplodePath, logicalBasePath, rootField := cleanLogicalExplodePath(explodePath)
++	resolvedTarget := s.resolveShadowTargetForScanArray(ctx, execDB, targetTable, explodePath, masterBindingID)
++	if resolvedTarget.ShadowTable != "" {
++		targetTable = resolvedTarget.ShadowTable
++	}
++	schemaName := resolvedTarget.ShadowSchema
++	if strings.TrimSpace(schemaName) == "" {
++		schemaName = metadata.ResolveTargetSchema(s.metadataRegistry, targetTable)
++	}
+diff --git a/centralized-data-service/internal/service/master/transmuter.go b/centralized-data-service/internal/service/master/transmuter.go
+--- a/centralized-data-service/internal/service/master/transmuter.go
++++ b/centralized-data-service/internal/service/master/transmuter.go
+@@ -1768,14 +1768,1 @@
+-		path := r.SourceField
+-		if r.SourcePath != nil && *r.SourcePath != "" {
+-			path = *r.SourcePath
+-		} else if r.SourceFormat == "debezium_after" {
+-			path = "after." + r.SourceField
+-		}
+-		gres := gjson.Get(rawStr, path)
+-		if !gres.Exists() && strings.Contains(path, ".") {
+-			lastSeg := path[strings.LastIndex(path, ".")+1:]
+-			lastSeg = strings.TrimSuffix(lastSeg, "]")
+-			if lastSeg != "_id" || path == "_id" || path == "after._id" {
+-				gres = gjson.Get(rawStr, lastSeg)
+-			}
+-		}
++		gres, path := resolveRuleGJSONValue(rawStr, r)
+diff --git a/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx b/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx
+--- a/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx
++++ b/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx
+@@ -391,15 +391,17 @@
+   const handleScanArray = async () => {
+-    if (!binding?.shadow_table) {
++    const path = explodePath.trim();
++    if (!path) {
++      message.warning('Nhập explode_path (vd: after.items[*])');
++      return;
++    }
++    const targetShadowTable = resolveShadowTableForExplodePath(binding, shadowRules, path);
++    if (!targetShadowTable) {
+       message.warning('Binding chưa có shadow_table');
+       return;
+     }
+-    const path = explodePath.trim();
+-    if (!path) {
+-      message.warning('Nhập explode_path (vd: after.items[*])');
+-      return;
+-    }
+     setScanningArray(true);
+     try {
+       const { data: res } = await cmsApi.post(
+-        `/api/introspection/scan-array/${binding.shadow_table}`,
++        `/api/introspection/scan-array/${targetShadowTable}`,
+         { explode_path: path, master_binding_id: masterBindingID },
+       );

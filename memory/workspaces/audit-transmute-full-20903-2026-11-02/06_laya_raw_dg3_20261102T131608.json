@@ -1,0 +1,759 @@
+[
+  {
+    "id": "A-F1-CLONE",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "cloneAllShadowRulesTx populates source_field and data_type on PK row insert and backfills existing PK rows with NULL mapping_v2_id and empty source_field or data_type.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:68-91\n\t\t\tif pkCol := r.resolveMasterPKTargetColumn(ctx, db, masterBindingID, sbID); pkCol != \"\" {\n\t\t\t\tpkSourceField, pkDataType := r.resolvePrimaryShadowPKMeta(ctx, db, sbID, pkCol)\n\t\t\t\t_ = db.WithContext(ctx).Exec(`\n\t\t\t\t\tINSERT INTO `+masterRuleTable+`\n\t\t\t\t\t  (master_binding_id, mapping_v2_id, target_column, source_field, data_type, is_active, status, created_by, updated_by)\n\t\t\t\t\tSELECT ?, NULL, ?, ?, ?, true, 'pending', ?, ?\n\t\t\t\t\t WHERE NOT EXISTS (\n\t\t\t\t\t     SELECT 1 FROM `+masterRuleTable+` mm\n\t\t\t\t\t      WHERE mm.master_binding_id = ? AND lower(mm.target_column) = lower(?))\n\t\t\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,\n\t\t\t\t\tmasterBindingID, pkCol, pkSourceField, pkDataType, createdBy, updatedBy, masterBindingID, pkCol,\n\t\t\t\t)\n\t\t\t\t_ = db.WithContext(ctx).Exec(`\n\t\t\t\t\tUPDATE `+masterRuleTable+`\n\t\t\t\t\t   SET source_field = COALESCE(NULLIF(TRIM(source_field), ''), ?),\n\t\t\t\t\t       data_type    = COALESCE(NULLIF(TRIM(data_type), ''), ?),\n\t\t\t\t\t       updated_at   = CURRENT_TIMESTAMP\n\t\t\t\t\t WHERE master_binding_id = ?\n\t\t\t\t\t   AND lower(target_column) = lower(?)\n\t\t\t\t\t   AND mapping_v2_id IS NULL\n\t\t\t\t\t   AND (COALESCE(TRIM(source_field), '') = '' OR COALESCE(TRIM(data_type), '') = '')`,\n\t\t\t\t\tpkSourceField, pkDataType, masterBindingID, pkCol,\n\t\t\t\t)\n\t\t\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2926,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7157,
+                "INCORRECT": 0.1907,
+                "UNSUPPORTED": 0.0937
+              },
+              "confidence": 0.2926,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 854,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "cloneAllShadowRulesTx populates source_field and data_type on PK row insert and backfills existing PK rows with NULL mapping_v2_id and empty source_field or data_type.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:68-91\n\t\t\tif pkCol := r.resolveMasterPKTargetColumn(ctx, db, masterBindingID, sbID); pkCol != \"\" {\n\t\t\t\tpkSourceField, pkDataType := r.resolvePrimaryShadowPKMeta(ctx, db, sbID, pkCol)\n\t\t\t\t_ = db.WithContext(ctx).Exec(`\n\t\t\t\t\tINSERT INTO `+masterRuleTable+`\n\t\t\t\t\t  (master_binding_id, mapping_v2_id, target_column, source_field, data_type, is_active, status, created_by, updated_by)\n\t\t\t\t\tSELECT ?, NULL, ?, ?, ?, true, 'pending', ?, ?\n\t\t\t\t\t WHERE NOT EXISTS (\n\t\t\t\t\t     SELECT 1 FROM `+masterRuleTable+` mm\n\t\t\t\t\t      WHERE mm.master_binding_id = ? AND lower(mm.target_column) = lower(?))\n\t\t\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,\n\t\t\t\t\tmasterBindingID, pkCol, pkSourceField, pkDataType, createdBy, updatedBy, masterBindingID, pkCol,\n\t\t\t\t)\n\t\t\t\t_ = db.WithContext(ctx).Exec(`\n\t\t\t\t\tUPDATE `+masterRuleTable+`\n\t\t\t\t\t   SET source_field = COALESCE(NULLIF(TRIM(source_field), ''), ?),\n\t\t\t\t\t       data_type    = COALESCE(NULLIF(TRIM(data_type), ''), ?),\n\t\t\t\t\t       updated_at   = CURRENT_TIMESTAMP\n\t\t\t\t\t WHERE master_binding_id = ?\n\t\t\t\t\t   AND lower(target_column) = lower(?)\n\t\t\t\t\t   AND mapping_v2_id IS NULL\n\t\t\t\t\t   AND (COALESCE(TRIM(source_field), '') = '' OR COALESCE(TRIM(data_type), '') = '')`,\n\t\t\t\t\tpkSourceField, pkDataType, masterBindingID, pkCol,\n\t\t\t\t)\n\t\t\t}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.0419,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2194,
+                "INCORRECT": 0.4657,
+                "UNSUPPORTED": 0.3149
+              },
+              "confidence": 0.0419,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 860,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:68-91\n\t\t\tif pkCol := r.resolveMasterPKTargetColumn(ctx, db, masterBindingID, sbID); pkCol != \"\" {\n\t\t\t\tpkSourceField, pkDataType := r.resolvePrimaryShadowPKMeta(ctx, db, sbID, pkCol)\n\t\t\t\t_ = db.WithContext(ctx).Exec(`\n\t\t\t\t\tINSERT INTO `+masterRuleTable+`\n\t\t\t\t\t  (master_binding_id, mapping_v2_id, target_column, source_field, data_type, is_active, status, created_by, updated_by)\n\t\t\t\t\tSELECT ?, NULL, ?, ?, ?, true, 'pending', ?, ?\n\t\t\t\t\t WHERE NOT EXISTS (\n\t\t\t\t\t     SELECT 1 FROM `+masterRuleTable+` mm\n\t\t\t\t\t      WHERE mm.master_binding_id = ? AND lower(mm.target_column) = lower(?))\n\t\t\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,\n\t\t\t\t\tmasterBindingID, pkCol, pkSourceField, pkDataType, createdBy, updatedBy, masterBindingID, pkCol,\n\t\t\t\t)\n\t\t\t\t_ = db.WithContext(ctx).Exec(`\n\t\t\t\t\tUPDATE `+masterRuleTable+`\n\t\t\t\t\t   SET source_field = COALESCE(NULLIF(TRIM(source_field), ''), ?),\n\t\t\t\t\t       data_type    = COALESCE(NULLIF(TRIM(data_type), ''), ?),\n\t\t\t\t\t       updated_at   = CURRENT_TIMESTAMP\n\t\t\t\t\t WHERE master_binding_id = ?\n\t\t\t\t\t   AND lower(target_column) = lower(?)\n\t\t\t\t\t   AND mapping_v2_id IS NULL\n\t\t\t\t\t   AND (COALESCE(TRIM(source_field), '') = '' OR COALESCE(TRIM(data_type), '') = '')`,\n\t\t\t\t\tpkSourceField, pkDataType, masterBindingID, pkCol,\n\t\t\t\t)\n\t\t\t}",
+          "claim": "cloneAllShadowRulesTx populates source_field and data_type on PK row insert and backfills existing PK rows with NULL mapping_v2_id and empty source_field or data_type."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.1503,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.2758,
+                "NO": 0.7242
+              },
+              "confidence": 0.1503,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 793,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:68-91\n\t\t\tif pkCol := r.resolveMasterPKTargetColumn(ctx, db, masterBindingID, sbID); pkCol != \"\" {\n\t\t\t\tpkSourceField, pkDataType := r.resolvePrimaryShadowPKMeta(ctx, db, sbID, pkCol)\n\t\t\t\t_ = db.WithContext(ctx).Exec(`\n\t\t\t\t\tINSERT INTO `+masterRuleTable+`\n\t\t\t\t\t  (master_binding_id, mapping_v2_id, target_column, source_field, data_type, is_active, status, created_by, updated_by)\n\t\t\t\t\tSELECT ?, NULL, ?, ?, ?, true, 'pending', ?, ?\n\t\t\t\t\t WHERE NOT EXISTS (\n\t\t\t\t\t     SELECT 1 FROM `+masterRuleTable+` mm\n\t\t\t\t\t      WHERE mm.master_binding_id = ? AND lower(mm.target_column) = lower(?))\n\t\t\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,\n\t\t\t\t\tmasterBindingID, pkCol, pkSourceField, pkDataType, createdBy, updatedBy, masterBindingID, pkCol,\n\t\t\t\t)\n\t\t\t\t_ = db.WithContext(ctx).Exec(`\n\t\t\t\t\tUPDATE `+masterRuleTable+`\n\t\t\t\t\t   SET source_field = COALESCE(NULLIF(TRIM(source_field), ''), ?),\n\t\t\t\t\t       data_type    = COALESCE(NULLIF(TRIM(data_type), ''), ?),\n\t\t\t\t\t       updated_at   = CURRENT_TIMESTAMP\n\t\t\t\t\t WHERE master_binding_id = ?\n\t\t\t\t\t   AND lower(target_column) = lower(?)\n\t\t\t\t\t   AND mapping_v2_id IS NULL\n\t\t\t\t\t   AND (COALESCE(TRIM(source_field), '') = '' OR COALESCE(TRIM(data_type), '') = '')`,\n\t\t\t\t\tpkSourceField, pkDataType, masterBindingID, pkCol,\n\t\t\t\t)\n\t\t\t}",
+          "claim": "cloneAllShadowRulesTx populates source_field and data_type on PK row insert and backfills existing PK rows with NULL mapping_v2_id and empty source_field or data_type."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "A-F2-LOADRULES",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "normalizeMasterPKRule backfills SourceField from binding.SourcePK and DataType to TEXT when a rule matches masterPK and has empty SourceField or DataType.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:130-155\nfunc normalizeMasterPKRule(r mappingRuleRow, binding *masterBindingRuntime) mappingRuleRow {\n\tif binding == nil {\n\t\treturn r\n\t}\n\tmasterPK := \"\"\n\tif len(binding.TransformSpec) > 0 {\n\t\tmasterPK = strings.TrimSpace(parsePKFromSpec(binding.TransformSpec))\n\t}\n\tsourcePK := strings.TrimSpace(binding.SourcePK)\n\tif masterPK == \"\" {\n\t\tmasterPK = sourcePK\n\t}\n\tif masterPK != \"\" && strings.EqualFold(strings.TrimSpace(r.TargetColumn), masterPK) {\n\t\tif strings.TrimSpace(r.SourceField) == \"\" {\n\t\t\tif sourcePK != \"\" {\n\t\t\t\tr.SourceField = sourcePK\n\t\t\t} else {\n\t\t\t\tr.SourceField = strings.TrimSpace(r.TargetColumn)\n\t\t\t}\n\t\t}\n\t\tif strings.TrimSpace(r.DataType) == \"\" {\n\t\t\tr.DataType = \"TEXT\"\n\t\t}\n\t}\n\treturn r\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7563,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.936,
+                "INCORRECT": 0.0526,
+                "UNSUPPORTED": 0.0113
+              },
+              "confidence": 0.7563,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 502,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "normalizeMasterPKRule backfills SourceField from binding.SourcePK and DataType to TEXT when a rule matches masterPK and has empty SourceField or DataType.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:130-155\nfunc normalizeMasterPKRule(r mappingRuleRow, binding *masterBindingRuntime) mappingRuleRow {\n\tif binding == nil {\n\t\treturn r\n\t}\n\tmasterPK := \"\"\n\tif len(binding.TransformSpec) > 0 {\n\t\tmasterPK = strings.TrimSpace(parsePKFromSpec(binding.TransformSpec))\n\t}\n\tsourcePK := strings.TrimSpace(binding.SourcePK)\n\tif masterPK == \"\" {\n\t\tmasterPK = sourcePK\n\t}\n\tif masterPK != \"\" && strings.EqualFold(strings.TrimSpace(r.TargetColumn), masterPK) {\n\t\tif strings.TrimSpace(r.SourceField) == \"\" {\n\t\t\tif sourcePK != \"\" {\n\t\t\t\tr.SourceField = sourcePK\n\t\t\t} else {\n\t\t\t\tr.SourceField = strings.TrimSpace(r.TargetColumn)\n\t\t\t}\n\t\t}\n\t\tif strings.TrimSpace(r.DataType) == \"\" {\n\t\t\tr.DataType = \"TEXT\"\n\t\t}\n\t}\n\treturn r\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.0355,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.379,
+                "INCORRECT": 0.4129,
+                "UNSUPPORTED": 0.2081
+              },
+              "confidence": 0.0355,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 508,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:130-155\nfunc normalizeMasterPKRule(r mappingRuleRow, binding *masterBindingRuntime) mappingRuleRow {\n\tif binding == nil {\n\t\treturn r\n\t}\n\tmasterPK := \"\"\n\tif len(binding.TransformSpec) > 0 {\n\t\tmasterPK = strings.TrimSpace(parsePKFromSpec(binding.TransformSpec))\n\t}\n\tsourcePK := strings.TrimSpace(binding.SourcePK)\n\tif masterPK == \"\" {\n\t\tmasterPK = sourcePK\n\t}\n\tif masterPK != \"\" && strings.EqualFold(strings.TrimSpace(r.TargetColumn), masterPK) {\n\t\tif strings.TrimSpace(r.SourceField) == \"\" {\n\t\t\tif sourcePK != \"\" {\n\t\t\t\tr.SourceField = sourcePK\n\t\t\t} else {\n\t\t\t\tr.SourceField = strings.TrimSpace(r.TargetColumn)\n\t\t\t}\n\t\t}\n\t\tif strings.TrimSpace(r.DataType) == \"\" {\n\t\t\tr.DataType = \"TEXT\"\n\t\t}\n\t}\n\treturn r\n}",
+          "claim": "normalizeMasterPKRule backfills SourceField from binding.SourcePK and DataType to TEXT when a rule matches masterPK and has empty SourceField or DataType."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7072,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9485,
+                "NO": 0.0515
+              },
+              "confidence": 0.7072,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 441,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:130-155\nfunc normalizeMasterPKRule(r mappingRuleRow, binding *masterBindingRuntime) mappingRuleRow {\n\tif binding == nil {\n\t\treturn r\n\t}\n\tmasterPK := \"\"\n\tif len(binding.TransformSpec) > 0 {\n\t\tmasterPK = strings.TrimSpace(parsePKFromSpec(binding.TransformSpec))\n\t}\n\tsourcePK := strings.TrimSpace(binding.SourcePK)\n\tif masterPK == \"\" {\n\t\tmasterPK = sourcePK\n\t}\n\tif masterPK != \"\" && strings.EqualFold(strings.TrimSpace(r.TargetColumn), masterPK) {\n\t\tif strings.TrimSpace(r.SourceField) == \"\" {\n\t\t\tif sourcePK != \"\" {\n\t\t\t\tr.SourceField = sourcePK\n\t\t\t} else {\n\t\t\t\tr.SourceField = strings.TrimSpace(r.TargetColumn)\n\t\t\t}\n\t\t}\n\t\tif strings.TrimSpace(r.DataType) == \"\" {\n\t\t\tr.DataType = \"TEXT\"\n\t\t}\n\t}\n\treturn r\n}",
+          "claim": "normalizeMasterPKRule backfills SourceField from binding.SourcePK and DataType to TEXT when a rule matches masterPK and has empty SourceField or DataType."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "normalizeMasterPKRule returns r unchanged when binding is nil.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:130-134\nfunc normalizeMasterPKRule(r mappingRuleRow, binding *masterBindingRuntime) mappingRuleRow {\n\tif binding == nil {\n\t\treturn r\n\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7402,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9298,
+                "INCORRECT": 0.0588,
+                "UNSUPPORTED": 0.0114
+              },
+              "confidence": 0.7402,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 221,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "normalizeMasterPKRule returns r unchanged when binding is nil.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:130-134\nfunc normalizeMasterPKRule(r mappingRuleRow, binding *masterBindingRuntime) mappingRuleRow {\n\tif binding == nil {\n\t\treturn r\n\t}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5687,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8578,
+                "INCORRECT": 0.1179,
+                "UNSUPPORTED": 0.0243
+              },
+              "confidence": 0.5687,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 227,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:130-134\nfunc normalizeMasterPKRule(r mappingRuleRow, binding *masterBindingRuntime) mappingRuleRow {\n\tif binding == nil {\n\t\treturn r\n\t}",
+          "claim": "normalizeMasterPKRule returns r unchanged when binding is nil."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.183,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.7464,
+                "NO": 0.2536
+              },
+              "confidence": 0.183,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 160,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:130-134\nfunc normalizeMasterPKRule(r mappingRuleRow, binding *masterBindingRuntime) mappingRuleRow {\n\tif binding == nil {\n\t\treturn r\n\t}",
+          "claim": "normalizeMasterPKRule returns r unchanged when binding is nil."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "normalizeMasterPKRule panics when binding is nil.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:130-134\nfunc normalizeMasterPKRule(r mappingRuleRow, binding *masterBindingRuntime) mappingRuleRow {\n\tif binding == nil {\n\t\treturn r\n\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7291,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9236,
+                "INCORRECT": 0.0674,
+                "UNSUPPORTED": 0.009
+              },
+              "confidence": 0.7291,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 220,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "normalizeMasterPKRule panics when binding is nil.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:130-134\nfunc normalizeMasterPKRule(r mappingRuleRow, binding *masterBindingRuntime) mappingRuleRow {\n\tif binding == nil {\n\t\treturn r\n\t}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.5895,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.008,
+                "INCORRECT": 0.1403,
+                "UNSUPPORTED": 0.8517
+              },
+              "confidence": 0.5895,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 226,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:130-134\nfunc normalizeMasterPKRule(r mappingRuleRow, binding *masterBindingRuntime) mappingRuleRow {\n\tif binding == nil {\n\t\treturn r\n\t}",
+          "claim": "normalizeMasterPKRule panics when binding is nil."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.956,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0048,
+                "NO": 0.9952
+              },
+              "confidence": 0.956,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 159,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:130-134\nfunc normalizeMasterPKRule(r mappingRuleRow, binding *masterBindingRuntime) mappingRuleRow {\n\tif binding == nil {\n\t\treturn r\n\t}",
+          "claim": "normalizeMasterPKRule panics when binding is nil."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "normalizeMasterPKRule overwrites r.DataType to INTEGER when r.DataType is empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:150-153\n\t\tif strings.TrimSpace(r.DataType) == \"\" {\n\t\t\tr.DataType = \"TEXT\"\n\t\t}\n\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5935,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8775,
+                "INCORRECT": 0.086,
+                "UNSUPPORTED": 0.0365
+              },
+              "confidence": 0.5935,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 227,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "normalizeMasterPKRule overwrites r.DataType to INTEGER when r.DataType is empty.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:150-153\n\t\tif strings.TrimSpace(r.DataType) == \"\" {\n\t\t\tr.DataType = \"TEXT\"\n\t\t}\n\t}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.3678,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0066,
+                "INCORRECT": 0.3684,
+                "UNSUPPORTED": 0.625
+              },
+              "confidence": 0.3678,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 233,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:150-153\n\t\tif strings.TrimSpace(r.DataType) == \"\" {\n\t\t\tr.DataType = \"TEXT\"\n\t\t}\n\t}",
+          "claim": "normalizeMasterPKRule overwrites r.DataType to INTEGER when r.DataType is empty."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.9726,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0028,
+                "NO": 0.9972
+              },
+              "confidence": 0.9726,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 166,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_identity.go:150-153\n\t\tif strings.TrimSpace(r.DataType) == \"\" {\n\t\t\tr.DataType = \"TEXT\"\n\t\t}\n\t}",
+          "claim": "normalizeMasterPKRule overwrites r.DataType to INTEGER when r.DataType is empty."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

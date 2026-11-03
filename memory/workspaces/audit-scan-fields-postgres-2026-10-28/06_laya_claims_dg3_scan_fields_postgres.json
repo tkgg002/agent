@@ -1,0 +1,65 @@
+[
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In isKeepOrMaskedSecret in system_connectors_credentials.go, the function trims whitespace and returns true when s is empty, equals sourceCmd.KeepSecretSentinel, or equals \"***\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_credentials.go:137-140\nfunc isKeepOrMaskedSecret(v string) bool {\n\ts := strings.TrimSpace(v)\n\treturn s == \"\" || s == sourceCmd.KeepSecretSentinel || s == \"***\"\n}",
+    "flow": "isKeepOrMaskedSecret calls strings.TrimSpace(v) and checks s == \"\" || s == sourceCmd.KeepSecretSentinel || s == \"***\"."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In isKeepOrMaskedSecret in system_connectors_credentials.go, the function always returns false for \"***\" and drops the database table.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_credentials.go:137-140\nfunc isKeepOrMaskedSecret(v string) bool {\n\ts := strings.TrimSpace(v)\n\treturn s == \"\" || s == sourceCmd.KeepSecretSentinel || s == \"***\"\n}",
+    "flow": "isKeepOrMaskedSecret returns true when s == \"***\"."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In DiscoverHandler.ScanFieldsDebezium in discover_handler.go, when isSQLSource(sourceType) is true, the function panics and deletes the shadow table.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler.go:210-215\n\tif isFileOrStreamSource(sourceType) {\n\t\treturn h.scanFieldsFileSource(ctx, v2ObjectID, shadowBindingID, sourceTable, autoApprove)\n\t}\n\tif isSQLSource(sourceType) {\n\t\treturn h.scanFieldsSQLSource(ctx, v2ObjectID, shadowBindingID, sourceTable, autoApprove)\n\t}",
+    "flow": "When isSQLSource(sourceType) is true, ScanFieldsDebezium calls h.scanFieldsSQLSource(ctx, v2ObjectID, shadowBindingID, sourceTable, autoApprove)."
+  },
+  {
+    "id": "A-DIFF-1",
+    "kind": "audit",
+    "claim": "In extractCredentialsAsOptions in system_connectors_credentials.go, database.password and mongodb.password are only stored in opts[\"password\"] when !isKeepOrMaskedSecret(pass) is true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_credentials.go:148-160\n\tif pass, ok := cfg[\"database.password\"]; ok && !isKeepOrMaskedSecret(pass) {\n\t\topts[\"password\"] = pass\n\t}\n\tif sslmode, ok := cfg[\"database.sslmode\"]; ok && strings.TrimSpace(sslmode) != \"\" {\n\t\topts[\"sslmode\"] = strings.TrimSpace(sslmode)\n\t}\n\t// MongoDB\n\tif user, ok := cfg[\"mongodb.user\"]; ok && strings.TrimSpace(user) != \"\" {\n\t\topts[\"username\"] = strings.TrimSpace(user)\n\t}\n\tif pass, ok := cfg[\"mongodb.password\"]; ok && !isKeepOrMaskedSecret(pass) {\n\t\topts[\"password\"] = pass\n\t}",
+    "flow": "extractCredentialsAsOptions checks !isKeepOrMaskedSecret(pass) before assigning opts[\"password\"] = pass."
+  },
+  {
+    "id": "A-DIFF-2",
+    "kind": "audit",
+    "claim": "In DiscoverHandler.ScanFieldsDebezium in discover_handler.go, if isSQLSource(sourceType) is true, the function directly returns h.scanFieldsSQLSource(ctx, v2ObjectID, shadowBindingID, sourceTable, autoApprove).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler.go:210-215\n\tif isFileOrStreamSource(sourceType) {\n\t\treturn h.scanFieldsFileSource(ctx, v2ObjectID, shadowBindingID, sourceTable, autoApprove)\n\t}\n\tif isSQLSource(sourceType) {\n\t\treturn h.scanFieldsSQLSource(ctx, v2ObjectID, shadowBindingID, sourceTable, autoApprove)\n\t}",
+    "flow": "ScanFieldsDebezium checks isSQLSource(sourceType) and immediately returns h.scanFieldsSQLSource(ctx, v2ObjectID, shadowBindingID, sourceTable, autoApprove)."
+  },
+  {
+    "id": "A-DIFF-3",
+    "kind": "audit",
+    "claim": "In SourceInferrer.inferPGCols in discovery_utils_sql.go, if queryCols(schema) returns 0 columns and schema is not \"public\", it retries with queryCols(\"public\").",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discovery_utils_sql.go:65-75\n\tout, err := queryCols(schema)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tif len(out) == 0 && !strings.EqualFold(schema, \"public\") {\n\t\tout, err = queryCols(\"public\")\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t}\n\treturn out, nil",
+    "flow": "inferPGCols calls queryCols(schema) and when len(out) == 0 and !strings.EqualFold(schema, \"public\"), calls queryCols(\"public\")."
+  },
+  {
+    "id": "A-DIFF-4",
+    "kind": "audit",
+    "claim": "In CreateMasterHandler.Handle in create_master.go, when isMongoConn is true, masterSchema is assigned mongoDB and masterDatabase is assigned &mongoDB.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/create_master.go:167-180\n\tif isMongoConn {\n\t\t// Quy tắc 1 Kết nối Master Mongo = 1 Database: bắt buộc dùng default_database của kết nối\n\t\tmongoDB := \"\"\n\t\tif defaultDB != nil && strings.TrimSpace(*defaultDB) != \"\" {\n\t\t\tmongoDB = strings.TrimSpace(*defaultDB)\n\t\t} else if connItem.DefaultDatabase != nil && strings.TrimSpace(*connItem.DefaultDatabase) != \"\" {\n\t\t\tmongoDB = strings.TrimSpace(*connItem.DefaultDatabase)\n\t\t}\n\t\tif mongoDB == \"\" {\n\t\t\treturn nil, errors.New(\"invalid_mongo_master_database_required\")\n\t\t}\n\t\tmasterSchema = mongoDB\n\t\tmasterDatabase = &mongoDB\n\t}",
+    "flow": "When isMongoConn is true, CreateMasterHandler.Handle resolves mongoDB from defaultDB or connItem.DefaultDatabase and sets masterSchema = mongoDB and masterDatabase = &mongoDB."
+  },
+  {
+    "id": "A-DIFF-5",
+    "kind": "audit",
+    "claim": "In SyncRuntimeStateRepo.SyncMasterBindingDatabase in sync_runtime_state_repo.go, it executes an UPDATE on cdc_system.master_binding setting master_database, master_schema, and physical_table_fqn to dbName and dbName+\".\"+masterTable.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/sync_runtime_state_repo.go:52-65\nfunc (r *SyncRuntimeStateRepo) SyncMasterBindingDatabase(ctx context.Context, masterBindingID int64, dbName, masterTable string) error {\n\tif r == nil || r.db == nil || masterBindingID <= 0 || dbName == \"\" || masterTable == \"\" {\n\t\treturn nil\n\t}\n\treturn r.db.WithContext(ctx).Exec(\n\t\t`UPDATE cdc_system.master_binding\n\t\t    SET master_database = ?,\n\t\t        master_schema = ?,\n\t\t        physical_table_fqn = ?,\n\t\t        updated_at = NOW()\n\t\t  WHERE id = ? AND (COALESCE(master_database, '') <> ? OR COALESCE(master_schema, '') <> ?)`,\n\t\tdbName, dbName, dbName+\".\"+masterTable, masterBindingID, dbName, dbName,\n\t).Error\n}",
+    "flow": "SyncMasterBindingDatabase updates cdc_system.master_binding with dbName, dbName, and dbName+\".\"+masterTable where id = masterBindingID."
+  },
+  {
+    "id": "A-DIFF-6",
+    "kind": "audit",
+    "claim": "In CreateMasterModal.tsx, when isMongoMasterTarget is true, the label renders 'Master Database (MongoDB)' and renders a disabled Input with value={mongoMasterDatabase || form.master_schema}.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/master/CreateMasterModal.tsx:219-228\n          <Text strong style={{ display: 'block', marginBottom: 4 }}>\n            {isMongoMasterTarget ? 'Master Database (MongoDB)' : 'Master Schema'} <Text type=\"danger\">*</Text>\n          </Text>\n          {isMongoMasterTarget ? (\n            <>\n              <Input\n                value={mongoMasterDatabase || form.master_schema}\n                disabled\n                placeholder=\"Tự động chọn theo Database của kết nối MongoDB\"\n              />",
+    "flow": "When isMongoMasterTarget is true, CreateMasterModal.tsx displays 'Master Database (MongoDB)' and a disabled Input bound to mongoMasterDatabase || form.master_schema."
+  }
+]

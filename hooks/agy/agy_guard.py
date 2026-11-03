@@ -2,23 +2,22 @@
 """Antigravity Lifecycle Hook Dispatcher (H1-H7).
 
 Usage:
-  python3 agy_guard.py pre-invocation|pre-write|pre-command|post-invocation|stop
+  python3 agy_guard.py pre-invocation|pre-write|pre-command|pre-subagent|post-invocation|stop
 
 Hooks implemented:
-  H1 boot          (PreInvocation)  : Injects S0 Boot checklist + Laya server status (:8200).
+  H1 boot          (PreInvocation)  : Injects S0 Boot checklist + Laya server status (:8200) + matched Lesson Tripwires.
   H2 memory_guard  (PreToolUse)     : Denies Overwrite on existing memory files; denies removing
-                                      TargetContent on append-only files (05_progress, 04_decisions, lessons).
+                                      TargetContent on append-only files; enforces Global Lesson Hygiene on lessons.md.
   H3 secret_guard  (PreToolUse)     : Denies unmasked secrets/URIs in memory files; force_ask in source files.
-  H4 change_gate   (PreToolUse)     : Denies production mock pollution (*Fn, sqlmock, fakemodel);
-                                      denies source edits without active workspace, 05_progress log, or DG1 PASS;
-                                      force_ask if no User APPROVE after 09_tasks_solution in transcript.
+  H4 change_gate   (PreToolUse)     : Enforces Lesson Tripwires (H4t on both docs & source code), H4c Claim-Evidence,
+                                      H4a S1-before-S3, and H4b Anti-Mock-Pollution + DG0/DG1 + User APPROVE.
   H5 command_guard (PreToolUse)     : Denies git push (Rule #15), git reset --hard / clean -f (Rule #19),
                                       rm -rf memory/.git (Rule #17); force_ask on direct DB write CLI (Rule #12).
   H6 fast_feedback (PostInvocation) : Runs component checks from nearest .agent-project.json after source edits
                                       AND auto-injects Mandatory Final Adversarial Audit & Anti-Smoke-Speculation protocol.
-  H7 done_gate     (Stop)           : Blocks premature completion if DG1/DG2/DG3, 05_progress, 06_validation,
-                                      audit_report_<suffix>.md (6 sections), component runtime_check, or
-                                      verify_governance.py are missing/failing (max 2 blocks per turn).
+  H7 done_gate     (Stop)           : Blocks premature completion if lessons index sync, DG0/DG1/DG2/DG3, 05_progress,
+                                      06_validation, audit_report_<suffix>.md (6 sections), component runtime_check, or
+                                      verify_governance.py are missing/failing (max 3 blocks per turn).
 """
 from __future__ import annotations
 
@@ -36,12 +35,12 @@ WS_ROOT = MEM / "workspaces"
 FALLBACK_WS_ROOT = AGENT / ".agents" / "state" / "workspaces"
 STATE = Path(os.environ.get("AGY_STATE_DIR", "/tmp/agy"))
 
-SRC_EXT = {".go", ".ts", ".tsx", ".js", ".py", ".sql"}
+SRC_EXT = {".go", ".ts", ".tsx", ".js", ".py", ".sql", ".css", ".html"}
 APPEND_ONLY = re.compile(r"(05_progress[^/]*|04_decisions[^/]*|lessons|governance_metrics)\.md$")
 SECRET = re.compile(
     r"(AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|ATATT[\w\-]{20,}|ghp_\w{30,}"
-    r"|Bearer\s+[\w.\-]{20,}|(mongodb|postgres(ql)?|mysql|redis)://[^*\s:/]+:[^*\s@]+@"
-    r"|password\s*[:=]\s*[^\s*'\"]{6,})",
+    r"|Bearer\s+[\w.\-]{20,}|(mongodb|postgres(ql)?|mysql|redis)://[^*\s:/%]+:[^*\s@%]+@"
+    r"|password\s*[:=]\s*['\"][^\s*'\"]{6,}['\"])",
     re.I,
 )
 # G-01: neo đầu dòng — chặn false-positive khi từ khoá xuất hiện giữa câu mô tả ("...đã được Jev duyệt...").
@@ -49,9 +48,27 @@ APPROVE = re.compile(
     r"^\s*(?:ok\s+|ừ\s+|được\s+)?(approve|duyệt|bắt\s*đầu|ok\s*(sửa|làm|fix)|làm đi|sửa đi|fix đi|triển khai|thực hiện đi|chặn\s*đứng|thêm.*vào.*cho\s*tao|vòng\s+lặp\s+phản\s+tỉnh|self-improvement\s+loop|update\s+agy_g)",
     re.I | re.M,
 )
+# L02 & L14: Agnostic Anti-Mock-Pollution (không chứa tên biến riêng của dự án con)
 PROD_MOCK_POLLUTION = re.compile(
-    r"(\b\w+Fn\s+func\s*\(|\blookupMasterTargetsFn\b|\brunEventsFn\b|\bsqlmock\b|\bfakemodel\b)",
+    r"(\b\w+Fn\s+func\s*\(|\bsqlmock\b|\bfakemodel\b|\bfake\w+Repo\b)",
 )
+FAKE_REAL_TEST_RE = re.compile(
+    r"func\s+Test\w*(RealPostgres|RealDB|RealNATS|RealMongo)\w*[\s\S]{0,1500}(sqlmock\.New|sqlite\.Open\(\"file::memory:|httptest\.NewServer)",
+)
+
+# H2b: Global Lesson Hygiene Guard constants (bảo vệ cấu trúc lessons.md ngay tại pre-write)
+LESSON_H3_RE = re.compile(r"^###\s+\[(\d{4}-\d{2}-\d{2})\]\s+(.+)$")
+LESSON_PAREN_EN_RE = re.compile(r"\(([^()]{10,})\)\s*$")
+LESSON_REQUIRED_BULLETS = (
+    "- **Global Pattern:**",
+    "- **Bối cảnh (Trigger):**",
+    "- **Root Cause:**",
+    "- **Fix/Correct Flow:**",
+    "- **Tags:**",
+)
+LESSON_LOCAL_PATH_RE = re.compile(r"/Users/\w+/Documents/work/", re.I)
+LESSON_MAX_LINES = 12
+
 CLEAN_ROOM_MODE_RE = re.compile(r"^\s*mode\s*:\s*clean-room\b", re.I | re.M)
 CLEAN_ROOM_FORBIDDEN_RE = re.compile(r"^\s*clean_room_forbidden_sources\s*:\s*(.+)$", re.I | re.M)
 CLEAN_ROOM_SPEC_RE = re.compile(r"clean-room\s+approved\s+spec", re.I)
@@ -60,7 +77,7 @@ CLEAN_ROOM_START = re.compile(r"^\s*(BẮT\s*ĐẦU|APPROVE)\s*[.!]?\s*$", re.I 
 # G-03: mỗi rule trong Clean-Room Approved Spec phải có REF: path:line.
 SPEC_RULE_RE = re.compile(r"^[ \t]*(?:[-*][ \t]*|\|[ \t]*)?\**(C?R-?\d+)\b[^:\n|]*\**[ \t]*[:.|]", re.I | re.M)
 SPEC_REF_RE = re.compile(r"REF:\s*`?\S+:\d+")
-SPEC_REJECT_RE = re.compile(r"(\[(?:REJECTED|NO_EVIDENCE|UNVERIFIED|BLOCKED)\]|trạng\s+thái\s*:\s*(?:REJECTED|BLOCK|NO_EVIDENCE))", re.I)
+SPEC_REJECT_RE = re.compile(r"(\[(?:REJECTED\vert{}NO_EVIDENCE\vert{}UNVERIFIED\vert{}BLOCKED)\]|trạng\s+thái\s*:\s*(?:REJECTED|BLOCK|NO_EVIDENCE))", re.I)
 # G-02: tool-call args có thể chứa nội dung/đường dẫn file đọc được.
 READ_ARG_KEYS = {
     "view_file": ("AbsolutePath",),
@@ -95,9 +112,9 @@ ASK_CMD = [
     )
 ]
 BOOT_MSG = (
-    "BOOT S0: (1) Đọc agent/GEMINI.md + memory/global/lessons/INDEX.md. "
+    "BOOT S0: (1) Đọc agent/GEMINI.md + memory/global/lessons/INDEX.md (CẤM đọc nguyên file lessons.md gốc). "
     "(2) Phân loại T0/Audit/T1-T3 (kiểm tra lỗi/phân tích/thiết kế/sửa code >= T2, CẤM trả lời chay trên chat). "
-    "(3) S1 Intake (T1+): tạo 01_requirements_<suffix>.md + 08_tasks_<suffix>.md + append 05_progress START TRƯỚC khi lập 09_tasks_solution hoặc sửa code. "
+    "(3) S1 Intake (T1+): tạo 01_requirements_<suffix>.md + 08_tasks_<suffix>.md + append 05_progress START TRƯỚC khi chạy S2.5 (DG0) và lập 09_tasks_solution. "
     "(4) Giải pháp/code demo/audit → chạy laya_gate.py (Laya: {laya}). "
     "(5) Không sửa source trước khi có User APPROVE; sau khi sửa code BẮT BUỘC lập audit_report_<suffix>.md (6 phần, chống suy diễn smoke test). (6) CẤM git push."
 )
@@ -126,7 +143,7 @@ FINAL_AUDIT_MSG = (
     "   - Nếu cần trace runtime value trên môi trường thật mà không tự chạy được -> BẮT BUỘC nêu rõ để phối hợp với User trace runtime value!\n"
     "3. [Anti-Speculation & Honesty Check]: Kiểm tra xem có suy diễn hay báo cáo láo không (mọi khẳng định phải có file:line + output lệnh thật).\n"
     "4. [Self-Improvement & Autonomous Self-Healing Loop (S5 -> S3 -> S4 -> S5)]:\n"
-    "   - Đối chiếu lessons/INDEX.md; nếu phát hiện lỗi/anti-pattern mới, ghi vào lessons.md + chạy build_lessons_index.py.\n"
+    "   - Đối chiếu lessons/INDEX.md; nếu phát hiện lỗi/anti-pattern mới, ghi vào lessons.md (chuẩn Global <=12 dòng) + chạy build_lessons_index.py.\n"
     "   - Nếu lúc Audit phát hiện còn bug/lỗ hổng/thiếu sót so với Plan: CẤM dừng lại bắt User APPROVE lần 2! "
     "Bắt buộc tự động quay về S3 cập nhật `09_tasks_solution_<suffix>.md` + `08_tasks_<suffix>.md` + chạy `DG1/DG2`, "
     "sau đó tự sửa dứt điểm source code (S4) + chạy lại test + Audit lại (S5 + DG3) trong cùng lượt cho tới khi sạch bóng bug rồi mới báo OK!\n"
@@ -228,6 +245,65 @@ def src_edits(st: List[Dict[str, Any]], mem_root: Optional[Path] = None) -> List
         for i, n, a in calls(st)
         if n in ("write_to_file", "replace_file_content") and is_src(tgt(a), mem_root)
     ]
+
+
+def lessons_edits_since(st: List[Dict[str, Any]], after: int = -1) -> List[int]:
+    return [
+        i
+        for i, n, a in calls(st)
+        if i > after
+        and n in ("write_to_file", "replace_file_content")
+        and tgt(a).replace("\\", "/").endswith("/memory/global/lessons.md")
+    ]
+
+
+def validate_lesson_append_hygiene(args: Dict[str, Any]) -> List[str]:
+    """H2b: Chặn ngay tại pre-write nếu Agent append bài học mới sai cấu trúc Global vào lessons.md."""
+    old_text = str(args.get("TargetContent") or "")
+    new_text = str(args.get("ReplacementContent") or "") or str(args.get("CodeContent") or "")
+    if old_text and new_text.startswith(old_text):
+        added = new_text[len(old_text) :]
+    elif old_text and old_text in new_text:
+        added = new_text.replace(old_text, "", 1)
+    else:
+        added = new_text
+
+    if not added.strip():
+        return []
+
+    lines = added.splitlines()
+    h3_indices = [i for i, ln in enumerate(lines) if ln.startswith("### ")]
+    if not h3_indices:
+        return [
+            "Mọi bài học append vào `lessons.md` bắt buộc phải bắt đầu bằng Header `### [YYYY-MM-DD] <Tiêu đề> (<English Summary>)`."
+        ]
+
+    issues: List[str] = []
+    for idx, start_i in enumerate(h3_indices):
+        end_i = h3_indices[idx + 1] if idx + 1 < len(h3_indices) else len(lines)
+        block = [ln for ln in lines[start_i:end_i] if ln.strip() and not ln.startswith("## ")]
+        header_line = block[0]
+        m = LESSON_H3_RE.match(header_line)
+        if not m:
+            issues.append(f"Header '{header_line[:60]}' sai cú pháp `### [YYYY-MM-DD] <Tiêu đề> (<English Summary>)`.")
+        elif not LESSON_PAREN_EN_RE.search(m.group(2)):
+            issues.append(
+                f"Header '{header_line[:60]}' thiếu cụm tóm tắt Tiếng Anh trong ngoặc đơn `(...)` (>=10 ký tự) ở cuối dòng."
+            )
+        if len(block) > LESSON_MAX_LINES:
+            issues.append(
+                f"Mục bài học '{header_line[:50]}' dài {len(block)} dòng (vượt trần {LESSON_MAX_LINES} dòng). "
+                "Bắt buộc tóm tắt gọn đúng 1 dòng cho mỗi trường!"
+            )
+        raw_block = "\n".join(block)
+        for req_b in LESSON_REQUIRED_BULLETS:
+            if req_b not in raw_block:
+                issues.append(f"Mục '{header_line[:50]}' thiếu trường bắt buộc `{req_b}`.")
+        if LESSON_LOCAL_PATH_RE.search(raw_block):
+            issues.append(
+                f"Mục '{header_line[:50]}' chứa đường dẫn cục bộ `/Users/...`. Bắt buộc trừu tượng hóa 100% thành Global Pattern!"
+            )
+    return issues
 
 
 def project_reads_since(
@@ -432,16 +508,23 @@ def load_tripwires(mem_root: Optional[Path] = None) -> List[Dict[str, str]]:
     path = (mem_root or MEM) / "global" / "lessons" / "tripwires.json"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and "tripwires" in data:
+            data = data["tripwires"]
     except (OSError, ValueError):
         return []
-    return [t for t in data if isinstance(t, dict) and t.get("id") and t.get("trigger") and t.get("check")]
+    if not isinstance(data, list):
+        return []
+    return [t for t in data if isinstance(t, dict) and t.get("id") and (t.get("trigger") or t.get("trigger_regex")) and t.get("check")]
 
 
 def match_tripwires(prompt: str, trips: List[Dict[str, str]], limit: int = TRIPWIRE_LIMIT) -> List[Dict[str, str]]:
     hits: List[Dict[str, str]] = []
     for t in trips:
+        trig = t.get("trigger") or t.get("trigger_regex") or ""
+        if not trig:
+            continue
         try:
-            if re.search(t["trigger"], prompt or "", re.I):
+            if re.search(trig, prompt or "", re.I):
                 hits.append(t)
         except re.error:
             continue
@@ -450,14 +533,36 @@ def match_tripwires(prompt: str, trips: List[Dict[str, str]], limit: int = TRIPW
     return hits
 
 
+def code_tripwire_violations(file_path: str, new_code_body: str, trips: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """H4t-Code: Kiểm tra trực tiếp nội dung code mới chuẩn bị ghi đối chiếu với các Tripwires có Require."""
+    out: List[Dict[str, str]] = []
+    for t in trips:
+        tid = str(t.get("id") or "")
+        # Bỏ qua các tripwire chỉ dành cho tra cứu tài liệu/workspace ở pha Brain
+        if "prior-workspace" in tid or "propose-only" in tid or "agnostic-core" in tid or "worktree-isolation" in tid:
+            continue
+        trig = t.get("trigger") or t.get("trigger_regex") or ""
+        req = t.get("require") or t.get("require_regex") or ""
+        forbid = t.get("forbid_regex") or ""
+        if not trig:
+            continue
+        try:
+            if not re.search(trig, new_code_body, re.I):
+                continue
+            if forbid and re.search(forbid, new_code_body, re.I):
+                out.append(t)
+                continue
+            if req and not re.search(req, new_code_body, re.I):
+                out.append(t)
+        except re.error:
+            continue
+    return out
+
+
 def tripwire_violations(
     st: List[Dict[str, Any]], trips: List[Dict[str, str]], exclude_ws: Optional[str] = None
 ) -> List[Dict[str, str]]:
-    """G-08: tripwire có Require mà sau prompt khớp Trigger chưa có tool call nào khớp Require.
-
-    AF-1: chỉ tool đọc/lệnh mới là bằng chứng. AF-4: match trỏ vào workspace đích (exclude_ws)
-    hoặc chứa biến shell chưa expand (`$`) không chứng minh được việc đã làm → bỏ qua.
-    """
+    """G-08: tripwire có Require mà sau prompt khớp Trigger chưa có tool call nào khớp Require."""
 
     def _token(blob: str, s: int, e: int) -> str:
         while s > 0 and blob[s - 1] not in TRIPWIRE_TOKEN_BOUNDARY:
@@ -472,7 +577,6 @@ def tripwire_violations(
             if "$" in hit or (exclude_ws and f"/{exclude_ws}/" in hit):
                 continue
             tok = _token(blob, m.start(), m.end())
-            # AF-5: đường dẫn tuyệt đối chỉ là bằng chứng nếu tồn tại thật (chuỗi trong script repro thì không).
             if tok.startswith("/") and not tok.startswith("//"):
                 try:
                     if not Path(tok).exists():
@@ -484,7 +588,7 @@ def tripwire_violations(
 
     out: List[Dict[str, str]] = []
     for t in trips:
-        req = t.get("require")
+        req = t.get("require") or t.get("require_regex")
         if not req:
             continue
         trig_idx = [
@@ -761,7 +865,7 @@ def handle_pre_write(
     f = tgt(args)
     body = str(args.get("CodeContent") or "") + str(args.get("ReplacementContent") or "")
 
-    # H2: Memory File Protection (Rule #4, #17)
+    # H2: Memory File Protection & Global Lesson Hygiene (Rule #4, #5, #17)
     if is_mem_path(f, mem_root):
         try:
             exists = Path(f).exists()
@@ -781,6 +885,16 @@ def handle_pre_write(
                 "decision": "deny",
                 "reason": f"Rule 4/17: {Path(f).name} là file append-only — bắt buộc giữ nguyên TargetContent.",
             }
+        if f.replace("\\", "/").endswith("/memory/global/lessons.md"):
+            hygiene_errs = validate_lesson_append_hygiene(args)
+            if hygiene_errs:
+                return {
+                    "decision": "deny",
+                    "reason": (
+                        "Rule 5 (Global Lesson Hygiene Guard — Chống phá cấu trúc lessons.md):\n- "
+                        + "\n- ".join(hygiene_errs)
+                    ),
+                }
 
     # H3: Secret & PII Guard (Rule #20)
     m = SECRET.search(body)
@@ -790,7 +904,7 @@ def handle_pre_write(
             "reason": f"Rule 20: phát hiện chuỗi giống secret ({m.group(0)[:10]}***). Mask trước khi ghi.",
         }
 
-    # H4t: Lesson Tripwire Gate (G-08) — lesson phải chặn TRƯỚC, không chỉ ghi biên bản sau.
+    # H4t: Lesson Tripwire Gate (G-08) — kiểm tra tiền điều kiện trên tài liệu kết luận
     tw_match = TRIPWIRE_GUARDED_DOCS.search(f.replace("\\", "/"))
     if tw_match and is_mem_path(f, mem_root):
         tgt_ws = re.search(r"/workspaces/([^/]+)/", f.replace("\\", "/"))
@@ -889,16 +1003,38 @@ def handle_pre_write(
                     "reason": "Rule 13 (Clean-Room Spec, G-03): " + "; ".join(rule_issues),
                 }
 
-    # H4b: Source Change Gate & Anti-Mock-Pollution (Rule #4, #10, #12, #13, #14, #16)
+    # H4b: Source Change Gate, Code-Level Tripwires & Anti-Mock-Pollution (Rule #4, #10, #12, #13, #14, #16)
     if is_src(f, mem_root):
-        if not is_test_file(f) and PROD_MOCK_POLLUTION.search(body):
+        old_src_lines = set(str(args.get("TargetContent") or "").splitlines())
+        added_src_body = "\n".join(ln for ln in body.splitlines() if ln not in old_src_lines) or body
+
+        if not is_test_file(f) and PROD_MOCK_POLLUTION.search(added_src_body):
             return {
                 "decision": "deny",
                 "reason": (
-                    "Rule 12/14 (Anti-Smoke-Speculation): CẤM gắn hàm mock/closure giả (*Fn, sqlmock, fakemodel) "
-                    "vào code production để lách tích hợp thật (L001/L056)!"
+                    "Rule 12/14 (Anti-Smoke-Speculation, L14): CẤM gắn hàm mock/closure giả (*Fn, sqlmock, fakemodel) "
+                    "vào code production để lách tích hợp thật!"
                 ),
             }
+        if is_test_file(f) and FAKE_REAL_TEST_RE.search(added_src_body):
+            return {
+                "decision": "deny",
+                "reason": (
+                    "Rule 14 (Zero-Mockup in Real DB Tests, L14): CẤM dùng sqlmock, SQLite file::memory: hoặc "
+                    "httptest.NewServer bên trong hàm test mang tên RealPostgres/RealDB/RealNATS!"
+                ),
+            }
+
+        code_tw_viol = code_tripwire_violations(f, added_src_body, load_tripwires(mem_root))
+        if code_tw_viol:
+            return {
+                "decision": "deny",
+                "reason": (
+                    "Code Tripwire Gate (H4t-Code): Phát hiện mẫu code vi phạm bài học trong lessons.md:\n"
+                    + "\n".join(f"- [{t['id']}] {t['check']}" for t in code_tw_viol)
+                ),
+            }
+
         st = steps(payload)
         ws = active_ws(st, ws_root)
         if not ws:
@@ -910,6 +1046,12 @@ def handle_pre_write(
             return {
                 "decision": "deny",
                 "reason": f"Rule 4: phải append START vào {ws}/05_progress_*.md trước khi sửa code.",
+            }
+        dg0_st = laya_gate_status(ws, "dg0", ws_root)
+        if dg0_st is not None and dg0_st != "PASS":
+            return {
+                "decision": "deny",
+                "reason": "DG0: Wave phản biện yêu cầu trước Plan chưa đạt PASS — không được sửa source code.",
             }
         if laya_gate_status(ws, "dg1", ws_root) != "PASS":
             return {
@@ -1101,8 +1243,18 @@ def handle_stop(
     src = [(i, f) for i, f in src_edits(st, mem_root) if i > u_idx]
     miss: List[str] = []
 
+    # Cổng đồng bộ bắt buộc: Nếu có sửa lessons.md trong lượt thì bắt buộc phải chạy build_lessons_index.py sau đó
+    les_edits = lessons_edits_since(st, u_idx)
+    if les_edits and not touched(st, r"build_lessons_index\.py", les_edits[-1]):
+        miss.append(
+            "Rule 5 (Lessons Index Sync): Đã cập nhật `lessons.md` nhưng chưa chạy `python3 tooling/build_lessons_index.py` sau lần sửa cuối!"
+        )
+
     sol_touched = touched(st, r"09_tasks_solution", u_idx)
     if sol_touched:
+        dg0_st = laya_gate_status(ws, "dg0", ws_root)
+        if dg0_st is not None and dg0_st != "PASS":
+            miss.append("DG0: laya_gate chưa PASS cho Wave phản biện trước Plan")
         if laya_gate_status(ws, "dg1", ws_root) != "PASS":
             miss.append("DG1: laya_gate chưa PASS cho giải pháp/code demo")
         dg2_st = laya_gate_status(ws, "dg2", ws_root)

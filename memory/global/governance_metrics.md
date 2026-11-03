@@ -74,3 +74,9 @@
 ### [2026-10-15 11:41] Snapshot KPI
 - Global Patterns (catalog): 234 | Distinct tags: 917 | Catalog format-compliance: 100% ✓
 - Active hooks: 5 ✓
+
+## [2026-10-28] snapshot (Antigravity)
+- patterns=45 index_entries=45 index_bytes=4442 tripwires=14 local_leaks=0 tags=183 catalog_fmt=100%
+- workspaces=404 progress_compliance=95% t1_plus=232
+- rules_gemini=23 gemini_bytes=19531 skills=10 hook_events=0
+- recidivism_top: #governance(19) #pipeline(8) #cdc(8) #audit-phase(8) #workspace(7) #no-speculation(7) #kafka(7) #golang(7) 

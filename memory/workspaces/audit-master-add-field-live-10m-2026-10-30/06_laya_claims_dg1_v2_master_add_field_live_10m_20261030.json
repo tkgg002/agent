@@ -1,0 +1,58 @@
+[
+  {
+    "id": "S-RC-1",
+    "kind": "claim",
+    "claim": "In TransmuterModule.Run at transmuter.go lines 450-452, processBatch is called with runType == \"full\" || len(chunkIDs) > 0 as isFullSync, disabling OCC during full table resync when chunkIDs is empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:450-452\n\t\t\tif len(shadowRows) > 0 {\n\t\t\t\tbatchRes = t.processBatch(ctx, masterRow, rules, shadowRows, strat, rc, runType == \"full\" || len(chunkIDs) > 0)\n\t\t\t\tres.Scanned += batchRes.scanned",
+    "flow": "TransmuterModule.Run passes runType == \"full\" || len(chunkIDs) > 0 to processBatch, which disables OCC in bulkUpsertMaster when isFullSync is true."
+  },
+  {
+    "id": "S-FIX-1",
+    "kind": "claim",
+    "claim": "In TransmuterModule.processBatch at transmuter.go lines 1257-1270, dedupedRecords is constructed by iterating over allRecords without sorting by conflictTarget before bulkUpsertMaster is called at line 1292.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1257-1270\n\t\tdedupedRecords := make([]map[string]any, 0, len(bestIndices))\n\t\tfor idx, rec := range allRecords {\n\t\t\tif keepIndices[idx] {\n\t\t\t\tdedupedRecords = append(dedupedRecords, rec)\n\t\t\t}\n\t\t}\n\n\t\t// Ghi nhận số dòng trùng bị loại bỏ vào occSkipped để đồng bộ với cơ chế chống false-positive degraded\n\t\tintraBatchDuplicates := int64(len(allRecords) - len(dedupedRecords))\n\t\tout.occSkipped += intraBatchDuplicates\n\t\tout.skipped += intraBatchDuplicates\n\n\t\tallRecords = dedupedRecords",
+    "flow": "processBatch deduplicates allRecords into dedupedRecords without sorting by conflictTarget."
+  },
+  {
+    "id": "S-IMPACT-1",
+    "kind": "claim",
+    "claim": "In ActivityLogReadRepoGorm.GetDailyFlow at activity_log_read_repo_gorm.go lines 438-455, snapshot_master and master_written only check COALESCE(e.details->>'run_type', '') = 'full_sync' and <> 'full_sync', omitting 'full'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:438-455\n\t\t\tSUM(CASE WHEN (e.triggered_by IN ('snapshot', 'snapshot-hook', 'admin', 'manual', 're-sync', 'resync') OR COALESCE((e.details->>'is_snapshot')::boolean, false) OR COALESCE(e.details->>'run_type', '') = 'full_sync') AND e.operation IN ('transmute','transmute_sub') AND e.status <> 'error'\n\t\t\t         THEN COALESCE((e.details->>'written')::bigint, NULLIF(e.rows_affected, 0), COALESCE((e.details->>'inserted')::bigint, 0) + COALESCE((e.details->>'updated')::bigint, 0) + COALESCE((e.details->>'deleted')::bigint, 0)) ELSE 0 END) AS snapshot_master,\n\t\t\tSUM(CASE WHEN e.operation = 'kafka-consumer' AND NOT (COALESCE(e.details->>'buffer_type' = 'snapshot', false) OR COALESCE((e.details->>'is_snapshot')::boolean, false))\n\t\t\t         THEN COALESCE((e.details->>'c')::bigint, (e.details->>'inserted')::bigint, 0)\n\t\t\t            + COALESCE((e.details->>'u')::bigint, (e.details->>'updated')::bigint, 0)\n\t\t\t            + COALESCE((e.details->>'d')::bigint, (e.details->>'deleted')::bigint, 0)\n\t\t\t            + CASE WHEN (e.details->>'c' IS NULL AND e.details->>'inserted' IS NULL) THEN COALESCE((e.details->>'written')::bigint, e.rows_affected, 0) ELSE 0 END\n\t\t\t         ELSE 0 END) AS kafka_total,\n\t\t\tSUM(CASE WHEN e.operation = 'kafka-consumer' AND NOT (COALESCE(e.details->>'buffer_type' = 'snapshot', false) OR COALESCE((e.details->>'is_snapshot')::boolean, false))\n\t\t\t         THEN COALESCE((e.details->>'c')::bigint, (e.details->>'inserted')::bigint, 0) ELSE 0 END) AS kafka_c,\n\t\t\tSUM(CASE WHEN e.operation = 'kafka-consumer' AND NOT (COALESCE(e.details->>'buffer_type' = 'snapshot', false) OR COALESCE((e.details->>'is_snapshot')::boolean, false))\n\t\t\t         THEN COALESCE((e.details->>'u')::bigint, (e.details->>'updated')::bigint, 0) ELSE 0 END) AS kafka_u,\n\t\t\tSUM(CASE WHEN e.operation = 'kafka-consumer' AND NOT (COALESCE(e.details->>'buffer_type' = 'snapshot', false) OR COALESCE((e.details->>'is_snapshot')::boolean, false))\n\t\t\t         THEN COALESCE((e.details->>'d')::bigint, (e.details->>'deleted')::bigint, 0) ELSE 0 END) AS kafka_d,\n\t\t\tSUM(CASE WHEN e.operation = 'kafka-consumer' AND e.status <> 'error' AND NOT (COALESCE(e.details->>'buffer_type' = 'snapshot', false) OR COALESCE((e.details->>'is_snapshot')::boolean, false))\n\t\t\t         THEN COALESCE((e.details->>'written')::bigint, e.rows_affected, 0) ELSE 0 END) AS shadow_written,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by NOT IN ('snapshot', 'snapshot-hook', 'admin', 'manual', 're-sync', 'resync') AND NOT COALESCE((e.details->>'is_snapshot')::boolean, false) AND COALESCE(e.details->>'run_type', '') <> 'full_sync'",
+    "flow": "GetDailyFlow classifies transmute activity logs into snapshot_master vs master_written using details->>'run_type' = 'full_sync'."
+  },
+  {
+    "id": "S-PATTERN-1",
+    "kind": "claim",
+    "claim": "In MasterDDLGenerator.Apply at master_ddl_generator.go lines 361-400, CreateSQL, AlterSQL, IndexSQL, and 7 legacy DROP COLUMN IF EXISTS statements execute inside a single transaction.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator.go:372-399\n\t\tif err := tx.Exec(res.CreateSQL).Error; err != nil {\n\t\t\treturn fmt.Errorf(\"create table: %w\", err)\n\t\t}\n\t\tfor _, s := range res.AlterSQL {\n\t\t\tif err := tx.Exec(s).Error; err != nil {\n\t\t\t\treturn fmt.Errorf(\"alter add column: %w\", err)\n\t\t\t}\n\t\t}\n\t\tfor _, s := range res.IndexSQL {\n\t\t\tif err := tx.Exec(s).Error; err != nil {\n\t\t\t\treturn fmt.Errorf(\"create index: %w\", err)\n\t\t\t}\n\t\t}\n\t\t// Tinh gọn schema: gỡ 6 system col cũ khỏi master đã tạo trước (thiết kế mới\n\t\t// chỉ giữ _gpay_id/_source_ts/_deleted/_updated_at). DROP COLUMN IF EXISTS là\n\t\t// idempotent (đã gỡ → no-op); index trên cột đó (vd ux_source_id, ix_created_at)\n\t\t// tự bị drop theo. Trong tx đã có lock_timeout/statement_timeout fail-fast.\n\t\t// LƯU Ý vận hành: bảng master CŨ đã có data dùng _gpay_id ngẫu nhiên cũ → cần\n\t\t// TRUNCATE + re-sync 1 lần để conflict-key (_gpay_id deterministic) khớp lại.\n\t\tlegacyTbl := quoteDDLQualified(reg.MasterSchema, reg.MasterTable)\n\t\t// + _raw_data: master là bảng NGHIỆP VỤ, KHÔNG giữ JSON thô (I2). transmute\n\t\t// không bao giờ ghi cột này nên drop an toàn (dữ liệu business không mất).\n\t\tfor _, col := range []string{\"_source_id\", \"_source\", \"_synced_at\", \"_version\", \"_hash\", \"_created_at\", \"_raw_data\"} {\n\t\t\tif err := tx.Exec(fmt.Sprintf(`ALTER TABLE %s DROP COLUMN IF EXISTS %s`, legacyTbl, quoteDDLIdent(col))).Error; err != nil {\n\t\t\t\treturn fmt.Errorf(\"drop legacy col %s: %w\", col, err)\n\t\t\t}\n\t\t}",
+    "flow": "MasterDDLGenerator.Apply runs CreateSQL, AlterSQL, IndexSQL, and legacy column drops in one transaction."
+  },
+  {
+    "id": "D-API-1",
+    "kind": "claim",
+    "claim": "In NatsMasterDDLPublisher.PublishMasterCreate at master_ddl_publisher.go lines 124-136, the JSON payload sent to cdc.cmd.master-create only includes master_table, triggered_by, and correlation_id without master_binding_id.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/messaging/nats/master_ddl_publisher.go:124-136\nfunc (p *NatsMasterDDLPublisher) PublishMasterCreate(ctx context.Context, masterTable, triggeredBy string) error {\n\tif p.conn == nil {\n\t\treturn fmt.Errorf(\"nats conn nil\")\n\t}\n\n\tpayload, _ := json.Marshal(map[string]string{\n\t\t\"master_table\":   masterTable,\n\t\t\"triggered_by\":   triggeredBy,\n\t\t\"correlation_id\": \"rule-approve-\" + masterTable + \"-\" + time.Now().UTC().Format(time.RFC3339Nano),\n\t})\n\n\treturn p.conn.Publish(\"cdc.cmd.master-create\", payload)\n}",
+    "flow": "PublishMasterCreate publishes a JSON payload with master_table, triggered_by, and correlation_id."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In MasterDDLHandler.HandleMasterCreate at master_ddl_handler.go line 188, h.gen.Apply is called with req.MasterTable and req.MasterBindingID.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/master_ddl_handler.go:185-189\n\tctx, cancel := context.WithTimeout(ctx, 60*time.Second)\n\tdefer cancel()\n\n\tres, err := h.gen.Apply(ctx, req.MasterTable, req.MasterBindingID)\n\tif err != nil {",
+    "flow": "HandleMasterCreate calls h.gen.Apply(ctx, req.MasterTable, req.MasterBindingID)."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In NatsMasterDDLPublisher.PublishMasterCreate at master_ddl_publisher.go lines 129-133, the payload already sends master_binding_id in the JSON map.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/messaging/nats/master_ddl_publisher.go:129-134\n\tpayload, _ := json.Marshal(map[string]string{\n\t\t\"master_table\":   masterTable,\n\t\t\"triggered_by\":   triggeredBy,\n\t\t\"correlation_id\": \"rule-approve-\" + masterTable + \"-\" + time.Now().UTC().Format(time.RFC3339Nano),\n\t})",
+    "flow": "PublishMasterCreate builds the JSON payload map."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In ActivityLogReadRepoGorm.GetDailyFlow at activity_log_read_repo_gorm.go line 438, the SQL condition already checks IN ('full', 'full_sync') for details->>'run_type'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:438-439\n\t\t\tSUM(CASE WHEN (e.triggered_by IN ('snapshot', 'snapshot-hook', 'admin', 'manual', 're-sync', 'resync') OR COALESCE((e.details->>'is_snapshot')::boolean, false) OR COALESCE(e.details->>'run_type', '') = 'full_sync') AND e.operation IN ('transmute','transmute_sub') AND e.status <> 'error'\n\t\t\t         THEN COALESCE((e.details->>'written')::bigint, NULLIF(e.rows_affected, 0), COALESCE((e.details->>'inserted')::bigint, 0) + COALESCE((e.details->>'updated')::bigint, 0) + COALESCE((e.details->>'deleted')::bigint, 0)) ELSE 0 END) AS snapshot_master,",
+    "flow": "GetDailyFlow checks details->>'run_type' = 'full_sync'."
+  }
+]

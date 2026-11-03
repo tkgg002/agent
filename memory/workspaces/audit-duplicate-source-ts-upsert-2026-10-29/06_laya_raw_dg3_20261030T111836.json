@@ -1,0 +1,911 @@
+[
+  {
+    "id": "A-R4-S5-1",
+    "kind": "claim",
+    "claim": "In source_repo_gorm.go Register and delete_shadow_binding.go DeleteShadowBindingHandler, orphan cleanup and deletion of cdc_system.cdc_table_registry are scoped by source_connection_id, source_db, source_table, and target_table.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/source/source_repo_gorm.go:271-292\n\t\terr := tx.Exec(`\n\t\t\tDELETE FROM cdc_system.cdc_table_registry tr\n\t\t\tWHERE tr.source_db = ?\n\t\t\t  AND tr.source_table = ?\n\t\t\t  AND tr.target_table = ?\n\t\t\t  AND (\n\t\t\t        (? > 0 AND tr.source_connection_id = ?)\n\t\t\t     OR (? <= 0 AND tr.source_connection_id IS NULL)\n\t\t\t  )\n\t\t\t  AND NOT EXISTS (\n\t\t\t\t  SELECT 1\n\t\t\t\t  FROM cdc_system.shadow_binding sb\n\t\t\t\t  JOIN cdc_system.source_object_registry so ON so.id = sb.source_object_id\n\t\t\t\t  WHERE sb.shadow_table = tr.target_table\n\t\t\t\t    AND COALESCE(NULLIF(so.source_schema, ''), so.source_database) = tr.source_db\n\t\t\t\t    AND so.source_object_name = tr.source_table\n\t\t\t\t    AND (\n\t\t\t\t          (tr.source_connection_id IS NOT NULL AND so.source_connection_id = tr.source_connection_id)\n\t\t\t\t       OR (tr.source_connection_id IS NULL)\n\t\t\t\t    )\n\t\t\t  )\n\t\t`, entry.SourceDB, entry.SourceTable, entry.TargetTable, connID, connID, connID).Error\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/shadow/delete_shadow_binding.go:166-177\n    if err := tx.Exec(`\n        DELETE FROM cdc_system.cdc_table_registry tr\n        USING cdc_system.source_object_registry so\n        WHERE so.id = ?\n          AND (tr.source_connection_id = so.source_connection_id OR tr.source_connection_id IS NULL)\n          AND (\n                (tr.target_table = ?\n                 AND COALESCE(NULLIF(so.source_schema, ''), so.source_database) = tr.source_db\n                 AND tr.source_table = so.source_object_name)\n             OR (? > 0 AND tr.id = ?)\n          )\n    `, sourceObjectID, info.ShadowTable, cmd.RegistryID, cmd.RegistryID).Error; err != nil {",
+    "flow": "Register & DeleteShadowBindingHandler",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3142,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6989,
+                "INCORRECT": 0.247,
+                "UNSUPPORTED": 0.054
+              },
+              "confidence": 0.3142,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In source_repo_gorm.go Register and delete_shadow_binding.go DeleteShadowBindingHandler, orphan cleanup and deletion of cdc_system.cdc_table_registry are scoped by source_connection_id, source_db, source_table, and target_table.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/source/source_repo_gorm.go:271-292\n\t\terr := tx.Exec(`\n\t\t\tDELETE FROM cdc_system.cdc_table_registry tr\n\t\t\tWHERE tr.source_db = ?\n\t\t\t  AND tr.source_table = ?\n\t\t\t  AND tr.target_table = ?\n\t\t\t  AND (\n\t\t\t        (? > 0 AND tr.source_connection_id = ?)\n\t\t\t     OR (? <= 0 AND tr.source_connection_id IS NULL)\n\t\t\t  )\n\t\t\t  AND NOT EXISTS (\n\t\t\t\t  SELECT 1\n\t\t\t\t  FROM cdc_system.shadow_binding sb\n\t\t\t\t  JOIN cdc_system.source_object_registry so ON so.id = sb.source_object_id\n\t\t\t\t  WHERE sb.shadow_table = tr.target_table\n\t\t\t\t    AND COALESCE(NULLIF(so.source_schema, ''), so.source_database) = tr.source_db\n\t\t\t\t    AND so.source_object_name = tr.source_table\n\t\t\t\t    AND (\n\t\t\t\t          (tr.source_connection_id IS NOT NULL AND so.source_connection_id = tr.source_connection_id)\n\t\t\t\t       OR (tr.source_connection_id IS NULL)\n\t\t\t\t    )\n\t\t\t  )\n\t\t`, entry.SourceDB, entry.SourceTable, entry.TargetTable, connID, connID, connID).Error\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/shadow/delete_shadow_binding.go:166-177\n    if err := tx.Exec(`\n        DELETE FROM cdc_system.cdc_table_registry tr\n        USING cdc_system.source_object_registry so\n        WHERE so.id = ?\n          AND (tr.source_connection_id = so.source_connection_id OR tr.source_connection_id IS NULL)\n          AND (\n                (tr.target_table = ?\n                 AND COALESCE(NULLIF(so.source_schema, ''), so.source_database) = tr.source_db\n                 AND tr.source_table = so.source_object_name)\n             OR (? > 0 AND tr.id = ?)\n          )\n    `, sourceObjectID, info.ShadowTable, cmd.RegistryID, cmd.RegistryID).Error; err != nil {",
+          "flow": "Register & DeleteShadowBindingHandler"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2182,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.656,
+                "INCORRECT": 0.2343,
+                "UNSUPPORTED": 0.1096
+              },
+              "confidence": 0.2182,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "Register & DeleteShadowBindingHandler",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/source/source_repo_gorm.go:271-292\n\t\terr := tx.Exec(`\n\t\t\tDELETE FROM cdc_system.cdc_table_registry tr\n\t\t\tWHERE tr.source_db = ?\n\t\t\t  AND tr.source_table = ?\n\t\t\t  AND tr.target_table = ?\n\t\t\t  AND (\n\t\t\t        (? > 0 AND tr.source_connection_id = ?)\n\t\t\t     OR (? <= 0 AND tr.source_connection_id IS NULL)\n\t\t\t  )\n\t\t\t  AND NOT EXISTS (\n\t\t\t\t  SELECT 1\n\t\t\t\t  FROM cdc_system.shadow_binding sb\n\t\t\t\t  JOIN cdc_system.source_object_registry so ON so.id = sb.source_object_id\n\t\t\t\t  WHERE sb.shadow_table = tr.target_table\n\t\t\t\t    AND COALESCE(NULLIF(so.source_schema, ''), so.source_database) = tr.source_db\n\t\t\t\t    AND so.source_object_name = tr.source_table\n\t\t\t\t    AND (\n\t\t\t\t          (tr.source_connection_id IS NOT NULL AND so.source_connection_id = tr.source_connection_id)\n\t\t\t\t       OR (tr.source_connection_id IS NULL)\n\t\t\t\t    )\n\t\t\t  )\n\t\t`, entry.SourceDB, entry.SourceTable, entry.TargetTable, connID, connID, connID).Error\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/shadow/delete_shadow_binding.go:166-177\n    if err := tx.Exec(`\n        DELETE FROM cdc_system.cdc_table_registry tr\n        USING cdc_system.source_object_registry so\n        WHERE so.id = ?\n          AND (tr.source_connection_id = so.source_connection_id OR tr.source_connection_id IS NULL)\n          AND (\n                (tr.target_table = ?\n                 AND COALESCE(NULLIF(so.source_schema, ''), so.source_database) = tr.source_db\n                 AND tr.source_table = so.source_object_name)\n             OR (? > 0 AND tr.id = ?)\n          )\n    `, sourceObjectID, info.ShadowTable, cmd.RegistryID, cmd.RegistryID).Error; err != nil {",
+          "claim": "In source_repo_gorm.go Register and delete_shadow_binding.go DeleteShadowBindingHandler, orphan cleanup and deletion of cdc_system.cdc_table_registry are scoped by source_connection_id, source_db, source_table, and target_table."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.3262,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8229,
+                "NO": 0.1771
+              },
+              "confidence": 0.3262,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 977,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/source/source_repo_gorm.go:271-292\n\t\terr := tx.Exec(`\n\t\t\tDELETE FROM cdc_system.cdc_table_registry tr\n\t\t\tWHERE tr.source_db = ?\n\t\t\t  AND tr.source_table = ?\n\t\t\t  AND tr.target_table = ?\n\t\t\t  AND (\n\t\t\t        (? > 0 AND tr.source_connection_id = ?)\n\t\t\t     OR (? <= 0 AND tr.source_connection_id IS NULL)\n\t\t\t  )\n\t\t\t  AND NOT EXISTS (\n\t\t\t\t  SELECT 1\n\t\t\t\t  FROM cdc_system.shadow_binding sb\n\t\t\t\t  JOIN cdc_system.source_object_registry so ON so.id = sb.source_object_id\n\t\t\t\t  WHERE sb.shadow_table = tr.target_table\n\t\t\t\t    AND COALESCE(NULLIF(so.source_schema, ''), so.source_database) = tr.source_db\n\t\t\t\t    AND so.source_object_name = tr.source_table\n\t\t\t\t    AND (\n\t\t\t\t          (tr.source_connection_id IS NOT NULL AND so.source_connection_id = tr.source_connection_id)\n\t\t\t\t       OR (tr.source_connection_id IS NULL)\n\t\t\t\t    )\n\t\t\t  )\n\t\t`, entry.SourceDB, entry.SourceTable, entry.TargetTable, connID, connID, connID).Error\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/shadow/delete_shadow_binding.go:166-177\n    if err := tx.Exec(`\n        DELETE FROM cdc_system.cdc_table_registry tr\n        USING cdc_system.source_object_registry so\n        WHERE so.id = ?\n          AND (tr.source_connection_id = so.source_connection_id OR tr.source_connection_id IS NULL)\n          AND (\n                (tr.target_table = ?\n                 AND COALESCE(NULLIF(so.source_schema, ''), so.source_database) = tr.source_db\n                 AND tr.source_table = so.source_object_name)\n             OR (? > 0 AND tr.id = ?)\n          )\n    `, sourceObjectID, info.ShadowTable, cmd.RegistryID, cmd.RegistryID).Error; err != nil {",
+          "claim": "In source_repo_gorm.go Register and delete_shadow_binding.go DeleteShadowBindingHandler, orphan cleanup and deletion of cdc_system.cdc_table_registry are scoped by source_connection_id, source_db, source_table, and target_table."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "A-R4-S5-2",
+    "kind": "claim",
+    "claim": "In mapping_rule_repo_gorm.go buildFilter, reserved shadow system columns are filtered out via LOWER(TRIM(mr.source_field)) NOT IN (?) and LOWER(TRIM(mr.target_column)) NOT IN (?), and scanFieldsSQLSource calls DeleteReservedSystemRulesBySourceObjectAndBinding before listing rules.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/mapping_rule_repo_gorm.go:191-195\n\treservedCols := domainshadow.ReservedShadowSystemColumns()\n\tq += ` AND LOWER(TRIM(mr.source_field)) NOT IN (?) AND LOWER(TRIM(mr.target_column)) NOT IN (?)`\n\targs = append(args, reservedCols, reservedCols)\n\treturn q, args\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_sql.go:56-57\n\t_ = h.mappingV2Repo.DeleteReservedSystemRulesBySourceObjectAndBinding(ctx, registry.ID, shadowBindingID)\n\texistingRules, err := h.mappingV2Repo.ListBySourceObjectAndBinding(ctx, registry.ID, shadowBindingID)",
+    "flow": "mappingRuleRepoGorm.buildFilter & scanFieldsSQLSource",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7418,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9338,
+                "INCORRECT": 0.0468,
+                "UNSUPPORTED": 0.0194
+              },
+              "confidence": 0.7418,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 435,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In mapping_rule_repo_gorm.go buildFilter, reserved shadow system columns are filtered out via LOWER(TRIM(mr.source_field)) NOT IN (?) and LOWER(TRIM(mr.target_column)) NOT IN (?), and scanFieldsSQLSource calls DeleteReservedSystemRulesBySourceObjectAndBinding before listing rules.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/mapping_rule_repo_gorm.go:191-195\n\treservedCols := domainshadow.ReservedShadowSystemColumns()\n\tq += ` AND LOWER(TRIM(mr.source_field)) NOT IN (?) AND LOWER(TRIM(mr.target_column)) NOT IN (?)`\n\targs = append(args, reservedCols, reservedCols)\n\treturn q, args\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_sql.go:56-57\n\t_ = h.mappingV2Repo.DeleteReservedSystemRulesBySourceObjectAndBinding(ctx, registry.ID, shadowBindingID)\n\texistingRules, err := h.mappingV2Repo.ListBySourceObjectAndBinding(ctx, registry.ID, shadowBindingID)",
+          "flow": "mappingRuleRepoGorm.buildFilter & scanFieldsSQLSource"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.009,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3349,
+                "INCORRECT": 0.3898,
+                "UNSUPPORTED": 0.2752
+              },
+              "confidence": 0.009,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 441,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "mappingRuleRepoGorm.buildFilter & scanFieldsSQLSource",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/mapping_rule_repo_gorm.go:191-195\n\treservedCols := domainshadow.ReservedShadowSystemColumns()\n\tq += ` AND LOWER(TRIM(mr.source_field)) NOT IN (?) AND LOWER(TRIM(mr.target_column)) NOT IN (?)`\n\targs = append(args, reservedCols, reservedCols)\n\treturn q, args\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_sql.go:56-57\n\t_ = h.mappingV2Repo.DeleteReservedSystemRulesBySourceObjectAndBinding(ctx, registry.ID, shadowBindingID)\n\texistingRules, err := h.mappingV2Repo.ListBySourceObjectAndBinding(ctx, registry.ID, shadowBindingID)",
+          "claim": "In mapping_rule_repo_gorm.go buildFilter, reserved shadow system columns are filtered out via LOWER(TRIM(mr.source_field)) NOT IN (?) and LOWER(TRIM(mr.target_column)) NOT IN (?), and scanFieldsSQLSource calls DeleteReservedSystemRulesBySourceObjectAndBinding before listing rules."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4304,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8655,
+                "NO": 0.1345
+              },
+              "confidence": 0.4304,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 360,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/mapping_rule_repo_gorm.go:191-195\n\treservedCols := domainshadow.ReservedShadowSystemColumns()\n\tq += ` AND LOWER(TRIM(mr.source_field)) NOT IN (?) AND LOWER(TRIM(mr.target_column)) NOT IN (?)`\n\targs = append(args, reservedCols, reservedCols)\n\treturn q, args\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_sql.go:56-57\n\t_ = h.mappingV2Repo.DeleteReservedSystemRulesBySourceObjectAndBinding(ctx, registry.ID, shadowBindingID)\n\texistingRules, err := h.mappingV2Repo.ListBySourceObjectAndBinding(ctx, registry.ID, shadowBindingID)",
+          "claim": "In mapping_rule_repo_gorm.go buildFilter, reserved shadow system columns are filtered out via LOWER(TRIM(mr.source_field)) NOT IN (?) and LOWER(TRIM(mr.target_column)) NOT IN (?), and scanFieldsSQLSource calls DeleteReservedSystemRulesBySourceObjectAndBinding before listing rules."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "A-R4-S5-3",
+    "kind": "claim",
+    "claim": "In source_object_v2_sync.go SyncRulesFromLegacyTx and mapping_utils.go BridgeMappingRulesToV2, reserved shadow system columns are excluded when syncing rules from cdc_mapping_rules into mapping_rule_v2.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/source/source_object_v2_sync.go:297-301\n\t\tFROM cdc_system.cdc_mapping_rules\n\t\tWHERE source_table = ?\n\t\t  AND LOWER(TRIM(source_field)) NOT IN (?)\n\t\t  AND LOWER(TRIM(target_column)) NOT IN (?)\n\t\tON CONFLICT (source_object_id, COALESCE(shadow_binding_id, 0), COALESCE(master_binding_id, 0), target_column) DO UPDATE SET\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/metadata/mapping_utils.go:218-221\n\tfor _, r := range v1Rules {\n\t\tif !r.IsActive || modelshadow.IsReservedSystemColumn(r.SourceField) || modelshadow.IsReservedSystemColumn(r.TargetColumn) {\n\t\t\tcontinue\n\t\t}",
+    "flow": "SyncRulesFromLegacyTx & BridgeMappingRulesToV2",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.8061,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9541,
+                "INCORRECT": 0.0337,
+                "UNSUPPORTED": 0.0123
+              },
+              "confidence": 0.8061,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 464,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In source_object_v2_sync.go SyncRulesFromLegacyTx and mapping_utils.go BridgeMappingRulesToV2, reserved shadow system columns are excluded when syncing rules from cdc_mapping_rules into mapping_rule_v2.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/source/source_object_v2_sync.go:297-301\n\t\tFROM cdc_system.cdc_mapping_rules\n\t\tWHERE source_table = ?\n\t\t  AND LOWER(TRIM(source_field)) NOT IN (?)\n\t\t  AND LOWER(TRIM(target_column)) NOT IN (?)\n\t\tON CONFLICT (source_object_id, COALESCE(shadow_binding_id, 0), COALESCE(master_binding_id, 0), target_column) DO UPDATE SET\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/metadata/mapping_utils.go:218-221\n\tfor _, r := range v1Rules {\n\t\tif !r.IsActive || modelshadow.IsReservedSystemColumn(r.SourceField) || modelshadow.IsReservedSystemColumn(r.TargetColumn) {\n\t\t\tcontinue\n\t\t}",
+          "flow": "SyncRulesFromLegacyTx & BridgeMappingRulesToV2"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4327,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7964,
+                "INCORRECT": 0.1496,
+                "UNSUPPORTED": 0.054
+              },
+              "confidence": 0.4327,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 470,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "SyncRulesFromLegacyTx & BridgeMappingRulesToV2",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/source/source_object_v2_sync.go:297-301\n\t\tFROM cdc_system.cdc_mapping_rules\n\t\tWHERE source_table = ?\n\t\t  AND LOWER(TRIM(source_field)) NOT IN (?)\n\t\t  AND LOWER(TRIM(target_column)) NOT IN (?)\n\t\tON CONFLICT (source_object_id, COALESCE(shadow_binding_id, 0), COALESCE(master_binding_id, 0), target_column) DO UPDATE SET\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/metadata/mapping_utils.go:218-221\n\tfor _, r := range v1Rules {\n\t\tif !r.IsActive || modelshadow.IsReservedSystemColumn(r.SourceField) || modelshadow.IsReservedSystemColumn(r.TargetColumn) {\n\t\t\tcontinue\n\t\t}",
+          "claim": "In source_object_v2_sync.go SyncRulesFromLegacyTx and mapping_utils.go BridgeMappingRulesToV2, reserved shadow system columns are excluded when syncing rules from cdc_mapping_rules into mapping_rule_v2."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4889,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8863,
+                "NO": 0.1137
+              },
+              "confidence": 0.4889,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 390,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/source/source_object_v2_sync.go:297-301\n\t\tFROM cdc_system.cdc_mapping_rules\n\t\tWHERE source_table = ?\n\t\t  AND LOWER(TRIM(source_field)) NOT IN (?)\n\t\t  AND LOWER(TRIM(target_column)) NOT IN (?)\n\t\tON CONFLICT (source_object_id, COALESCE(shadow_binding_id, 0), COALESCE(master_binding_id, 0), target_column) DO UPDATE SET\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/metadata/mapping_utils.go:218-221\n\tfor _, r := range v1Rules {\n\t\tif !r.IsActive || modelshadow.IsReservedSystemColumn(r.SourceField) || modelshadow.IsReservedSystemColumn(r.TargetColumn) {\n\t\t\tcontinue\n\t\t}",
+          "claim": "In source_object_v2_sync.go SyncRulesFromLegacyTx and mapping_utils.go BridgeMappingRulesToV2, reserved shadow system columns are excluded when syncing rules from cdc_mapping_rules into mapping_rule_v2."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "CTRL-FALSE-R4-S5-1",
+    "kind": "control_false",
+    "claim": "In mapping_rule_repo_gorm.go buildFilter, reserved shadow system columns are NOT filtered out from the query on cdc_system.mapping_rule_v2.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/mapping_rule_repo_gorm.go:191-195\n\treservedCols := domainshadow.ReservedShadowSystemColumns()\n\tq += ` AND LOWER(TRIM(mr.source_field)) NOT IN (?) AND LOWER(TRIM(mr.target_column)) NOT IN (?)`\n\targs = append(args, reservedCols, reservedCols)\n\treturn q, args\n}",
+    "flow": "control_false",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.0278,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2229,
+                "INCORRECT": 0.4096,
+                "UNSUPPORTED": 0.3675
+              },
+              "confidence": 0.0278,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 286,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In mapping_rule_repo_gorm.go buildFilter, reserved shadow system columns are NOT filtered out from the query on cdc_system.mapping_rule_v2.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/mapping_rule_repo_gorm.go:191-195\n\treservedCols := domainshadow.ReservedShadowSystemColumns()\n\tq += ` AND LOWER(TRIM(mr.source_field)) NOT IN (?) AND LOWER(TRIM(mr.target_column)) NOT IN (?)`\n\targs = append(args, reservedCols, reservedCols)\n\treturn q, args\n}",
+          "flow": "control_false"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.0078,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.2833,
+                "INCORRECT": 0.3266,
+                "UNSUPPORTED": 0.3901
+              },
+              "confidence": 0.0078,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 292,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "control_false",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/mapping_rule_repo_gorm.go:191-195\n\treservedCols := domainshadow.ReservedShadowSystemColumns()\n\tq += ` AND LOWER(TRIM(mr.source_field)) NOT IN (?) AND LOWER(TRIM(mr.target_column)) NOT IN (?)`\n\targs = append(args, reservedCols, reservedCols)\n\treturn q, args\n}",
+          "claim": "In mapping_rule_repo_gorm.go buildFilter, reserved shadow system columns are NOT filtered out from the query on cdc_system.mapping_rule_v2."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.2886,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.1948,
+                "NO": 0.8052
+              },
+              "confidence": 0.2886,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 221,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/mapping_rule_repo_gorm.go:191-195\n\treservedCols := domainshadow.ReservedShadowSystemColumns()\n\tq += ` AND LOWER(TRIM(mr.source_field)) NOT IN (?) AND LOWER(TRIM(mr.target_column)) NOT IN (?)`\n\targs = append(args, reservedCols, reservedCols)\n\treturn q, args\n}",
+          "claim": "In mapping_rule_repo_gorm.go buildFilter, reserved shadow system columns are NOT filtered out from the query on cdc_system.mapping_rule_v2."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-R4-S5-2",
+    "kind": "control_false",
+    "claim": "In discover_handler_sql.go scanFieldsSQLSource, DeleteReservedSystemRulesBySourceObjectAndBinding is never called before ListBySourceObjectAndBinding.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_sql.go:56-57\n\t_ = h.mappingV2Repo.DeleteReservedSystemRulesBySourceObjectAndBinding(ctx, registry.ID, shadowBindingID)\n\texistingRules, err := h.mappingV2Repo.ListBySourceObjectAndBinding(ctx, registry.ID, shadowBindingID)",
+    "flow": "control_false",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.011,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2831,
+                "INCORRECT": 0.4058,
+                "UNSUPPORTED": 0.3111
+              },
+              "confidence": 0.011,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 266,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In discover_handler_sql.go scanFieldsSQLSource, DeleteReservedSystemRulesBySourceObjectAndBinding is never called before ListBySourceObjectAndBinding.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_sql.go:56-57\n\t_ = h.mappingV2Repo.DeleteReservedSystemRulesBySourceObjectAndBinding(ctx, registry.ID, shadowBindingID)\n\texistingRules, err := h.mappingV2Repo.ListBySourceObjectAndBinding(ctx, registry.ID, shadowBindingID)",
+          "flow": "control_false"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.28,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6329,
+                "INCORRECT": 0.3235,
+                "UNSUPPORTED": 0.0435
+              },
+              "confidence": 0.28,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 272,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "control_false",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_sql.go:56-57\n\t_ = h.mappingV2Repo.DeleteReservedSystemRulesBySourceObjectAndBinding(ctx, registry.ID, shadowBindingID)\n\texistingRules, err := h.mappingV2Repo.ListBySourceObjectAndBinding(ctx, registry.ID, shadowBindingID)",
+          "claim": "In discover_handler_sql.go scanFieldsSQLSource, DeleteReservedSystemRulesBySourceObjectAndBinding is never called before ListBySourceObjectAndBinding."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.0563,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.6387,
+                "NO": 0.3613
+              },
+              "confidence": 0.0563,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 201,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_sql.go:56-57\n\t_ = h.mappingV2Repo.DeleteReservedSystemRulesBySourceObjectAndBinding(ctx, registry.ID, shadowBindingID)\n\texistingRules, err := h.mappingV2Repo.ListBySourceObjectAndBinding(ctx, registry.ID, shadowBindingID)",
+          "claim": "In discover_handler_sql.go scanFieldsSQLSource, DeleteReservedSystemRulesBySourceObjectAndBinding is never called before ListBySourceObjectAndBinding."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-TRUE-R4-S5-1",
+    "kind": "control_true",
+    "claim": "In mapping_rule_v2_repo.go DeleteReservedSystemRulesBySourceObjectAndBinding, reservedCols comes from shadow.ReservedSystemColumns() and deletes matching mapping_rule_v2 rows for sourceObjectID and shadowBindingID.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/mapping_rule_v2_repo.go:102-111\nfunc (r *MappingRuleV2Repo) DeleteReservedSystemRulesBySourceObjectAndBinding(ctx context.Context, sourceObjectID int64, shadowBindingID int64) error {\n\treservedCols := shadow.ReservedSystemColumns()\n\tquery := r.db.WithContext(ctx).\n\t\tWhere(\"source_object_id = ? AND (LOWER(TRIM(source_field)) IN ? OR LOWER(TRIM(target_column)) IN ?)\",\n\t\t\tsourceObjectID, reservedCols, reservedCols)\n\tif shadowBindingID > 0 {\n\t\tquery = query.Where(\"shadow_binding_id = ?\", shadowBindingID)\n\t}\n\treturn query.Delete(&mastermodel.MappingRuleV2{}).Error\n}",
+    "flow": "control_true",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6461,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.888,
+                "INCORRECT": 0.0999,
+                "UNSUPPORTED": 0.0121
+              },
+              "confidence": 0.6461,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 404,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In mapping_rule_v2_repo.go DeleteReservedSystemRulesBySourceObjectAndBinding, reservedCols comes from shadow.ReservedSystemColumns() and deletes matching mapping_rule_v2 rows for sourceObjectID and shadowBindingID.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/mapping_rule_v2_repo.go:102-111\nfunc (r *MappingRuleV2Repo) DeleteReservedSystemRulesBySourceObjectAndBinding(ctx context.Context, sourceObjectID int64, shadowBindingID int64) error {\n\treservedCols := shadow.ReservedSystemColumns()\n\tquery := r.db.WithContext(ctx).\n\t\tWhere(\"source_object_id = ? AND (LOWER(TRIM(source_field)) IN ? OR LOWER(TRIM(target_column)) IN ?)\",\n\t\t\tsourceObjectID, reservedCols, reservedCols)\n\tif shadowBindingID > 0 {\n\t\tquery = query.Where(\"shadow_binding_id = ?\", shadowBindingID)\n\t}\n\treturn query.Delete(&mastermodel.MappingRuleV2{}).Error\n}",
+          "flow": "control_true"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5418,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8584,
+                "INCORRECT": 0.0845,
+                "UNSUPPORTED": 0.0571
+              },
+              "confidence": 0.5418,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 410,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "control_true",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/mapping_rule_v2_repo.go:102-111\nfunc (r *MappingRuleV2Repo) DeleteReservedSystemRulesBySourceObjectAndBinding(ctx context.Context, sourceObjectID int64, shadowBindingID int64) error {\n\treservedCols := shadow.ReservedSystemColumns()\n\tquery := r.db.WithContext(ctx).\n\t\tWhere(\"source_object_id = ? AND (LOWER(TRIM(source_field)) IN ? OR LOWER(TRIM(target_column)) IN ?)\",\n\t\t\tsourceObjectID, reservedCols, reservedCols)\n\tif shadowBindingID > 0 {\n\t\tquery = query.Where(\"shadow_binding_id = ?\", shadowBindingID)\n\t}\n\treturn query.Delete(&mastermodel.MappingRuleV2{}).Error\n}",
+          "claim": "In mapping_rule_v2_repo.go DeleteReservedSystemRulesBySourceObjectAndBinding, reservedCols comes from shadow.ReservedSystemColumns() and deletes matching mapping_rule_v2 rows for sourceObjectID and shadowBindingID."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8042,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9697,
+                "NO": 0.0303
+              },
+              "confidence": 0.8042,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 339,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/mapping_rule_v2_repo.go:102-111\nfunc (r *MappingRuleV2Repo) DeleteReservedSystemRulesBySourceObjectAndBinding(ctx context.Context, sourceObjectID int64, shadowBindingID int64) error {\n\treservedCols := shadow.ReservedSystemColumns()\n\tquery := r.db.WithContext(ctx).\n\t\tWhere(\"source_object_id = ? AND (LOWER(TRIM(source_field)) IN ? OR LOWER(TRIM(target_column)) IN ?)\",\n\t\t\tsourceObjectID, reservedCols, reservedCols)\n\tif shadowBindingID > 0 {\n\t\tquery = query.Where(\"shadow_binding_id = ?\", shadowBindingID)\n\t}\n\treturn query.Delete(&mastermodel.MappingRuleV2{}).Error\n}",
+          "claim": "In mapping_rule_v2_repo.go DeleteReservedSystemRulesBySourceObjectAndBinding, reservedCols comes from shadow.ReservedSystemColumns() and deletes matching mapping_rule_v2 rows for sourceObjectID and shadowBindingID."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

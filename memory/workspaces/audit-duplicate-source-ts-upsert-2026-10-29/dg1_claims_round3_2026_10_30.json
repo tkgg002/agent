@@ -1,0 +1,51 @@
+[
+  {
+    "id": "S-RC-R3",
+    "kind": "claim",
+    "claim": "runSnapshot returns on a find batch error before reaching the per-batch flushSnapshotTables call, so the job never pops async flush errors for its table on that path.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:683-687\n\t\t\tif err != nil {\n\t\t\t\tcursorCancel()\n\t\t\t\tr.markProgressError(ctx, progressID, fmt.Sprintf(\"find: %v\", err))\n\t\t\t\treturn fmt.Errorf(\"find batch: %w\", err)\n\t\t\t}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:855-858\n\t\t_, flushErr := r.flushSnapshotTables(ctx, targetTable, scopedBinding, routes)\n\t\tif flushErr != nil {\n\t\t\treturn tripBreaker(fmt.Sprintf(\"flush failed: %v\", flushErr))\n\t\t}",
+    "flow": "runSnapshot early return vs flushSnapshotTables"
+  },
+  {
+    "id": "S-FIX-R3",
+    "kind": "claim",
+    "claim": "Calling popAsyncFlushErrorLocked for a target table removes every async error entry whose sample matches that table and keeps the others, so it can be reused to discard stale errors at job start.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_async_err.go:45-62\nfunc (bb *BatchBuffer) popAsyncFlushErrorLocked(targetTable string) error {\n\tif len(bb.asyncFlushErrs) == 0 {\n\t\treturn nil\n\t}\n\tvar matchedErr error\n\tkept := bb.asyncFlushErrs[:0]\n\tfor _, entry := range bb.asyncFlushErrs {\n\t\tif matchTargetTable(entry.sample, targetTable) {\n\t\t\tif matchedErr == nil {\n\t\t\t\tmatchedErr = entry.err\n\t\t\t}\n\t\t} else {\n\t\t\tkept = append(kept, entry)\n\t\t}\n\t}\n\tbb.asyncFlushErrs = kept\n\treturn matchedErr\n}",
+    "flow": "DiscardAsyncFlushErrors -> popAsyncFlushErrorLocked"
+  },
+  {
+    "id": "S-IMPACT-R3",
+    "kind": "claim",
+    "claim": "snapshotBatchBuffer is created with NewBatchBuffer and configured with connection manager, masking, NATS, JetStream, failed sync log repo and snapshot mode, which a shared helper can reproduce for a dedicated heal buffer.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:166-172\n\tsnapshotBatchBuffer := handlershadow.NewBatchBuffer(snapshotBatchSize, 5*time.Second, db, schemaAdapter, logger)\n\tsnapshotBatchBuffer.SetConnectionManager(connectionManager)\n\tsnapshotBatchBuffer.SetMaskingService(maskingSvc)\n\tsnapshotBatchBuffer.SetNatsConn(natsClient.Conn)\n\tsnapshotBatchBuffer.SetJetStream(natsClient.JS)\n\tsnapshotBatchBuffer.SetFailedSyncLogRepo(failedSyncLogRepo)\n\tsnapshotBatchBuffer.SetSnapshotMode(true)",
+    "flow": "server_setup buffer wiring"
+  },
+  {
+    "id": "D-API-R3",
+    "kind": "claim",
+    "claim": "flushSnapshotTables checks whether r.eventHandler implements FlushTableBatchBuffer through an anonymous interface type assertion before calling it.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_utils.go:220-222\n\ttableFlusher, hasTableFlush := r.eventHandler.(interface {\n\t\tFlushTableBatchBuffer(ctx context.Context, targetTable string) (int, error)\n\t})",
+    "flow": "SnapshotRunner optional capability via type assertion"
+  },
+  {
+    "id": "CTRL-TRUE-DG1R3",
+    "kind": "control_true",
+    "claim": "snapshotBatchBuffer is put into snapshot mode with SetSnapshotMode(true).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:172-172\n\tsnapshotBatchBuffer.SetSnapshotMode(true)",
+    "flow": "server_setup"
+  },
+  {
+    "id": "CTRL-FALSE-DG1R3-1",
+    "kind": "control_false",
+    "claim": "popAsyncFlushErrorLocked keeps matched entries in bb.asyncFlushErrs after returning the error.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_async_err.go:51-60\n\tfor _, entry := range bb.asyncFlushErrs {\n\t\tif matchTargetTable(entry.sample, targetTable) {\n\t\t\tif matchedErr == nil {\n\t\t\t\tmatchedErr = entry.err\n\t\t\t}\n\t\t} else {\n\t\t\tkept = append(kept, entry)\n\t\t}\n\t}\n\tbb.asyncFlushErrs = kept",
+    "flow": "popAsyncFlushErrorLocked"
+  },
+  {
+    "id": "CTRL-FALSE-DG1R3-2",
+    "kind": "control_false",
+    "claim": "snapshotBatchBuffer is created with a 30 second timeout and snapshot mode disabled.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:166-172\n\tsnapshotBatchBuffer := handlershadow.NewBatchBuffer(snapshotBatchSize, 5*time.Second, db, schemaAdapter, logger)\n\tsnapshotBatchBuffer.SetConnectionManager(connectionManager)\n\tsnapshotBatchBuffer.SetMaskingService(maskingSvc)\n\tsnapshotBatchBuffer.SetNatsConn(natsClient.Conn)\n\tsnapshotBatchBuffer.SetJetStream(natsClient.JS)\n\tsnapshotBatchBuffer.SetFailedSyncLogRepo(failedSyncLogRepo)\n\tsnapshotBatchBuffer.SetSnapshotMode(true)",
+    "flow": "server_setup"
+  }
+]

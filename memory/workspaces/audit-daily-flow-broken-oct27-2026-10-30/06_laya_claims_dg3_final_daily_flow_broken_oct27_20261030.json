@@ -1,0 +1,51 @@
+[
+  {
+    "id": "A-F1-DATE",
+    "kind": "claim",
+    "claim": "In cdc_event_date.go, MidnightFlushGraceWindow is defined as 15 * time.Minute and ResolveEventDateHCM returns fbDate when tsMs <= 0.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/model/shadow/cdc_event_date.go:10-25\nconst MidnightFlushGraceWindow = 15 * time.Minute\n\n// ResolveEventDateHCM quy đổi mốc thời gian sự kiện gốc (SourceTsMs) sang ngày YYYY-MM-DD\n// theo múi giờ Asia/Ho_Chi_Minh (GMT+7). Chỉ lùi về ngày của tsMs (D-1) khi thời điểm xử lý\n// (fallback) nằm trong cửa sổ MidnightFlushGraceWindow (15 phút đầu ngày D) và sự kiện gốc\n// phát sinh vào cuối ngày D-1 cách thời điểm flush không quá MidnightFlushGraceWindow.\n// Mọi trường hợp catch-up, replay, hoặc backlog cũ hơn đều giữ nguyên ngày thực thi thực tế\n// (fallback) để không làm gãy bảng Thống kê đối soát 3 trạm & DLQ theo ngày.\nfunc ResolveEventDateHCM(tsMs int64, fallback time.Time) string {\n\tif fallback.IsZero() {\n\t\tfallback = time.Now()\n\t}\n\tfbHCM := fallback.In(locHCM)\n\tfbDate := fbHCM.Format(\"2006-01-02\")\n\tif tsMs <= 0 {\n\t\treturn fbDate\n\t}",
+    "flow": "ResolveEventDateHCM enforces a 15-minute midnight flush grace window and falls back to fbDate."
+  },
+  {
+    "id": "A-F1-SNAP",
+    "kind": "claim",
+    "claim": "In batch_buffer_event_date.go, flushTableGroupByEventDate only calls splitRecordsByEventDate(tableRecs, now) when !bb.isSnapshotBuffer is true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_event_date.go:42-50\nfunc (bb *BatchBuffer) flushTableGroupByEventDate(ctx context.Context, gk string, tableRecs []*shadow.UpsertRecord, now time.Time) (int, []RecordExecutionResult, error) {\n\tvar written int\n\tvar allResults []RecordExecutionResult\n\tvar firstErr error\n\tsubGroups := [][]*shadow.UpsertRecord{tableRecs}\n\tif !bb.isSnapshotBuffer {\n\t\tsubGroups = splitRecordsByEventDate(tableRecs, now)\n\t}\n\tfor _, recs := range subGroups {",
+    "flow": "BatchBuffer skips splitting records by SourceTsMs when isSnapshotBuffer is true."
+  },
+  {
+    "id": "A-F2-AVRO",
+    "kind": "claim",
+    "claim": "In kafka_consumer.go, op, afterRaw, beforeRaw, and sourceRaw are all unwrapped with unwrapAvroUnion.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/kafka_consumer.go:583-586\n\top := unwrapAvroUnion(event[\"op\"])\n\tafterRaw := unwrapAvroUnion(event[\"after\"])\n\tbeforeRaw := unwrapAvroUnion(event[\"before\"])\n\tsourceRaw := unwrapAvroUnion(event[\"source\"])",
+    "flow": "KafkaConsumer.processMessage unwraps op, after, before, and source fields using unwrapAvroUnion."
+  },
+  {
+    "id": "A-F3-UI",
+    "kind": "claim",
+    "claim": "In ReconPipelineGrid.tsx, Summary.Cell index 14 renders totals.masterDeleted and index 15 renders totals.masterSkipped.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:1455-1459\n                <Table.Summary.Cell index={12} align=\"right\">{pipeline?.masterName ? <span style={{ color: '#52c41a' }}>{fmtNum(totals.masterInserted)}</span> : <Text type=\"secondary\">—</Text>}</Table.Summary.Cell>\n                <Table.Summary.Cell index={13} align=\"right\">{pipeline?.masterName ? <span style={{ color: '#faad14' }}>{fmtNum(totals.masterUpdated)}</span> : <Text type=\"secondary\">—</Text>}</Table.Summary.Cell>\n                <Table.Summary.Cell index={14} align=\"right\">{pipeline?.masterName ? <span style={{ color: '#ff4d4f' }}>{fmtNum(totals.masterDeleted)}</span> : <Text type=\"secondary\">—</Text>}</Table.Summary.Cell>\n                <Table.Summary.Cell index={15} align=\"right\">{pipeline?.masterName ? <Text type=\"secondary\">{fmtNum(totals.masterSkipped)}</Text> : <Text type=\"secondary\">—</Text>}</Table.Summary.Cell>",
+    "flow": "ReconPipelineGrid renders totals.masterDeleted at cell index 14 and totals.masterSkipped at cell index 15."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In utils.go, extractSourceTsMs calls source = unwrapAvroUnion(source) before asserting source.(map[string]interface{}).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/utils.go:72-77\nfunc extractSourceTsMs(source interface{}) int64 {\n\tsource = unwrapAvroUnion(source)\n\tm, ok := source.(map[string]interface{})\n\tif !ok {\n\t\treturn 0\n\t}",
+    "flow": "extractSourceTsMs unwraps Avro union on source."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In cdc_event_date.go, MidnightFlushGraceWindow is defined as 24 * time.Hour and ResolveEventDateHCM always returns an empty string.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/model/shadow/cdc_event_date.go:10-25\nconst MidnightFlushGraceWindow = 15 * time.Minute\n\n// ResolveEventDateHCM quy đổi mốc thời gian sự kiện gốc (SourceTsMs) sang ngày YYYY-MM-DD\n// theo múi giờ Asia/Ho_Chi_Minh (GMT+7). Chỉ lùi về ngày của tsMs (D-1) khi thời điểm xử lý\n// (fallback) nằm trong cửa sổ MidnightFlushGraceWindow (15 phút đầu ngày D) và sự kiện gốc\n// phát sinh vào cuối ngày D-1 cách thời điểm flush không quá MidnightFlushGraceWindow.\n// Mọi trường hợp catch-up, replay, hoặc backlog cũ hơn đều giữ nguyên ngày thực thi thực tế\n// (fallback) để không làm gãy bảng Thống kê đối soát 3 trạm & DLQ theo ngày.\nfunc ResolveEventDateHCM(tsMs int64, fallback time.Time) string {\n\tif fallback.IsZero() {\n\t\tfallback = time.Now()\n\t}\n\tfbHCM := fallback.In(locHCM)\n\tfbDate := fbHCM.Format(\"2006-01-02\")\n\tif tsMs <= 0 {\n\t\treturn fbDate\n\t}",
+    "flow": "MidnightFlushGraceWindow is 15 * time.Minute."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In kafka_consumer.go, event[\"source\"] is never passed to unwrapAvroUnion and is always set to nil.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/kafka_consumer.go:583-586\n\top := unwrapAvroUnion(event[\"op\"])\n\tafterRaw := unwrapAvroUnion(event[\"after\"])\n\tbeforeRaw := unwrapAvroUnion(event[\"before\"])\n\tsourceRaw := unwrapAvroUnion(event[\"source\"])",
+    "flow": "sourceRaw is unwrapped with unwrapAvroUnion(event[\"source\"])."
+  }
+]

@@ -1,0 +1,79 @@
+[
+  {
+    "id": "S-RC-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "S3 Root Cause & Remediation: kernel_bridge.go MatchTripwires and CheckUnmetTripwiresH4t delegate to live_schema_parser.go",
+    "claim": "Trong internal/agentgate/kernel_bridge.go dòng 250-267, hàm MatchTripwires và CheckUnmetTripwiresH4t đọc tripwires.json và ủy quyền cho matchTripwiresFromBytes và checkUnmetTripwiresH4t.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:250-267\n// MatchTripwires reads /agent/memory/global/lessons/tripwires.json and returns all tripwires matching prompt (G-08).\nfunc (g *Gatekeeper) MatchTripwires(prompt string) []TripwireEntry {\n\tif g == nil || g.AgentCoreDir == \"\" || strings.TrimSpace(prompt) == \"\" {\n\t\treturn nil\n\t}\n\traw, err := os.ReadFile(filepath.Join(g.AgentCoreDir, \"memory\", \"global\", \"lessons\", \"tripwires.json\"))\n\tif err != nil {\n\t\treturn nil\n\t}\n\treturn matchTripwiresFromBytes(raw, prompt)\n}\n\n// CheckUnmetTripwiresH4t replicates Hook H4t (agy_guard.py:unmet_tripwires, GAP-FLOW-05):\n// Ensures that for every matched tripwire, either all required tokens appear in evidencedPaths/docText\n// or an explicit \"TRIPWIRE-OK: <ID>\" marker is present in docText.\nfunc (g *Gatekeeper) CheckUnmetTripwiresH4t(prompt string, evidencedPaths []string, docText string) []string {\n\treturn checkUnmetTripwiresH4t(g.MatchTripwires(prompt), evidencedPaths, docText)\n}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:250-267",
+    "must_contain": [
+      "MatchTripwires",
+      "matchTripwiresFromBytes"
+    ]
+  },
+  {
+    "id": "S-FIX-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "S3 Solution Fix: Direct execution of agy_guard.py dispatch (pre-write, pre-command, pre-subagent) and build_lessons_index.py",
+    "claim": "File hooks/agy/agy_guard.py dòng 1368-1391 đã có sẵn hàm dispatch và main() đọc JSON payload từ stdin và in JSON kết quả ra stdout cho các sự kiện pre-invocation, pre-write, pre-command, pre-subagent, post-invocation, stop.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:1368-1391\ndef dispatch(event_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:\n    handlers = {\n        \"pre-invocation\": handle_pre_invocation,\n        \"pre-write\": handle_pre_write,\n        \"pre-command\": handle_pre_command,\n        \"pre-subagent\": handle_pre_subagent,\n        \"post-invocation\": handle_post_invocation,\n        \"stop\": handle_stop,\n    }\n    if event_name not in handlers:\n        return {}\n    return handlers[event_name](payload)\n\n\ndef main() -> int:\n    if len(sys.argv) < 2:\n        print(\"{}\")\n        return 0\n    raw_in = sys.stdin.read().strip()\n    payload = json.loads(raw_in) if raw_in else {}\n    res = dispatch(sys.argv[1], payload)\n    print(json.dumps(res, ensure_ascii=False))\n    return 0",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:1368-1391",
+    "must_contain": [
+      "def dispatch(event_name: str",
+      "sys.stdin.read().strip()"
+    ]
+  },
+  {
+    "id": "D-BEHAV-01",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "S3 Concrete Code Demo (DG2): Direct Kernel Execution & Schema Alignment in 09_tasks_solution",
+    "claim": "Trong 09_tasks_solution_sync_agent_kernel_direct.md dòng 111-125, Code Demo định nghĩa AgyGuardResponse và RunAgyGuardHook gọi trực tiếp hooks/agy/agy_guard.py.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_sync_agent_kernel_direct.md:111-125\n// AgyGuardResponse mirrors the JSON output of /agent/hooks/agy/agy_guard.py.\ntype AgyGuardResponse struct {\n\tDecision string `json:\"decision\"`\n\tReason   string `json:\"reason\"`\n}\n\n// RunAgyGuardHook invokes python3 <AgentCoreDir>/hooks/agy/agy_guard.py <eventName>\n// passing payload as JSON on stdin and returning the parsed decision.\nfunc (g *Gatekeeper) RunAgyGuardHook(ctx context.Context, eventName string, payload map[string]any) (AgyGuardResponse, error) {",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_sync_agent_kernel_direct.md:111-125",
+    "must_contain": [
+      "AgyGuardResponse",
+      "RunAgyGuardHook"
+    ]
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG1/DG2 Control False 1",
+    "claim": "Giải pháp đề xuất xóa hoàn toàn thư mục /Users/trainguyen/Documents/work/agent và chuyển sang dùng Go-only hardcoded rules.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_sync_agent_kernel_direct.md:111-125\n// AgyGuardResponse mirrors the JSON output of /agent/hooks/agy/agy_guard.py.\ntype AgyGuardResponse struct {\n\tDecision string `json:\"decision\"`\n\tReason   string `json:\"reason\"`\n}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_sync_agent_kernel_direct.md:111-125",
+    "must_contain": [
+      "DELETE_AGENT_DIR_COMPLETELY_FABRICATED_TOKEN_111"
+    ]
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG1/DG2 Control False 2",
+    "claim": "Hàm dispatch trong agy_guard.py yêu cầu kết nối gRPC tới máy chủ từ xa tại cổng 9999.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:1368-1391\ndef dispatch(event_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:\n    handlers = {\n        \"pre-invocation\": handle_pre_invocation,\n        \"pre-write\": handle_pre_write,",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:1368-1391",
+    "must_contain": [
+      "REMOTE_GRPC_PORT_9999_FABRICATED_TOKEN_222"
+    ]
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "DG1/DG2 Control True",
+    "claim": "Hàm dispatch trong hooks/agy/agy_guard.py định tuyến các sự kiện pre-invocation, pre-write, pre-command, pre-subagent, post-invocation và stop.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:1368-1380\ndef dispatch(event_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:\n    handlers = {\n        \"pre-invocation\": handle_pre_invocation,\n        \"pre-write\": handle_pre_write,\n        \"pre-command\": handle_pre_command,\n        \"pre-subagent\": handle_pre_subagent,\n        \"post-invocation\": handle_post_invocation,\n        \"stop\": handle_stop,\n    }\n    if event_name not in handlers:\n        return {}\n    return handlers[event_name](payload)",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:1368-1380",
+    "must_contain": [
+      "pre-write",
+      "pre-command",
+      "handle_stop"
+    ]
+  }
+]

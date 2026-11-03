@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "claim": "In buildMasterConnectionDSN in master_registry_handler_connections.go, q.Set(\"connectTimeoutMS\", \"5000\") is called and fmt.Sprintf formats a mongodb:// URI without setting directConnection.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections.go:46-78\n\tif engineType == \"mongodb\" {\n\t\tif port <= 0 {\n\t\t\tport = 27017\n\t\t}\n\t\tif database == \"\" {\n\t\t\tdatabase = \"admin\"\n\t\t}\n\t\tq := url.Values{}\n\t\tif authSource == \"\" && username != \"\" {\n\t\t\tauthSource = \"admin\"\n\t\t}\n\t\tif authSource != \"\" {\n\t\t\tq.Set(\"authSource\", authSource)\n\t\t}\n\t\tif replicaSet != \"\" {\n\t\t\tq.Set(\"replicaSet\", replicaSet)\n\t\t}\n\t\tif sslmode == \"require\" || sslmode == \"verify-full\" || sslmode == \"true\" {\n\t\t\tq.Set(\"tls\", \"true\")\n\t\t}\n\t\tq.Set(\"connectTimeoutMS\", \"5000\")\n\t\tif username != \"\" {\n\t\t\treturn fmt.Sprintf(\"mongodb://%s:%s@%s:%d/%s?%s\",\n\t\t\t\turl.QueryEscape(username),\n\t\t\t\turl.QueryEscape(password),\n\t\t\t\thost,\n\t\t\t\tport,\n\t\t\t\tdatabase,\n\t\t\t\tq.Encode(),\n\t\t\t)\n\t\t}\n\t\treturn fmt.Sprintf(\"mongodb://%s:%d/%s?%s\", host, port, database, q.Encode())\n\t}",
+    "flow": "buildMasterConnectionDSN constructs mongodb://host:port/database?connectTimeoutMS=5000 without directConnection=true."
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "claim": "In normalizeMasterMongoURI in 09_tasks_solution_cdc_3repos_master_mongo.md, when u.Host does not contain a comma and q.Get(\"directConnection\") is empty, q.Set(\"directConnection\", \"true\") is applied.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-cdc-3repos-master-mongo-2026-10-28/09_tasks_solution_cdc_3repos_master_mongo.md:618-638\nfunc normalizeMasterMongoURI(rawURI string) string {\n\ttrimmed := strings.TrimSpace(rawURI)\n\tif !strings.HasPrefix(trimmed, \"mongodb://\") {\n\t\treturn trimmed\n\t}\n\tu, err := url.Parse(trimmed)\n\tif err != nil || u.Host == \"\" {\n\t\treturn trimmed\n\t}\n\tif !strings.Contains(u.Host, \",\") {\n\t\tq := u.Query()\n\t\tif q.Get(\"directConnection\") == \"\" {\n\t\t\tq.Set(\"directConnection\", \"true\")\n\t\t\tu.RawQuery = q.Encode()\n\t\t}\n\t}\n\treturn u.String()\n}",
+    "flow": "normalizeMasterMongoURI checks !strings.Contains(u.Host, \",\") and q.Get(\"directConnection\") == \"\", then sets directConnection=true."
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "claim": "In TestConnection in master_registry_handler_connections.go, resolvedDSN is fetched via h.masterRepo.GetMasterConnectionDSN when req.ID > 0 or req.ConnectionCode is provided.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections.go:165-176\n\t} else if req.ID > 0 || strings.TrimSpace(req.ConnectionCode) != \"\" {\n\t\tresolvedDSN, err := h.masterRepo.GetMasterConnectionDSN(c.Context(), req.ID, req.ConnectionCode)\n\t\tif err != nil {\n\t\t\treturn c.Status(400).JSON(fiber.Map{\n\t\t\t\t\"success\": false,\n\t\t\t\t\"error\":   fmt.Sprintf(\"Could not retrieve connection credentials: %v\", err),\n\t\t\t})\n\t\t}\n\t\tdsn = resolvedDSN",
+    "flow": "TestConnection retrieves resolvedDSN from GetMasterConnectionDSN when req.ID > 0 or req.ConnectionCode is non-empty."
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "claim": "In resolveMasterMongoURI in connection_manager.go, uri is resolved from ConnectionOverrides, conn.OptionsJSON, conn.SecretRef, or conn.Host/Port and returned with defaultDB.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:212-249\n\t\t\tif uri == \"\" && len(conn.OptionsJSON) > 0 {\n\t\t\t\tvar opts map[string]interface{}\n\t\t\t\tif err := json.Unmarshal(conn.OptionsJSON, &opts); err == nil {\n\t\t\t\t\tfor _, k := range []string{\"uri\", \"dsn\", \"url\", \"connection_string\"} {\n\t\t\t\t\t\tif v, ok := opts[k].(string); ok && strings.TrimSpace(v) != \"\" {\n\t\t\t\t\t\t\turi = strings.TrimSpace(v)\n\t\t\t\t\t\t\tbreak\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t\tif uri == \"\" && hostVal != \"\" {\n\t\t\t\turi = fmt.Sprintf(\"mongodb://%s:%d/%s\", hostVal, port, dbPart)\n\t\t\t}\n\treturn uri, defaultDB\n}",
+    "flow": "resolveMasterMongoURI extracts uri from OptionsJSON or formats mongodb://host:port/db and returns uri, defaultDB."
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "claim": "In formatMongoHostList in 09_tasks_solution_cdc_3repos_master_mongo.md, each comma-separated host part is trimmed and defaultPort is appended only if the part does not already contain a colon.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-cdc-3repos-master-mongo-2026-10-28/09_tasks_solution_cdc_3repos_master_mongo.md:598-616\nfunc formatMongoHostList(rawHost string, defaultPort int) string {\n\tif defaultPort <= 0 {\n\t\tdefaultPort = 27017\n\t}\n\tparts := strings.Split(rawHost, \",\")\n\tout := make([]string, 0, len(parts))\n\tfor _, p := range parts {\n\t\th := strings.TrimSpace(p)\n\t\tif h == \"\" {\n\t\t\tcontinue\n\t\t}\n\t\tif strings.Contains(h, \":\") {\n\t\t\tout = append(out, h)\n\t\t} else {\n\t\t\tout = append(out, fmt.Sprintf(\"%s:%d\", h, defaultPort))\n\t\t}\n\t}\n\treturn strings.Join(out, \",\")\n}",
+    "flow": "formatMongoHostList splits rawHost by comma and appends defaultPort when strings.Contains(h, \":\") is false."
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "claim": "In normalizeMasterMongoURI in 09_tasks_solution_cdc_3repos_master_mongo.md, if trimmed does not have prefix mongodb://, the function returns trimmed unchanged.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-cdc-3repos-master-mongo-2026-10-28/09_tasks_solution_cdc_3repos_master_mongo.md:618-626\nfunc normalizeMasterMongoURI(rawURI string) string {\n\ttrimmed := strings.TrimSpace(rawURI)\n\tif !strings.HasPrefix(trimmed, \"mongodb://\") {\n\t\treturn trimmed\n\t}\n\tu, err := url.Parse(trimmed)\n\tif err != nil || u.Host == \"\" {\n\t\treturn trimmed\n\t}",
+    "flow": "normalizeMasterMongoURI checks !strings.HasPrefix(trimmed, \"mongodb://\") and returns trimmed."
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "claim": "In the demo for TestConnection in 09_tasks_solution_cdc_3repos_master_mongo.md, dsn is passed through normalizeMasterMongoURI(dsn) before calling options.Client().ApplyURI(dsn).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-cdc-3repos-master-mongo-2026-10-28/09_tasks_solution_cdc_3repos_master_mongo.md:693-699\n\tif engineType == \"mongodb\" || strings.HasPrefix(dsn, \"mongodb://\") || strings.HasPrefix(dsn, \"mongodb+srv://\") {\n\t\tdsn = normalizeMasterMongoURI(dsn)\n\t\tclientOpts := options.Client().\n\t\t\tApplyURI(dsn).\n\t\t\tSetConnectTimeout(5 * time.Second).\n\t\t\tSetServerSelectionTimeout(5 * time.Second)",
+    "flow": "TestConnection calls dsn = normalizeMasterMongoURI(dsn) before options.Client().ApplyURI(dsn)."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In normalizeMasterEngineType in master_registry_handler_connections.go, both mongodb and mongo normalize to the string mongodb.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections.go:28-35\nfunc normalizeMasterEngineType(raw string) string {\n\tswitch strings.ToLower(strings.TrimSpace(raw)) {\n\tcase \"mongodb\", \"mongo\":\n\t\treturn \"mongodb\"\n\tdefault:\n\t\treturn \"postgresql\"\n\t}\n}",
+    "flow": "case \"mongodb\", \"mongo\" returns \"mongodb\"."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In normalizeMasterEngineType in master_registry_handler_connections.go, the input mongo returns postgresql.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections.go:28-35\nfunc normalizeMasterEngineType(raw string) string {\n\tswitch strings.ToLower(strings.TrimSpace(raw)) {\n\tcase \"mongodb\", \"mongo\":\n\t\treturn \"mongodb\"\n\tdefault:\n\t\treturn \"postgresql\"\n\t}\n}",
+    "flow": "case \"mongodb\", \"mongo\" returns \"mongodb\", not \"postgresql\"."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In normalizeMasterMongoURI in 09_tasks_solution_cdc_3repos_master_mongo.md, directConnection=true is added only when u.Host contains a comma.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-cdc-3repos-master-mongo-2026-10-28/09_tasks_solution_cdc_3repos_master_mongo.md:630-637\n\tif !strings.Contains(u.Host, \",\") {\n\t\tq := u.Query()\n\t\tif q.Get(\"directConnection\") == \"\" {\n\t\t\tq.Set(\"directConnection\", \"true\")\n\t\t\tu.RawQuery = q.Encode()\n\t\t}\n\t}\n\treturn u.String()",
+    "flow": "directConnection=true is added when !strings.Contains(u.Host, \",\"), not when u.Host contains a comma."
+  }
+]

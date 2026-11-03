@@ -1,0 +1,44 @@
+[
+  {
+    "id": "A-F1-SRP-SPLIT",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "models/trans-his-pg/trans-his-pg.query.ts imports and re-exports approvedRegex and coerceMongooseBoolean from ./trans-his-pg.regex and sort/cursor helpers from ./trans-his-pg.sort.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:31-63\nimport { approvedRegex, coerceMongooseBoolean } from \"./trans-his-pg.regex\";\nimport {\n\tBind,\n\tbindTo,\n\tdecodeCursor,\n\tencodeCursor,\n\tisPlainObject,\n\tnormalizeSelect,\n\tPageCursor,\n\tPageSegment,\n\tpageSegments,\n\trefuse,\n\tresolveSort,\n\tshown,\n\tSortSpec,\n\tstorable,\n\tSTORED_FIELDS,\n\tTransHisPgUnsupportedError\n} from \"./trans-his-pg.sort\";\n\nexport {\n\tapprovedRegex,\n\tcoerceMongooseBoolean,\n\tdecodeCursor,\n\tencodeCursor,\n\tnormalizeSelect,\n\tPageCursor,\n\tPageSegment,\n\tpageSegments,\n\tresolveSort,\n\tSortSpec,\n\tTransHisPgUnsupportedError\n};"
+  },
+  {
+    "id": "A-F2-F3-CONFIG",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "isDbEnabled in utils/trans-his-export-source.ts returns source === \"postgres\" for TRANS_HIS_PG_ALIAS and checks env.TRANS_HIS_MONGO_URI when alias === TRANS_HIS_MONGO_ALIAS and source === \"postgres\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/utils/trans-his-export-source.ts:30-39\nexport const isDbEnabled = (alias: string, env: Record<string, any> = SVC_ENV.get()): boolean => {\n\tconst source = getTransHisExportSource();\n\tif (alias === TRANS_HIS_PG_ALIAS) {\n\t\treturn source === \"postgres\";\n\t}\n\tif (alias === TRANS_HIS_MONGO_ALIAS && source === \"postgres\") {\n\t\treturn Boolean(env.TRANS_HIS_MONGO_URI && String(env.TRANS_HIS_MONGO_URI).trim() !== \"\");\n\t}\n\treturn true;\n};"
+  },
+  {
+    "id": "A-F5-STAMPEDE",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "TransHisPgModel.selectSql caches this.hasIdempotencyKeyPromise while HAS_IDEMPOTENCY_KEY_SQL is in flight and resets this.hasIdempotencyKeyPromise to undefined in catch.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.model.ts:122-138\n\tprivate async selectSql(): Promise<string> {\n\t\tif (this.hasIdempotencyKey === undefined) {\n\t\t\tif (!this.hasIdempotencyKeyPromise) {\n\t\t\t\tthis.hasIdempotencyKeyPromise = this.run(HAS_IDEMPOTENCY_KEY_SQL, [], 3000)\n\t\t\t\t\t.then(res => {\n\t\t\t\t\t\tthis.hasIdempotencyKey = res.rows.length > 0;\n\t\t\t\t\t\treturn this.hasIdempotencyKey;\n\t\t\t\t\t})\n\t\t\t\t\t.catch(err => {\n\t\t\t\t\t\tthis.hasIdempotencyKeyPromise = undefined;\n\t\t\t\t\t\tthrow err;\n\t\t\t\t\t});\n\t\t\t}\n\t\t\tawait this.hasIdempotencyKeyPromise;\n\t\t}\n\t\treturn this.hasIdempotencyKey ? SELECT_SQL.replace(REQUEST_ID_COLUMN, IDEMPOTENCY_KEY_COLUMN) : SELECT_SQL;\n\t}"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "GetListTransHisByTransIdPgHandler.execute returns { data: [] } when listTransId is not a non-empty array.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/domain/handlers/trans-his/GetListTransHisByTransIdPgHandler.ts:13-18\n    public async execute(query: GetListTransHisByTransIdQuery, context: any, options: any): Promise<any> {\n        const { listTransId } = query;\n        if (!Array.isArray(listTransId) || listTransId.length === 0) {\n            return { data: [] };\n        }"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "GetListTransHisByTransIdPgHandler.execute throws an Error when listTransId is an empty array.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/domain/handlers/trans-his/GetListTransHisByTransIdPgHandler.ts:13-18\n    public async execute(query: GetListTransHisByTransIdQuery, context: any, options: any): Promise<any> {\n        const { listTransId } = query;\n        if (!Array.isArray(listTransId) || listTransId.length === 0) {\n            return { data: [] };\n        }"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "isDbEnabled in utils/trans-his-export-source.ts always returns false for every database alias.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/utils/trans-his-export-source.ts:30-39\nexport const isDbEnabled = (alias: string, env: Record<string, any> = SVC_ENV.get()): boolean => {\n\tconst source = getTransHisExportSource();\n\tif (alias === TRANS_HIS_PG_ALIAS) {\n\t\treturn source === \"postgres\";\n\t}\n\tif (alias === TRANS_HIS_MONGO_ALIAS && source === \"postgres\") {\n\t\treturn Boolean(env.TRANS_HIS_MONGO_URI && String(env.TRANS_HIS_MONGO_URI).trim() !== \"\");\n\t}\n\treturn true;\n};"
+  }
+]

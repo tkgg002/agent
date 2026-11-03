@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "critique",
+    "claim": "In MasterMappingFieldsPage.tsx, handleScanArray posts to /api/introspection/scan-array/${binding.shadow_table} using the primary binding.shadow_table and displays a warning about shadow table having no data when newCount === 0 and total === 0.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx:403-415\n      const { data: res } = await cmsApi.post(\n        `/api/introspection/scan-array/${binding.shadow_table}`,\n        { explode_path: path, master_binding_id: masterBindingID },\n      );\n      const newCount = (res.new_rules || []).length;\n      const total = Number(res.total_keys ?? 0);\n      if (newCount === 0) {\n        if (total > 0) {\n          message.info(`Đã quét ${total} field trong \"${path}\" — tất cả đã được map rồi (không có field mới). Muốn map lại thì xoá field cũ trước.`);\n        } else {\n          message.warning(`Không tìm thấy field nào trong \"${path}\" — shadow table chưa có data, hoặc field không phải JSON object. Kiểm tra shadow đã ingest data chưa.`);\n        }\n      }",
+    "flow": "handleScanArray calls cmsApi.post(`/api/introspection/scan-array/${binding.shadow_table}`, { explode_path: path, master_binding_id: masterBindingID }) and warns when newCount === 0 and total === 0."
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "critique",
+    "claim": "In ScanService.ScanArrayFields in scan_service.go, when masterBindingID != nil, it queries cdc_system.master_binding joined only with mb.shadow_binding_id and overwrites targetTable with sb.ShadowTable and schemaName with sb.ShadowSchema.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:198-215\n\tif masterBindingID != nil {\n\t\tvar sb struct {\n\t\t\tShadowSchema string `gorm:\"column:shadow_schema\"`\n\t\t\tShadowTable  string `gorm:\"column:shadow_table\"`\n\t\t}\n\t\tif err := s.db.WithContext(ctx).Raw(`\n            SELECT sb.shadow_schema, sb.shadow_table\n              FROM cdc_system.master_binding mb\n              JOIN cdc_system.shadow_binding sb ON sb.id = mb.shadow_binding_id\n             WHERE mb.id = ?`, *masterBindingID).Scan(&sb).Error; err == nil {\n\t\t\tif strings.TrimSpace(sb.ShadowTable) != \"\" {\n\t\t\t\ttargetTable = sb.ShadowTable\n\t\t\t}\n\t\t\tif strings.TrimSpace(sb.ShadowSchema) != \"\" {\n\t\t\t\tschemaName = sb.ShadowSchema\n\t\t\t}\n\t\t}\n\t}",
+    "flow": "When masterBindingID != nil, ScanArrayFields queries JOIN cdc_system.shadow_binding sb ON sb.id = mb.shadow_binding_id and overwrites targetTable = sb.ShadowTable."
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "critique",
+    "claim": "In ScanService.ScanArrayFields in scan_service.go, parentV2ID is resolved by joining cdc_system.mapping_rule_v2 v2 with cdc_system.master_binding mb on mb.shadow_binding_id = v2.shadow_binding_id.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:448-455\n\t\tif len(masterRows) > 0 && masterBindingID != nil {\n\t\t\tvar parentV2ID int64\n\t\t\ttx.Raw(`\n                SELECT v2.id FROM cdc_system.mapping_rule_v2 v2\n                   JOIN cdc_system.master_binding mb ON mb.shadow_binding_id = v2.shadow_binding_id\n                 WHERE mb.id = ? AND v2.target_column = ? LIMIT 1`,\n\t\t\t\t*masterBindingID, basePath).Scan(&parentV2ID)",
+    "flow": "ScanArrayFields queries SELECT v2.id FROM cdc_system.mapping_rule_v2 v2 JOIN cdc_system.master_binding mb ON mb.shadow_binding_id = v2.shadow_binding_id WHERE mb.id = ? AND v2.target_column = ? LIMIT 1."
+  },
+  {
+    "id": "CTRL-TRUE-DG0",
+    "kind": "control_true",
+    "claim": "In validScanIdent in scan_service.go, the function returns false when s is empty or len(s) > 64.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:523-526\nfunc validScanIdent(s string) bool {\n\tif s == \"\" || len(s) > 64 {\n\t\treturn false\n\t}",
+    "flow": "validScanIdent checks if s == \"\" || len(s) > 64 and returns false."
+  },
+  {
+    "id": "CTRL-FALSE-DG0-1",
+    "kind": "control_false",
+    "claim": "In validScanIdent in scan_service.go, the function always returns true when s is empty or len(s) > 64.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:523-526\nfunc validScanIdent(s string) bool {\n\tif s == \"\" || len(s) > 64 {\n\t\treturn false\n\t}",
+    "flow": "validScanIdent returns false when s == \"\" or len(s) > 64."
+  },
+  {
+    "id": "CTRL-FALSE-DG0-2",
+    "kind": "control_false",
+    "claim": "In IntrospectionHandler.ScanArray in introspection_handler.go, when body.ExplodePath is empty, the handler deletes the master binding and panics.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:327-329\n\tif body.ExplodePath == \"\" {\n\t\treturn c.Status(fiber.StatusBadRequest).JSON(fiber.Map{\"error\": \"explode_path_required\"})\n\t}",
+    "flow": "When body.ExplodePath == \"\", ScanArray returns HTTP 400 with error \"explode_path_required\"."
+  }
+]

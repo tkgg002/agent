@@ -1,0 +1,50 @@
+[
+  {
+    "id": "A-DIFF-01",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "DG3 Audit 1: Dual-Gate Architecture in internal/agentgate/vega_sidecar.go",
+    "claim": "In internal/agentgate/vega_sidecar.go, DefaultLayaPredictURL is anchored at http://127.0.0.1:8200/v1/predict while DefaultVegaBaseURL is set to http://127.0.0.1:8222.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/vega_sidecar.go:19-26\nconst (\n\t// DefaultLayaPredictURL is the anchored Laya 421M endpoint (:8200) for /agent & fast micro-claims.\n\tDefaultLayaPredictURL = \"http://127.0.0.1:8200/v1/predict\"\n\t// DefaultLayaHealthURL is the health check endpoint for Laya (:8200).\n\tDefaultLayaHealthURL = \"http://127.0.0.1:8200/health\"\n\t// DefaultVegaBaseURL is the self-contained VegaML (NandhaKishorM/vegaml vega-U) sidecar port (:8222) inside ai-orchestrator.\n\tDefaultVegaBaseURL = \"http://127.0.0.1:8222\"\n)"
+  },
+  {
+    "id": "A-DIFF-02",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "DG3 Audit 2: Self-contained VegaML Sidecar translator & TTT feedback in sidecar/vegaml/vega_systemone_sidecar.py",
+    "claim": "In sidecar/vegaml/vega_systemone_sidecar.py, to_vega_questions translates q_type == \"noul\" to spec_copy[\"type\"] = \"boolean\" and to_systemone_answers preserves readout, abstain, unbound, and prediction_set.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/sidecar/vegaml/vega_systemone_sidecar.py:178-215\ndef to_vega_questions(sys1_questions: Dict[str, Dict[str, Any]]) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, str]]:\n    vega_q: Dict[str, Dict[str, Any]] = {}\n    orig_types: Dict[str, str] = {}\n    for q_name, q_spec in sys1_questions.items():\n        spec_copy = copy.deepcopy(q_spec)\n        q_type = spec_copy.get(\"type\", \"choice\")\n        orig_types[q_name] = q_type\n        if q_type == \"noul\":\n            spec_copy[\"type\"] = \"boolean\"\n        vega_meta = {\n            \"readout\": ans.get(\"readout\", \"engine\"),\n            \"abstain\": bool(ans.get(\"abstain\", False)),\n            \"unbound\": bool(ans.get(\"unbound\", False)),\n            \"prediction_set\": ans.get(\"conformal_set\") or ans.get(\"prediction_set\") or [],\n        }"
+  },
+  {
+    "id": "A-DIFF-03",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "DG3 Audit 3: Human Gate feedback routes & async emitter in internal/webui/vega_human_gate.go and server.go",
+    "claim": "In internal/webui/vega_human_gate.go, registerVegaRoutes registers /api/vega/status, /api/vega/feedback, and /api/vega/fit on mux.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/vega_human_gate.go:16-20\nfunc (s *Server) registerVegaRoutes(mux *http.ServeMux) {\n\tmux.HandleFunc(\"/api/vega/status\", s.handleVegaStatus)\n\tmux.HandleFunc(\"/api/vega/feedback\", s.handleVegaFeedback)\n\tmux.HandleFunc(\"/api/vega/fit\", s.handleVegaFit)\n}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG3 Control False 1",
+    "claim": "In internal/agentgate/vega_sidecar.go, DefaultVegaBaseURL is set to http://127.0.0.1:9999 and deletes Laya on port 8200.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/vega_sidecar.go:19-26\nconst (\n\t// DefaultLayaPredictURL is the anchored Laya 421M endpoint (:8200) for /agent & fast micro-claims.\n\tDefaultLayaPredictURL = \"http://127.0.0.1:8200/v1/predict\"\n\t// DefaultLayaHealthURL is the health check endpoint for Laya (:8200).\n\tDefaultLayaHealthURL = \"http://127.0.0.1:8200/health\"\n\t// DefaultVegaBaseURL is the self-contained VegaML (NandhaKishorM/vegaml vega-U) sidecar port (:8222) inside ai-orchestrator.\n\tDefaultVegaBaseURL = \"http://127.0.0.1:8222\"\n)"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG3 Control False 2",
+    "claim": "registerVegaRoutes drops all HTTP routes and panics immediately when called.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/vega_human_gate.go:16-20\nfunc (s *Server) registerVegaRoutes(mux *http.ServeMux) {\n\tmux.HandleFunc(\"/api/vega/status\", s.handleVegaStatus)\n\tmux.HandleFunc(\"/api/vega/feedback\", s.handleVegaFeedback)\n\tmux.HandleFunc(\"/api/vega/fit\", s.handleVegaFit)\n}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "DG3 Control True",
+    "claim": "In internal/webui/vega_human_gate.go, registerVegaRoutes registers /api/vega/status, /api/vega/feedback, and /api/vega/fit.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/vega_human_gate.go:16-20\nfunc (s *Server) registerVegaRoutes(mux *http.ServeMux) {\n\tmux.HandleFunc(\"/api/vega/status\", s.handleVegaStatus)\n\tmux.HandleFunc(\"/api/vega/feedback\", s.handleVegaFeedback)\n\tmux.HandleFunc(\"/api/vega/fit\", s.handleVegaFit)\n}"
+  }
+]

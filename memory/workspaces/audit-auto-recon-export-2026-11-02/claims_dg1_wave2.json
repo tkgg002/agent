@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "BaseExportProcessor.execute catches sub-query errors at lines 236-238 and logs the error without rethrowing, while ExportConfig at lines 24-36 has no failOnSubQueryError option.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/processors/BaseExportProcessor.ts:232-239\n              // 4. Merge data\n              const subDataList = Array.isArray(subResult) ? subResult : (subResult.data || []);\n              currentData = config.mergeData(currentData, subDataList);\n\n            } catch (err) {\n              this.context.broker.logger.error(`Error executing sub-query for job ${jobId}`, err);\n            }\n          }"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "MerchantReconcileResultModel.getAll executes buildListQuery(conditions, cursor).limit(limit + 1) at line 93 without coercing limit via Number(limit).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/auto-reconcile/merchant-reconcile-result.model.ts:86-97\n    public async getAll(\n        conditions: MerchantFilterCondition[],\n        cursor?: MerchantTransactionCursor | null,\n        limit = DEFAULT_PAGE_SIZE\n    ): Promise<{ data: MerchantTransactionRow[]; nextCursor: MerchantTransactionCursor | null }> {\n        try {\n            // limit+1 để biết còn trang sau mà không phải đếm lại.\n            const rows = await this.buildListQuery(conditions, cursor).limit(limit + 1).execute({ cache: false });\n\n            const hasMore = rows.length > limit;\n            const data = (hasMore ? rows.slice(0, limit) : rows) as MerchantTransactionRow[];"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "Dockerfile runs 'NODE_ENV=production npm install --force' and 'npm run build' during container image build.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/Dockerfile:11-14\nCOPY . .\nRUN NODE_ENV=production npm install --force\nRUN npm run build"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "centralrecon-export.pure.ts imports GetAllCentralReconExportQuery from '../../../domain/queries' and CentralReconExportParams from '../../../data-transfers/params', and defines validate and columns directly inside the pure file.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/reconcile/centralrecon-export.pure.ts:1-6\nimport moment from \"moment\";\nimport { ExportConfig } from \"../../processors/BaseExportProcessor\";\nimport { GetAllCentralReconExportQuery } from \"../../../domain/queries\";\nimport { validateParams } from \"../../../utils/validator\";\nimport { CentralReconExportParams } from \"../../../data-transfers/params\";"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "MerchantReconcileResultModel.buildListQuery compares tuple(toUnixTimestamp64Milli(updated_at), goopay_code) against tuple(cursor.updatedAtMs, cursor.goopayCode) using the less function.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/auto-reconcile/merchant-reconcile-result.model.ts:74-77\n            query = query.where(expr => expr.fn(\"less\",\n                expr.fn(\"tuple\", expr.fn(\"toUnixTimestamp64Milli\", expr.col(\"updated_at\")), expr.col(\"goopay_code\")),\n                expr.fn(\"tuple\", expr.literal(cursor.updatedAtMs), expr.literal(cursor.goopayCode))));\n        }"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "MerchantReconcileResultModel.getColumnName throws an Error when fieldName is not present in the mapping object.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/auto-reconcile/merchant-reconcile-result.model.ts:229-236\n        const column = mapping[fieldName];\n        if (!column) {\n            // Lọt tới đây nghĩa là export config thêm field mới mà quên mapping;\n            // để nguyên tên camelCase thì ClickHouse chỉ báo \"unknown identifier\".\n            throw new Error(`MerchantReconcileResultModel: no column mapped for field '${fieldName}'`);\n        }\n        return column;\n    }"
+  },
+  {
+    "id": "D-API",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "DbConnectorFactory.connect checks missing uri/host/database inside the switch cases for MONGODB, POSTGRES, and MARIADB, while CLICKHOUSE delegates directly to this.connectClickHouse(config).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/dbHandler/DbConnectorFactory.ts:95-113\n        switch (config.type) {\n          case DbType.MONGODB:\n            if (!config.uri) { throw new Error(\"MongoDB requires 'uri'\"); }\n            connection = await this.connectMongo(config);\n            break;\n          case DbType.POSTGRES:\n            if (!config.host || !config.database) { throw new Error(\"Postgres requires host & database\"); }\n            connection = await this.connectPostgres(config);\n            break;\n          case DbType.MARIADB:\n            if (!config.host || !config.database) { throw new Error(\"MariaDB requires host & database\"); }\n            connection = await this.connectMariaDB(config);\n            break;\n          case DbType.CLICKHOUSE:\n            connection = await this.connectClickHouse(config);\n            break;\n          default:\n            throw new Error(`Unsupported DB type: ${config.type}`);\n        }"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "ClickHouse sets DEFAULT_READ_TIMEOUT_MS to 300000 in dbHandler/clickhouse.ts.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/dbHandler/clickhouse.ts:5-9\n// Kết nối này chỉ phục vụ export. clickhouse_settings bật wait_end_of_query=1\n// (server gom hết kết quả rồi mới trả byte đầu) nên hạn mức phải rộng hơn\n// nhiều so với 20s của dashboard API.\nconst DEFAULT_READ_TIMEOUT_MS = 300000;"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "ClickHouse sets DEFAULT_READ_TIMEOUT_MS to 5000 in dbHandler/clickhouse.ts.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/dbHandler/clickhouse.ts:5-9\n// Kết nối này chỉ phục vụ export. clickhouse_settings bật wait_end_of_query=1\n// (server gom hết kết quả rồi mới trả byte đầu) nên hạn mức phải rộng hơn\n// nhiều so với 20s của dashboard API.\nconst DEFAULT_READ_TIMEOUT_MS = 300000;"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "MerchantReconcileResultModel.getColumnName returns 'default_col' without throwing when fieldName is not found.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/auto-reconcile/merchant-reconcile-result.model.ts:229-236\n        const column = mapping[fieldName];\n        if (!column) {\n            // Lọt tới đây nghĩa là export config thêm field mới mà quên mapping;\n            // để nguyên tên camelCase thì ClickHouse chỉ báo \"unknown identifier\".\n            throw new Error(`MerchantReconcileResultModel: no column mapped for field '${fieldName}'`);\n        }\n        return column;\n    }"
+  }
+]

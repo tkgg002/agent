@@ -1,0 +1,151 @@
+{
+  "mode": "claim",
+  "stage": "dg1",
+  "workspace": "audit-duplicate-source-ts-upsert-2026-10-29",
+  "ts": "20261029T174614",
+  "trusted_rounds": [
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-duplicate-source-ts-upsert-2026-10-29/06_laya_raw_dg1_20261029T174614.json",
+  "claims": [
+    {
+      "id": "S-RC-1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In BuildUpsertSQLInSchema and BuildBatchUpsertSQLsInSchema, mappedData columns only check col != pkField and schema.Columns existence before being appended to allCols, while metaCols from getMetadataInsertCols also appends _source_ts to allCols.",
+      "decision": "FLAG",
+      "resolved": "Verified in schema_adapter.go where BuildUpsertSQLInSchema (356-374) and BuildBatchUpsertSQLsInSchema (558-581) append mappedData columns and getMetadataInsertCols without deduplicating _source_ts in allCols. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:356-374",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5738
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.2925
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4281
+        }
+      }
+    },
+    {
+      "id": "S-FIX-1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "sourceRepoGorm.UpdateRegistry updates mapping_rule_v2 status to approved and is_active to true for all rows matching source_object_id and shadow_binding_id where status != approved, without filtering out system columns.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2801
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4135
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8035
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT-1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "BatchBuffer.FlushTableWithContext filters bb.records using matchTargetTable(r, targetTable) so that only records matching targetTable are flushed while remaining records stay in bb.records.",
+      "decision": "FLAG",
+      "resolved": "Verified in batch_buffer.go where FlushTableWithContext splits bb.records into matched and remaining via matchTargetTable(r, targetTable). REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:287-298",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3478
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3371
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.0318
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN-1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "DynamicMapper.MapData iterates over rules from dm.registry.GetMappingRules(bindingID), skips inactive rules, and populates columns[rule.TargetColumn] for each active non-enriched rule.",
+      "decision": "FLAG",
+      "resolved": "Verified in dynamic_mapper.go where MapData iterates over active rules and assigns columns[rule.TargetColumn]. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/dynamic_mapper.go:85-119",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.0292
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1276
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.1056
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV-1",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the proposed code demo, ShouldSkipDataColumn returns true when col matches pkField or is a reserved shadow system column in reservedShadowSystemColumns such as _source_ts, preventing duplicate columns in allCols.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2943
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.711
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7154
+        }
+      }
+    },
+    {
+      "id": "D-EDGE-1",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In the proposed code demo, SnapshotRunner calls r.eventHandler.FlushTableBatchBuffer(ctx, p.TargetTable) instead of FlushBatchBuffer(ctx) to flush only the target table of the current snapshot job.",
+      "decision": "FLAG",
+      "resolved": "Verified in 09_tasks_solution_2026_10_29.md where SnapshotRunner calls r.eventHandler.FlushTableBatchBuffer(ctx, p.TargetTable) to isolate flush per target table. REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-duplicate-source-ts-upsert-2026-10-29/09_tasks_solution_2026_10_29.md:145-150",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2949
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.5636
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.2273
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

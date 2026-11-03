@@ -1,0 +1,51 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "target",
+    "basis": "code",
+    "claim": "isDualVersionV1V2Directive and synthesizeDirectAnswerSummary in internal/webui/task_llm_bridge.go hardcode PostgresDB V1/V2 responses whenever text contains both v1 and v2, overriding non-Postgres tasks like EX-002 ClickHouse.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_bridge.go:189-224\nfunc isDualVersionV1V2Directive(text string) bool {\n\tlower := strings.ToLower(text)\n\treturn (strings.Contains(lower, \"v2\") && strings.Contains(lower, \"v1\")) ||\n\t\tstrings.Contains(lower, \"bỏ cái export type cũ đi\") ||\n\t\tstrings.Contains(lower, \"v1 vẫn là cái cũ\") ||\n\t\tstrings.Contains(lower, \"tạo 1 cái type v2\")\n}"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "target",
+    "basis": "code",
+    "claim": "renderContextualDiscussReply in internal/webui/task_chat_knowledge.go calls invokeArchitectLLM but ignores llmRes.DirectAnswer when calling BuildUnifiedCoArchitectReply.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_chat_knowledge.go:72-93\n\tif llmRes, err := s.invokeArchitectLLM(context.Background(), qt, subTasks, cleanMsg, selectedModel, \"discuss\"); err == nil && llmRes != nil {\n\t\trootCauses = llmRes.RootCauses\n\t\tsolutions = llmRes.Solutions\n\t\tcodeSnippet = strings.TrimSpace(llmRes.CodeDemo)\n\t}"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "target",
+    "basis": "code",
+    "claim": "generateDeepTaskArtifacts in internal/webui/task_inspector.go calls buildConcreteCodeDemoForTask which uses isPostgresOrDualSourceMigrationTask instead of invokeArchitectLLM.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:3288-3294\nfunc buildConcreteCodeDemoForTask(qt queue.QueuedTask, targetRepo string, hits []RepoSymbolHit) string {\n\tif isSelfUpgradeOrchestratorTask(qt, []string{targetRepo}) {\n\t\treturn buildSelfUpgradeOrchestratorCodeDemo()\n\t}\n\tif isPostgresOrDualSourceMigrationTask(qt.Title + \" \" + qt.Description) {\n\t\treturn buildCleanKeyDiffPreview(qt, \"models/trans-his/trans-his.model.ts\", \"typescript\", \"\")\n\t}"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "target",
+    "basis": "code",
+    "claim": "Section 8 of 09_tasks_solution_fix_orchestrator_real_llm_bridge_and_scanner.md defines ArchitectLLMSubTaskSpec and expands ArchitectLLMAnalysis to wire invokeArchitectLLM into Plan generation, Chat, and Feedback revision.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-master-mongo-orchestrator-2026-10-22/09_tasks_solution_fix_orchestrator_real_llm_bridge_and_scanner.md:410-434\ntype ArchitectLLMSubTaskSpec struct {\n\tSubTaskID       string `json:\"sub_task_id\"`\n\tWaveIndex       int    `json:\"wave_index\"`\n\tTitle           string `json:\"title\"`\n\tDescription     string `json:\"description\"`\n\tTargetFile      string `json:\"target_file\"`\n\tContextFileLine string `json:\"context_file_line\"`\n\tTestDoD         string `json:\"test_dod\"`\n}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "MaskSecrets is defined in internal/scout/scout.go.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/scout/scout.go:45-48\nfunc MaskSecrets(text string) string {"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "MaskSecrets in internal/scout/scout.go returns an integer instead of a string.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/scout/scout.go:45-48\nfunc MaskSecrets(text string) string {"
+  },
+  {
+    "id": "K3",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "renderContextualDiscussReply in internal/webui/task_chat_knowledge.go takes zero arguments.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_chat_knowledge.go:16-23\nfunc (s *Server) renderContextualDiscussReply("
+  }
+]

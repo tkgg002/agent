@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "isDbEnabled in dbHandler/trans-his-pg.ts returns alias !== TRANS_HIS_PG_ALIAS || getTransHisExportSource() === \"postgres\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/dbHandler/trans-his-pg.ts:11-14\n/** Every database of DB_LIST is connected, except the trans-his Postgres when the exports read Mongo. */\nexport const isDbEnabled = (alias: string): boolean =>\n\talias !== TRANS_HIS_PG_ALIAS || getTransHisExportSource() === \"postgres\";"
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "start.ts calls readTransHisPgConfig() inside the else if (config.type === \"postgres\") branch and connects via this.postgresDbHandler.createConnection.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/start.ts:277-290\n                    } else if (config.type === \"postgres\") {\n                        const pg = readTransHisPgConfig();\n                        connection = await new Promise((resolve, reject) => {\n                            this.postgresDbHandler.createConnection({\n                                alias,\n                                host: pg.host!,\n                                port: pg.port!,\n                                database: pg.database!,\n                                username: pg.username!,\n                                password: pg.password!,\n                                poolSize: pg.poolSize!\n                            }, (err, pool) => err ? reject(err) : resolve(pool));\n                        });\n                    }"
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "pageSegments in models/trans-his-pg/trans-his-pg.query.ts builds orderBy with sort.expr and core.id and splits NULL and NOT NULL segments.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:571-586\nexport function pageSegments(sort: SortSpec, cursor: PageCursor | null, firstParameter: number): PageSegment[] {\n\tconst ascending = sort.direction === \"ASC\";\n\tconst comparison = ascending ? \">\" : \"<\";\n\tconst orderBy = `${sort.expr} ${sort.direction} ${ascending ? \"NULLS FIRST\" : \"NULLS LAST\"}, core.id ${sort.direction}`;\n\tconst segment = (isNull: boolean, after: PageCursor | null): PageSegment => {\n\t\tconst values: unknown[] = [];\n\t\tconst bind: Bind = value => {\n\t\t\tvalues.push(value);\n\t\t\treturn `$${firstParameter + values.length - 1}`;\n\t\t};\n\t\tif (isNull) {\n\t\t\treturn { where: `(${sort.expr}) IS NULL${after ? ` AND core.id ${comparison} ${bind(after.id)}::text` : \"\"}`, orderBy, values };\n\t\t}\n\t\tconst keyset = after ? ` AND ((${sort.expr}), core.id) ${comparison} (${bind(after.value)}::${sort.type}, ${bind(after.id)}::text)` : \"\";\n\t\treturn { where: `(${sort.expr}) IS NOT NULL${keyset}`, orderBy, values };\n\t};"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "TransHisPgModel.selectSql checks if this.hasIdempotencyKey is undefined and runs HAS_IDEMPOTENCY_KEY_SQL with a 3000ms timeout.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.model.ts:121-126\n\tprivate async selectSql(): Promise<string> {\n\t\tif (this.hasIdempotencyKey === undefined) {\n\t\t\tthis.hasIdempotencyKey = (await this.run(HAS_IDEMPOTENCY_KEY_SQL, [], 3000)).rows.length > 0;\n\t\t}\n\t\treturn this.hasIdempotencyKey ? SELECT_SQL.replace(REQUEST_ID_COLUMN, IDEMPOTENCY_KEY_COLUMN) : SELECT_SQL;\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "isDbEnabled in dbHandler/trans-his-pg.ts always returns false for every database alias when TRANS_HIS_EXPORT_SOURCE is set to postgres.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/dbHandler/trans-his-pg.ts:11-14\n/** Every database of DB_LIST is connected, except the trans-his Postgres when the exports read Mongo. */\nexport const isDbEnabled = (alias: string): boolean =>\n\talias !== TRANS_HIS_PG_ALIAS || getTransHisExportSource() === \"postgres\";"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "TransHisPgModel.selectSql hardcodes this.hasIdempotencyKey to false and never queries information_schema.columns.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.model.ts:121-126\n\tprivate async selectSql(): Promise<string> {\n\t\tif (this.hasIdempotencyKey === undefined) {\n\t\t\tthis.hasIdempotencyKey = (await this.run(HAS_IDEMPOTENCY_KEY_SQL, [], 3000)).rows.length > 0;\n\t\t}\n\t\treturn this.hasIdempotencyKey ? SELECT_SQL.replace(REQUEST_ID_COLUMN, IDEMPOTENCY_KEY_COLUMN) : SELECT_SQL;\n\t}"
+  }
+]

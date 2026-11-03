@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ-1",
+    "kind": "claim",
+    "claim": "BuildBatchUpsertSQLsInSchema appends dataCols from colsMap into allCols and then appends metaCols from getMetadataInsertCols(schema, pkField) into allCols without deduplicating dataCols against metaCols.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:570-582\n\tvar dataCols []string\n\tfor col := range colsMap {\n\t\tdataCols = append(dataCols, col)\n\t}\n\tallCols := []string{pkIdent}\n\tfor _, col := range dataCols {\n\t\tallCols = append(allCols, pgx.Identifier{col}.Sanitize())\n\t}\n\tmetaCols := getMetadataInsertCols(schema, pkField)\n\tallCols = append(allCols, metaCols...)",
+    "flow": "BatchBuffer.batchUpsert -> SchemaAdapter.BuildBatchUpsertSQLsInSchema -> builds allCols from dataCols and getMetadataInsertCols"
+  },
+  {
+    "id": "C-REALITY-1",
+    "kind": "claim",
+    "claim": "processDiscoveryRows only skips _raw_data, _synced_at, and _source when iterating over targetMap, so other underscore metadata columns such as _source_ts, _gpay_id, _deleted, and _updated_at are retained in perField.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_utils.go:27-38\n\t\tfor k, v := range targetMap {\n\t\t\tif k == \"_raw_data\" || k == \"_synced_at\" || k == \"_source\" {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tt := servicesource.InferTypeFromRawData(v)\n\t\t\tset, ok := perField[k]\n\t\t\tif !ok {\n\t\t\t\tset = map[string]struct{}{}\n\t\t\t\tperField[k] = set\n\t\t\t}\n\t\t\tset[t] = struct{}{}\n\t\t}",
+    "flow": "DiscoverHandler.scanFieldsSQLSource -> processDiscoveryRows -> upsertDiscoveredRule"
+  },
+  {
+    "id": "C-CONTRA-1",
+    "kind": "claim",
+    "claim": "SnapshotRunner calls r.eventHandler.FlushBatchBuffer(ctx) after each batch and trips the circuit breaker with flush failed if flushErr is non-nil.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:853-860\n\t\tflushDLQ()\n\t\t_, flushErr := r.eventHandler.FlushBatchBuffer(ctx)\n\t\tif flushErr != nil {\n\t\t\treturn tripBreaker(fmt.Sprintf(\"flush failed: %v\", flushErr))\n\t\t}\n\t\trowsTotal += int64(batchSize)",
+    "flow": "SnapshotRunner.runSnapshot -> EventHandler.FlushBatchBuffer -> BatchBuffer.FlushWithContext"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "BatchBuffer.timerLoop calls bb.Flush() when receiving from ticker.C or bb.flushCh and discards the returned values using blank identifiers.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:248-263\nfunc (bb *BatchBuffer) timerLoop() {\n\tticker := time.NewTicker(bb.timeout)\n\tdefer ticker.Stop()\n\tfor {\n\t\tselect {\n\t\tcase <-bb.ctx.Done():\n\t\t\t_, _ = bb.Flush() // best-effort drain on shutdown; err already logged inside Flush\n\t\t\treturn\n\t\tcase <-ticker.C:\n\t\t\t_, _ = bb.Flush()\n\t\tcase <-bb.flushCh:\n\t\t\t_, _ = bb.Flush()\n\t\t}\n\t}\n}",
+    "flow": "BatchBuffer.timerLoop -> BatchBuffer.Flush"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "getMetadataInsertCols never appends _source_ts to the cols slice even when _source_ts exists in schema.Columns.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:674-698\nfunc getMetadataInsertCols(schema *TableSchema, pkField string) []string {\n\tvar cols []string\n\tif _, ok := schema.Columns[\"_source_ts\"]; ok {\n\t\tcols = append(cols, `\"_source_ts\"`)\n\t}\n\treturn cols\n}",
+    "flow": "SchemaAdapter.getMetadataInsertCols"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "sourceRepoGorm.UpdateRegistry sets status to rejected and is_active to false when updating mapping_rule_v2.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/source/source_repo_gorm.go:383-393\n\t\t\t\tres := tx.Table(\"cdc_system.mapping_rule_v2\").\n\t\t\t\t\tWhere(\"source_object_id = ? AND shadow_binding_id = ? AND status != ?\",\n\t\t\t\t\t\tsourceObjectID, shadowBindingID, \"approved\").\n\t\t\t\t\tUpdates(map[string]interface{}{\n\t\t\t\t\t\t\"status\":    \"approved\",\n\t\t\t\t\t\t\"is_active\": true,\n\t\t\t\t\t})",
+    "flow": "sourceRepoGorm.UpdateRegistry -> Updates mapping_rule_v2"
+  }
+]

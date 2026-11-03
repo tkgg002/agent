@@ -1,0 +1,917 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "target",
+    "basis": "code",
+    "claim": "In index_handler.go lines 34-62, resolveDB embeds cdc_system.master_binding GORM lookup and calls GetMasterDB directly inside the NATS transport handler layer.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/governance/index_handler.go:34-62\nfunc (h *IndexHandler) resolveDB(ctx context.Context, plane, schema, table, connKey string) (*gorm.DB, error) {\n\tif strings.ToLower(plane) == \"master\" {\n\t\tkey := strings.TrimSpace(connKey)\n\t\tif key == \"\" || key == \"default\" {\n\t\t\t// Fallback: Tra cứu master_connection_id từ cdc_system.master_binding nếu client chưa truyền\n\t\t\tvar mb struct {\n\t\t\t\tConnectionCode string `gorm:\"column:connection_code\"`\n\t\t\t}\n\t\t\tsystemDB, _ := h.connMgr.GetSystemDB(ctx)\n\t\t\tif systemDB != nil {\n\t\t\t\t_ = systemDB.Table(\"cdc_system.master_binding mb\").\n\t\t\t\t\tSelect(\"COALESCE(cr.connection_code, 'default') AS connection_code\").\n\t\t\t\t\tJoins(\"LEFT JOIN cdc_system.connection_registry cr ON cr.id = mb.master_connection_id\").\n\t\t\t\t\tWhere(\"(mb.master_table = ? OR mb.master_schema || '.' || mb.master_table = ?) AND mb.is_active = true\", table, schema+\".\"+table).\n\t\t\t\t\tOrder(\"mb.id DESC\").\n\t\t\t\t\tLimit(1).Scan(&mb).Error\n\t\t\t\tif mb.ConnectionCode != \"\" {\n\t\t\t\t\tkey = mb.ConnectionCode\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif key == \"\" {\n\t\t\tkey = \"default\"\n\t\t}\n\t\treturn h.connMgr.GetMasterDB(ctx, key)\n\t}\n\t// Với shadow plane\n\treturn h.connMgr.GetShadowDB(ctx, connKey)\n}\n",
+    "flow": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5313,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8374,
+                "INCORRECT": 0.1368,
+                "UNSUPPORTED": 0.0257
+              },
+              "confidence": 0.5313,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 731,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In index_handler.go lines 34-62, resolveDB embeds cdc_system.master_binding GORM lookup and calls GetMasterDB directly inside the NATS transport handler layer.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/governance/index_handler.go:34-62\nfunc (h *IndexHandler) resolveDB(ctx context.Context, plane, schema, table, connKey string) (*gorm.DB, error) {\n\tif strings.ToLower(plane) == \"master\" {\n\t\tkey := strings.TrimSpace(connKey)\n\t\tif key == \"\" || key == \"default\" {\n\t\t\t// Fallback: Tra cứu master_connection_id từ cdc_system.master_binding nếu client chưa truyền\n\t\t\tvar mb struct {\n\t\t\t\tConnectionCode string `gorm:\"column:connection_code\"`\n\t\t\t}\n\t\t\tsystemDB, _ := h.connMgr.GetSystemDB(ctx)\n\t\t\tif systemDB != nil {\n\t\t\t\t_ = systemDB.Table(\"cdc_system.master_binding mb\").\n\t\t\t\t\tSelect(\"COALESCE(cr.connection_code, 'default') AS connection_code\").\n\t\t\t\t\tJoins(\"LEFT JOIN cdc_system.connection_registry cr ON cr.id = mb.master_connection_id\").\n\t\t\t\t\tWhere(\"(mb.master_table = ? OR mb.master_schema || '.' || mb.master_table = ?) AND mb.is_active = true\", table, schema+\".\"+table).\n\t\t\t\t\tOrder(\"mb.id DESC\").\n\t\t\t\t\tLimit(1).Scan(&mb).Error\n\t\t\t\tif mb.ConnectionCode != \"\" {\n\t\t\t\t\tkey = mb.ConnectionCode\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif key == \"\" {\n\t\t\tkey = \"default\"\n\t\t}\n\t\treturn h.connMgr.GetMasterDB(ctx, key)\n\t}\n\t// Với shadow plane\n\treturn h.connMgr.GetShadowDB(ctx, connKey)\n}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.142,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.4165,
+                "INCORRECT": 0.4859,
+                "UNSUPPORTED": 0.0976
+              },
+              "confidence": 0.142,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 737,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/governance/index_handler.go:34-62\nfunc (h *IndexHandler) resolveDB(ctx context.Context, plane, schema, table, connKey string) (*gorm.DB, error) {\n\tif strings.ToLower(plane) == \"master\" {\n\t\tkey := strings.TrimSpace(connKey)\n\t\tif key == \"\" || key == \"default\" {\n\t\t\t// Fallback: Tra cứu master_connection_id từ cdc_system.master_binding nếu client chưa truyền\n\t\t\tvar mb struct {\n\t\t\t\tConnectionCode string `gorm:\"column:connection_code\"`\n\t\t\t}\n\t\t\tsystemDB, _ := h.connMgr.GetSystemDB(ctx)\n\t\t\tif systemDB != nil {\n\t\t\t\t_ = systemDB.Table(\"cdc_system.master_binding mb\").\n\t\t\t\t\tSelect(\"COALESCE(cr.connection_code, 'default') AS connection_code\").\n\t\t\t\t\tJoins(\"LEFT JOIN cdc_system.connection_registry cr ON cr.id = mb.master_connection_id\").\n\t\t\t\t\tWhere(\"(mb.master_table = ? OR mb.master_schema || '.' || mb.master_table = ?) AND mb.is_active = true\", table, schema+\".\"+table).\n\t\t\t\t\tOrder(\"mb.id DESC\").\n\t\t\t\t\tLimit(1).Scan(&mb).Error\n\t\t\t\tif mb.ConnectionCode != \"\" {\n\t\t\t\t\tkey = mb.ConnectionCode\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif key == \"\" {\n\t\t\tkey = \"default\"\n\t\t}\n\t\treturn h.connMgr.GetMasterDB(ctx, key)\n\t}\n\t// Với shadow plane\n\treturn h.connMgr.GetShadowDB(ctx, connKey)\n}\n",
+          "claim": "In index_handler.go lines 34-62, resolveDB embeds cdc_system.master_binding GORM lookup and calls GetMasterDB directly inside the NATS transport handler layer."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4867,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8855,
+                "NO": 0.1145
+              },
+              "confidence": 0.4867,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 670,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/governance/index_handler.go:34-62\nfunc (h *IndexHandler) resolveDB(ctx context.Context, plane, schema, table, connKey string) (*gorm.DB, error) {\n\tif strings.ToLower(plane) == \"master\" {\n\t\tkey := strings.TrimSpace(connKey)\n\t\tif key == \"\" || key == \"default\" {\n\t\t\t// Fallback: Tra cứu master_connection_id từ cdc_system.master_binding nếu client chưa truyền\n\t\t\tvar mb struct {\n\t\t\t\tConnectionCode string `gorm:\"column:connection_code\"`\n\t\t\t}\n\t\t\tsystemDB, _ := h.connMgr.GetSystemDB(ctx)\n\t\t\tif systemDB != nil {\n\t\t\t\t_ = systemDB.Table(\"cdc_system.master_binding mb\").\n\t\t\t\t\tSelect(\"COALESCE(cr.connection_code, 'default') AS connection_code\").\n\t\t\t\t\tJoins(\"LEFT JOIN cdc_system.connection_registry cr ON cr.id = mb.master_connection_id\").\n\t\t\t\t\tWhere(\"(mb.master_table = ? OR mb.master_schema || '.' || mb.master_table = ?) AND mb.is_active = true\", table, schema+\".\"+table).\n\t\t\t\t\tOrder(\"mb.id DESC\").\n\t\t\t\t\tLimit(1).Scan(&mb).Error\n\t\t\t\tif mb.ConnectionCode != \"\" {\n\t\t\t\t\tkey = mb.ConnectionCode\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif key == \"\" {\n\t\t\tkey = \"default\"\n\t\t}\n\t\treturn h.connMgr.GetMasterDB(ctx, key)\n\t}\n\t// Với shadow plane\n\treturn h.connMgr.GetShadowDB(ctx, connKey)\n}\n",
+          "claim": "In index_handler.go lines 34-62, resolveDB embeds cdc_system.master_binding GORM lookup and calls GetMasterDB directly inside the NATS transport handler layer."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "target",
+    "basis": "code",
+    "claim": "In index_manager.go lines 33-38, IndexManager is an empty struct with no logger field, so calling m.logger.Info on IndexManager fails compilation unless dependencies are injected into a dedicated driver struct.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_manager.go:33-38\ntype IndexManager struct {\n}\n\nfunc NewIndexManager() *IndexManager {\n\treturn &IndexManager{}\n}\n",
+    "flow": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.0669,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5125,
+                "INCORRECT": 0.2809,
+                "UNSUPPORTED": 0.2067
+              },
+              "confidence": 0.0669,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 242,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In index_manager.go lines 33-38, IndexManager is an empty struct with no logger field, so calling m.logger.Info on IndexManager fails compilation unless dependencies are injected into a dedicated driver struct.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_manager.go:33-38\ntype IndexManager struct {\n}\n\nfunc NewIndexManager() *IndexManager {\n\treturn &IndexManager{}\n}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.0999,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.1831,
+                "INCORRECT": 0.5545,
+                "UNSUPPORTED": 0.2624
+              },
+              "confidence": 0.0999,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 248,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_manager.go:33-38\ntype IndexManager struct {\n}\n\nfunc NewIndexManager() *IndexManager {\n\treturn &IndexManager{}\n}\n",
+          "claim": "In index_manager.go lines 33-38, IndexManager is an empty struct with no logger field, so calling m.logger.Info on IndexManager fails compilation unless dependencies are injected into a dedicated driver struct."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.5326,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0995,
+                "NO": 0.9005
+              },
+              "confidence": 0.5326,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 181,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_manager.go:33-38\ntype IndexManager struct {\n}\n\nfunc NewIndexManager() *IndexManager {\n\treturn &IndexManager{}\n}\n",
+          "claim": "In index_manager.go lines 33-38, IndexManager is an empty struct with no logger field, so calling m.logger.Info on IndexManager fails compilation unless dependencies are injected into a dedicated driver struct."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "target",
+    "basis": "code",
+    "claim": "In connection_manager.go lines 106-115, IsMongoMasterConnection normalizes non-mongo engine_type values to postgresql in masterEngines[key], overwriting future engines like clickhouse or mysql unless ResolveMasterEngineType is extracted.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:102-117\n\t\tvar conn modelsource.ConnectionRegistry\n\t\tif qErr := sysDB.WithContext(ctx).Table(\"cdc_system.connection_registry\").\n\t\t\tWhere(\"(connection_code = ? OR connection_code = ?) AND status = 'active'\", key, strings.ToLower(key)).\n\t\t\tFirst(&conn).Error; qErr == nil {\n\t\t\teng := strings.ToLower(strings.TrimSpace(conn.EngineType))\n\t\t\tresolvedEng := \"postgresql\"\n\t\t\tif eng == \"mongodb\" || eng == \"mongo\" {\n\t\t\t\tresolvedEng = \"mongodb\"\n\t\t\t}\n\t\t\tm.masterPoolMu.Lock()\n\t\t\tif m.masterEngines == nil {\n\t\t\t\tm.masterEngines = make(map[string]string)\n\t\t\t}\n\t\t\tm.masterEngines[key] = resolvedEng\n\t\t\tif conn.DefaultDatabase != nil && strings.TrimSpace(*conn.DefaultDatabase) != \"\" {\n\t\t\t\tif m.masterMongoDBs == nil {\n",
+    "flow": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2682,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6303,
+                "INCORRECT": 0.3204,
+                "UNSUPPORTED": 0.0493
+              },
+              "confidence": 0.2682,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 513,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In connection_manager.go lines 106-115, IsMongoMasterConnection normalizes non-mongo engine_type values to postgresql in masterEngines[key], overwriting future engines like clickhouse or mysql unless ResolveMasterEngineType is extracted.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:102-117\n\t\tvar conn modelsource.ConnectionRegistry\n\t\tif qErr := sysDB.WithContext(ctx).Table(\"cdc_system.connection_registry\").\n\t\t\tWhere(\"(connection_code = ? OR connection_code = ?) AND status = 'active'\", key, strings.ToLower(key)).\n\t\t\tFirst(&conn).Error; qErr == nil {\n\t\t\teng := strings.ToLower(strings.TrimSpace(conn.EngineType))\n\t\t\tresolvedEng := \"postgresql\"\n\t\t\tif eng == \"mongodb\" || eng == \"mongo\" {\n\t\t\t\tresolvedEng = \"mongodb\"\n\t\t\t}\n\t\t\tm.masterPoolMu.Lock()\n\t\t\tif m.masterEngines == nil {\n\t\t\t\tm.masterEngines = make(map[string]string)\n\t\t\t}\n\t\t\tm.masterEngines[key] = resolvedEng\n\t\t\tif conn.DefaultDatabase != nil && strings.TrimSpace(*conn.DefaultDatabase) != \"\" {\n\t\t\t\tif m.masterMongoDBs == nil {\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.0794,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.2288,
+                "INCORRECT": 0.2343,
+                "UNSUPPORTED": 0.5369
+              },
+              "confidence": 0.0794,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 519,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:102-117\n\t\tvar conn modelsource.ConnectionRegistry\n\t\tif qErr := sysDB.WithContext(ctx).Table(\"cdc_system.connection_registry\").\n\t\t\tWhere(\"(connection_code = ? OR connection_code = ?) AND status = 'active'\", key, strings.ToLower(key)).\n\t\t\tFirst(&conn).Error; qErr == nil {\n\t\t\teng := strings.ToLower(strings.TrimSpace(conn.EngineType))\n\t\t\tresolvedEng := \"postgresql\"\n\t\t\tif eng == \"mongodb\" || eng == \"mongo\" {\n\t\t\t\tresolvedEng = \"mongodb\"\n\t\t\t}\n\t\t\tm.masterPoolMu.Lock()\n\t\t\tif m.masterEngines == nil {\n\t\t\t\tm.masterEngines = make(map[string]string)\n\t\t\t}\n\t\t\tm.masterEngines[key] = resolvedEng\n\t\t\tif conn.DefaultDatabase != nil && strings.TrimSpace(*conn.DefaultDatabase) != \"\" {\n\t\t\t\tif m.masterMongoDBs == nil {\n",
+          "claim": "In connection_manager.go lines 106-115, IsMongoMasterConnection normalizes non-mongo engine_type values to postgresql in masterEngines[key], overwriting future engines like clickhouse or mysql unless ResolveMasterEngineType is extracted."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.0108,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.5611,
+                "NO": 0.4389
+              },
+              "confidence": 0.0108,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 452,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:102-117\n\t\tvar conn modelsource.ConnectionRegistry\n\t\tif qErr := sysDB.WithContext(ctx).Table(\"cdc_system.connection_registry\").\n\t\t\tWhere(\"(connection_code = ? OR connection_code = ?) AND status = 'active'\", key, strings.ToLower(key)).\n\t\t\tFirst(&conn).Error; qErr == nil {\n\t\t\teng := strings.ToLower(strings.TrimSpace(conn.EngineType))\n\t\t\tresolvedEng := \"postgresql\"\n\t\t\tif eng == \"mongodb\" || eng == \"mongo\" {\n\t\t\t\tresolvedEng = \"mongodb\"\n\t\t\t}\n\t\t\tm.masterPoolMu.Lock()\n\t\t\tif m.masterEngines == nil {\n\t\t\t\tm.masterEngines = make(map[string]string)\n\t\t\t}\n\t\t\tm.masterEngines[key] = resolvedEng\n\t\t\tif conn.DefaultDatabase != nil && strings.TrimSpace(*conn.DefaultDatabase) != \"\" {\n\t\t\t\tif m.masterMongoDBs == nil {\n",
+          "claim": "In connection_manager.go lines 106-115, IsMongoMasterConnection normalizes non-mongo engine_type values to postgresql in masterEngines[key], overwriting future engines like clickhouse or mysql unless ResolveMasterEngineType is extracted."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "CTRL-T1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "In master_ddl_generator_mongo.go lines 67-81, snakeToCamelKey converts a snake_case string into camelCase by upper-casing the first character of each segment after the first.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_mongo.go:67-81\nfunc snakeToCamelKey(s string) string {\n\tparts := strings.Split(s, \"_\")\n\tif len(parts) <= 1 {\n\t\treturn s\n\t}\n\tvar b strings.Builder\n\tb.WriteString(parts[0])\n\tfor _, p := range parts[1:] {\n\t\tif p == \"\" {\n\t\t\tcontinue\n\t\t}\n\t\tb.WriteString(strings.ToUpper(p[:1]) + p[1:])\n\t}\n\treturn b.String()\n}\n",
+    "flow": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.586,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8738,
+                "INCORRECT": 0.0899,
+                "UNSUPPORTED": 0.0363
+              },
+              "confidence": 0.586,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 358,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In master_ddl_generator_mongo.go lines 67-81, snakeToCamelKey converts a snake_case string into camelCase by upper-casing the first character of each segment after the first.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_mongo.go:67-81\nfunc snakeToCamelKey(s string) string {\n\tparts := strings.Split(s, \"_\")\n\tif len(parts) <= 1 {\n\t\treturn s\n\t}\n\tvar b strings.Builder\n\tb.WriteString(parts[0])\n\tfor _, p := range parts[1:] {\n\t\tif p == \"\" {\n\t\t\tcontinue\n\t\t}\n\t\tb.WriteString(strings.ToUpper(p[:1]) + p[1:])\n\t}\n\treturn b.String()\n}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1952,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6091,
+                "INCORRECT": 0.2974,
+                "UNSUPPORTED": 0.0935
+              },
+              "confidence": 0.1952,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 364,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_mongo.go:67-81\nfunc snakeToCamelKey(s string) string {\n\tparts := strings.Split(s, \"_\")\n\tif len(parts) <= 1 {\n\t\treturn s\n\t}\n\tvar b strings.Builder\n\tb.WriteString(parts[0])\n\tfor _, p := range parts[1:] {\n\t\tif p == \"\" {\n\t\t\tcontinue\n\t\t}\n\t\tb.WriteString(strings.ToUpper(p[:1]) + p[1:])\n\t}\n\treturn b.String()\n}\n",
+          "claim": "In master_ddl_generator_mongo.go lines 67-81, snakeToCamelKey converts a snake_case string into camelCase by upper-casing the first character of each segment after the first."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6943,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9454,
+                "NO": 0.0546
+              },
+              "confidence": 0.6943,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 297,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_mongo.go:67-81\nfunc snakeToCamelKey(s string) string {\n\tparts := strings.Split(s, \"_\")\n\tif len(parts) <= 1 {\n\t\treturn s\n\t}\n\tvar b strings.Builder\n\tb.WriteString(parts[0])\n\tfor _, p := range parts[1:] {\n\t\tif p == \"\" {\n\t\t\tcontinue\n\t\t}\n\t\tb.WriteString(strings.ToUpper(p[:1]) + p[1:])\n\t}\n\treturn b.String()\n}\n",
+          "claim": "In master_ddl_generator_mongo.go lines 67-81, snakeToCamelKey converts a snake_case string into camelCase by upper-casing the first character of each segment after the first."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-F1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In index_manager.go lines 33-38, IndexManager already has a logger *zap.Logger field.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_manager.go:33-38\ntype IndexManager struct {\n}\n\nfunc NewIndexManager() *IndexManager {\n\treturn &IndexManager{}\n}\n",
+    "flow": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.1345,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.1013,
+                "INCORRECT": 0.4548,
+                "UNSUPPORTED": 0.4439
+              },
+              "confidence": 0.1345,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 221,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In index_manager.go lines 33-38, IndexManager already has a logger *zap.Logger field.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_manager.go:33-38\ntype IndexManager struct {\n}\n\nfunc NewIndexManager() *IndexManager {\n\treturn &IndexManager{}\n}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.8148,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0002,
+                "INCORRECT": 0.051,
+                "UNSUPPORTED": 0.9488
+              },
+              "confidence": 0.8148,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 227,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_manager.go:33-38\ntype IndexManager struct {\n}\n\nfunc NewIndexManager() *IndexManager {\n\treturn &IndexManager{}\n}\n",
+          "claim": "In index_manager.go lines 33-38, IndexManager already has a logger *zap.Logger field."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.9908,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0008,
+                "NO": 0.9992
+              },
+              "confidence": 0.9908,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 160,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_manager.go:33-38\ntype IndexManager struct {\n}\n\nfunc NewIndexManager() *IndexManager {\n\treturn &IndexManager{}\n}\n",
+          "claim": "In index_manager.go lines 33-38, IndexManager already has a logger *zap.Logger field."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-F2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In introspection_handler.go lines 563-569, DropIndex already forwards the table query parameter in the NATS payload.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:563-569\n\tpayload, _ := json.Marshal(map[string]interface{}{\n\t\t\"schema\":         schema,\n\t\t\"index_name\":     name,\n\t\t\"plane\":          plane,\n\t\t\"connection_key\": connectionKey,\n\t\t\"reply_to\":       replySubj,\n\t})\n",
+    "flow": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1886,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6057,
+                "INCORRECT": 0.2966,
+                "UNSUPPORTED": 0.0977
+              },
+              "confidence": 0.1886,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 306,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In introspection_handler.go lines 563-569, DropIndex already forwards the table query parameter in the NATS payload.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:563-569\n\tpayload, _ := json.Marshal(map[string]interface{}{\n\t\t\"schema\":         schema,\n\t\t\"index_name\":     name,\n\t\t\"plane\":          plane,\n\t\t\"connection_key\": connectionKey,\n\t\t\"reply_to\":       replySubj,\n\t})\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.7456,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0071,
+                "INCORRECT": 0.064,
+                "UNSUPPORTED": 0.9289
+              },
+              "confidence": 0.7456,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 312,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:563-569\n\tpayload, _ := json.Marshal(map[string]interface{}{\n\t\t\"schema\":         schema,\n\t\t\"index_name\":     name,\n\t\t\"plane\":          plane,\n\t\t\"connection_key\": connectionKey,\n\t\t\"reply_to\":       replySubj,\n\t})\n",
+          "claim": "In introspection_handler.go lines 563-569, DropIndex already forwards the table query parameter in the NATS payload."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.3623,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.1614,
+                "NO": 0.8386
+              },
+              "confidence": 0.3623,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 245,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:563-569\n\tpayload, _ := json.Marshal(map[string]interface{}{\n\t\t\"schema\":         schema,\n\t\t\"index_name\":     name,\n\t\t\"plane\":          plane,\n\t\t\"connection_key\": connectionKey,\n\t\t\"reply_to\":       replySubj,\n\t})\n",
+          "claim": "In introspection_handler.go lines 563-569, DropIndex already forwards the table query parameter in the NATS payload."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

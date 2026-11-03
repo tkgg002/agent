@@ -1,0 +1,50 @@
+[
+  {
+    "id": "C-REQ-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "S2.5 Pre-Plan Critique: Verify /agent/tooling/laya_gate.py calls POST /v1/predict and reads result.answers",
+    "claim": "The ask_round_mode_a function calls post_laya(url, st, q) against DEFAULT_URL (http://127.0.0.1:8200/v1/predict) and extracts the verdict from raw.get(\"result\", {}).get(\"answers\", {}).get(\"verdict\", {}).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:42-42\nDEFAULT_URL = \"http://127.0.0.1:8200/v1/predict\"\nREF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:198-200\n    raw = post_laya(url, st, q, retries=retries, retry_wait=retry_wait)\n    ans = raw.get(\"result\", {}).get(\"answers\", {}).get(\"verdict\", {})\n    return {"
+  },
+  {
+    "id": "C-REALITY-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "S2.5 Pre-Plan Critique: Verify ai-orchestrator RunBootProtocolS0 pings http://127.0.0.1:8200/health and looks for ensure_laya_up.sh",
+    "claim": "RunBootProtocolS0 sets LayaURL to http://127.0.0.1:8200/health, calls checkLayaHealthHTTP(rep.LayaURL), and if not up, attempts to run scripts/ensure_laya_up.sh.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:138-155\nfunc (g *Gatekeeper) RunBootProtocolS0(ctx context.Context, projectName, prompt string) BootReportS0 {\n\trep := BootReportS0{\n\t\tLayaURL: \"http://127.0.0.1:8200/health\",\n\t}\n\tif g == nil || g.AgentCoreDir == \"\" {\n\t\treturn rep\n\t}\n\n\t// 1. Check Laya :8200/health\n\trep.LayaUp = checkLayaHealthHTTP(rep.LayaURL)\n\tif !rep.LayaUp {\n\t\tensureScript := filepath.Join(g.AgentCoreDir, \"scripts\", \"ensure_laya_up.sh\")\n\t\tif _, err := os.Stat(ensureScript); err == nil {\n\t\t\tcmd := executil.CommandContext(ctx, \"bash\", ensureScript)\n\t\t\tcmd.Dir = g.AgentCoreDir\n\t\t\t_ = cmd.Run()\n\t\t\trep.LayaUp = checkLayaHealthHTTP(rep.LayaURL)\n\t\t}"
+  },
+  {
+    "id": "C-CONTRA-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "S2.5 Pre-Plan Critique: Verify Human Gate approve handler in internal/webui/server.go writes .user-approved and opens S4 execution",
+    "claim": "In internal/webui/server.go, the \"approve\" case writes .user-approved to isoMeta.ArtifactDir, resets Sub-Task CircuitOpen and RetryCount, appends START S4 Approved to 05_progress, and calls s.TaskRunner.Approve().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1347-1402\n\tcase \"approve\":\n\t\ts.advancePacedWorkflowStep(ctx, *qt, 8, 17, 56, \"Human Gate · You APPROVED S3 Solution\", fmt.Sprintf(\"Mở khóa cổng H4b Propose-Only cho %s trên nhánh %s\", qt.ExternalID, isoMeta.BranchName), isoMeta.PlanFile, \"👤 You + 🧠 BRAIN · Slot A\", stepDelay)\n\t\tif ctx.Err() != nil {\n\t\t\treturn nil\n\t\t}\n\t\telapsed := time.Since(start).Seconds()\n\t\tif elapsed < 0.02 {\n\t\t\telapsed = 0.02\n\t\t}\n\t\t_ = os.MkdirAll(isoMeta.ArtifactDir, 0o755)\n\t\tnowStamp := []byte(time.Now().Format(time.RFC3339) + \"\\n\")\n\t\t_ = os.WriteFile(filepath.Join(isoMeta.ArtifactDir, \".user-approved\"), nowStamp, 0o644)\n\t\tif s.TaskRunner != nil {\n\t\t\ts.TaskRunner.Approve()\n\t\t}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG0 Control False 1",
+    "claim": "ask_round_mode_a connects to port 9999 over gRPC and never uses HTTP JSON.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:42-42\nDEFAULT_URL = \"http://127.0.0.1:8200/v1/predict\""
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG0 Control False 2",
+    "claim": "RunBootProtocolS0 deletes the entire database instead of checking Laya health on port 8200.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:138-148\nfunc (g *Gatekeeper) RunBootProtocolS0(ctx context.Context, projectName, prompt string) BootReportS0 {\n\trep := BootReportS0{\n\t\tLayaURL: \"http://127.0.0.1:8200/health\",\n\t}\n\trep.LayaUp = checkLayaHealthHTTP(rep.LayaURL)"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "DG0 Control True",
+    "claim": "DEFAULT_URL in laya_gate.py is set to \"http://127.0.0.1:8200/v1/predict\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:42-42\nDEFAULT_URL = \"http://127.0.0.1:8200/v1/predict\""
+  }
+]

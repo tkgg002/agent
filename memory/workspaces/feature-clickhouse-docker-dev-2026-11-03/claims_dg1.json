@@ -1,0 +1,130 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "S3 Root Cause: Missing ClickHouse Service in cdc-docker-dev",
+    "claim": "File docker-compose.yml của cdc-docker-dev hiện chỉ có 7 service đến mariadb và chưa có định nghĩa service clickhouse gpay-clickhouse.",
+    "evidence": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/docker-compose.yml:134-162\n  # 6. MariaDB SOURCE — binlog ROW + GTID strict.\n  mariadb:\n    image: mariadb:10.11\n    container_name: gpay-mariadb",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/docker-compose.yml:134-162",
+    "must_contain": [
+      "mariadb:",
+      "container_name: gpay-mariadb"
+    ]
+  },
+  {
+    "id": "S-FIX",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "S3 Fix: Add gpay-clickhouse Service & Volume",
+    "claim": "Giải pháp bổ sung service clickhouse với container_name gpay-clickhouse, image clickhouse/clickhouse-server:25.5.6, cổng 9000:9000 và 8123:8123, mạng cdc-bridge và volume clickhouse_data.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feature-clickhouse-docker-dev-2026-11-03/09_tasks_solution_clickhouse_docker_dev.md:58-84\n+  # 7. ClickHouse MASTER/DEST — analytics OLAP destination.\n+  clickhouse:\n+    image: clickhouse/clickhouse-server:25.5.6\n+    container_name: gpay-clickhouse",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feature-clickhouse-docker-dev-2026-11-03/09_tasks_solution_clickhouse_docker_dev.md:58-84",
+    "must_contain": [
+      "image: clickhouse/clickhouse-server:25.5.6",
+      "container_name: gpay-clickhouse"
+    ]
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "S3 Impact: Compatible with ClickHouse Master DSN on Port 9000",
+    "claim": "Cấu hình cổng 9000 và giao thức clickhouse:// tương thích trực tiếp với hàm buildClickHouseMasterConnectionDSN trong cdc-cms-service.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections_probe_sql.go:72-89\nfunc buildClickHouseMasterConnectionDSN(host string, port int, username, password, database string) string {\n\tif port <= 0 {\n\t\tport = 9000\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections_probe_sql.go:72-89",
+    "must_contain": [
+      "func buildClickHouseMasterConnectionDSN(host string, port int, username, password, database string) string {",
+      "port = 9000"
+    ]
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "S3 Pattern: Volume Naming Convention in cdc-docker-dev",
+    "claim": "Volume clickhouse_data đặt tên cố định cdc_docker_dev_clickhouse_data đồng nhất với chuẩn đặt tên cdc_docker_dev_pg_master_2_data và cdc_docker_dev_pg_shadow_data.",
+    "evidence": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/docker-compose.yml:170-174\n  pg_master_2_data:\n    name: cdc_docker_dev_pg_master_2_data\n  pg_shadow_data:\n    name: cdc_docker_dev_pg_shadow_data",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/docker-compose.yml:170-174",
+    "must_contain": [
+      "name: cdc_docker_dev_pg_master_2_data",
+      "name: cdc_docker_dev_pg_shadow_data"
+    ]
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "DG2 Code Demo Behavior: Healthcheck & Access Management",
+    "claim": "Code Demo bật CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1 và cấu hình healthcheck qua 0.0.0.0:8123/ping.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feature-clickhouse-docker-dev-2026-11-03/09_tasks_solution_clickhouse_docker_dev.md:62-83\n+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1\n+    ports:\n+      - \"9000:9000\"\n+      - \"8123:8123\"",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feature-clickhouse-docker-dev-2026-11-03/09_tasks_solution_clickhouse_docker_dev.md:62-83",
+    "must_contain": [
+      "CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1",
+      "0.0.0.0:8123/ping"
+    ]
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "DG2 Code Demo Edge Case: Env Variable Fallbacks",
+    "claim": "Code Demo sử dụng cú pháp nội suy biến môi trường có giá trị mặc định cho CLICKHOUSE_DATABASE, CLICKHOUSE_USER và CLICKHOUSE_PASSWORD.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feature-clickhouse-docker-dev-2026-11-03/09_tasks_solution_clickhouse_docker_dev.md:62-67\n+    environment:\n+      CLICKHOUSE_DB: ${CLICKHOUSE_DATABASE:-goopay_clickhouse}\n+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}\n+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-root}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feature-clickhouse-docker-dev-2026-11-03/09_tasks_solution_clickhouse_docker_dev.md:62-67",
+    "must_contain": [
+      "CLICKHOUSE_DB: ${CLICKHOUSE_DATABASE:-goopay_clickhouse}",
+      "CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}"
+    ]
+  },
+  {
+    "id": "D-API",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "DG2 Code Demo API Contract: .env.example & README.md Sync",
+    "claim": "Code Demo cập nhật đồng bộ các biến CLICKHOUSE_USER, CLICKHOUSE_PASSWORD, CLICKHOUSE_DATABASE vào .env.example và bảng cổng trong README.md.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feature-clickhouse-docker-dev-2026-11-03/09_tasks_solution_clickhouse_docker_dev.md:114-129\n+# ---------- ClickHouse (gpay-clickhouse on :9000 TCP / :8123 HTTP) ----------\n+CLICKHOUSE_USER=default\n+CLICKHOUSE_PASSWORD=root\n+CLICKHOUSE_DATABASE=goopay_clickhouse",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feature-clickhouse-docker-dev-2026-11-03/09_tasks_solution_clickhouse_docker_dev.md:114-129",
+    "must_contain": [
+      "CLICKHOUSE_USER=default",
+      "CLICKHOUSE_DATABASE=goopay_clickhouse"
+    ]
+  },
+  {
+    "id": "K1",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "DG1 Control True",
+    "claim": "File .env.example của cdc-docker-dev khai báo MYSQL_ROOT_PASSWORD=root và MYSQL_DATABASE=goopay_db.",
+    "evidence": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/.env.example:24-27\n# ---------- MySQL ----------\nMYSQL_ROOT_PASSWORD=root\nMYSQL_DATABASE=goopay_db",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/.env.example:24-27",
+    "must_contain": [
+      "MYSQL_ROOT_PASSWORD=root",
+      "MYSQL_DATABASE=goopay_db"
+    ]
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG1 Control False 1",
+    "claim": "Code Demo xóa toàn bộ service mysql và mariadb khỏi docker-compose.yml.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feature-clickhouse-docker-dev-2026-11-03/09_tasks_solution_clickhouse_docker_dev.md:58-84\n+  clickhouse:\n+    image: clickhouse/clickhouse-server:25.5.6",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feature-clickhouse-docker-dev-2026-11-03/09_tasks_solution_clickhouse_docker_dev.md:58-84",
+    "must_contain": [
+      "NONEXISTENT_DELETE_MYSQL_MARIADB_TOKEN_777"
+    ]
+  },
+  {
+    "id": "K3",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG1 Control False 2",
+    "claim": "Code Demo gắn gpay-clickhouse vào mạng signoz-net thay vì cdc-bridge.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feature-clickhouse-docker-dev-2026-11-03/09_tasks_solution_clickhouse_docker_dev.md:76-84\n+    networks:\n+      - cdc-bridge",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feature-clickhouse-docker-dev-2026-11-03/09_tasks_solution_clickhouse_docker_dev.md:76-84",
+    "must_contain": [
+      "NONEXISTENT_SIGNOZ_NET_TOKEN_666"
+    ]
+  }
+]

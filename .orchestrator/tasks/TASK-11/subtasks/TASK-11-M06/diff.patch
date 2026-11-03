@@ -1,0 +1,30 @@
+# [NO UNCOMMITTED GIT DIFF HUNK IN WORKTREE — VERIFIED ON-DISK SOURCE AT TargetRepo]
+# Sub-Task: TASK-11-M06 (centralized-data-service) · Isolated Branch: task/TASK-11/task-11-m06
+# Context: centralized-data-service/internal/model/recon/reconciliation_report.go:8 (type ReconciliationReport struct {) · Deliverable: Tích hợp tầng Service / Handler & Kiểm thử nghiệm thu DoD tại `centralized-data-service` (`reconciliation_report.go`)
+# Verified File: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/model/recon/reconciliation_report.go
+// VERIFIED ON-DISK SOURCE: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/model/recon/reconciliation_report.go (lines 8-32)
+   8 | type ReconciliationReport struct {
+   9 | 	ID          uint64 `gorm:"primaryKey" json:"id"`
+  10 | 	TargetTable string `gorm:"-" json:"target_table"`
+  11 | 	SourceDB    string `gorm:"column:source_db" json:"source_db"`
+  12 | 	SourceType  string `gorm:"column:source_type" json:"source_type"`
+  13 | 	SourceHost  string `gorm:"column:source_host" json:"source_host"`
+  14 | 	SourceTable string `gorm:"column:source_table" json:"source_table"`
+  15 | 	// Migration 017 — SourceCount is pointer/nullable so we can distinguish
+  16 | 	// query failure (NULL) from actual empty window (0). KHÔNG tag default:0:
+  17 | 	// tag đó làm gorm ghi 0 khi nil → error-row thành source_count=0 → FE
+  18 | 	// hiện 0 GIẢ + "ingest +N thừa" rác suốt lúc nguồn unreachable (đã xảy ra).
+  19 | 	SourceCount  *int64          `gorm:"column:source_count" json:"source_count"`
+  20 | 	DestCount    int64           `gorm:"column:dest_count;default:0" json:"dest_count"`
+  21 | 	Diff         int64           `gorm:"column:diff;default:0" json:"diff"`
+  22 | 	MissingCount int             `gorm:"column:missing_count;default:0" json:"missing_count"`
+  23 | 	MissingIDs   json.RawMessage `gorm:"column:missing_ids;type:jsonb" json:"missing_ids"`
+  24 | 	StaleCount   int             `gorm:"column:stale_count;default:0" json:"stale_count"`
+  25 | 	StaleIDs     json.RawMessage `gorm:"column:stale_ids;type:jsonb" json:"stale_ids"`
+  26 | 	CheckType    string          `gorm:"column:check_type;not null" json:"check_type"`
+  27 | 	Status       string          `gorm:"column:status;not null" json:"status"`
+  28 | 	// Migration 081 (Recon V4) — segment định vị tầng đối soát:
+  29 | 	// 'source_shadow' (A — ingest path) | 'shadow_master' (B — transmute path).
+  30 | 	Segment string `gorm:"column:segment;default:source_shadow" json:"segment"`
+  31 | 	// Migration 085 — KHÓA PIPELINE ổn định. target_table (bare) KHÔNG unique:
+  32 | 	// trùng tên across-schema + segment A ghi tên shadow / B ghi tên master. Cặp

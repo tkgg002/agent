@@ -1,0 +1,65 @@
+[
+  {
+    "id": "A-STORE",
+    "kind": "target",
+    "basis": "code",
+    "claim": "UpdateTaskDetails is defined in internal/queue/store_task_update.go.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/queue/store_task_update.go:43-50\nfunc (s *Store) UpdateTaskDetails(ctx context.Context, externalID, title, description, complexity, assignedModel string, labels []string) (QueuedTask, error) {\n\ts.mu.Lock()\n\tdefer s.mu.Unlock()\n\n\texternalID = strings.TrimSpace(externalID)\n\tif externalID == \"\" {\n\t\treturn QueuedTask{}, errors.New(\"queue: external_id is required\")\n\t}"
+  },
+  {
+    "id": "A-DETAIL",
+    "kind": "target",
+    "basis": "code",
+    "claim": "splitCleanDescriptionAndBRD is defined in internal/webui/task_edit_handler.go.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_edit_handler.go:45-52\nfunc splitCleanDescriptionAndBRD(rawDesc, artifactDir string) (string, string) {\n\tconst brdMarker = \"### Tài Liệu BRD / PRD Đính Kèm:\"\n\tcleanDesc := strings.TrimSpace(rawDesc)\n\tvar embeddedBRD string\n\tif idx := strings.Index(cleanDesc, brdMarker); idx >= 0 {\n\t\tembeddedBRD = strings.TrimSpace(cleanDesc[idx+len(brdMarker):])\n\t\tcleanDesc = strings.TrimSpace(cleanDesc[:idx])\n\t}"
+  },
+  {
+    "id": "A-LLM-SYNC",
+    "kind": "target",
+    "basis": "code",
+    "claim": "syncEditedSubTasksToLLMAnalysis is defined in internal/webui/subtask_edit_service.go.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/subtask_edit_service.go:171-186\nfunc (s *Server) syncEditedSubTasksToLLMAnalysis(taskKey string, items []SubTaskDTO) {\n\tstoredLLM := s.loadTaskLLMAnalysis(taskKey)\n\tif storedLLM == nil {\n\t\treturn\n\t}\n\tspecs := make([]ArchitectLLMSubTaskSpec, 0, len(items))\n\tfor _, it := range items {\n\t\tspecs = append(specs, ArchitectLLMSubTaskSpec{\n\t\t\tSubTaskID:       it.SubTaskID,\n\t\t\tTitle:           it.Title,\n\t\t\tDescription:     it.Description,\n\t\t\tContextFileLine: it.ContextFileLine,\n\t\t})\n\t}\n\tstoredLLM.SubTasks = specs"
+  },
+  {
+    "id": "A-REQ-SYNC",
+    "kind": "target",
+    "basis": "code",
+    "claim": "syncUpdatedTaskRequirementsDoc is defined in internal/webui/subtask_edit_service.go.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/subtask_edit_service.go:17-29\nfunc (s *Server) syncUpdatedTaskRequirementsDoc(\n\tctx context.Context,\n\tqt queue.QueuedTask,\n\tisoMeta TaskIsolationDTO,\n\tsubTasks []SubTaskDTO,\n\tactiveRunner, routedModel string,\n) {\n\tif isoMeta.ArtifactDir == \"\" {\n\t\treturn\n\t}\n\t_ = os.MkdirAll(isoMeta.ArtifactDir, 0o755)\n\ttargetRepo := s.ResolveTaskTargetRepo(qt)\n\taffectedRepos := s.ResolveTaskAffectedRepos(qt)"
+  },
+  {
+    "id": "A-MODAL-GUARD",
+    "kind": "target",
+    "basis": "code",
+    "claim": "fillDefaultSubTasksInModal in internal/webui/static/app.js returns early when window.editingTaskKey is set and forceClear is false.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/app.js:3030-3036\nfunction fillDefaultSubTasksInModal(forceClear) {\n  if (window.editingTaskKey && !forceClear) return;\n  const title = document.getElementById(\"inp-task-title\")?.value.trim() || \"\";\n  const ta = document.getElementById(\"inp-task-subtasks\");\n  if (!ta) return;\n  if (getSelectedModalAffectedRepos().length > 0 && title) ta.value = \"\";\n}"
+  },
+  {
+    "id": "A-ROUTES",
+    "kind": "target",
+    "basis": "code",
+    "claim": "Handler in internal/webui/server.go registers /api/tasks/detail and /api/tasks/update.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:639-650\nfunc (s *Server) Handler() http.Handler {\n\tmux := http.NewServeMux()\n\tsub, err := fs.Sub(staticFS, \"static\")\n\tif err == nil {\n\t\tmux.Handle(\"/\", http.FileServer(http.FS(sub)))\n\t}\n\tmux.HandleFunc(\"/api/dashboard\", s.handleDashboard)\n\tmux.HandleFunc(\"/api/tasks\", s.handleCreateTask)\n\tmux.HandleFunc(\"/api/tasks/detail\", s.handleTaskDetail)\n\tmux.HandleFunc(\"/api/tasks/update\", s.handleUpdateTask)\n\tmux.HandleFunc(\"/api/tasks/action\", s.handleTaskAction)\n\tmux.HandleFunc(\"/api/tasks/delete\", s.handleDeleteTask)"
+  },
+  {
+    "id": "K1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "GetByExternalID is defined in internal/queue/store_task_update.go.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/queue/store_task_update.go:36-40\nfunc (s *Store) GetByExternalID(ctx context.Context, externalID string) (QueuedTask, error) {\n\ts.mu.Lock()\n\tdefer s.mu.Unlock()\n\treturn s.getByExternalIDLocked(ctx, externalID)\n}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "GetByExternalID in internal/queue/store_task_update.go deletes all rows in task_queue.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/queue/store_task_update.go:36-40\nfunc (s *Store) GetByExternalID(ctx context.Context, externalID string) (QueuedTask, error) {\n\ts.mu.Lock()\n\tdefer s.mu.Unlock()\n\treturn s.getByExternalIDLocked(ctx, externalID)\n}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "splitCleanDescriptionAndBRD in internal/webui/task_edit_handler.go takes zero arguments.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_edit_handler.go:45-50\nfunc splitCleanDescriptionAndBRD(rawDesc, artifactDir string) (string, string) {\n\tconst brdMarker = \"### Tài Liệu BRD / PRD Đính Kèm:\"\n\tcleanDesc := strings.TrimSpace(rawDesc)\n\tvar embeddedBRD string\n\tif idx := strings.Index(cleanDesc, brdMarker); idx >= 0 {\n\t\tembeddedBRD = strings.TrimSpace(cleanDesc[idx+len(brdMarker):])"
+  }
+]

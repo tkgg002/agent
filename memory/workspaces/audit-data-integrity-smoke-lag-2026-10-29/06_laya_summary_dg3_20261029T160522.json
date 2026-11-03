@@ -1,0 +1,128 @@
+{
+  "mode": "claim",
+  "stage": "dg3",
+  "workspace": "audit-data-integrity-smoke-lag-2026-10-29",
+  "ts": "20261029T160522",
+  "trusted_rounds": [
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-data-integrity-smoke-lag-2026-10-29/06_laya_raw_dg3_20261029T160522.json",
+  "claims": [
+    {
+      "id": "R2-F1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "HasColumnIndex caches results in a package-level map keyed only by lowercase tableName.col, so two different ReconDestAgent connections with the same schema.table share one cache entry.",
+      "decision": "FLAG",
+      "resolved": "Ground truth: package-level var pgColIndexCache (lines 17-20) keyed by tableName.col only, no agent identity. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:46-52",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.0517
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3443
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.2017
+        }
+      }
+    },
+    {
+      "id": "R2-F2",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "HasColumnIndex matches indexdef with LIKE '%(col%', so a column named created also matches an index defined on (created_at), producing a false positive.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6679
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3263
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.5706
+        }
+      }
+    },
+    {
+      "id": "R2-F3",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "For Postgres sources, verifySegmentAAtFreezeCutoff sets dstIndexed without calling HasColumnIndex and keeps the entry.TimestampField override, which differs from the approved demo that always calls HasColumnIndex.",
+      "decision": "FLAG",
+      "resolved": "Ground truth: Postgres branch never calls HasColumnIndex while 09_tasks_solution demo line 389 always calls it. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke_guard.go:61-69",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0849
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.0669
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.1768
+        }
+      }
+    },
+    {
+      "id": "R2-F4",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In RunTotalOnlyB, masterTotal and masterActive are reassigned from verifySegmentBAtFreezeCutoff and then written to metrics MasterTableRowCount and MasterActiveRowCount, so when resolved they report shadow counts instead of measured master counts.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.7493
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6969
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7656
+        }
+      }
+    },
+    {
+      "id": "R2-F5",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "The existing ReconDestAgent design keeps per-agent caches as struct fields (colTypesMu and colTypes), not as package-level globals.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "INCORRECT",
+          "confidence": 0.0244
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.0614
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6646
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

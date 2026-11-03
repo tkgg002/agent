@@ -1,0 +1,1529 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "target",
+    "basis": "code",
+    "claim": "In index_handler.go lines 34-62, resolveDB routes plane==master to h.connMgr.GetMasterDB(ctx, key), which rejects MongoDB master connections.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/governance/index_handler.go:34-62\nfunc (h *IndexHandler) resolveDB(ctx context.Context, plane, schema, table, connKey string) (*gorm.DB, error) {\n\tif strings.ToLower(plane) == \"master\" {\n\t\tkey := strings.TrimSpace(connKey)\n\t\tif key == \"\" || key == \"default\" {\n\t\t\t// Fallback: Tra cứu master_connection_id từ cdc_system.master_binding nếu client chưa truyền\n\t\t\tvar mb struct {\n\t\t\t\tConnectionCode string `gorm:\"column:connection_code\"`\n\t\t\t}\n\t\t\tsystemDB, _ := h.connMgr.GetSystemDB(ctx)\n\t\t\tif systemDB != nil {\n\t\t\t\t_ = systemDB.Table(\"cdc_system.master_binding mb\").\n\t\t\t\t\tSelect(\"COALESCE(cr.connection_code, 'default') AS connection_code\").\n\t\t\t\t\tJoins(\"LEFT JOIN cdc_system.connection_registry cr ON cr.id = mb.master_connection_id\").\n\t\t\t\t\tWhere(\"(mb.master_table = ? OR mb.master_schema || '.' || mb.master_table = ?) AND mb.is_active = true\", table, schema+\".\"+table).\n\t\t\t\t\tOrder(\"mb.id DESC\").\n\t\t\t\t\tLimit(1).Scan(&mb).Error\n\t\t\t\tif mb.ConnectionCode != \"\" {\n\t\t\t\t\tkey = mb.ConnectionCode\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif key == \"\" {\n\t\t\tkey = \"default\"\n\t\t}\n\t\treturn h.connMgr.GetMasterDB(ctx, key)\n\t}\n\t// Với shadow plane\n\treturn h.connMgr.GetShadowDB(ctx, connKey)\n}\n",
+    "flow": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6542,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8998,
+                "INCORRECT": 0.077,
+                "UNSUPPORTED": 0.0233
+              },
+              "confidence": 0.6542,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 728,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In index_handler.go lines 34-62, resolveDB routes plane==master to h.connMgr.GetMasterDB(ctx, key), which rejects MongoDB master connections.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/governance/index_handler.go:34-62\nfunc (h *IndexHandler) resolveDB(ctx context.Context, plane, schema, table, connKey string) (*gorm.DB, error) {\n\tif strings.ToLower(plane) == \"master\" {\n\t\tkey := strings.TrimSpace(connKey)\n\t\tif key == \"\" || key == \"default\" {\n\t\t\t// Fallback: Tra cứu master_connection_id từ cdc_system.master_binding nếu client chưa truyền\n\t\t\tvar mb struct {\n\t\t\t\tConnectionCode string `gorm:\"column:connection_code\"`\n\t\t\t}\n\t\t\tsystemDB, _ := h.connMgr.GetSystemDB(ctx)\n\t\t\tif systemDB != nil {\n\t\t\t\t_ = systemDB.Table(\"cdc_system.master_binding mb\").\n\t\t\t\t\tSelect(\"COALESCE(cr.connection_code, 'default') AS connection_code\").\n\t\t\t\t\tJoins(\"LEFT JOIN cdc_system.connection_registry cr ON cr.id = mb.master_connection_id\").\n\t\t\t\t\tWhere(\"(mb.master_table = ? OR mb.master_schema || '.' || mb.master_table = ?) AND mb.is_active = true\", table, schema+\".\"+table).\n\t\t\t\t\tOrder(\"mb.id DESC\").\n\t\t\t\t\tLimit(1).Scan(&mb).Error\n\t\t\t\tif mb.ConnectionCode != \"\" {\n\t\t\t\t\tkey = mb.ConnectionCode\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif key == \"\" {\n\t\t\tkey = \"default\"\n\t\t}\n\t\treturn h.connMgr.GetMasterDB(ctx, key)\n\t}\n\t// Với shadow plane\n\treturn h.connMgr.GetShadowDB(ctx, connKey)\n}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.151,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5752,
+                "INCORRECT": 0.3069,
+                "UNSUPPORTED": 0.1179
+              },
+              "confidence": 0.151,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 734,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/governance/index_handler.go:34-62\nfunc (h *IndexHandler) resolveDB(ctx context.Context, plane, schema, table, connKey string) (*gorm.DB, error) {\n\tif strings.ToLower(plane) == \"master\" {\n\t\tkey := strings.TrimSpace(connKey)\n\t\tif key == \"\" || key == \"default\" {\n\t\t\t// Fallback: Tra cứu master_connection_id từ cdc_system.master_binding nếu client chưa truyền\n\t\t\tvar mb struct {\n\t\t\t\tConnectionCode string `gorm:\"column:connection_code\"`\n\t\t\t}\n\t\t\tsystemDB, _ := h.connMgr.GetSystemDB(ctx)\n\t\t\tif systemDB != nil {\n\t\t\t\t_ = systemDB.Table(\"cdc_system.master_binding mb\").\n\t\t\t\t\tSelect(\"COALESCE(cr.connection_code, 'default') AS connection_code\").\n\t\t\t\t\tJoins(\"LEFT JOIN cdc_system.connection_registry cr ON cr.id = mb.master_connection_id\").\n\t\t\t\t\tWhere(\"(mb.master_table = ? OR mb.master_schema || '.' || mb.master_table = ?) AND mb.is_active = true\", table, schema+\".\"+table).\n\t\t\t\t\tOrder(\"mb.id DESC\").\n\t\t\t\t\tLimit(1).Scan(&mb).Error\n\t\t\t\tif mb.ConnectionCode != \"\" {\n\t\t\t\t\tkey = mb.ConnectionCode\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif key == \"\" {\n\t\t\tkey = \"default\"\n\t\t}\n\t\treturn h.connMgr.GetMasterDB(ctx, key)\n\t}\n\t// Với shadow plane\n\treturn h.connMgr.GetShadowDB(ctx, connKey)\n}\n",
+          "claim": "In index_handler.go lines 34-62, resolveDB routes plane==master to h.connMgr.GetMasterDB(ctx, key), which rejects MongoDB master connections."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5291,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8994,
+                "NO": 0.1006
+              },
+              "confidence": 0.5291,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 667,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/governance/index_handler.go:34-62\nfunc (h *IndexHandler) resolveDB(ctx context.Context, plane, schema, table, connKey string) (*gorm.DB, error) {\n\tif strings.ToLower(plane) == \"master\" {\n\t\tkey := strings.TrimSpace(connKey)\n\t\tif key == \"\" || key == \"default\" {\n\t\t\t// Fallback: Tra cứu master_connection_id từ cdc_system.master_binding nếu client chưa truyền\n\t\t\tvar mb struct {\n\t\t\t\tConnectionCode string `gorm:\"column:connection_code\"`\n\t\t\t}\n\t\t\tsystemDB, _ := h.connMgr.GetSystemDB(ctx)\n\t\t\tif systemDB != nil {\n\t\t\t\t_ = systemDB.Table(\"cdc_system.master_binding mb\").\n\t\t\t\t\tSelect(\"COALESCE(cr.connection_code, 'default') AS connection_code\").\n\t\t\t\t\tJoins(\"LEFT JOIN cdc_system.connection_registry cr ON cr.id = mb.master_connection_id\").\n\t\t\t\t\tWhere(\"(mb.master_table = ? OR mb.master_schema || '.' || mb.master_table = ?) AND mb.is_active = true\", table, schema+\".\"+table).\n\t\t\t\t\tOrder(\"mb.id DESC\").\n\t\t\t\t\tLimit(1).Scan(&mb).Error\n\t\t\t\tif mb.ConnectionCode != \"\" {\n\t\t\t\t\tkey = mb.ConnectionCode\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif key == \"\" {\n\t\t\tkey = \"default\"\n\t\t}\n\t\treturn h.connMgr.GetMasterDB(ctx, key)\n\t}\n\t// Với shadow plane\n\treturn h.connMgr.GetShadowDB(ctx, connKey)\n}\n",
+          "claim": "In index_handler.go lines 34-62, resolveDB routes plane==master to h.connMgr.GetMasterDB(ctx, key), which rejects MongoDB master connections."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "target",
+    "basis": "code",
+    "claim": "In connection_manager.go lines 129-189, GetMasterMongoClient and ResolveMasterMongoDatabase resolve the *mongo.Client and target MongoDB database name for a master connection key.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:129-189\n// GetMasterMongoClient returns a cached or newly opened *mongo.Client for a MongoDB master destination.\nfunc (m *ConnectionManager) GetMasterMongoClient(ctx context.Context, key string) (*mongo.Client, error) {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" {\n\t\treturn nil, fmt.Errorf(\"master mongo connection key is empty\")\n\t}\n\n\tm.masterPoolMu.RLock()\n\tif client, ok := m.masterMongoPool[key]; ok && client != nil {\n\t\tm.masterPoolMu.RUnlock()\n\t\treturn client, nil\n\t}\n\tm.masterPoolMu.RUnlock()\n\n\tm.masterPoolMu.Lock()\n\tdefer m.masterPoolMu.Unlock()\n\n\tif client, ok := m.masterMongoPool[key]; ok && client != nil {\n\t\treturn client, nil\n\t}\n\n\turi, defaultDB := m.resolveMasterMongoURI(ctx, key)\n\tif uri == \"\" {\n\t\treturn nil, fmt.Errorf(\"mongo master connection URI not found for key %q\", key)\n\t}\n\n\tclientOpts := options.Client().ApplyURI(uri)\n\tclient, err := mongo.Connect(ctx, clientOpts)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"connect master mongo for %q: %w\", key, err)\n\t}\n\n\tm.masterMongoPool[key] = client\n\tif defaultDB != \"\" {\n\t\tm.masterMongoDBs[key] = defaultDB\n\t}\n\treturn client, nil\n}\n\n// ResolveMasterMongoDatabase resolves the target MongoDB database name for a master connection key.\nfunc (m *ConnectionManager) ResolveMasterMongoDatabase(ctx context.Context, key, fallbackDB string) string {\n\tkey = strings.TrimSpace(key)\n\tm.masterPoolMu.RLock()\n\tif dbName, ok := m.masterMongoDBs[key]; ok && strings.TrimSpace(dbName) != \"\" {\n\t\tm.masterPoolMu.RUnlock()\n\t\treturn dbName\n\t}\n\tm.masterPoolMu.RUnlock()\n\n\t_, defaultDB := m.resolveMasterMongoURI(ctx, key)\n\tif strings.TrimSpace(defaultDB) != \"\" {\n\t\tm.masterPoolMu.Lock()\n\t\tm.masterMongoDBs[key] = defaultDB\n\t\tm.masterPoolMu.Unlock()\n\t\treturn defaultDB\n\t}\n\tif strings.TrimSpace(fallbackDB) != \"\" && fallbackDB != \"public\" {\n\t\treturn strings.TrimSpace(fallbackDB)\n\t}\n\treturn \"gpay_master\"\n}\n",
+    "flow": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5137,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8305,
+                "INCORRECT": 0.1394,
+                "UNSUPPORTED": 0.0301
+              },
+              "confidence": 0.5137,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 884,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In connection_manager.go lines 129-189, GetMasterMongoClient and ResolveMasterMongoDatabase resolve the *mongo.Client and target MongoDB database name for a master connection key.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:129-189\n// GetMasterMongoClient returns a cached or newly opened *mongo.Client for a MongoDB master destination.\nfunc (m *ConnectionManager) GetMasterMongoClient(ctx context.Context, key string) (*mongo.Client, error) {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" {\n\t\treturn nil, fmt.Errorf(\"master mongo connection key is empty\")\n\t}\n\n\tm.masterPoolMu.RLock()\n\tif client, ok := m.masterMongoPool[key]; ok && client != nil {\n\t\tm.masterPoolMu.RUnlock()\n\t\treturn client, nil\n\t}\n\tm.masterPoolMu.RUnlock()\n\n\tm.masterPoolMu.Lock()\n\tdefer m.masterPoolMu.Unlock()\n\n\tif client, ok := m.masterMongoPool[key]; ok && client != nil {\n\t\treturn client, nil\n\t}\n\n\turi, defaultDB := m.resolveMasterMongoURI(ctx, key)\n\tif uri == \"\" {\n\t\treturn nil, fmt.Errorf(\"mongo master connection URI not found for key %q\", key)\n\t}\n\n\tclientOpts := options.Client().ApplyURI(uri)\n\tclient, err := mongo.Connect(ctx, clientOpts)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"connect master mongo for %q: %w\", key, err)\n\t}\n\n\tm.masterMongoPool[key] = client\n\tif defaultDB != \"\" {\n\t\tm.masterMongoDBs[key] = defaultDB\n\t}\n\treturn client, nil\n}\n\n// ResolveMasterMongoDatabase resolves the target MongoDB database name for a master connection key.\nfunc (m *ConnectionManager) ResolveMasterMongoDatabase(ctx context.Context, key, fallbackDB string) string {\n\tkey = strings.TrimSpace(key)\n\tm.masterPoolMu.RLock()\n\tif dbName, ok := m.masterMongoDBs[key]; ok && strings.TrimSpace(dbName) != \"\" {\n\t\tm.masterPoolMu.RUnlock()\n\t\treturn dbName\n\t}\n\tm.masterPoolMu.RUnlock()\n\n\t_, defaultDB := m.resolveMasterMongoURI(ctx, key)\n\tif strings.TrimSpace(defaultDB) != \"\" {\n\t\tm.masterPoolMu.Lock()\n\t\tm.masterMongoDBs[key] = defaultDB\n\t\tm.masterPoolMu.Unlock()\n\t\treturn defaultDB\n\t}\n\tif strings.TrimSpace(fallbackDB) != \"\" && fallbackDB != \"public\" {\n\t\treturn strings.TrimSpace(fallbackDB)\n\t}\n\treturn \"gpay_master\"\n}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1064,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5141,
+                "INCORRECT": 0.3489,
+                "UNSUPPORTED": 0.137
+              },
+              "confidence": 0.1064,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 890,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:129-189\n// GetMasterMongoClient returns a cached or newly opened *mongo.Client for a MongoDB master destination.\nfunc (m *ConnectionManager) GetMasterMongoClient(ctx context.Context, key string) (*mongo.Client, error) {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" {\n\t\treturn nil, fmt.Errorf(\"master mongo connection key is empty\")\n\t}\n\n\tm.masterPoolMu.RLock()\n\tif client, ok := m.masterMongoPool[key]; ok && client != nil {\n\t\tm.masterPoolMu.RUnlock()\n\t\treturn client, nil\n\t}\n\tm.masterPoolMu.RUnlock()\n\n\tm.masterPoolMu.Lock()\n\tdefer m.masterPoolMu.Unlock()\n\n\tif client, ok := m.masterMongoPool[key]; ok && client != nil {\n\t\treturn client, nil\n\t}\n\n\turi, defaultDB := m.resolveMasterMongoURI(ctx, key)\n\tif uri == \"\" {\n\t\treturn nil, fmt.Errorf(\"mongo master connection URI not found for key %q\", key)\n\t}\n\n\tclientOpts := options.Client().ApplyURI(uri)\n\tclient, err := mongo.Connect(ctx, clientOpts)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"connect master mongo for %q: %w\", key, err)\n\t}\n\n\tm.masterMongoPool[key] = client\n\tif defaultDB != \"\" {\n\t\tm.masterMongoDBs[key] = defaultDB\n\t}\n\treturn client, nil\n}\n\n// ResolveMasterMongoDatabase resolves the target MongoDB database name for a master connection key.\nfunc (m *ConnectionManager) ResolveMasterMongoDatabase(ctx context.Context, key, fallbackDB string) string {\n\tkey = strings.TrimSpace(key)\n\tm.masterPoolMu.RLock()\n\tif dbName, ok := m.masterMongoDBs[key]; ok && strings.TrimSpace(dbName) != \"\" {\n\t\tm.masterPoolMu.RUnlock()\n\t\treturn dbName\n\t}\n\tm.masterPoolMu.RUnlock()\n\n\t_, defaultDB := m.resolveMasterMongoURI(ctx, key)\n\tif strings.TrimSpace(defaultDB) != \"\" {\n\t\tm.masterPoolMu.Lock()\n\t\tm.masterMongoDBs[key] = defaultDB\n\t\tm.masterPoolMu.Unlock()\n\t\treturn defaultDB\n\t}\n\tif strings.TrimSpace(fallbackDB) != \"\" && fallbackDB != \"public\" {\n\t\treturn strings.TrimSpace(fallbackDB)\n\t}\n\treturn \"gpay_master\"\n}\n",
+          "claim": "In connection_manager.go lines 129-189, GetMasterMongoClient and ResolveMasterMongoDatabase resolve the *mongo.Client and target MongoDB database name for a master connection key."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6976,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9462,
+                "NO": 0.0538
+              },
+              "confidence": 0.6976,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 823,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:129-189\n// GetMasterMongoClient returns a cached or newly opened *mongo.Client for a MongoDB master destination.\nfunc (m *ConnectionManager) GetMasterMongoClient(ctx context.Context, key string) (*mongo.Client, error) {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" {\n\t\treturn nil, fmt.Errorf(\"master mongo connection key is empty\")\n\t}\n\n\tm.masterPoolMu.RLock()\n\tif client, ok := m.masterMongoPool[key]; ok && client != nil {\n\t\tm.masterPoolMu.RUnlock()\n\t\treturn client, nil\n\t}\n\tm.masterPoolMu.RUnlock()\n\n\tm.masterPoolMu.Lock()\n\tdefer m.masterPoolMu.Unlock()\n\n\tif client, ok := m.masterMongoPool[key]; ok && client != nil {\n\t\treturn client, nil\n\t}\n\n\turi, defaultDB := m.resolveMasterMongoURI(ctx, key)\n\tif uri == \"\" {\n\t\treturn nil, fmt.Errorf(\"mongo master connection URI not found for key %q\", key)\n\t}\n\n\tclientOpts := options.Client().ApplyURI(uri)\n\tclient, err := mongo.Connect(ctx, clientOpts)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"connect master mongo for %q: %w\", key, err)\n\t}\n\n\tm.masterMongoPool[key] = client\n\tif defaultDB != \"\" {\n\t\tm.masterMongoDBs[key] = defaultDB\n\t}\n\treturn client, nil\n}\n\n// ResolveMasterMongoDatabase resolves the target MongoDB database name for a master connection key.\nfunc (m *ConnectionManager) ResolveMasterMongoDatabase(ctx context.Context, key, fallbackDB string) string {\n\tkey = strings.TrimSpace(key)\n\tm.masterPoolMu.RLock()\n\tif dbName, ok := m.masterMongoDBs[key]; ok && strings.TrimSpace(dbName) != \"\" {\n\t\tm.masterPoolMu.RUnlock()\n\t\treturn dbName\n\t}\n\tm.masterPoolMu.RUnlock()\n\n\t_, defaultDB := m.resolveMasterMongoURI(ctx, key)\n\tif strings.TrimSpace(defaultDB) != \"\" {\n\t\tm.masterPoolMu.Lock()\n\t\tm.masterMongoDBs[key] = defaultDB\n\t\tm.masterPoolMu.Unlock()\n\t\treturn defaultDB\n\t}\n\tif strings.TrimSpace(fallbackDB) != \"\" && fallbackDB != \"public\" {\n\t\treturn strings.TrimSpace(fallbackDB)\n\t}\n\treturn \"gpay_master\"\n}\n",
+          "claim": "In connection_manager.go lines 129-189, GetMasterMongoClient and ResolveMasterMongoDatabase resolve the *mongo.Client and target MongoDB database name for a master connection key."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "target",
+    "basis": "code",
+    "claim": "In introspection_handler.go lines 491-496, 546-551, and 578-583, ListIndexes, CreateIndex, and DropIndex return c.JSON(res) with HTTP 200 without checking res[status]==error.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:546-583\n\tvar res map[string]interface{}\n\tif err := json.Unmarshal(msgData, &res); err != nil {\n\t\treturn c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{\"error\": \"failed to parse worker response\"})\n\t}\n\treturn c.JSON(res)\n}\n\n// DropIndex - DELETE /introspection/indexes/:name\nfunc (h *IntrospectionHandler) DropIndex(c *fiber.Ctx) error {\n\tname := c.Params(\"name\")\n\tschema := c.Query(\"schema\", \"public\")\n\tplane := c.Query(\"plane\", \"shadow\")\n\tconnectionKey := c.Query(\"connection_key\")\n\n\tcorrelationID := fmt.Sprintf(\"drop-index-%s-%d\", name, time.Now().UnixNano())\n\treplySubj := \"cdc.evt.drop-index.\" + correlationID\n\n\tpayload, _ := json.Marshal(map[string]interface{}{\n\t\t\"schema\":         schema,\n\t\t\"index_name\":     name,\n\t\t\"plane\":          plane,\n\t\t\"connection_key\": connectionKey,\n\t\t\"reply_to\":       replySubj,\n\t})\n\n\tmsgData, err := h.rpc.Request(c.UserContext(), \"cdc.cmd.drop-index\", replySubj, payload, 30*time.Second)\n\tif err != nil {\n\t\treturn c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{\n\t\t\t\"error\": \"Worker timeout or request error: \" + err.Error(),\n\t\t})\n\t}\n\n\tvar res map[string]interface{}\n\tif err := json.Unmarshal(msgData, &res); err != nil {\n\t\treturn c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{\"error\": \"failed to parse worker response\"})\n\t}\n\treturn c.JSON(res)\n}\n",
+    "flow": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.412,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7759,
+                "INCORRECT": 0.178,
+                "UNSUPPORTED": 0.0461
+              },
+              "confidence": 0.412,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 752,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In introspection_handler.go lines 491-496, 546-551, and 578-583, ListIndexes, CreateIndex, and DropIndex return c.JSON(res) with HTTP 200 without checking res[status]==error.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:546-583\n\tvar res map[string]interface{}\n\tif err := json.Unmarshal(msgData, &res); err != nil {\n\t\treturn c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{\"error\": \"failed to parse worker response\"})\n\t}\n\treturn c.JSON(res)\n}\n\n// DropIndex - DELETE /introspection/indexes/:name\nfunc (h *IntrospectionHandler) DropIndex(c *fiber.Ctx) error {\n\tname := c.Params(\"name\")\n\tschema := c.Query(\"schema\", \"public\")\n\tplane := c.Query(\"plane\", \"shadow\")\n\tconnectionKey := c.Query(\"connection_key\")\n\n\tcorrelationID := fmt.Sprintf(\"drop-index-%s-%d\", name, time.Now().UnixNano())\n\treplySubj := \"cdc.evt.drop-index.\" + correlationID\n\n\tpayload, _ := json.Marshal(map[string]interface{}{\n\t\t\"schema\":         schema,\n\t\t\"index_name\":     name,\n\t\t\"plane\":          plane,\n\t\t\"connection_key\": connectionKey,\n\t\t\"reply_to\":       replySubj,\n\t})\n\n\tmsgData, err := h.rpc.Request(c.UserContext(), \"cdc.cmd.drop-index\", replySubj, payload, 30*time.Second)\n\tif err != nil {\n\t\treturn c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{\n\t\t\t\"error\": \"Worker timeout or request error: \" + err.Error(),\n\t\t})\n\t}\n\n\tvar res map[string]interface{}\n\tif err := json.Unmarshal(msgData, &res); err != nil {\n\t\treturn c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{\"error\": \"failed to parse worker response\"})\n\t}\n\treturn c.JSON(res)\n}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0868,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4836,
+                "INCORRECT": 0.3669,
+                "UNSUPPORTED": 0.1494
+              },
+              "confidence": 0.0868,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 758,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:546-583\n\tvar res map[string]interface{}\n\tif err := json.Unmarshal(msgData, &res); err != nil {\n\t\treturn c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{\"error\": \"failed to parse worker response\"})\n\t}\n\treturn c.JSON(res)\n}\n\n// DropIndex - DELETE /introspection/indexes/:name\nfunc (h *IntrospectionHandler) DropIndex(c *fiber.Ctx) error {\n\tname := c.Params(\"name\")\n\tschema := c.Query(\"schema\", \"public\")\n\tplane := c.Query(\"plane\", \"shadow\")\n\tconnectionKey := c.Query(\"connection_key\")\n\n\tcorrelationID := fmt.Sprintf(\"drop-index-%s-%d\", name, time.Now().UnixNano())\n\treplySubj := \"cdc.evt.drop-index.\" + correlationID\n\n\tpayload, _ := json.Marshal(map[string]interface{}{\n\t\t\"schema\":         schema,\n\t\t\"index_name\":     name,\n\t\t\"plane\":          plane,\n\t\t\"connection_key\": connectionKey,\n\t\t\"reply_to\":       replySubj,\n\t})\n\n\tmsgData, err := h.rpc.Request(c.UserContext(), \"cdc.cmd.drop-index\", replySubj, payload, 30*time.Second)\n\tif err != nil {\n\t\treturn c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{\n\t\t\t\"error\": \"Worker timeout or request error: \" + err.Error(),\n\t\t})\n\t}\n\n\tvar res map[string]interface{}\n\tif err := json.Unmarshal(msgData, &res); err != nil {\n\t\treturn c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{\"error\": \"failed to parse worker response\"})\n\t}\n\treturn c.JSON(res)\n}\n",
+          "claim": "In introspection_handler.go lines 491-496, 546-551, and 578-583, ListIndexes, CreateIndex, and DropIndex return c.JSON(res) with HTTP 200 without checking res[status]==error."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6429,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9323,
+                "NO": 0.0677
+              },
+              "confidence": 0.6429,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 691,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:546-583\n\tvar res map[string]interface{}\n\tif err := json.Unmarshal(msgData, &res); err != nil {\n\t\treturn c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{\"error\": \"failed to parse worker response\"})\n\t}\n\treturn c.JSON(res)\n}\n\n// DropIndex - DELETE /introspection/indexes/:name\nfunc (h *IntrospectionHandler) DropIndex(c *fiber.Ctx) error {\n\tname := c.Params(\"name\")\n\tschema := c.Query(\"schema\", \"public\")\n\tplane := c.Query(\"plane\", \"shadow\")\n\tconnectionKey := c.Query(\"connection_key\")\n\n\tcorrelationID := fmt.Sprintf(\"drop-index-%s-%d\", name, time.Now().UnixNano())\n\treplySubj := \"cdc.evt.drop-index.\" + correlationID\n\n\tpayload, _ := json.Marshal(map[string]interface{}{\n\t\t\"schema\":         schema,\n\t\t\"index_name\":     name,\n\t\t\"plane\":          plane,\n\t\t\"connection_key\": connectionKey,\n\t\t\"reply_to\":       replySubj,\n\t})\n\n\tmsgData, err := h.rpc.Request(c.UserContext(), \"cdc.cmd.drop-index\", replySubj, payload, 30*time.Second)\n\tif err != nil {\n\t\treturn c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{\n\t\t\t\"error\": \"Worker timeout or request error: \" + err.Error(),\n\t\t})\n\t}\n\n\tvar res map[string]interface{}\n\tif err := json.Unmarshal(msgData, &res); err != nil {\n\t\treturn c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{\"error\": \"failed to parse worker response\"})\n\t}\n\treturn c.JSON(res)\n}\n",
+          "claim": "In introspection_handler.go lines 491-496, 546-551, and 578-583, ListIndexes, CreateIndex, and DropIndex return c.JSON(res) with HTTP 200 without checking res[status]==error."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "target",
+    "basis": "code",
+    "claim": "In index_manager.go lines 40-65, ListIndexes queries PostgreSQL system catalogs pg_index and pg_class and returns a slice of IndexInfo.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_manager.go:40-65\nfunc (im *IndexManager) ListIndexes(ctx context.Context, db *gorm.DB, schema, table string) ([]IndexInfo, error) {\n\tif !sqlutil.IsSafeIdent(schema) || !sqlutil.IsSafeIdent(table) {\n\t\treturn nil, fmt.Errorf(\"invalid schema or table identifier\")\n\t}\n\n\tquery := `\n\t\tSELECT \n\t\t\tc.relname AS index_name,\n\t\t\tpg_get_indexdef(i.indexrelid) AS index_def,\n\t\t\tpg_size_pretty(pg_relation_size(i.indexrelid)) AS index_size,\n\t\t\tcoalesce(stat.idx_scan, 0) AS scan_count,\n\t\t\ti.indisvalid AS is_valid\n\t\tFROM pg_index i\n\t\tJOIN pg_class c ON c.oid = i.indexrelid\n\t\tJOIN pg_class t ON t.oid = i.indrelid\n\t\tJOIN pg_namespace n ON n.oid = t.relnamespace\n\t\tLEFT JOIN pg_stat_user_indexes stat ON stat.indexrelid = i.indexrelid\n\t\tWHERE n.nspname = ? AND t.relname = ?\n\t`\n\n\tvar results []IndexInfo\n\trows, err := db.WithContext(ctx).Raw(query, schema, table).Rows()\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tdefer rows.Close()\n",
+    "flow": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.0795,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4461,
+                "INCORRECT": 0.4034,
+                "UNSUPPORTED": 0.1505
+              },
+              "confidence": 0.0795,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 599,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In index_manager.go lines 40-65, ListIndexes queries PostgreSQL system catalogs pg_index and pg_class and returns a slice of IndexInfo.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_manager.go:40-65\nfunc (im *IndexManager) ListIndexes(ctx context.Context, db *gorm.DB, schema, table string) ([]IndexInfo, error) {\n\tif !sqlutil.IsSafeIdent(schema) || !sqlutil.IsSafeIdent(table) {\n\t\treturn nil, fmt.Errorf(\"invalid schema or table identifier\")\n\t}\n\n\tquery := `\n\t\tSELECT \n\t\t\tc.relname AS index_name,\n\t\t\tpg_get_indexdef(i.indexrelid) AS index_def,\n\t\t\tpg_size_pretty(pg_relation_size(i.indexrelid)) AS index_size,\n\t\t\tcoalesce(stat.idx_scan, 0) AS scan_count,\n\t\t\ti.indisvalid AS is_valid\n\t\tFROM pg_index i\n\t\tJOIN pg_class c ON c.oid = i.indexrelid\n\t\tJOIN pg_class t ON t.oid = i.indrelid\n\t\tJOIN pg_namespace n ON n.oid = t.relnamespace\n\t\tLEFT JOIN pg_stat_user_indexes stat ON stat.indexrelid = i.indexrelid\n\t\tWHERE n.nspname = ? AND t.relname = ?\n\t`\n\n\tvar results []IndexInfo\n\trows, err := db.WithContext(ctx).Raw(query, schema, table).Rows()\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tdefer rows.Close()\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0349,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4105,
+                "INCORRECT": 0.3807,
+                "UNSUPPORTED": 0.2088
+              },
+              "confidence": 0.0349,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 605,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_manager.go:40-65\nfunc (im *IndexManager) ListIndexes(ctx context.Context, db *gorm.DB, schema, table string) ([]IndexInfo, error) {\n\tif !sqlutil.IsSafeIdent(schema) || !sqlutil.IsSafeIdent(table) {\n\t\treturn nil, fmt.Errorf(\"invalid schema or table identifier\")\n\t}\n\n\tquery := `\n\t\tSELECT \n\t\t\tc.relname AS index_name,\n\t\t\tpg_get_indexdef(i.indexrelid) AS index_def,\n\t\t\tpg_size_pretty(pg_relation_size(i.indexrelid)) AS index_size,\n\t\t\tcoalesce(stat.idx_scan, 0) AS scan_count,\n\t\t\ti.indisvalid AS is_valid\n\t\tFROM pg_index i\n\t\tJOIN pg_class c ON c.oid = i.indexrelid\n\t\tJOIN pg_class t ON t.oid = i.indrelid\n\t\tJOIN pg_namespace n ON n.oid = t.relnamespace\n\t\tLEFT JOIN pg_stat_user_indexes stat ON stat.indexrelid = i.indexrelid\n\t\tWHERE n.nspname = ? AND t.relname = ?\n\t`\n\n\tvar results []IndexInfo\n\trows, err := db.WithContext(ctx).Raw(query, schema, table).Rows()\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tdefer rows.Close()\n",
+          "claim": "In index_manager.go lines 40-65, ListIndexes queries PostgreSQL system catalogs pg_index and pg_class and returns a slice of IndexInfo."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.1923,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.7523,
+                "NO": 0.2477
+              },
+              "confidence": 0.1923,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 538,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/governance/index_manager.go:40-65\nfunc (im *IndexManager) ListIndexes(ctx context.Context, db *gorm.DB, schema, table string) ([]IndexInfo, error) {\n\tif !sqlutil.IsSafeIdent(schema) || !sqlutil.IsSafeIdent(table) {\n\t\treturn nil, fmt.Errorf(\"invalid schema or table identifier\")\n\t}\n\n\tquery := `\n\t\tSELECT \n\t\t\tc.relname AS index_name,\n\t\t\tpg_get_indexdef(i.indexrelid) AS index_def,\n\t\t\tpg_size_pretty(pg_relation_size(i.indexrelid)) AS index_size,\n\t\t\tcoalesce(stat.idx_scan, 0) AS scan_count,\n\t\t\ti.indisvalid AS is_valid\n\t\tFROM pg_index i\n\t\tJOIN pg_class c ON c.oid = i.indexrelid\n\t\tJOIN pg_class t ON t.oid = i.indrelid\n\t\tJOIN pg_namespace n ON n.oid = t.relnamespace\n\t\tLEFT JOIN pg_stat_user_indexes stat ON stat.indexrelid = i.indexrelid\n\t\tWHERE n.nspname = ? AND t.relname = ?\n\t`\n\n\tvar results []IndexInfo\n\trows, err := db.WithContext(ctx).Raw(query, schema, table).Rows()\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tdefer rows.Close()\n",
+          "claim": "In index_manager.go lines 40-65, ListIndexes queries PostgreSQL system catalogs pg_index and pg_class and returns a slice of IndexInfo."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "target",
+    "basis": "code",
+    "claim": "In master_ddl_generator_mongo.go lines 192-208, applyMongoCollectionAndIndexes appends indexModels for res.FinancialCols and calls CreateMany on mongoDB.Collection(reg.MasterTable).Indexes().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_mongo.go:192-208\n\tfor _, finCol := range res.FinancialCols {\n\t\tcol := strings.TrimSpace(finCol)\n\t\tif col == \"\" || seenIdxCols[col] {\n\t\t\tcontinue\n\t\t}\n\t\tseenIdxCols[col] = true\n\t\tindexModels = append(indexModels, mongo.IndexModel{\n\t\t\tKeys:    bson.D{{Key: col, Value: 1}},\n\t\t\tOptions: options.Index().SetName(fmt.Sprintf(\"ix_%s_%s\", reg.MasterTable, col)),\n\t\t})\n\t}\n\n\tif _, iErr := mongoDB.Collection(reg.MasterTable).Indexes().CreateMany(ctx, indexModels); iErr != nil {\n\t\tres.Err = iErr.Error()\n\t\tg.markDDLStatus(ctx, reg.ID, \"failed\", iErr)\n\t\treturn res, fmt.Errorf(\"create mongo indexes on %s.%s: %w\", dbName, reg.MasterTable, iErr)\n\t}\n",
+    "flow": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5202,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8418,
+                "INCORRECT": 0.1173,
+                "UNSUPPORTED": 0.0409
+              },
+              "confidence": 0.5202,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 492,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In master_ddl_generator_mongo.go lines 192-208, applyMongoCollectionAndIndexes appends indexModels for res.FinancialCols and calls CreateMany on mongoDB.Collection(reg.MasterTable).Indexes().",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_mongo.go:192-208\n\tfor _, finCol := range res.FinancialCols {\n\t\tcol := strings.TrimSpace(finCol)\n\t\tif col == \"\" || seenIdxCols[col] {\n\t\t\tcontinue\n\t\t}\n\t\tseenIdxCols[col] = true\n\t\tindexModels = append(indexModels, mongo.IndexModel{\n\t\t\tKeys:    bson.D{{Key: col, Value: 1}},\n\t\t\tOptions: options.Index().SetName(fmt.Sprintf(\"ix_%s_%s\", reg.MasterTable, col)),\n\t\t})\n\t}\n\n\tif _, iErr := mongoDB.Collection(reg.MasterTable).Indexes().CreateMany(ctx, indexModels); iErr != nil {\n\t\tres.Err = iErr.Error()\n\t\tg.markDDLStatus(ctx, reg.ID, \"failed\", iErr)\n\t\treturn res, fmt.Errorf(\"create mongo indexes on %s.%s: %w\", dbName, reg.MasterTable, iErr)\n\t}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1386,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5474,
+                "INCORRECT": 0.3366,
+                "UNSUPPORTED": 0.1161
+              },
+              "confidence": 0.1386,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 498,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_mongo.go:192-208\n\tfor _, finCol := range res.FinancialCols {\n\t\tcol := strings.TrimSpace(finCol)\n\t\tif col == \"\" || seenIdxCols[col] {\n\t\t\tcontinue\n\t\t}\n\t\tseenIdxCols[col] = true\n\t\tindexModels = append(indexModels, mongo.IndexModel{\n\t\t\tKeys:    bson.D{{Key: col, Value: 1}},\n\t\t\tOptions: options.Index().SetName(fmt.Sprintf(\"ix_%s_%s\", reg.MasterTable, col)),\n\t\t})\n\t}\n\n\tif _, iErr := mongoDB.Collection(reg.MasterTable).Indexes().CreateMany(ctx, indexModels); iErr != nil {\n\t\tres.Err = iErr.Error()\n\t\tg.markDDLStatus(ctx, reg.ID, \"failed\", iErr)\n\t\treturn res, fmt.Errorf(\"create mongo indexes on %s.%s: %w\", dbName, reg.MasterTable, iErr)\n\t}\n",
+          "claim": "In master_ddl_generator_mongo.go lines 192-208, applyMongoCollectionAndIndexes appends indexModels for res.FinancialCols and calls CreateMany on mongoDB.Collection(reg.MasterTable).Indexes()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6106,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9236,
+                "NO": 0.0764
+              },
+              "confidence": 0.6106,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 431,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_mongo.go:192-208\n\tfor _, finCol := range res.FinancialCols {\n\t\tcol := strings.TrimSpace(finCol)\n\t\tif col == \"\" || seenIdxCols[col] {\n\t\t\tcontinue\n\t\t}\n\t\tseenIdxCols[col] = true\n\t\tindexModels = append(indexModels, mongo.IndexModel{\n\t\t\tKeys:    bson.D{{Key: col, Value: 1}},\n\t\t\tOptions: options.Index().SetName(fmt.Sprintf(\"ix_%s_%s\", reg.MasterTable, col)),\n\t\t})\n\t}\n\n\tif _, iErr := mongoDB.Collection(reg.MasterTable).Indexes().CreateMany(ctx, indexModels); iErr != nil {\n\t\tres.Err = iErr.Error()\n\t\tg.markDDLStatus(ctx, reg.ID, \"failed\", iErr)\n\t\treturn res, fmt.Errorf(\"create mongo indexes on %s.%s: %w\", dbName, reg.MasterTable, iErr)\n\t}\n",
+          "claim": "In master_ddl_generator_mongo.go lines 192-208, applyMongoCollectionAndIndexes appends indexModels for res.FinancialCols and calls CreateMany on mongoDB.Collection(reg.MasterTable).Indexes()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "target",
+    "basis": "code",
+    "claim": "In TableIndexManager.tsx lines 250-264, isProtected disables the Drop button only for index names starting with pk_ or ux_.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/TableIndexManager.tsx:250-264\n      render: (_: any, record: IndexInfo) => {\n        const isProtected = record.index_name.startsWith('pk_') || record.index_name.startsWith('ux_');\n        return (\n          <Button\n            size=\"small\"\n            type=\"text\"\n            danger\n            icon={<DeleteOutlined />}\n            disabled={isProtected}\n            onClick={() => handleDropIndex(record.index_name)}\n          >\n            Drop\n          </Button>\n        );\n      }\n",
+    "flow": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4359,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7829,
+                "INCORRECT": 0.1817,
+                "UNSUPPORTED": 0.0354
+              },
+              "confidence": 0.4359,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 439,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In TableIndexManager.tsx lines 250-264, isProtected disables the Drop button only for index names starting with pk_ or ux_.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/TableIndexManager.tsx:250-264\n      render: (_: any, record: IndexInfo) => {\n        const isProtected = record.index_name.startsWith('pk_') || record.index_name.startsWith('ux_');\n        return (\n          <Button\n            size=\"small\"\n            type=\"text\"\n            danger\n            icon={<DeleteOutlined />}\n            disabled={isProtected}\n            onClick={() => handleDropIndex(record.index_name)}\n          >\n            Drop\n          </Button>\n        );\n      }\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.6091,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8865,
+                "INCORRECT": 0.0698,
+                "UNSUPPORTED": 0.0437
+              },
+              "confidence": 0.6091,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 445,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/TableIndexManager.tsx:250-264\n      render: (_: any, record: IndexInfo) => {\n        const isProtected = record.index_name.startsWith('pk_') || record.index_name.startsWith('ux_');\n        return (\n          <Button\n            size=\"small\"\n            type=\"text\"\n            danger\n            icon={<DeleteOutlined />}\n            disabled={isProtected}\n            onClick={() => handleDropIndex(record.index_name)}\n          >\n            Drop\n          </Button>\n        );\n      }\n",
+          "claim": "In TableIndexManager.tsx lines 250-264, isProtected disables the Drop button only for index names starting with pk_ or ux_."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.9491,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9943,
+                "NO": 0.0057
+              },
+              "confidence": 0.9491,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 378,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/TableIndexManager.tsx:250-264\n      render: (_: any, record: IndexInfo) => {\n        const isProtected = record.index_name.startsWith('pk_') || record.index_name.startsWith('ux_');\n        return (\n          <Button\n            size=\"small\"\n            type=\"text\"\n            danger\n            icon={<DeleteOutlined />}\n            disabled={isProtected}\n            onClick={() => handleDropIndex(record.index_name)}\n          >\n            Drop\n          </Button>\n        );\n      }\n",
+          "claim": "In TableIndexManager.tsx lines 250-264, isProtected disables the Drop button only for index names starting with pk_ or ux_."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "D-API",
+    "kind": "target",
+    "basis": "code",
+    "claim": "In TableIndexManager.tsx lines 85-89, handleDropIndex calls cmsApi.delete with params schema, plane, and connection_key without table.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/TableIndexManager.tsx:85-89\n        try {\n          await cmsApi.delete(`/api/introspection/indexes/${indexName}`, {\n            params: { schema, plane, connection_key: connectionKey }\n          });\n          message.success('Index drop command submitted concurrently.');\n",
+    "flow": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4081,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7863,
+                "INCORRECT": 0.1484,
+                "UNSUPPORTED": 0.0653
+              },
+              "confidence": 0.4081,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 294,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In TableIndexManager.tsx lines 85-89, handleDropIndex calls cmsApi.delete with params schema, plane, and connection_key without table.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/TableIndexManager.tsx:85-89\n        try {\n          await cmsApi.delete(`/api/introspection/indexes/${indexName}`, {\n            params: { schema, plane, connection_key: connectionKey }\n          });\n          message.success('Index drop command submitted concurrently.');\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2374,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6739,
+                "INCORRECT": 0.219,
+                "UNSUPPORTED": 0.1071
+              },
+              "confidence": 0.2374,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 300,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/TableIndexManager.tsx:85-89\n        try {\n          await cmsApi.delete(`/api/introspection/indexes/${indexName}`, {\n            params: { schema, plane, connection_key: connectionKey }\n          });\n          message.success('Index drop command submitted concurrently.');\n",
+          "claim": "In TableIndexManager.tsx lines 85-89, handleDropIndex calls cmsApi.delete with params schema, plane, and connection_key without table."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.3893,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8497,
+                "NO": 0.1503
+              },
+              "confidence": 0.3893,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 233,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/TableIndexManager.tsx:85-89\n        try {\n          await cmsApi.delete(`/api/introspection/indexes/${indexName}`, {\n            params: { schema, plane, connection_key: connectionKey }\n          });\n          message.success('Index drop command submitted concurrently.');\n",
+          "claim": "In TableIndexManager.tsx lines 85-89, handleDropIndex calls cmsApi.delete with params schema, plane, and connection_key without table."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "CTRL-T1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "In connection_manager.go lines 68-72, IsMongoMasterConnection returns false when key is empty or default.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:67-72\n// IsMongoMasterConnection checks whether the given connection_code resolves to a MongoDB master destination.\nfunc (m *ConnectionManager) IsMongoMasterConnection(ctx context.Context, key string) bool {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" || key == \"default\" {\n\t\treturn false\n\t}\n",
+    "flow": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3263,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6913,
+                "INCORRECT": 0.2671,
+                "UNSUPPORTED": 0.0416
+              },
+              "confidence": 0.3263,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 274,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In connection_manager.go lines 68-72, IsMongoMasterConnection returns false when key is empty or default.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:67-72\n// IsMongoMasterConnection checks whether the given connection_code resolves to a MongoDB master destination.\nfunc (m *ConnectionManager) IsMongoMasterConnection(ctx context.Context, key string) bool {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" || key == \"default\" {\n\t\treturn false\n\t}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4866,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8201,
+                "INCORRECT": 0.1418,
+                "UNSUPPORTED": 0.0381
+              },
+              "confidence": 0.4866,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 280,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:67-72\n// IsMongoMasterConnection checks whether the given connection_code resolves to a MongoDB master destination.\nfunc (m *ConnectionManager) IsMongoMasterConnection(ctx context.Context, key string) bool {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" || key == \"default\" {\n\t\treturn false\n\t}\n",
+          "claim": "In connection_manager.go lines 68-72, IsMongoMasterConnection returns false when key is empty or default."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7552,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9594,
+                "NO": 0.0406
+              },
+              "confidence": 0.7552,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 213,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:67-72\n// IsMongoMasterConnection checks whether the given connection_code resolves to a MongoDB master destination.\nfunc (m *ConnectionManager) IsMongoMasterConnection(ctx context.Context, key string) bool {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" || key == \"default\" {\n\t\treturn false\n\t}\n",
+          "claim": "In connection_manager.go lines 68-72, IsMongoMasterConnection returns false when key is empty or default."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-F1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In connection_manager.go lines 68-72, IsMongoMasterConnection returns true when key is empty or default.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:67-72\n// IsMongoMasterConnection checks whether the given connection_code resolves to a MongoDB master destination.\nfunc (m *ConnectionManager) IsMongoMasterConnection(ctx context.Context, key string) bool {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" || key == \"default\" {\n\t\treturn false\n\t}\n",
+    "flow": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3291,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6816,
+                "INCORRECT": 0.2829,
+                "UNSUPPORTED": 0.0355
+              },
+              "confidence": 0.3291,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 274,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In connection_manager.go lines 68-72, IsMongoMasterConnection returns true when key is empty or default.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:67-72\n// IsMongoMasterConnection checks whether the given connection_code resolves to a MongoDB master destination.\nfunc (m *ConnectionManager) IsMongoMasterConnection(ctx context.Context, key string) bool {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" || key == \"default\" {\n\t\treturn false\n\t}\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2624,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6313,
+                "INCORRECT": 0.3156,
+                "UNSUPPORTED": 0.0531
+              },
+              "confidence": 0.2624,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 280,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:67-72\n// IsMongoMasterConnection checks whether the given connection_code resolves to a MongoDB master destination.\nfunc (m *ConnectionManager) IsMongoMasterConnection(ctx context.Context, key string) bool {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" || key == \"default\" {\n\t\treturn false\n\t}\n",
+          "claim": "In connection_manager.go lines 68-72, IsMongoMasterConnection returns true when key is empty or default."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7085,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9488,
+                "NO": 0.0512
+              },
+              "confidence": 0.7085,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 213,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:67-72\n// IsMongoMasterConnection checks whether the given connection_code resolves to a MongoDB master destination.\nfunc (m *ConnectionManager) IsMongoMasterConnection(ctx context.Context, key string) bool {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" || key == \"default\" {\n\t\treturn false\n\t}\n",
+          "claim": "In connection_manager.go lines 68-72, IsMongoMasterConnection returns true when key is empty or default."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-F2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In introspection_handler.go lines 563-569, DropIndex includes the table field in the NATS payload.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:563-569\n\tpayload, _ := json.Marshal(map[string]interface{}{\n\t\t\"schema\":         schema,\n\t\t\"index_name\":     name,\n\t\t\"plane\":          plane,\n\t\t\"connection_key\": connectionKey,\n\t\t\"reply_to\":       replySubj,\n\t})\n",
+    "flow": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1121,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4627,
+                "INCORRECT": 0.4176,
+                "UNSUPPORTED": 0.1198
+              },
+              "confidence": 0.1121,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 304,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In introspection_handler.go lines 563-569, DropIndex includes the table field in the NATS payload.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:563-569\n\tpayload, _ := json.Marshal(map[string]interface{}{\n\t\t\"schema\":         schema,\n\t\t\"index_name\":     name,\n\t\t\"plane\":          plane,\n\t\t\"connection_key\": connectionKey,\n\t\t\"reply_to\":       replySubj,\n\t})\n",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.9126,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0021,
+                "INCORRECT": 0.0158,
+                "UNSUPPORTED": 0.9821
+              },
+              "confidence": 0.9126,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 310,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:563-569\n\tpayload, _ := json.Marshal(map[string]interface{}{\n\t\t\"schema\":         schema,\n\t\t\"index_name\":     name,\n\t\t\"plane\":          plane,\n\t\t\"connection_key\": connectionKey,\n\t\t\"reply_to\":       replySubj,\n\t})\n",
+          "claim": "In introspection_handler.go lines 563-569, DropIndex includes the table field in the NATS payload."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.1269,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.2934,
+                "NO": 0.7066
+              },
+              "confidence": 0.1269,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 243,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:563-569\n\tpayload, _ := json.Marshal(map[string]interface{}{\n\t\t\"schema\":         schema,\n\t\t\"index_name\":     name,\n\t\t\"plane\":          plane,\n\t\t\"connection_key\": connectionKey,\n\t\t\"reply_to\":       replySubj,\n\t})\n",
+          "claim": "In introspection_handler.go lines 563-569, DropIndex includes the table field in the NATS payload."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

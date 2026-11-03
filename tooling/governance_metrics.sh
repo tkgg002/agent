@@ -8,6 +8,7 @@ GLOBAL="$AGENT_DIR/memory/global"
 WS="$AGENT_DIR/memory/workspaces"
 CATALOG="$GLOBAL/lessons.md"
 INDEX_MD="$GLOBAL/lessons/INDEX.md"
+TRIPWIRES_JSON="$GLOBAL/lessons/tripwires.json"
 GEMINI="$AGENT_DIR/GEMINI.md"
 HOOKS_JSON="$AGENT_DIR/.agents/hooks.json"
 SKILLS_DIR="$AGENT_DIR/skills"
@@ -17,11 +18,13 @@ TODAY="$(date '+%Y-%m-%d')"
 
 c() { grep -c "$@" 2>/dev/null || true; }
 
-# ---------- A. Knowledge base (catalog = lessons.md + 2-tier INDEX.md) ----------
+# ---------- A. Knowledge base (catalog = lessons.md + 2-tier INDEX.md + tripwires.json) ----------
 PATTERNS=$( [ -f "$CATALOG" ] && c '^### \[' "$CATALOG" || echo 0 )
 H3_TOTAL=$( [ -f "$CATALOG" ] && c '^### ' "$CATALOG" || echo 0 )
 INDEX_COUNT=$( [ -f "$INDEX_MD" ] && c '^- L[0-9]' "$INDEX_MD" || echo 0 )
 INDEX_BYTES=$( [ -f "$INDEX_MD" ] && wc -c < "$INDEX_MD" | tr -d ' ' || echo 0 )
+TRIPWIRES_COUNT=$( [ -f "$TRIPWIRES_JSON" ] && python3 -c "import json; d=json.load(open('$TRIPWIRES_JSON')); print(len(d.get('tripwires', d) if isinstance(d, dict) else d))" 2>/dev/null || echo 0 )
+LOCAL_LEAKS=$( [ -f "$CATALOG" ] && c -i '/Users/[a-z0-9_]*/Documents/work/' "$CATALOG" || echo 0 )
 TAGS_DISTINCT=$( [ -f "$CATALOG" ] && grep -oE '#[a-z0-9][a-z0-9-]*' "$CATALOG" 2>/dev/null | sort -u | wc -l | tr -d ' ' || echo 0 )
 CAT_FMT=0; [ "$H3_TOTAL" -gt 0 ] && CAT_FMT=$(( PATTERNS*100/H3_TOTAL ))
 
@@ -53,17 +56,18 @@ flag() { [ "$1" = "1" ] && printf "✓" || printf "⚠"; }
 F_GEMINI=$( [ "$RULES_G" -eq 23 ] && [ "$GEMINI_BYTES" -le 12000 ] && echo 1 || echo 0 )
 F_HOOKS=$( [ "$HOOK_EVENTS" -ge 4 ] && echo 1 || echo 0 )
 F_INDEX=$( [ "$INDEX_COUNT" -eq "$PATTERNS" ] && [ "$INDEX_BYTES" -lt 15000 ] && echo 1 || echo 0 )
-F_FMT=$( [ "$CAT_FMT" -ge 95 ] && echo 1 || echo 0 )
+F_FMT=$( [ "$CAT_FMT" -ge 95 ] && [ "$LOCAL_LEAKS" -eq 0 ] && echo 1 || echo 0 )
 
 cat <<EOF
 ════════════════════════════════════════════════
  GOVERNANCE METRICS (ANTIGRAVITY) — $NOW
 ════════════════════════════════════════════════
 A. KNOWLEDGE BASE
-   • Global Patterns (lessons.md) : $PATTERNS
+   • Global Patterns (lessons.md) : $PATTERNS (Local Path Leaks: $LOCAL_LEAKS)
    • 2-Tier Index (INDEX.md)      : $INDEX_COUNT entries (${INDEX_BYTES}B < 15000B)  $(flag $F_INDEX)
+   • Automated Tripwires (H4t)    : $TRIPWIRES_COUNT active rules
    • Distinct tags                : $TAGS_DISTINCT
-   • Catalog format-compliance    : ${CAT_FMT}%  $(flag $F_FMT)  (### [date] / tổng ###)
+   • Catalog Global-compliance    : ${CAT_FMT}%  $(flag $F_FMT)  (### [date] / tổng ### & 0 local leak)
 
 B. RECIDIVISM — lớp lỗi tái diễn nhiều nhất (tag • số lần)
    $TOP_TAGS
@@ -89,7 +93,7 @@ if [ -w "$GLOBAL" ] || [ -w "$TREND" ]; then
   fi
   {
     printf '\n## [%s] snapshot (Antigravity)\n' "$TODAY"
-    printf -- '- patterns=%s index_entries=%s index_bytes=%s tags=%s catalog_fmt=%s%%\n' "$PATTERNS" "$INDEX_COUNT" "$INDEX_BYTES" "$TAGS_DISTINCT" "$CAT_FMT"
+    printf -- '- patterns=%s index_entries=%s index_bytes=%s tripwires=%s local_leaks=%s tags=%s catalog_fmt=%s%%\n' "$PATTERNS" "$INDEX_COUNT" "$INDEX_BYTES" "$TRIPWIRES_COUNT" "$LOCAL_LEAKS" "$TAGS_DISTINCT" "$CAT_FMT"
     printf -- '- workspaces=%s progress_compliance=%s%% t1_plus=%s\n' "$WS_TOTAL" "$PROGRESS_PCT" "$WS_MIN_T1"
     printf -- '- rules_gemini=%s gemini_bytes=%s skills=%s hook_events=%s\n' "$RULES_G" "$GEMINI_BYTES" "$SKILLS_COUNT" "$HOOK_EVENTS"
     printf -- '- recidivism_top: %s\n' "$TOP_TAGS"

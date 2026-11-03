@@ -1,0 +1,58 @@
+[
+  {
+    "id": "A-FIX-01",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "F1 fixed: laya_gate.py only runs when the Laya :8200 health check passes; no --url routing to VegaML",
+    "claim": "In kernel_bridge.go, laya_gate.py is invoked only when checkLayaHealthHTTP(DefaultLayaHealthURL) is true, and the runPythonTool arguments contain no --url flag.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:693-702\n\tif g != nil && g.AgentCoreDir != \"\" && liveAllowed && checkLayaHealthHTTP(DefaultLayaHealthURL) {\n\t\tscript := filepath.Join(g.AgentCoreDir, \"tooling\", \"laya_gate.py\")\n\t\tif _, statErr := os.Stat(script); statErr == nil {\n\t\t\tout, runErr := runPythonTool(ctx, g.AgentCoreDir, script,\n\t\t\t\t\"run\",\n\t\t\t\t\"--stage\", stage,\n\t\t\t\t\"--ws-root\", filepath.Dir(absWsDir),\n\t\t\t\t\"--workspace\", filepath.Base(absWsDir),\n\t\t\t\t\"--claims\", claimsFile,\n\t\t\t)"
+  },
+  {
+    "id": "A-FIX-02",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "F2 fixed: EnsureDualNeuralGates returns Laya and VegaML states as two separate values",
+    "claim": "EnsureDualNeuralGates returns layaUp from ensureLayaUp and vegaUp from EnsureVegaSidecarUp as two separate return values.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/neural_gate_boot.go:28-29\nfunc (g *Gatekeeper) EnsureDualNeuralGates(ctx context.Context) (layaUp, vegaUp bool) {\n\treturn g.ensureLayaUp(ctx), g.EnsureVegaSidecarUp(ctx)"
+  },
+  {
+    "id": "A-FIX-03",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "F3 fixed: feedback labels contain only human-sourced keys",
+    "claim": "In vega_human_gate.go, the feedback labels map contains only c_req_check and dg0_dg1_routing.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/vega_human_gate.go:117-117\n\tlabels := map[string]any{\"c_req_check\": approved, \"dg0_dg1_routing\": \"PASS_TO_HUMAN_GATE\"}"
+  },
+  {
+    "id": "A-FIX-04",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "F7 fixed: ensure_vega_up.sh exits 1 when health never returns 2xx",
+    "claim": "ensure_vega_up.sh prints an error to stderr and exits with code 1 after the health-check loop finishes without success.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/sidecar/vegaml/ensure_vega_up.sh:69-72\ndone\n\necho \"[ensure_vega_up] ${VEGA_URL} did not return 2xx within 25s (see ${LOG_FILE})\" >&2\nexit 1"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Control False 1",
+    "claim": "ensure_vega_up.sh exits with code 0 after the health-check loop fails.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/sidecar/vegaml/ensure_vega_up.sh:69-72\ndone\n\necho \"[ensure_vega_up] ${VEGA_URL} did not return 2xx within 25s (see ${LOG_FILE})\" >&2\nexit 1"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Control False 2",
+    "claim": "The feedback labels map hardcodes architecture_safety_score to 3.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/vega_human_gate.go:117-117\n\tlabels := map[string]any{\"c_req_check\": approved, \"dg0_dg1_routing\": \"PASS_TO_HUMAN_GATE\"}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "Control True",
+    "claim": "In vega_sidecar.go, defaultVegaDecideTimeout is 60 seconds.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/vega_sidecar.go:26-26\n\tdefaultVegaDecideTimeout = 60 * time.Second"
+  }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "claim",
+    "claim": "ConnectionManager.normalizeEngineName returns 'mongodb' for 'mongodb'/'mongo', 'clickhouse' for 'clickhouse'/'ch', 'mysql' for 'mysql'/'mariadb', and 'postgresql' as default.",
+    "function_workflow": "normalizeEngineName normalizes raw engine string into canonical engine_type.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:126-137\nfunc normalizeEngineName(raw string) string {\n\tswitch strings.ToLower(strings.TrimSpace(raw)) {\n\tcase \"mongodb\", \"mongo\":\n\t\treturn \"mongodb\"\n\tcase \"clickhouse\", \"ch\":\n\t\treturn \"clickhouse\"\n\tcase \"mysql\", \"mariadb\":\n\t\treturn \"mysql\"\n\tdefault:\n\t\treturn \"postgresql\"\n\t}\n}"
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "claim",
+    "claim": "Registry.openGorm in multi.go opens the GORM connection using postgres.Open(dsn).",
+    "function_workflow": "openGorm initializes a *gorm.DB instance for the given dsn and role.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go:205-216\nfunc (r *Registry) openGorm(dsn, role string) (*gorm.DB, error) {\n\tlogLevel := logger.Warn\n\tif r.cfg.Server.Mode == \"debug\" {\n\t\tlogLevel = logger.Info\n\t}\n\n\tdb, err := gorm.Open(postgres.Open(dsn), &gorm.Config{\n\t\tLogger: NewCDCLogger(logLevel),\n\t})\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"gorm open: %w\", err)\n\t}"
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "claim",
+    "claim": "In cdc-cms-service master_connection_repo_gorm.go, CreateMasterConnection only normalizes engineType to 'mongodb' when engineType is 'mongo' or 'mongodb', and otherwise sets engineType to 'postgresql'.",
+    "function_workflow": "CreateMasterConnection normalizes item.EngineType before inserting into connection_registry.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_connection_repo_gorm.go:160-165\n\tengineType := strings.ToLower(strings.TrimSpace(item.EngineType))\n\tif engineType == \"mongo\" || engineType == \"mongodb\" {\n\t\tengineType = \"mongodb\"\n\t} else {\n\t\tengineType = \"postgresql\"\n\t}"
+  },
+  {
+    "id": "CTRL-TRUE-01",
+    "kind": "control_true",
+    "claim": "IsMongoMasterConnection checks whether ResolveMasterEngineType(ctx, key) equals 'mongodb'.",
+    "function_workflow": "IsMongoMasterConnection delegates to ResolveMasterEngineType.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:140-142\nfunc (m *ConnectionManager) IsMongoMasterConnection(ctx context.Context, key string) bool {\n\treturn m.ResolveMasterEngineType(ctx, key) == \"mongodb\"\n}"
+  },
+  {
+    "id": "CTRL-FALSE-01",
+    "kind": "control_false",
+    "claim": "IsMongoMasterConnection always returns true regardless of the engine type returned by ResolveMasterEngineType.",
+    "function_workflow": "IsMongoMasterConnection delegates to ResolveMasterEngineType.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:140-142\nfunc (m *ConnectionManager) IsMongoMasterConnection(ctx context.Context, key string) bool {\n\treturn m.ResolveMasterEngineType(ctx, key) == \"mongodb\"\n}"
+  },
+  {
+    "id": "CTRL-FALSE-02",
+    "kind": "control_false",
+    "claim": "normalizeEngineName returns 'oracle' when the input raw string is 'mongodb'.",
+    "function_workflow": "normalizeEngineName normalizes raw engine string.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:126-137\nfunc normalizeEngineName(raw string) string {\n\tswitch strings.ToLower(strings.TrimSpace(raw)) {\n\tcase \"mongodb\", \"mongo\":\n\t\treturn \"mongodb\"\n\tcase \"clickhouse\", \"ch\":\n\t\treturn \"clickhouse\"\n\tcase \"mysql\", \"mariadb\":\n\t\treturn \"mysql\"\n\tdefault:\n\t\treturn \"postgresql\"\n\t}\n}"
+  }
+]

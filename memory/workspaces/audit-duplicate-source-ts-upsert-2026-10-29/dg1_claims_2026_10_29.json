@@ -1,0 +1,65 @@
+[
+  {
+    "id": "S-RC-1",
+    "kind": "claim",
+    "claim": "In BuildUpsertSQLInSchema, the updateSets loop at line 377 still checks only if col == pkField instead of ShouldSkipDataColumn(col, pkField), allowing system columns in mappedData to enter updateSets.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:375-387\n\tseenUpdateCols := make(map[string]bool)\n\tupdateSets := []string{}\n\tfor col := range mappedData {\n\t\tif col == pkField {\n\t\t\tcontinue\n\t\t}\n\t\tif _, exists := schema.Columns[col]; !exists {\n\t\t\tcontinue\n\t\t}\n\t\tident := pgx.Identifier{col}.Sanitize()\n\t\tseenUpdateCols[col] = true\n\t\tupdateSets = append(updateSets, fmt.Sprintf(`%s = EXCLUDED.%s`, ident, ident))\n\t}",
+    "flow": "SchemaAdapter.BuildUpsertSQLInSchema -> updateSets loop"
+  },
+  {
+    "id": "S-FIX-1",
+    "kind": "claim",
+    "claim": "sourceRepoGorm.UpdateRegistry excludes the 11 reserved shadow system columns from auto-approval in mapping_rule_v2 when updating status to approved.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/source/source_repo_gorm.go:383-392\n\t\t\t\tres := tx.Table(\"cdc_system.mapping_rule_v2\").\n\t\t\t\t\tWhere(`source_object_id = ? AND shadow_binding_id = ? AND status != ?\n\t\t\t\t\t\tAND LOWER(source_field) NOT IN ('_gpay_id','_source_id','_raw_data','_source','_source_ts','_synced_at','_version','_hash','_deleted','_created_at','_updated_at')\n\t\t\t\t\t\tAND LOWER(target_column) NOT IN ('_gpay_id','_source_id','_raw_data','_source','_source_ts','_synced_at','_version','_hash','_deleted','_created_at','_updated_at')`,\n\t\t\t\t\t\tsourceObjectID, shadowBindingID, \"approved\").\n\t\t\t\t\tUpdates(map[string]interface{}{\n\t\t\t\t\t\t\"status\":    \"approved\",\n\t\t\t\t\t\t\"is_active\": true,\n\t\t\t\t\t})",
+    "flow": "UpdateRegistryHandler.Handle -> sourceRepoGorm.UpdateRegistry -> Updates cdc_system.mapping_rule_v2"
+  },
+  {
+    "id": "S-IMPACT-1",
+    "kind": "claim",
+    "claim": "BatchBuffer.FlushTableWithContext pops priorAsyncErr via popAsyncFlushErrorLocked(targetTable) and filters bb.records using matchTargetTable(r, targetTable).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:282-301\n\tbb.mu.Lock()\n\tpriorAsyncErr := bb.popAsyncFlushErrorLocked(targetTable)\n\tif len(bb.records) == 0 {\n\t\tbb.mu.Unlock()\n\t\treturn 0, priorAsyncErr\n\t}\n\tmatched := make([]*shadow.UpsertRecord, 0)\n\tremaining := make([]*shadow.UpsertRecord, 0, len(bb.records))\n\tfor _, r := range bb.records {\n\t\tif matchTargetTable(r, targetTable) {\n\t\t\tmatched = append(matched, r)\n\t\t} else {\n\t\t\tremaining = append(remaining, r)\n\t\t}\n\t}\n\tbb.records = remaining\n\tbb.mu.Unlock()",
+    "flow": "EventHandler.FlushTableBatchBuffer -> BatchBuffer.FlushTableWithContext -> matchTargetTable"
+  },
+  {
+    "id": "S-PATTERN-1",
+    "kind": "claim",
+    "claim": "DynamicMapper.MapData skips inactive rules and any rule where IsReservedShadowSystemColumn(rule.TargetColumn) is true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/dynamic_mapper.go:85-90\n\tfor _, rule := range rules {\n\t\tif !rule.IsActive || IsReservedShadowSystemColumn(rule.TargetColumn) {\n\t\t\tcontinue\n\t\t}",
+    "flow": "EventHandler -> DynamicMapper.MapData -> IsReservedShadowSystemColumn"
+  },
+  {
+    "id": "D-BEHAV-1",
+    "kind": "demo",
+    "claim": "In the proposed code demo, ShouldSkipDataColumn returns true when col matches pkField or is a reserved shadow system column in reservedShadowSystemColumns such as _source_ts, preventing duplicate columns in allCols.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-duplicate-source-ts-upsert-2026-10-29/09_tasks_solution_2026_10_29.md:55-76\nfunc IsReservedShadowSystemColumn(col string) bool {\n\tclean := strings.ToLower(strings.Trim(strings.TrimSpace(col), `\"`))\n\t_, exists := reservedShadowSystemColumns[clean]\n\treturn exists\n}\nfunc ShouldSkipDataColumn(col string, pkField string) bool {\n\tclean := strings.ToLower(strings.Trim(strings.TrimSpace(col), `\"`))\n\tif clean == \"\" {\n\t\treturn true\n\t}\n\tif strings.EqualFold(clean, strings.TrimSpace(pkField)) {\n\t\treturn true\n\t}\n\tif clean == \"_deleted\" {\n\t\treturn false\n\t}\n\treturn IsReservedShadowSystemColumn(clean)\n}",
+    "flow": "SchemaAdapter.BuildBatchUpsertSQLsInSchema -> ShouldSkipDataColumn -> IsReservedShadowSystemColumn"
+  },
+  {
+    "id": "D-EDGE-1",
+    "kind": "demo",
+    "claim": "In the proposed code demo, SnapshotRunner calls r.eventHandler.FlushTableBatchBuffer(ctx, p.TargetTable) instead of FlushBatchBuffer(ctx) to flush only the target table of the current snapshot job.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-duplicate-source-ts-upsert-2026-10-29/09_tasks_solution_2026_10_29.md:148-154\n\t\tflushDLQ()\n\t\t_, flushErr := r.eventHandler.FlushTableBatchBuffer(ctx, p.TargetTable)\n\t\tif flushErr != nil {\n\t\t\treturn tripBreaker(fmt.Sprintf(\"flush failed: %v\", flushErr))\n\t\t}",
+    "flow": "SnapshotRunner.runSnapshot -> EventHandler.FlushTableBatchBuffer"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "getMetadataInsertCols appends \"_source_ts\" to cols when \"_source_ts\" exists in schema.Columns.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:697-700\n\tif _, ok := schema.Columns[\"_source_ts\"]; ok {\n\t\tcols = append(cols, `\"_source_ts\"`)\n\t}\n\treturn cols",
+    "flow": "SchemaAdapter.getMetadataInsertCols"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "getMetadataInsertCols never appends \"_source_ts\" to cols and always returns an empty slice.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:697-700\n\tif _, ok := schema.Columns[\"_source_ts\"]; ok {\n\t\tcols = append(cols, `\"_source_ts\"`)\n\t}\n\treturn cols",
+    "flow": "SchemaAdapter.getMetadataInsertCols"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "DynamicMapper.MapData only processes rules where rule.IsActive is false and skips all active rules.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/dynamic_mapper.go:85-89\n\tfor _, rule := range rules {\n\t\tif !rule.IsActive || IsReservedShadowSystemColumn(rule.TargetColumn) {\n\t\t\tcontinue\n\t\t}",
+    "flow": "DynamicMapper.MapData"
+  }
+]

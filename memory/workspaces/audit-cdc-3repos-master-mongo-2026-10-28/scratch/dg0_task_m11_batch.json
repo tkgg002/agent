@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "critique",
+    "claim": "In buildMasterConnectionDSN in master_registry_handler_connections.go, when engineType is mongodb, q.Set(\"connectTimeoutMS\", \"5000\") is called and fmt.Sprintf formats a mongodb:// URI without setting directConnection.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections.go:46-78\n\tif engineType == \"mongodb\" {\n\t\tif port <= 0 {\n\t\t\tport = 27017\n\t\t}\n\t\tif database == \"\" {\n\t\t\tdatabase = \"admin\"\n\t\t}\n\t\tq := url.Values{}\n\t\tif authSource == \"\" && username != \"\" {\n\t\t\tauthSource = \"admin\"\n\t\t}\n\t\tif authSource != \"\" {\n\t\t\tq.Set(\"authSource\", authSource)\n\t\t}\n\t\tif replicaSet != \"\" {\n\t\t\tq.Set(\"replicaSet\", replicaSet)\n\t\t}\n\t\tif sslmode == \"require\" || sslmode == \"verify-full\" || sslmode == \"true\" {\n\t\t\tq.Set(\"tls\", \"true\")\n\t\t}\n\t\tq.Set(\"connectTimeoutMS\", \"5000\")\n\t\tif username != \"\" {\n\t\t\treturn fmt.Sprintf(\"mongodb://%s:%s@%s:%d/%s?%s\",\n\t\t\t\turl.QueryEscape(username),\n\t\t\t\turl.QueryEscape(password),\n\t\t\t\thost,\n\t\t\t\tport,\n\t\t\t\tdatabase,\n\t\t\t\tq.Encode(),\n\t\t\t)\n\t\t}\n\t\treturn fmt.Sprintf(\"mongodb://%s:%d/%s?%s\", host, port, database, q.Encode())\n\t}",
+    "flow": "buildMasterConnectionDSN builds mongodb://host:port/database?connectTimeoutMS=5000 without setting directConnection."
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "critique",
+    "claim": "In TestConnection in master_registry_handler_connections.go, when req.ID > 0 or req.ConnectionCode is non-empty, resolvedDSN is fetched via h.masterRepo.GetMasterConnectionDSN and passed to options.Client().ApplyURI(dsn).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections.go:165-205\n\t} else if req.ID > 0 || strings.TrimSpace(req.ConnectionCode) != \"\" {\n\t\tresolvedDSN, err := h.masterRepo.GetMasterConnectionDSN(c.Context(), req.ID, req.ConnectionCode)\n\t\tif err != nil {\n\t\t\treturn c.Status(400).JSON(fiber.Map{\n\t\t\t\t\"success\": false,\n\t\t\t\t\"error\":   fmt.Sprintf(\"Could not retrieve connection credentials: %v\", err),\n\t\t\t})\n\t\t}\n\t\tdsn = resolvedDSN\n\t\tif strings.HasPrefix(dsn, \"mongodb://\") || strings.HasPrefix(dsn, \"mongodb+srv://\") {\n\t\t\tengineType = \"mongodb\"\n\t\t}\n\t}\n\tclientOpts := options.Client().\n\t\tApplyURI(dsn).\n\t\tSetConnectTimeout(5 * time.Second).\n\t\tSetServerSelectionTimeout(5 * time.Second)\n\tclient, err := mongo.Connect(ctxTimeout, clientOpts)",
+    "flow": "TestConnection retrieves resolvedDSN via GetMasterConnectionDSN and passes dsn to options.Client().ApplyURI(dsn)."
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "critique",
+    "claim": "In resolveMasterMongoURI in connection_manager.go, uri is read from conn.OptionsJSON or formatted as fmt.Sprintf(\"mongodb://%s:%d/%s\", hostVal, port, dbPart) and returned along with defaultDB.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:212-249\n\t\t\tif uri == \"\" && len(conn.OptionsJSON) > 0 {\n\t\t\t\tvar opts map[string]interface{}\n\t\t\t\tif err := json.Unmarshal(conn.OptionsJSON, &opts); err == nil {\n\t\t\t\t\tfor _, k := range []string{\"uri\", \"dsn\", \"url\", \"connection_string\"} {\n\t\t\t\t\t\tif v, ok := opts[k].(string); ok && strings.TrimSpace(v) != \"\" {\n\t\t\t\t\t\t\turi = strings.TrimSpace(v)\n\t\t\t\t\t\t\tbreak\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t\tif uri == \"\" && hostVal != \"\" {\n\t\t\t\turi = fmt.Sprintf(\"mongodb://%s:%d/%s\", hostVal, port, dbPart)\n\t\t\t}\n\treturn uri, defaultDB\n}",
+    "flow": "resolveMasterMongoURI extracts uri from OptionsJSON or formats mongodb://host:port/db and returns uri, defaultDB."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In buildMasterConnectionDSN in master_registry_handler_connections.go, when engineType is mongodb and port <= 0, port is set to 27017.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections.go:46-52\n\tif engineType == \"mongodb\" {\n\t\tif port <= 0 {\n\t\t\tport = 27017\n\t\t}\n\t\tif database == \"\" {\n\t\t\tdatabase = \"admin\"\n\t\t}",
+    "flow": "When engineType == \"mongodb\" and port <= 0, port = 27017."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In buildMasterConnectionDSN in master_registry_handler_connections.go, when engineType is mongodb and port <= 0, port is set to 5432.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections.go:46-52\n\tif engineType == \"mongodb\" {\n\t\tif port <= 0 {\n\t\t\tport = 27017\n\t\t}\n\t\tif database == \"\" {\n\t\t\tdatabase = \"admin\"\n\t\t}",
+    "flow": "When engineType == \"mongodb\" and port <= 0, port = 27017, not 5432."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In GetMasterMongoClient in connection_manager.go, when key is empty, the function returns m.masterMongoPool[\"default\"] without an error.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:129-134\nfunc (m *ConnectionManager) GetMasterMongoClient(ctx context.Context, key string) (*mongo.Client, error) {\n\tkey = strings.TrimSpace(key)\n\tif key == \"\" {\n\t\treturn nil, fmt.Errorf(\"master mongo connection key is empty\")\n\t}",
+    "flow": "When key == \"\", GetMasterMongoClient returns nil and an error."
+  }
+]

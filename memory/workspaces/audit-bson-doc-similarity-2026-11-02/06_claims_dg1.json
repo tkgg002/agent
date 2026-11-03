@@ -1,0 +1,44 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "claim",
+    "claim": "Hàm coerceDefaultInt32IfInRange trong mongo_extjson_unwrapper.go hiện chỉ có các nhánh int32, int, int64 và json.Number, thiếu nhánh primitive.Decimal128.",
+    "flow": "CoerceRecordToBSONDoc -> ApplySourceFieldTypesToBSONDoc -> coerceDefaultInt32IfInRange",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_extjson_unwrapper.go:318-336\nfunc coerceDefaultInt32IfInRange(val any) (any, bool) {\n\tswitch v := val.(type) {\n\tcase int32:\n\t\treturn v, true\n\tcase int:\n\t\tif v >= math.MinInt32 && v <= math.MaxInt32 {\n\t\t\treturn int32(v), true\n\t\t}\n\tcase int64:\n\t\tif v >= math.MinInt32 && v <= math.MaxInt32 {\n\t\t\treturn int32(v), true\n\t\t}\n\tcase json.Number:\n\t\tif i, err := v.Int64(); err == nil && i >= math.MinInt32 && i <= math.MaxInt32 {\n\t\t\treturn int32(i), true\n\t\t}\n\t}\n\treturn val, false\n}"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "claim",
+    "claim": "Trong mongo_bson_restorer.go dòng 165-169, khi doc[\"value\"] không có metadata trong typeMap, ApplySourceFieldTypesToBSONDoc gọi coerceDefaultInt32IfInRange(rawVal) và gán lại doc[\"value\"] = v32 nếu ok == true.",
+    "flow": "ApplySourceFieldTypesToBSONDoc -> coerceDefaultInt32IfInRange",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:165-169\n\tif rawVal, hasVal := doc[\"value\"]; hasVal && rawVal != nil && !hasTypeMeta(typeMap, \"value\") {\n\t\tif v32, ok := coerceDefaultInt32IfInRange(rawVal); ok {\n\t\t\tdoc[\"value\"] = v32\n\t\t}\n\t}"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "claim": "Code Demo bổ sung case primitive.Decimal128 và case string vào coerceDefaultInt32IfInRange để chuyển các giá trị nguyên trong khoảng [math.MinInt32, math.MaxInt32] về int32.",
+    "flow": "coerceDefaultInt32IfInRange(primitive.Decimal128) -> int32(9999), true",
+    "evidence": "DEMO:\n\tcase primitive.Decimal128:\n\t\tif i, err := strconv.ParseInt(strings.TrimSpace(v.String()), 10, 64); err == nil && i >= math.MinInt32 && i <= math.MaxInt32 {\n\t\t\treturn int32(i), true\n\t\t}\n\tcase string:\n\t\tif i, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); err == nil && i >= math.MinInt32 && i <= math.MaxInt32 {\n\t\t\treturn int32(i), true\n\t\t}"
+  },
+  {
+    "id": "CTRL-T1",
+    "kind": "control_true",
+    "claim": "Hàm ensureReconstructedMongoTimestamps trong mongo_extjson_unwrapper.go đảm bảo trường __v có kiểu int32, mặc định là int32(0).",
+    "flow": "ApplySourceFieldTypesToBSONDoc -> ensureReconstructedMongoTimestamps",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_extjson_unwrapper.go:388-394\n\tif _, isInt32 := doc[\"__v\"].(int32); !isInt32 {\n\t\tif v32, err := coerceInt32(doc[\"__v\"]); err == nil {\n\t\t\tdoc[\"__v\"] = v32\n\t\t} else {\n\t\t\tdoc[\"__v\"] = int32(0)\n\t\t}\n\t}"
+  },
+  {
+    "id": "CTRL-F1",
+    "kind": "control_false",
+    "claim": "Hàm ensureReconstructedMongoTimestamps luôn xóa bỏ hoàn toàn trường createdAt và updatedAt ra khỏi doc.",
+    "flow": "ensureReconstructedMongoTimestamps",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_extjson_unwrapper.go:349-355\n\tfor _, dtKey := range []string{\"createdAt\", \"updatedAt\"} {\n\t\tif raw, exists := doc[dtKey]; exists && raw != nil {\n\t\t\tif dt, err := coerceExtJSONDateValue(raw); err == nil && dt != 0 {\n\t\t\t\tdoc[dtKey] = dt\n\t\t\t}\n\t\t}\n\t}"
+  },
+  {
+    "id": "CTRL-F2",
+    "kind": "control_false",
+    "claim": "Hàm CoerceToBSONValue ép mọi cột kiểu NUMERIC thành kiểu boolean.",
+    "flow": "CoerceToBSONValue",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_type_converter.go:42-46\n\t// 3. NUMERIC / DECIMAL / DECIMAL128 -> primitive.Decimal128\n\tif strings.HasPrefix(dt, \"NUMERIC\") || strings.HasPrefix(dt, \"DECIMAL\") || dt == \"MONEY\" || sf == \"DECIMAL128\" {\n\t\treturn coerceDecimal128(val)\n\t}"
+  }
+]

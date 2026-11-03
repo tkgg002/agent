@@ -1,0 +1,77 @@
+[
+  {
+    "id": "S-RC-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "S3 Root Cause: DiscoverWorkspaceRepos 32-Repo Cap & ResolveTaskTargetRepo",
+    "claim": "DiscoverWorkspaceRepos giới hạn cứng if len(repos) >= 32 { break } và ResolveTaskTargetRepo chỉ so khớp baseName mà không đối chiếu nhánh Git CurrentBranch.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:421-426\nfull := filepath.Join(workRoot, e.Name())\naddRepo(e.Name(), full)\nif len(repos) >= 32 {\n\tbreak\n}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:421-426",
+    "must_contain": [
+      "if len(repos) >= 32 {",
+      "break"
+    ]
+  },
+  {
+    "id": "S-FIX-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "S3 Fix: Branch-Aware ResolveTaskTargetRepo & DG0 Branch Check",
+    "claim": "Giải pháp bổ sung extractExplicitBranchFromPrompt vào ResolveTaskTargetRepo và kiểm tra actualBranch vs wantBranch trong BuildUnifiedDG0CritiqueDoc.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-ai-orchestrator-task-100-2026-11-02/09_tasks_solution_task_100_2026_11_02.md:88-115\nfunc (s *Server) ResolveTaskTargetRepo(qt queue.QueuedTask) string {\n\tlower := strings.ToLower(qt.ExternalID + \" \" + qt.Title + \" \" + qt.Description)\n\twantBranch := extractExplicitBranchFromPrompt(qt.Title + \" \" + qt.Description)",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-ai-orchestrator-task-100-2026-11-02/09_tasks_solution_task_100_2026_11_02.md:88-115",
+    "must_contain": [
+      "wantBranch := extractExplicitBranchFromPrompt(qt.Title + \" \" + qt.Description)",
+      "strings.EqualFold(strings.TrimSpace(r.CurrentBranch), wantBranch)"
+    ]
+  },
+  {
+    "id": "D-BEHAV-01",
+    "kind": "demo",
+    "basis": "code",
+    "flow": "DG2 Concrete Code Demo: inspectRealGitStatusAndDiff Branch Diff Support",
+    "claim": "Code Demo trong 09_tasks_solution bổ sung detectRepoBranchFast và git diff --stat develop...HEAD vào inspectRealGitStatusAndDiff.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-ai-orchestrator-task-100-2026-11-02/09_tasks_solution_task_100_2026_11_02.md:276-298\nbranchName := detectRepoBranchFast(targetRepo)\ncmdStatus := exec.CommandContext(ctx, \"git\", \"-C\", targetRepo, \"status\", \"--short\")",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-ai-orchestrator-task-100-2026-11-02/09_tasks_solution_task_100_2026_11_02.md:276-298",
+    "must_contain": [
+      "branchName := detectRepoBranchFast(targetRepo)",
+      "for _, baseRef := range []string{\"develop...HEAD\", \"main...HEAD\", \"HEAD~1..HEAD\"}"
+    ]
+  },
+  {
+    "id": "K1",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "DG1 Control True",
+    "claim": "openDispatchModal lấy dashboardState.active_target_repo gán vào activeRepo.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/app.js:2723-2726\nconst repos = dashboardState?.available_repos || [];\nconst activeRepo = dashboardState?.active_target_repo || \"\";",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/static/app.js:2723-2726",
+    "must_contain": [
+      "const activeRepo = dashboardState?.active_target_repo || \"\";"
+    ]
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG1 Control False 1",
+    "claim": "Giải pháp cho phép giữ nguyên giới hạn 32 repo trong DiscoverWorkspaceRepos.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-ai-orchestrator-task-100-2026-11-02/09_tasks_solution_task_100_2026_11_02.md:66-76\nfull := filepath.Join(workRoot, e.Name())\naddRepo(e.Name(), full)",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-ai-orchestrator-task-100-2026-11-02/09_tasks_solution_task_100_2026_11_02.md:66-76",
+    "must_contain": [
+      "KEEP_32_REPO_CAP_FABRICATED_TOKEN_777"
+    ]
+  },
+  {
+    "id": "K3",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG1 Control False 2",
+    "claim": "Giải pháp thực hiện git push trực tiếp lên nhánh develop.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-ai-orchestrator-task-100-2026-11-02/09_tasks_solution_task_100_2026_11_02.md:221-249\nbranchName := detectRepoBranchFast(targetRepo)",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-ai-orchestrator-task-100-2026-11-02/09_tasks_solution_task_100_2026_11_02.md:221-249",
+    "must_contain": [
+      "GIT_PUSH_FORCE_DEVELOP_FABRICATED_TOKEN_666"
+    ]
+  }
+]

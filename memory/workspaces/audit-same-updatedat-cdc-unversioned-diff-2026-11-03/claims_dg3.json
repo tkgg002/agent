@@ -1,0 +1,44 @@
+[
+  {
+    "id": "A-FINDING-1",
+    "kind": "claim",
+    "claim": "In internal/handler/shadow/utils.go, extractSourceTsMs extracts raw := m[\"ts_ms\"] from the source map after calling unwrapAvroUnion(source).",
+    "flow": "KafkaConsumer calls extractSourceTsMs(sourceRaw) to populate Record.SourceTsMs.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/utils.go:72-84\nfunc extractSourceTsMs(source interface{}) int64 {\n\tsource = unwrapAvroUnion(source)\n\tm, ok := source.(map[string]interface{})\n\tif !ok {\n\t\treturn 0\n\t}\n\traw := m[\"ts_ms\"]"
+  },
+  {
+    "id": "A-FINDING-2",
+    "kind": "claim",
+    "claim": "In internal/service/shadow/schema_adapter.go, buildOCCWhereClause formats timeClause with _source_ts < EXCLUDED._source_ts and only permits _source_ts = EXCLUDED._source_ts when existing _source is 'snapshot:v2'.",
+    "flow": "buildOCCWhereClause generates the WHERE condition for ON CONFLICT DO UPDATE on shadow tables.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:771-783\n\t\tif _, hasSourceCol := schema.Columns[\"_source\"]; hasSourceCol {\n\t\t\ttimeClause = fmt.Sprintf(\n\t\t\t\t`(%s.\"_source_ts\" IS NULL `+\n\t\t\t\t\t`OR %s.\"_source_ts\" < EXCLUDED.\"_source_ts\" `+\n\t\t\t\t\t`OR (%s.\"_source_ts\" = EXCLUDED.\"_source_ts\" `+\n\t\t\t\t\t`    AND %s.\"_source\" = 'snapshot:v2' `+\n\t\t\t\t\t`    AND EXCLUDED.\"_source\" <> 'snapshot:v2'))`,\n\t\t\t\tqualifiedTable, qualifiedTable, qualifiedTable, qualifiedTable,\n\t\t\t)\n\t\t} else {\n\t\t\ttimeClause = fmt.Sprintf(`(%s.\"_source_ts\" IS NULL OR %s.\"_source_ts\" < EXCLUDED.\"_source_ts\")`,\n\t\t\t\tqualifiedTable, qualifiedTable)\n\t\t}"
+  },
+  {
+    "id": "A-FINDING-3",
+    "kind": "claim",
+    "claim": "In TransHisModel, transId is configured with unique: true, and createTransHis in start.ts calls both createIpAddress(ctx) and createTrans(ctx) whereas updateTransHisStatus calls updateTransStatus(ctx).",
+    "flow": "CashInPublish invokes createTransHis and updateTransHis without await -> MongoDB executes insertOne first so updateOne matches the row (n:1, nModified:1) while createTransHis logs completion 23ms later.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/core-trans-proxy-history-service/models/transHis.model.ts:28-32\n\t\t\t\ttransId: {\n\t\t\t\t\ttype: String,\n\t\t\t\t\trequired: [true, \"transId required\"],\n\t\t\t\t\tunique: true,\n\t\t\t\t},\nREF: /Users/trainguyen/Documents/work/core-trans-proxy-history-service/start.ts:50-55\n\t\t\t\tcreateTransHis: (ctx) => {\n\t\t\t\t\tthis.ipAddressSavePublish.createIpAddress(ctx);\n\t\t\t\t\treturn this.transHisSavePublish.createTrans(ctx);\n\t\t\t\t},\n\t\t\t\tupdateTransHisStatus: (ctx) =>\n\t\t\t\t\tthis.transHisSavePublish.updateTransStatus(ctx),"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In internal/handler/shadow/utils.go, extractSourceTsMs returns 0 when source cannot be cast to map[string]interface{}.",
+    "flow": "extractSourceTsMs unwraps Avro union -> checks map type assertion -> returns 0 if !ok.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/utils.go:72-78\nfunc extractSourceTsMs(source interface{}) int64 {\n\tsource = unwrapAvroUnion(source)\n\tm, ok := source.(map[string]interface{})\n\tif !ok {\n\t\treturn 0\n\t}\n\traw := m[\"ts_ms\"]"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In internal/handler/shadow/utils.go, extractSourceTsMs returns -1 instead of 0 when source is not a map[string]interface{}.",
+    "flow": "extractSourceTsMs checks map type assertion.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/utils.go:72-78\nfunc extractSourceTsMs(source interface{}) int64 {\n\tsource = unwrapAvroUnion(source)\n\tm, ok := source.(map[string]interface{})\n\tif !ok {\n\t\treturn 0\n\t}\n\traw := m[\"ts_ms\"]"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In TransHisModel, the transId field is configured with unique: false and required: false.",
+    "flow": "TransHisModel constructor defines Mongoose schema for transId.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/core-trans-proxy-history-service/models/transHis.model.ts:28-32\n\t\t\t\ttransId: {\n\t\t\t\t\ttype: String,\n\t\t\t\t\trequired: [true, \"transId required\"],\n\t\t\t\t\tunique: true,\n\t\t\t\t},"
+  }
+]

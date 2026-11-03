@@ -1,0 +1,105 @@
+{
+  "mode": "claim",
+  "stage": "dg3",
+  "workspace": "audit-daily-flow-vs-daily-count-2026-10-27",
+  "ts": "20261027T101522",
+  "trusted_rounds": [
+    "r2"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-daily-flow-vs-daily-count-2026-10-27/06_laya_raw_dg3_20261027T101522.json",
+  "claims": [
+    {
+      "id": "A-RC-KAFKA-FALLBACK",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Tại activity_log_read_repo_gorm.go:431-438, kafka_total cộng thêm fallback COALESCE((e.details->>'written')::bigint, e.rows_affected, 0) khi c và inserted đều NULL, nhưng kafka_c lại không có fallback này khiến Kafka.Total lớn hơn Kafka.C + Kafka.U + Kafka.D đối với các log legacy.",
+      "decision": "FLAG",
+      "resolved": "Xác minh trực tiếp tại SQL CTE exec_daily: kafka_total có nhánh fallback CASE WHEN c IS NULL AND inserted IS NULL còn kafka_c không có. REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:431-438",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3409
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.135
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.1358
+        }
+      }
+    },
+    {
+      "id": "A-SNAPSHOT-MASTER-DOUBLE",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Tại activity_log_read_repo_gorm.go:429-430, snapshot_master cộng đồng thời cả inserted + updated + deleted lẫn e.rows_affected khiến số liệu bị nhân đôi khi rows_affected đã bằng tổng inserted + updated + deleted.",
+      "decision": "FLAG",
+      "resolved": "Xác minh trực tiếp tại SQL CTE exec_daily: snapshot_master cộng cả inserted+updated+deleted lẫn e.rows_affected. REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:429-430",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.1993
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2195
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.5033
+        }
+      }
+    },
+    {
+      "id": "A-UI-SUMMARY-COL-SHIFT",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Tại ReconPipelineGrid.tsx:1357-1361, khối 4. GHI VÀO DB MASTER có cột Delete(d) nằm giữa Updated và Skipped, nhưng tại Table.Summary.Row (L1455-1458) lại thiếu ô Table.Summary.Cell cho totals.masterDeleted.",
+      "decision": "FLAG",
+      "resolved": "Xác minh trực tiếp tại ReconPipelineGrid.tsx: Table.Summary.Row thiếu ô Table.Summary.Cell cho master.deleted. REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:1455-1458",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.414
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1925
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.5923
+        }
+      }
+    },
+    {
+      "id": "A-SHADOW-DEDUP",
+      "kind": "target",
+      "basis": "code",
+      "claim": "Tại batch_buffer.go:731, trước khi chạy SQL Upsert vào Shadow, hàm dedupByConflictKey(sc.Records) gộp các bản ghi trùng khóa chính trong cùng subChunk.",
+      "decision": "FLAG",
+      "resolved": "Xác minh trực tiếp tại batchUpsert: dedupByConflictKey(sc.Records) gộp các bản ghi trùng khóa chính trước khi Upsert. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:726-732",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0563
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1579
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0573
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

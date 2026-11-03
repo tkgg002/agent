@@ -1,0 +1,58 @@
+[
+  {
+    "id": "A-AUD-01",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Re-Audit F1: laya_gate.py bi dinh tuyen sang VegaML :8222 khi /health cua Laya :8200 khong tra 2xx",
+    "claim": "In kernel_bridge.go, predictURL is switched to VegaPredictURL() whenever checkLayaHealthHTTP(DefaultLayaHealthURL) is false and the VegaML health check is true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:699-705\n\tif g != nil && g.AgentCoreDir != \"\" && liveAllowed && (checkLayaHealthHTTP(DefaultLayaHealthURL) || checkLayaHealthHTTP(VegaHealthURL())) {\n\t\tscript := filepath.Join(g.AgentCoreDir, \"tooling\", \"laya_gate.py\")\n\t\tif _, statErr := os.Stat(script); statErr == nil {\n\t\t\tpredictURL := DefaultLayaPredictURL\n\t\t\tif !checkLayaHealthHTTP(DefaultLayaHealthURL) && checkLayaHealthHTTP(VegaHealthURL()) {\n\t\t\t\tpredictURL = VegaPredictURL()\n\t\t\t}"
+  },
+  {
+    "id": "A-AUD-02",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Re-Audit F2: BootReportS0.LayaUp bao true khi chi VegaML len",
+    "claim": "In RunBootProtocolS0, rep.LayaUp is set to true whenever rep.VegaUp is true, even if the Laya endpoint is not reachable.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:146-148\n\t// 1. Check Laya (:8200) and ensure self-contained VegaML Sidecar (:8222) is up\n\trep.VegaUp = g.EnsureVegaSidecarUp(ctx)\n\trep.LayaUp = CheckNeuralEndpointReachable(rep.LayaURL) || rep.VegaUp"
+  },
+  {
+    "id": "A-AUD-03",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Re-Audit F3: Nhan TTT bi gan cung, khong lay tu nguoi duyet",
+    "claim": "In vega_human_gate.go, architecture_safety_score is hardcoded to 3 when approved and to 1 when not approved, rather than coming from a human-provided score.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/vega_human_gate.go:115-123\n\tlabels := map[string]any{\n\t\t\"c_req_check\":               approved,\n\t\t\"dg0_dg1_routing\":           \"PASS_TO_HUMAN_GATE\",\n\t\t\"architecture_safety_score\": 3,\n\t}\n\tif !approved {\n\t\tlabels[\"dg0_dg1_routing\"] = \"REJECT_REWRITE_PLAN\"\n\t\tlabels[\"architecture_safety_score\"] = 1\n\t}"
+  },
+  {
+    "id": "A-AUD-04",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Re-Audit F4: ensure_vega_up.sh luon exit 0 ke ca khi health-check that bai",
+    "claim": "ensure_vega_up.sh ends with an unconditional exit 0 after the health-check loop, so a failed startup still returns exit code 0.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/sidecar/vegaml/ensure_vega_up.sh:63-68\n    exit 0\n  fi\n  sleep 1\ndone\n\nexit 0"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Re-Audit Control False 1",
+    "claim": "ensure_vega_up.sh ends with exit 1 so a failed health check returns a non-zero exit code.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/sidecar/vegaml/ensure_vega_up.sh:63-68\n    exit 0\n  fi\n  sleep 1\ndone\n\nexit 0"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Re-Audit Control False 2",
+    "claim": "In RunBootProtocolS0, rep.LayaUp only depends on the Laya endpoint and never uses rep.VegaUp.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:146-148\n\t// 1. Check Laya (:8200) and ensure self-contained VegaML Sidecar (:8222) is up\n\trep.VegaUp = g.EnsureVegaSidecarUp(ctx)\n\trep.LayaUp = CheckNeuralEndpointReachable(rep.LayaURL) || rep.VegaUp"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "Re-Audit Control True",
+    "claim": "In vega_sidecar.go, DecideVegaSystemOneHTTP uses a request context timeout of 15 seconds.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/vega_sidecar.go:172-172\n\treqCtx, cancel := context.WithTimeout(ctx, 15*time.Second)"
+  }
+]

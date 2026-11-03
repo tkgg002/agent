@@ -1,0 +1,128 @@
+{
+  "mode": "claim",
+  "stage": "dg3",
+  "workspace": "audit-duplicate-source-ts-upsert-2026-10-29",
+  "ts": "20261030T095219",
+  "trusted_rounds": [
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-duplicate-source-ts-upsert-2026-10-29/06_laya_raw_dg3_20261030T095219.json",
+  "claims": [
+    {
+      "id": "A-R3-C1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "The same snapshotEventHandler (backed by snapshotBatchBuffer) is wired into both SnapshotRunner and ExecuteHealHandler, and popAsyncFlushErrorLocked removes matched async errors destructively, so a heal flush on the same table can consume an async error produced by a snapshot job.",
+      "decision": "FLAG",
+      "resolved": "VERIFIED by code: REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:476-480 (ExecuteHealHandler WithEventHandler(snapshotEventHandler)) + REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:428-430 (SnapshotRunner gets snapshotEventHandler) + REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_async_err.go:45-62 (destructive pop). Frequency at runtime = HYPOTHESIS (needs concurrent heal+snapshot on same table).",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4261
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.0732
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4147
+        }
+      }
+    },
+    {
+      "id": "A-R3-C2",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "runSnapshot has early return paths such as the find batch error that exit before calling flushSnapshotTables, so a background flush error recorded later for leftover records of that table is not popped by the exiting job and remains for the next job on the same table.",
+      "decision": "FLAG",
+      "resolved": "VERIFIED by code: early returns at REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:683-687 (also 694,734,741,811,847) precede flushSnapshotTables at :855 and :919; background error recorded via REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_async_err.go:19-43 persists until next pop. Runtime frequency = HYPOTHESIS; in-memory, cleared by worker restart.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.537
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2813
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.468
+        }
+      }
+    },
+    {
+      "id": "A-R3-C3",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "DynamicMapper.MapData and shouldSkipTransformRule only check rule.TargetColumn against reserved system columns and do not check rule.SourceField.",
+      "decision": "FLAG",
+      "resolved": "VERIFIED by code: REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/dynamic_mapper.go:85-88 and REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_helpers.go:10-12 test only rule.TargetColumn. Round-2 report claim that SourceField is also checked was FALSE; not a 42701 defect (SchemaAdapter keys on target column).",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5538
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.2412
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.1413
+        }
+      }
+    },
+    {
+      "id": "A-R3-C4",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "The async flush unit test injects the error by calling recordAsyncFlushError directly on a BatchBuffer built with a nil database, so it does not exercise the timerLoop background flush path or a real database write.",
+      "decision": "FLAG",
+      "resolved": "VERIFIED by code: REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_async_err_test.go:14-28 uses NewBatchBuffer(...nil db, nil adapter) and injects via recordAsyncFlushError; timerLoop->flushFromBackground path is uncovered. F4 runtime proof requires User-coordinated trace.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6554
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2213
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.1276
+        }
+      }
+    },
+    {
+      "id": "A-R3-C5",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "master_multi_shadow_repo_gorm.go still contains a hardcoded literal list of the 11 reserved columns in addition to the domainShadow.ReservedShadowSystemColumns() call.",
+      "decision": "FLAG",
+      "resolved": "VERIFIED by code: REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:58-59 (literal list) and :148 (domainShadow.ReservedShadowSystemColumns()). Literal is pre-existing in an untracked file from another task; round-2 claim of full literal elimination was overstated.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0254
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.3289
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.4076
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

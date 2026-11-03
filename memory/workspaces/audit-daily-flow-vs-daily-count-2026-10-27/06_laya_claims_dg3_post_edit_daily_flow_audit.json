@@ -1,0 +1,50 @@
+[
+  {
+    "id": "G7-DIFF-1",
+    "kind": "target",
+    "claim": "Tại cdc_event_date.go:9-29, ResolveEventDateHCM quy đổi tsMs > 0 sang ngày YYYY-MM-DD theo múi giờ GMT+7 (locHCM) và ResolveBatchEventDateHCM duyệt tìm bản ghi dữ liệu thật đầu tiên (bỏ qua IsMarker hoặc SourceTsMs <= 0).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/model/shadow/cdc_event_date.go:9-29\nfunc ResolveEventDateHCM(tsMs int64, fallback time.Time) string {\n\tif tsMs > 0 {\n\t\treturn time.UnixMilli(tsMs).In(locHCM).Format(\"2006-01-02\")\n\t}\n\tif fallback.IsZero() {\n\t\tfallback = time.Now()\n\t}\n\treturn fallback.In(locHCM).Format(\"2006-01-02\")\n}\n\n// ResolveBatchEventDateHCM duyệt tìm bản ghi dữ liệu thật đầu tiên (bỏ qua IsMarker hoặc SourceTsMs <= 0)\n// để lấy event_date chính xác cho sub-batch.\nfunc ResolveBatchEventDateHCM(records []*UpsertRecord, fallback time.Time) string {\n\tfor _, r := range records {\n\t\tif r == nil || r.IsMarker || r.SourceTsMs <= 0 {\n\t\t\tcontinue\n\t\t}\n\t\treturn ResolveEventDateHCM(r.SourceTsMs, fallback)\n\t}\n\treturn ResolveEventDateHCM(0, fallback)\n}"
+  },
+  {
+    "id": "G7-DIFF-2",
+    "kind": "target",
+    "claim": "Tại batch_buffer_event_date.go:17-50, splitRecordsByEventDate và flushTableGroupByEventDate tách tuần tự các bản ghi trong cùng goroutine của bảng theo event_date và giữ bản ghi IsMarker đi kèm đúng sub-batch liền kề.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_event_date.go:17-50\nfunc splitRecordsByEventDate(records []*shadow.UpsertRecord, fallback time.Time) [][]*shadow.UpsertRecord {\n\tif len(records) <= 1 {\n\t\treturn [][]*shadow.UpsertRecord{records}\n\t}\n\tdefaultDate := shadow.ResolveBatchEventDateHCM(records, fallback)\n\tidx := make(map[string]int, 2)\n\tvar groups [][]*shadow.UpsertRecord\n\tcurrentDate := defaultDate\n\tfor _, r := range records {\n\t\td := currentDate\n\t\tif r != nil && !r.IsMarker && r.SourceTsMs > 0 {\n\t\t\td = shadow.ResolveEventDateHCM(r.SourceTsMs, fallback)\n\t\t\tcurrentDate = d\n\t\t}"
+  },
+  {
+    "id": "G7-DIFF-3",
+    "kind": "target",
+    "claim": "Tại transmute_event_date_split.go:59-79, splitTaskByEventDate dùng bộ đếm atomic.AddInt32(&remaining, -1) và sync.Once để chỉ gọi t.complete(finalErr) sau khi toàn bộ các nhóm sự kiện theo ngày đã hoàn tất.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_event_date_split.go:59-79\n\tremaining := int32(len(evGroups))\n\tvar mu sync.Mutex\n\tvar firstErr error\n\tvar finishOnce sync.Once\n\tsharedComplete := func(err error) {\n\t\tif err != nil {\n\t\t\tmu.Lock()\n\t\t\tif firstErr == nil {\n\t\t\t\tfirstErr = err\n\t\t\t}\n\t\t\tmu.Unlock()\n\t\t}\n\t\tif atomic.AddInt32(&remaining, -1) <= 0 {\n\t\t\tfinishOnce.Do(func() {\n\t\t\t\tmu.Lock()\n\t\t\t\tfinalErr := firstErr\n\t\t\t\tmu.Unlock()\n\t\t\t\tt.complete(finalErr)\n\t\t\t})\n\t\t}\n\t}"
+  },
+  {
+    "id": "G7-DIFF-4",
+    "kind": "target",
+    "claim": "Tại transmuter_events_batch.go:67-77, 143-146, runEventBatches gộp các bản ghi trùng khóa chính qua dedupMasterEventRecords, cộng số dòng DB vật lý vào res.Written, đếm riêng res.Inserted/res.Updated theo từng sự kiện và khi xóa chỉ cộng res.Written += delCnt.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_events_batch.go:67-77\n\t\tdeduped := dedupMasterEventRecords(masterRow, colTypes, allEmits)\n\t\tins, upd, upsertErr := upsertWithRetry(deduped, pendingItems[0].sourceID)\n\t\tif upsertErr == nil {\n\t\t\tres.Written += ins + upd\n\t\t\tfor _, item := range pendingItems {\n\t\t\t\tif item.op == \"c\" || item.op == \"r\" {\n\t\t\t\t\tres.Inserted++\n\t\t\t\t} else {\n\t\t\t\t\tres.Updated++\n\t\t\t\t}\n\t\t\t}"
+  },
+  {
+    "id": "G7-DIFF-5",
+    "kind": "target",
+    "claim": "Tại activity_log_read_repo_gorm.go:406-447, act_filtered lọc al.created_at >= NOW() - ((? + 1) * INTERVAL '1 day') và act_daily gom nhóm theo COALESCE(NULLIF(e.details->>'event_date', ''), ...) đồng thời tính master_written từ COALESCE((e.details->>'written')::bigint, NULLIF(e.rows_affected, 0), ...).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:425-447\n\tact_daily AS (\n\t\tSELECT\n\t\t\tCOALESCE(NULLIF(e.details->>'event_date', ''), TO_CHAR(e.started_at AT TIME ZONE 'UTC' + (? * INTERVAL '1 minute'), 'YYYY-MM-DD')) AS day_str,\n\t\t\tSUM(CASE WHEN e.operation IN ('transmute','transmute_sub') AND e.status <> 'error' AND e.triggered_by <> 'snapshot-hook'\n\t\t\t         THEN COALESCE((e.details->>'written')::bigint, NULLIF(e.rows_affected, 0), COALESCE((e.details->>'inserted')::bigint, 0) + COALESCE((e.details->>'updated')::bigint, 0) + COALESCE((e.details->>'deleted')::bigint, 0)) ELSE 0 END) AS master_written,"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "Trong GetDailyFlow, nếu p.Days <= 0 thì p.Days được gán giá trị mặc định là 14, và nếu p.Days > 90 thì được giới hạn về 90.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:389-395\nfunc (r *ActivityLogReadRepo) GetDailyFlow(ctx context.Context, p system.DailyFlowParams) (*system.DailyFlowResult, error) {\n\tif p.Days <= 0 {\n\t\tp.Days = 14\n\t}\n\tif p.Days > 90 {\n\t\tp.Days = 90\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "Trong GetDailyFlow, nếu p.Days <= 0 thì hàm trả về lỗi ngay lập tức và không gán giá trị mặc định.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:389-395\nfunc (r *ActivityLogReadRepo) GetDailyFlow(ctx context.Context, p system.DailyFlowParams) (*system.DailyFlowResult, error) {\n\tif p.Days <= 0 {\n\t\tp.Days = 14\n\t}\n\tif p.Days > 90 {\n\t\tp.Days = 90\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "Trong ResolveEventDateHCM, khi tsMs > 0 thì hàm luôn trả về chuỗi rỗng thay vì ngày theo định dạng YYYY-MM-DD.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/model/shadow/cdc_event_date.go:9-17\nfunc ResolveEventDateHCM(tsMs int64, fallback time.Time) string {\n\tif tsMs > 0 {\n\t\treturn time.UnixMilli(tsMs).In(locHCM).Format(\"2006-01-02\")\n\t}\n\tif fallback.IsZero() {\n\t\tfallback = time.Now()\n\t}\n\treturn fallback.In(locHCM).Format(\"2006-01-02\")\n}"
+  }
+]

@@ -1,0 +1,5 @@
+# 04 — Decisions (Append ONLY)
+
+- [2026-10-27T10:03:06+07:00] [Agent:laya_gate] DG0 C-REQ FLAG resolved: Đã kiểm chứng trực tiếp mã nguồn: dòng 522 gán rec.Kafka.Total = row.KafkaTotal, dòng 527 gán rec.Shadow.Total = row.KafkaTotal, và dòng 548 kiểm tra rec.Kafka.Total == rec.Shadow.Total. REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:522-556
+- [2026-10-27T10:03:16+07:00] [Agent:laya_gate] DG0 C-REALITY FLAG resolved: Đã kiểm chứng trực tiếp mã nguồn: Table.Summary.Row thiếu ô Table.Summary.Cell cho totals.masterDeleted giữa index 13 và index 14. REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:1455-1460
+- [2026-10-27T10:03:16+07:00] [Agent:laya_gate] DG0 C-CONTRA FLAG resolved: Đã kiểm chứng trực tiếp mã nguồn: SourceCountRunner.Run chỉ tính yesterday := now.In(locHCM).AddDate(0, 0, -1). REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/sourcecount/source_count_runner.go:139-146

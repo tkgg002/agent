@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "claim": "On the current working tree of centralized-data-service, masterBindingRuntime in transmuter.go defines 18 fields and does not contain EngineType or DefaultDatabase.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:77-96\ntype masterBindingRuntime struct {\n\tID                  int64  `gorm:\"column:id\"`\n\tSourceObjectID      int64  `gorm:\"column:source_object_id\"`\n\tShadowBindingID     *int64 `gorm:\"column:shadow_binding_id\"`\n\tMasterConnectionKey string `gorm:\"column:master_connection_key\"`\n\tMasterSchema        string `gorm:\"column:master_schema\"`\n\tMasterTable         string `gorm:\"column:master_table\"`\n\tPhysicalTableFQN    string `gorm:\"column:physical_table_fqn\"`\n\tTransformType       string `gorm:\"column:transform_type\"`\n\tTransformSpec       []byte `gorm:\"column:transform_spec\"`\n\tIsActive            bool   `gorm:\"column:is_active\"`\n\tSchemaStatus        string `gorm:\"column:schema_status\"`\n\tShadowConnectionKey string `gorm:\"column:shadow_connection_key\"`\n\tShadowSchema        string `gorm:\"column:shadow_schema\"`\n\tShadowTable         string `gorm:\"column:shadow_table\"`\n\tShadowIsActive      bool   `gorm:\"column:shadow_is_active\"`\n\tSourceProfileStatus string `gorm:\"column:source_profile_status\"`\n\tSourcePK            string `gorm:\"column:source_pk\"`\n\tShadowPK            string `gorm:\"column:shadow_pk\"`\n}",
+    "flow": "masterBindingRuntime in transmuter.go on the working tree defines MasterConnectionKey, MasterSchema, MasterTable, etc., without EngineType or DefaultDatabase."
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "claim": "In centralized-data-service master_ddl_generator.go, applyMongoCollectionAndIndexes updates cdc_system.mapping_rule_master SET in_master = true WHERE master_binding_id = ? AND is_active = true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator.go:535-552\n\tif _, iErr := mongoDB.Collection(reg.MasterTable).Indexes().CreateMany(ctx, indexModels); iErr != nil {\n\t\tres.Err = iErr.Error()\n\t\tg.markDDLStatus(ctx, reg.ID, \"failed\", iErr)\n\t\treturn res, fmt.Errorf(\"create mongo indexes on %s.%s: %w\", dbName, reg.MasterTable, iErr)\n\t}\n\n\tif g.systemDB != nil {\n\t\t_ = g.systemDB.WithContext(ctx).Exec(\n\t\t\t`UPDATE cdc_system.mapping_rule_master SET in_master = true WHERE master_binding_id = ? AND is_active = true`,\n\t\t\treg.ID,\n\t\t).Error\n\t}\n\tg.markDDLStatus(ctx, reg.ID, \"created\", nil)\n\tif g.cacheInvalidator != nil {\n\t\tg.cacheInvalidator(reg.ID, reg.MasterTable)\n\t}\n\treturn res, nil\n}",
+    "flow": "applyMongoCollectionAndIndexes creates MongoDB indexes and executes UPDATE cdc_system.mapping_rule_master SET in_master = true WHERE master_binding_id = ? AND is_active = true."
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "claim": "In ReconCore.GetMasterAgent in recon_engine.go, targetDB is retrieved via rc.connMgr.GetMasterDB(ctx, connectionKey) and wrapped with NewReconDestAgentWithConfig.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_engine.go:195-216\n\tif rc.connMgr == nil {\n\t\tif rc.masterAgent != nil {\n\t\t\treturn rc.masterAgent, nil\n\t\t}\n\t\treturn nil, fmt.Errorf(\"connection manager not configured in reconCore\")\n\t}\n\n\ttargetDB, err := rc.connMgr.GetMasterDB(ctx, connectionKey)\n\tif err != nil {\n\t\tif rc.masterAgent != nil {\n\t\t\treturn rc.masterAgent, nil\n\t\t}\n\t\treturn nil, fmt.Errorf(\"failed to get master db for %s: %w\", connectionKey, err)\n\t}\n\n\tagent := NewReconDestAgentWithConfig(targetDB, targetDB, ReconDestAgentConfig{}, rc.logger)\n\tif rc.masterAgents == nil {\n\t\trc.masterAgents = make(map[string]*ReconDestAgent)\n\t}\n\trc.masterAgents[connectionKey] = agent\n\treturn agent, nil\n}",
+    "flow": "GetMasterAgent calls rc.connMgr.GetMasterDB(ctx, connectionKey) and constructs NewReconDestAgentWithConfig(targetDB, targetDB, ...)."
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "claim": "In cdc-cms-service master_registry_handler_connections.go, normalizeMasterEngineType maps mongodb or mongo to mongodb and defaults to postgresql.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections.go:28-36\nfunc normalizeMasterEngineType(raw string) string {\n\tswitch strings.ToLower(strings.TrimSpace(raw)) {\n\tcase \"mongodb\", \"mongo\":\n\t\treturn \"mongodb\"\n\tdefault:\n\t\treturn \"postgresql\"\n\t}\n}",
+    "flow": "normalizeMasterEngineType normalizes mongo/mongodb to mongodb and defaults to postgresql."
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "claim": "In buildMasterConnectionDSN in master_registry_handler_connections.go, when engineType is mongodb and port <= 0, port defaults to 27017.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections.go:46-53\n\tif engineType == \"mongodb\" {\n\t\tif port <= 0 {\n\t\t\tport = 27017\n\t\t}\n\t\tif database == \"\" {\n\t\t\tdatabase = \"admin\"\n\t\t}",
+    "flow": "When engineType == mongodb and port <= 0, buildMasterConnectionDSN sets port = 27017."
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB in recon_execute_heal_segb.go, when len(out) == 0 and effectiveIDType == gpay, the function returns nil, nil.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:568-575\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+    "flow": "resolveSourceIDsForSegmentB checks if len(out) == 0; if effectiveIDType == gpay, it returns nil, nil."
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "claim": "In CreateMasterConnectionRequest in master_connection_dto.go, EngineType, AuthSource, and ReplicaSet are optional JSON fields with omitempty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/dto/master_connection_dto.go:4-17\ntype CreateMasterConnectionRequest struct {\n\tConnectionCode  string `json:\"connection_code\"`\n\tDisplayName     string `json:\"display_name\"`\n\tEngineType      string `json:\"engine_type,omitempty\"`\n\tHost            string `json:\"host\"`\n\tPort            int    `json:\"port\"`\n\tDefaultDatabase string `json:\"default_database\"`\n\tDefaultSchema   string `json:\"default_schema\"`\n\tUsername        string `json:\"username\"`\n\tPassword        string `json:\"password\"`\n\tSSLMode         string `json:\"sslmode\"`\n\tAuthSource      string `json:\"auth_source,omitempty\"`\n\tReplicaSet      string `json:\"replica_set,omitempty\"`\n}",
+    "flow": "CreateMasterConnectionRequest declares EngineType, AuthSource, and ReplicaSet with json omitempty tags."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB in recon_execute_heal_segb.go, when len(out) == 0 and effectiveIDType == gpay, the function returns nil, nil instead of returning inputIDs.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:568-575\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+    "flow": "resolveSourceIDsForSegmentB checks if len(out) == 0; if effectiveIDType == gpay, it returns nil, nil."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In ExecuteHealHandler.resolveSourceIDsForSegmentB in recon_execute_heal_segb.go, when len(out) == 0 and effectiveIDType == gpay, the function always panics instead of returning.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb.go:568-575\n\tif len(out) == 0 {\n\t\tif effectiveIDType == \"gpay\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\treturn inputIDs, nil\n\t}\n\treturn uniqueStrings(out), nil\n}",
+    "flow": "resolveSourceIDsForSegmentB returns nil, nil when len(out) == 0 and effectiveIDType == gpay; it never panics."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In ReconCore.GetMasterAgent in recon_engine.go, when rc.connMgr is nil, the function deletes all rows from connection_registry.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_engine.go:195-200\n\tif rc.connMgr == nil {\n\t\tif rc.masterAgent != nil {\n\t\t\treturn rc.masterAgent, nil\n\t\t}\n\t\treturn nil, fmt.Errorf(\"connection manager not configured in reconCore\")\n\t}",
+    "flow": "When rc.connMgr == nil, GetMasterAgent returns rc.masterAgent if non-nil or returns an error; it never deletes rows."
+  }
+]

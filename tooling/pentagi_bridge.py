@@ -36,11 +36,11 @@ MANIFEST_NAME = ".agent-project.json"
 # Rule #20 / H3 Secret & Credential Masking Regex
 SECRET_RE = re.compile(
     r"(AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|ATATT[\w\-]{20,}|ghp_\w{30,}"
-    r"|Bearer\s+[\w.\-]{20,}|(mongodb|postgres(ql)?|mysql|redis)://[^*\s:/]+:[^*\s@]+@"
-    r"|password\s*[:=]\s*[^\s*'\"]{6,})",
+    r"|Bearer\s+[\w.\-]{20,}|(mongodb|postgres(ql)?|mysql|redis)://[^*\s:/%]+:[^*\s@%]+@"
+    r"|password\s*[:=]\s*['\"][^\s*'\"]{6,}['\"])",
     re.I,
 )
-DB_URI_CRED_RE = re.compile(r"((?:mongodb|postgres(?:ql)?|mysql|redis)://)[^*\s:/]+:[^*\s@]+@", re.I)
+DB_URI_CRED_RE = re.compile(r"((?:mongodb|postgres(?:ql)?|mysql|redis)://)[^*\s:/%]+:[^*\s@%]+@", re.I)
 
 DEFAULT_ALLOWED_TARGETS = (
     "http://localhost",

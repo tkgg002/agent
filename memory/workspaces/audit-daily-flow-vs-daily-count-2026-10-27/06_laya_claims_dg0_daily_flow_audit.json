@@ -1,0 +1,38 @@
+[
+    {
+      "id": "C-REQ",
+      "kind": "target",
+      "claim": "Hàm GetDailyFlow nhóm lưu lượng CDC theo started_at của cdc_activity_log và gán cứng rec.Shadow.Total = row.KafkaTotal khiến biểu thức isIngestOk := (rec.Kafka.Total == rec.Shadow.Total) luôn bằng true, đồng thời đánh giá WARNING khi rec.Shadow.Total > rec.Master.Total.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:522-556\n\t\trec.Kafka.Total = row.KafkaTotal\n\t\trec.Kafka.C = row.KafkaC\n\t\trec.Kafka.U = row.KafkaU\n\t\trec.Kafka.D = row.KafkaD\n\n\t\trec.Shadow.Total = row.KafkaTotal\n\t\trec.Shadow.Written = row.ShadowWritten\n\t\trec.Shadow.C = row.KafkaC\n\t\trec.Shadow.U = row.KafkaU\n\t\trec.Shadow.D = row.KafkaD\n\n\t\trec.Master.Total = row.MasterInserted + row.MasterUpdated + row.MasterDeleted + row.MasterSkipped\n\t\trec.Master.Written = row.MasterInserted + row.MasterUpdated + row.MasterDeleted\n\t\trec.Master.Inserted = row.MasterInserted\n\t\trec.Master.Updated = row.MasterUpdated\n\t\trec.Master.Deleted = row.MasterDeleted\n\t\trec.Master.Skipped = row.MasterSkipped\n\n\t\trec.Recon.TotalRuns = row.ReconRuns\n\t\trec.Recon.DLQ = row.DLQ\n\t\trec.Recon.Missing = row.Missing\n\t\trec.Recon.Stale = row.Stale\n\t\trec.Recon.Healed = row.Healed\n\n\t\tisMasterStalled := (p.MasterTable != \"\") && (rec.Shadow.Written > 0) && (rec.Master.Total == 0)\n\t\tisMasterIncomplete := (p.MasterTable != \"\") && (rec.Shadow.Total > rec.Master.Total)\n\t\tisIngestOk := (rec.Kafka.Total == rec.Shadow.Total)\n\n\t\tif rec.Recon.DLQ > 0 || rec.Recon.Missing > 0 {\n\t\t\trec.Status = \"DRIFT\"\n\t\t} else if rec.Recon.Stale > 0 || !isIngestOk || isMasterStalled || isMasterIncomplete {\n\t\t\trec.Status = \"WARNING\"\n\t\t} else {\n\t\t\trec.Status = \"BALANCED\"\n\t\t}"
+    },
+    {
+      "id": "C-REALITY",
+      "kind": "target",
+      "claim": "Trong ReconPipelineGrid.tsx, dòng tổng kết Table.Summary.Row bỏ sót ô Table.Summary.Cell cho cột Delete(d) của Master (totals.masterDeleted), nhảy trực tiếp từ totals.masterUpdated (index 13) sang totals.masterSkipped (index 14).",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:1455-1460\n                <Table.Summary.Cell index={12} align=\"right\">{pipeline?.masterName ? <span style={{ color: '#52c41a' }}>{fmtNum(totals.masterInserted)}</span> : <Text type=\"secondary\">—</Text>}</Table.Summary.Cell>\n                <Table.Summary.Cell index={13} align=\"right\">{pipeline?.masterName ? <span style={{ color: '#faad14' }}>{fmtNum(totals.masterUpdated)}</span> : <Text type=\"secondary\">—</Text>}</Table.Summary.Cell>\n                <Table.Summary.Cell index={14} align=\"right\">{pipeline?.masterName ? <Text type=\"secondary\">{fmtNum(totals.masterSkipped)}</Text> : <Text type=\"secondary\">—</Text>}</Table.Summary.Cell>\n\n                {/* Khối 5: RECON & DLQ */}\n                <Table.Summary.Cell index={15} align=\"right\">{fmtNum(totals.dlqTotal)}</Table.Summary.Cell>"
+    },
+    {
+      "id": "C-CONTRA",
+      "kind": "target",
+      "claim": "SourceCountRunner.Run chỉ tính toán số lượng bản ghi cho duy nhất ngày hôm qua (yesterday := now.In(locHCM).AddDate(0, 0, -1)) theo khoảng thời gian [startOfDay, nextDayStart) của cột DateField trên bảng nguồn và bảng đích.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/sourcecount/source_count_runner.go:139-146\n\t// Tính toán ngày chốt sổ hôm qua (D-1) và khoảng nửa mở [startOfDay, nextDayStart)\n\tyesterday := now.In(locHCM).AddDate(0, 0, -1)\n\treportDateStr := yesterday.Format(\"2006-01-02\")\n\treportDate, _ := time.Parse(\"2006-01-02\", reportDateStr)\n\n\tstartOfDay := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, locHCM)\n\tnextDayStart := startOfDay.AddDate(0, 0, 1)"
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "kind": "control_true",
+      "claim": "Trong GetDailyFlow, nếu p.Days <= 0 thì p.Days được gán giá trị mặc định là 14, và nếu p.Days > 90 thì được giới hạn về 90.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:388-394\nfunc (r *ActivityLogReadRepo) GetDailyFlow(ctx context.Context, p system.DailyFlowParams) (*system.DailyFlowResult, error) {\n\tif p.Days <= 0 {\n\t\tp.Days = 14\n\t}\n\tif p.Days > 90 {\n\t\tp.Days = 90\n\t}"
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "kind": "control_false",
+      "claim": "Trong GetDailyFlow, nếu p.Days <= 0 thì hàm trả về lỗi ngay lập tức và không gán giá trị mặc định.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:388-394\nfunc (r *ActivityLogReadRepo) GetDailyFlow(ctx context.Context, p system.DailyFlowParams) (*system.DailyFlowResult, error) {\n\tif p.Days <= 0 {\n\t\tp.Days = 14\n\t}\n\tif p.Days > 90 {\n\t\tp.Days = 90\n\t}"
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "kind": "control_false",
+      "claim": "SourceCountRunner.Run luôn tính toán cho ngày hiện tại (now) thay vì ngày hôm qua (AddDate(0, 0, -1)).",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/sourcecount/source_count_runner.go:139-146\n\t// Tính toán ngày chốt sổ hôm qua (D-1) và khoảng nửa mở [startOfDay, nextDayStart)\n\tyesterday := now.In(locHCM).AddDate(0, 0, -1)\n\treportDateStr := yesterday.Format(\"2006-01-02\")\n\treportDate, _ := time.Parse(\"2006-01-02\", reportDateStr)\n\n\tstartOfDay := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, locHCM)\n\tnextDayStart := startOfDay.AddDate(0, 0, 1)"
+    }
+  ]

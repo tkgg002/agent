@@ -1,0 +1,38 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "target",
+    "claim": "Trên ReconPipelineGrid.tsx, hàm buildPipelines tính sourceCount từ source_active, shadowCount từ shadow_active, masterCount từ master_active và tính driftBC = masterActive - shadowActive; khi masterActive = 56106 và shadowActive = 56108 thì driftBC = -2 và hiển thị 'transmute: -2 (thiếu)'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:169-190\n    const aCountable = a && a.status !== 'error';\n    const sourceTotal = aCountable ? (a.source_active ?? a.source_total ?? null) : null;\n    // Shadow: active từ smoke check result\n    const shadowActive = (aCountable ? (a.shadow_active ?? a.shadow_total ?? null) : null) ?? b.source_active ?? b.source_total ?? null;\n    // Master: active từ smoke check result\n    const masterActive = b.master_active ?? b.master_total ?? null;\n    out.push({\n      key: `b-${b.id}`,\n      sourceName: getSourceDisplayName(a),\n      sourceDb: a?.source_db ?? '',\n      sourceConnector: a?.source_connection_code ?? b.source_connection_code ?? null,\n      shadowName: b.shadow_schema && b.shadow_table ? `${b.shadow_schema}.${b.shadow_table}` : (b.source_db || shadowTable),\n      // Master hiển thị FQN schema.table (master_schema enrich từ master_binding)\n      masterName: b.master_schema ? `${b.master_schema}.${b.target_table}` : b.target_table,\n      sourceCount: sourceTotal,\n      shadowCount: shadowActive,\n      masterCount: masterActive,\n      driftAB: sourceTotal != null && shadowActive != null ? shadowActive - sourceTotal : null,\n      // transmute drift = master_active − shadow_active (cùng phương pháp, đã trừ tombstone ở Go).\n      driftBC: shadowActive != null && masterActive != null\n        ? masterActive - shadowActive\n        : -(b.diff ?? 0),"
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "target",
+    "claim": "Trong ConfirmDestructiveModal.tsx, hàm getRoundedEndTime() lùi biên trên của cửa sổ đối soát thủ công đi 5 phút (dayjs().subtract(5, 'minute').second(0).millisecond(0)), khiến các bản ghi mới tạo trong vòng 5 phút gần nhất không nằm trong khoảng quét của đợt đối soát thủ công vừa bấm.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ConfirmDestructiveModal.tsx:11-13\nconst getRoundedEndTime = () => {\n  return dayjs().subtract(5, 'minute').second(0).millisecond(0);\n};"
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "target",
+    "claim": "Trong ReconJobWorker.ProcessJob (recon_job_worker.go), khi lưu báo cáo vào cdc_system.cdc_reconciliation_report, trường report.Status đang bị gán trực tiếp bằng biến status của recon_jobs ('COMPLETED' hoặc 'FAILED') thay vì 'drift' hay 'ok'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_job_worker.go:388-415\n\t\treport := &modelrecon.ReconciliationReport{\n\t\t\t// Identity — đúng như stampA: shadow_schema + shadow_table định danh pipeline\n\t\t\tShadowSchema: entry.ShadowSchema,\n\t\t\tShadowTable:  entry.TargetTable,\n\t\t\tRunID:        event.JobID,\n\t\t\t// Source info\n\t\t\tSourceDB:    entry.SourceDB,\n\t\t\tSourceTable: entry.SourceTable,\n\t\t\tSourceType:  entry.SourceType,\n\t\t\tSourceHost:  extractHost(entry.SourceURL),\n\t\t\t// Counts — SourceCount nil khi engine lỗi (phân biệt 0 thật vs lỗi)\n\t\t\tSourceCount:  srcCount,\n\t\t\tDestCount:    dstCount,\n\t\t\tDiff:         diffVal,\n\t\t\tMissingCount: missingCount,\n\t\t\tMissingIDs:   missingRaw,\n\t\t\tStaleCount:   staleCount,\n\t\t\tStaleIDs:     staleRaw,\n\t\t\tOrphanCount:  orphanCount,\n\t\t\t// Check metadata\n\t\t\tSegment:        reqSegment,\n\t\t\tCheckType:      checkTypeVal,\n\t\t\tStatus:         status,\n\t\t\tDurationMs:     &durationMs,\n\t\t\tCheckedAt:      time.Now().UTC(),\n\t\t\tReconStartTime: &reconStart,\n\t\t\tReconEndTime:   &reconEnd,\n\t\t}"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "Trong ConfirmDestructiveModal.tsx, hằng số MIN_REASON_LENGTH được gán giá trị là 10.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ConfirmDestructiveModal.tsx:9-13\nconst MIN_REASON_LENGTH = 10;\n\nconst getRoundedEndTime = () => {\n  return dayjs().subtract(5, 'minute').second(0).millisecond(0);\n};"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "Trong ConfirmDestructiveModal.tsx, hàm getRoundedEndTime() cộng thêm 5 phút vào thời gian hiện tại (dayjs().add(5, 'minute')).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ConfirmDestructiveModal.tsx:9-13\nconst MIN_REASON_LENGTH = 10;\n\nconst getRoundedEndTime = () => {\n  return dayjs().subtract(5, 'minute').second(0).millisecond(0);\n};"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "Trong ReconPipelineGrid.tsx, hàm fmtDrift hiển thị chữ '(thừa)' màu xanh khi v < 0 và hiển thị chữ '(thiếu)' màu đỏ khi v > 0.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:103-110\nfunction fmtDrift(v: number | null) {\n  if (v == null) return <Text type=\"secondary\">—</Text>;\n  if (v === 0) return <Text style={{ color: 'green' }}>0</Text>;\n  // < 0: trạm sau THIẾU data (đỏ); > 0: trạm sau thừa (orphan — vàng)\n  return v < 0\n    ? <Text style={{ color: 'red' }}>{v.toLocaleString()} (thiếu)</Text>\n    : <Text style={{ color: '#d4a017' }}>+{v.toLocaleString()} (thừa)</Text>;\n}"
+  }
+]

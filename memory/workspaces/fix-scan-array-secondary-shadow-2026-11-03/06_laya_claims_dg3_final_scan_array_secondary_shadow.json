@@ -1,0 +1,65 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "claim": "In ScanService.ScanArrayFields in scan_service.go, the function calls cleanLogicalExplodePath(explodePath) and s.resolveShadowTargetForScanArray(ctx, execDB, targetTable, explodePath, masterBindingID), updating targetTable to resolvedTarget.ShadowTable when non-empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:201-206\n\tlogicalExplodePath, logicalBasePath, rootField := cleanLogicalExplodePath(explodePath)\n\tresolvedTarget := s.resolveShadowTargetForScanArray(ctx, execDB, targetTable, explodePath, masterBindingID)\n\tif resolvedTarget.ShadowTable != \"\" {\n\t\ttargetTable = resolvedTarget.ShadowTable\n\t}\n\tschemaName := resolvedTarget.ShadowSchema",
+    "flow": "ScanArrayFields invokes cleanLogicalExplodePath(explodePath) and s.resolveShadowTargetForScanArray(ctx, execDB, targetTable, explodePath, masterBindingID) and sets targetTable = resolvedTarget.ShadowTable."
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "claim": "In ScanService.shadowTableHasRawKey in scan_array_target_resolver.go, the query checks jsonb_extract_path(_raw_data, ?) IS NOT NULL OR jsonb_extract_path(_raw_data, 'after', ?) IS NOT NULL LIMIT 1.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_array_target_resolver.go:261-267\n\tvar exists bool\n\t_ = execDB.WithContext(ctx).Raw(fmt.Sprintf(\n\t\t`SELECT EXISTS(SELECT 1 FROM %s WHERE jsonb_extract_path(_raw_data, ?) IS NOT NULL OR jsonb_extract_path(_raw_data, 'after', ?) IS NOT NULL LIMIT 1)`,\n\t\tsqlutil.QualifiedTable(schemaName, tableName)),\n\t\trootField, rootField,\n\t).Scan(&exists).Error\n\treturn exists",
+    "flow": "shadowTableHasRawKey executes a raw SQL query checking jsonb_extract_path(_raw_data, ?) IS NOT NULL OR jsonb_extract_path(_raw_data, 'after', ?) IS NOT NULL."
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "claim": "In ScanService.ScanArrayFields in scan_service.go, dbExplodePath is initialized from logicalExplodePath, prepends \"after.\" when hasAfter is true, and passes dbExplodePath to explodePathToPGPath.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:240-245\n\tdbExplodePath := logicalExplodePath\n\tif hasAfter && !strings.HasPrefix(dbExplodePath, \"after.\") && dbExplodePath != \"after\" {\n\t\tdbExplodePath = \"after.\" + dbExplodePath\n\t}\n\n\tpgPath, isArrayExplode, err := explodePathToPGPath(dbExplodePath)",
+    "flow": "ScanArrayFields sets dbExplodePath := logicalExplodePath, conditionally prepends \"after.\", and calls explodePathToPGPath(dbExplodePath)."
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "claim": "In mappingRuleRepoGorm.GetApprovedJSONFieldsByMasterBindingID in mapping_rule_repo_gorm.go, the function calls collectShadowIDsFromSpec(ctx, r.db, masterBindingID, primaryShadowID) and queries WHERE (shadow_binding_id IN (?) OR master_binding_id = ?) when len(shadowIDs) > 0.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/mapping_rule_repo_gorm.go:366-379\n\t_ = r.db.WithContext(ctx).Raw(`SELECT COALESCE(shadow_binding_id, 0) FROM `+mbTable+` WHERE id = ?`, masterBindingID).Scan(&primaryShadowID).Error\n\tshadowIDs := collectShadowIDsFromSpec(ctx, r.db, masterBindingID, primaryShadowID)\n\n\tvar fields []string\n\tvar err error\n\tif len(shadowIDs) > 0 {\n\t\terr = r.db.WithContext(ctx).Raw(`\n\t\t\tSELECT DISTINCT target_column FROM `+mappingRuleTable+`\n\t\t\tWHERE (shadow_binding_id IN (?) OR master_binding_id = ?)\n\t\t\t  AND status = 'approved'\n\t\t\t  AND is_active = TRUE\n\t\t\t  AND UPPER(data_type) IN ('JSON', 'JSONB')\n\t\t\tORDER BY target_column\n\t\t`, shadowIDs, masterBindingID).Scan(&fields).Error",
+    "flow": "GetApprovedJSONFieldsByMasterBindingID resolves shadowIDs via collectShadowIDsFromSpec and queries target_column where shadow_binding_id IN (?) OR master_binding_id = ?."
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "claim": "In MasterMappingFieldsPage.tsx, handleScanArray resolves targetShadowTable using resolveShadowTableForExplodePath(binding, shadowRules, path) and posts to /api/introspection/scan-array/${targetShadowTable}.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx:398-408\n    const targetShadowTable = resolveShadowTableForExplodePath(binding, shadowRules, path);\n    if (!targetShadowTable) {\n      message.warning('Binding chưa có shadow_table');\n      return;\n    }\n    setScanningArray(true);\n    try {\n      const { data: res } = await cmsApi.post(\n        `/api/introspection/scan-array/${targetShadowTable}`,\n        { explode_path: path, master_binding_id: masterBindingID },\n      );",
+    "flow": "handleScanArray computes targetShadowTable = resolveShadowTableForExplodePath(binding, shadowRules, path) and calls cmsApi.post(`/api/introspection/scan-array/${targetShadowTable}`, ...)."
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "claim": "In resolveRuleGJSONValue in transmuter_gjson_path.go, when !gres.Exists(), the function checks gjson.Get(rawStr, \"after.\"+path) if path does not start with \"after.\", or gjson.Get(rawStr, strings.TrimPrefix(path, \"after.\")) otherwise.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_gjson_path.go:20-27\n\tgres := gjson.Get(rawStr, path)\n\tif !gres.Exists() {\n\t\tif !strings.HasPrefix(path, \"after.\") {\n\t\t\tgres = gjson.Get(rawStr, \"after.\"+path)\n\t\t} else {\n\t\t\tgres = gjson.Get(rawStr, strings.TrimPrefix(path, \"after.\"))\n\t\t}\n\t}",
+    "flow": "resolveRuleGJSONValue calls gjson.Get(rawStr, path) and falls back to \"after.\"+path or strings.TrimPrefix(path, \"after.\") when !gres.Exists()."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In validScanIdent in scan_service.go, the function returns false when s is empty or len(s) > 64.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:509-512\nfunc validScanIdent(s string) bool {\n\tif s == \"\" || len(s) > 64 {\n\t\treturn false\n\t}",
+    "flow": "validScanIdent checks if s == \"\" || len(s) > 64 and returns false."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In validScanIdent in scan_service.go, the function always returns true when s is empty or len(s) > 64.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:509-512\nfunc validScanIdent(s string) bool {\n\tif s == \"\" || len(s) > 64 {\n\t\treturn false\n\t}",
+    "flow": "validScanIdent returns false when s == \"\" or len(s) > 64."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In IntrospectionHandler.ScanArray in introspection_handler.go, when body.ExplodePath is empty, the handler deletes the master binding and panics.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:327-329\n\tif body.ExplodePath == \"\" {\n\t\treturn c.Status(fiber.StatusBadRequest).JSON(fiber.Map{\"error\": \"explode_path_required\"})\n\t}",
+    "flow": "When body.ExplodePath == \"\", ScanArray returns HTTP 400 with error \"explode_path_required\"."
+  }
+]

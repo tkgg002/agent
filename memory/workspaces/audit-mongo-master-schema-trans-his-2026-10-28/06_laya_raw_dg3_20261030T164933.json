@@ -1,0 +1,917 @@
+[
+  {
+    "id": "A-EXTJSON-TS",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In mongo_extjson_unwrapper.go, ensureReconstructedMongoTimestamps synthesizes createdAt and updatedAt as primitive.DateTime from _source_ts or _id ObjectID timestamp when missing on a reconstructed MongoDB document, and ensures __v is int32(0).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_extjson_unwrapper.go:361-395\n\tsourceTs := extractInt64SourceTs(doc[\"_source_ts\"])\n\tif doc[\"createdAt\"] == nil {\n\t\tif oid, ok := doc[\"_id\"].(primitive.ObjectID); ok && !oid.IsZero() {\n\t\t\tdoc[\"createdAt\"] = primitive.NewDateTimeFromTime(oid.Timestamp().UTC())\n\t\t} else if sourceTs > 0 {\n\t\t\tdoc[\"createdAt\"] = epochToDateTime(sourceTs)\n\t\t} else if ua, ok := doc[\"updatedAt\"].(primitive.DateTime); ok && ua != 0 {\n\t\t\tdoc[\"createdAt\"] = ua\n\t\t} else {\n\t\t\tdoc[\"createdAt\"] = primitive.NewDateTimeFromTime(time.Now().UTC())\n\t\t}\n\t}\n\n\tif doc[\"updatedAt\"] == nil {\n\t\tif sourceTs > 0 {\n\t\t\tua := epochToDateTime(sourceTs)\n\t\t\tif ca, ok := doc[\"createdAt\"].(primitive.DateTime); ok && ca > ua {\n\t\t\t\tua = ca\n\t\t\t}\n\t\t\tdoc[\"updatedAt\"] = ua\n\t\t} else if ca, ok := doc[\"createdAt\"].(primitive.DateTime); ok && ca != 0 {\n\t\t\tdoc[\"updatedAt\"] = ca\n\t\t} else {\n\t\t\tdoc[\"updatedAt\"] = primitive.NewDateTimeFromTime(time.Now().UTC())\n\t\t}\n\t}\n\n\tif _, isInt32 := doc[\"__v\"].(int32); !isInt32 {\n\t\tif v32, err := coerceInt32(doc[\"__v\"]); err == nil {\n\t\t\tdoc[\"__v\"] = v32\n\t\t} else {\n\t\t\tdoc[\"__v\"] = int32(0)\n\t\t}\n\t}\n}",
+    "flow": "CoerceRecordToBSONDoc -> ApplySourceFieldTypesToBSONDoc -> ensureReconstructedMongoTimestamps",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4307,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7996,
+                "INCORRECT": 0.1379,
+                "UNSUPPORTED": 0.0626
+              },
+              "confidence": 0.4307,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 760,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In mongo_extjson_unwrapper.go, ensureReconstructedMongoTimestamps synthesizes createdAt and updatedAt as primitive.DateTime from _source_ts or _id ObjectID timestamp when missing on a reconstructed MongoDB document, and ensures __v is int32(0).",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_extjson_unwrapper.go:361-395\n\tsourceTs := extractInt64SourceTs(doc[\"_source_ts\"])\n\tif doc[\"createdAt\"] == nil {\n\t\tif oid, ok := doc[\"_id\"].(primitive.ObjectID); ok && !oid.IsZero() {\n\t\t\tdoc[\"createdAt\"] = primitive.NewDateTimeFromTime(oid.Timestamp().UTC())\n\t\t} else if sourceTs > 0 {\n\t\t\tdoc[\"createdAt\"] = epochToDateTime(sourceTs)\n\t\t} else if ua, ok := doc[\"updatedAt\"].(primitive.DateTime); ok && ua != 0 {\n\t\t\tdoc[\"createdAt\"] = ua\n\t\t} else {\n\t\t\tdoc[\"createdAt\"] = primitive.NewDateTimeFromTime(time.Now().UTC())\n\t\t}\n\t}\n\n\tif doc[\"updatedAt\"] == nil {\n\t\tif sourceTs > 0 {\n\t\t\tua := epochToDateTime(sourceTs)\n\t\t\tif ca, ok := doc[\"createdAt\"].(primitive.DateTime); ok && ca > ua {\n\t\t\t\tua = ca\n\t\t\t}\n\t\t\tdoc[\"updatedAt\"] = ua\n\t\t} else if ca, ok := doc[\"createdAt\"].(primitive.DateTime); ok && ca != 0 {\n\t\t\tdoc[\"updatedAt\"] = ca\n\t\t} else {\n\t\t\tdoc[\"updatedAt\"] = primitive.NewDateTimeFromTime(time.Now().UTC())\n\t\t}\n\t}\n\n\tif _, isInt32 := doc[\"__v\"].(int32); !isInt32 {\n\t\tif v32, err := coerceInt32(doc[\"__v\"]); err == nil {\n\t\t\tdoc[\"__v\"] = v32\n\t\t} else {\n\t\t\tdoc[\"__v\"] = int32(0)\n\t\t}\n\t}\n}",
+          "flow": "CoerceRecordToBSONDoc -> ApplySourceFieldTypesToBSONDoc -> ensureReconstructedMongoTimestamps"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1495,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5374,
+                "INCORRECT": 0.3606,
+                "UNSUPPORTED": 0.102
+              },
+              "confidence": 0.1495,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 774,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Post-S4 Final Adversarial Audit (DG3) for TASK-11",
+          "function_workflow": "CoerceRecordToBSONDoc -> ApplySourceFieldTypesToBSONDoc -> ensureReconstructedMongoTimestamps",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_extjson_unwrapper.go:361-395\n\tsourceTs := extractInt64SourceTs(doc[\"_source_ts\"])\n\tif doc[\"createdAt\"] == nil {\n\t\tif oid, ok := doc[\"_id\"].(primitive.ObjectID); ok && !oid.IsZero() {\n\t\t\tdoc[\"createdAt\"] = primitive.NewDateTimeFromTime(oid.Timestamp().UTC())\n\t\t} else if sourceTs > 0 {\n\t\t\tdoc[\"createdAt\"] = epochToDateTime(sourceTs)\n\t\t} else if ua, ok := doc[\"updatedAt\"].(primitive.DateTime); ok && ua != 0 {\n\t\t\tdoc[\"createdAt\"] = ua\n\t\t} else {\n\t\t\tdoc[\"createdAt\"] = primitive.NewDateTimeFromTime(time.Now().UTC())\n\t\t}\n\t}\n\n\tif doc[\"updatedAt\"] == nil {\n\t\tif sourceTs > 0 {\n\t\t\tua := epochToDateTime(sourceTs)\n\t\t\tif ca, ok := doc[\"createdAt\"].(primitive.DateTime); ok && ca > ua {\n\t\t\t\tua = ca\n\t\t\t}\n\t\t\tdoc[\"updatedAt\"] = ua\n\t\t} else if ca, ok := doc[\"createdAt\"].(primitive.DateTime); ok && ca != 0 {\n\t\t\tdoc[\"updatedAt\"] = ca\n\t\t} else {\n\t\t\tdoc[\"updatedAt\"] = primitive.NewDateTimeFromTime(time.Now().UTC())\n\t\t}\n\t}\n\n\tif _, isInt32 := doc[\"__v\"].(int32); !isInt32 {\n\t\tif v32, err := coerceInt32(doc[\"__v\"]); err == nil {\n\t\t\tdoc[\"__v\"] = v32\n\t\t} else {\n\t\t\tdoc[\"__v\"] = int32(0)\n\t\t}\n\t}\n}",
+          "claim": "In mongo_extjson_unwrapper.go, ensureReconstructedMongoTimestamps synthesizes createdAt and updatedAt as primitive.DateTime from _source_ts or _id ObjectID timestamp when missing on a reconstructed MongoDB document, and ensures __v is int32(0)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7961,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9681,
+                "NO": 0.0319
+              },
+              "confidence": 0.7961,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 674,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_extjson_unwrapper.go:361-395\n\tsourceTs := extractInt64SourceTs(doc[\"_source_ts\"])\n\tif doc[\"createdAt\"] == nil {\n\t\tif oid, ok := doc[\"_id\"].(primitive.ObjectID); ok && !oid.IsZero() {\n\t\t\tdoc[\"createdAt\"] = primitive.NewDateTimeFromTime(oid.Timestamp().UTC())\n\t\t} else if sourceTs > 0 {\n\t\t\tdoc[\"createdAt\"] = epochToDateTime(sourceTs)\n\t\t} else if ua, ok := doc[\"updatedAt\"].(primitive.DateTime); ok && ua != 0 {\n\t\t\tdoc[\"createdAt\"] = ua\n\t\t} else {\n\t\t\tdoc[\"createdAt\"] = primitive.NewDateTimeFromTime(time.Now().UTC())\n\t\t}\n\t}\n\n\tif doc[\"updatedAt\"] == nil {\n\t\tif sourceTs > 0 {\n\t\t\tua := epochToDateTime(sourceTs)\n\t\t\tif ca, ok := doc[\"createdAt\"].(primitive.DateTime); ok && ca > ua {\n\t\t\t\tua = ca\n\t\t\t}\n\t\t\tdoc[\"updatedAt\"] = ua\n\t\t} else if ca, ok := doc[\"createdAt\"].(primitive.DateTime); ok && ca != 0 {\n\t\t\tdoc[\"updatedAt\"] = ca\n\t\t} else {\n\t\t\tdoc[\"updatedAt\"] = primitive.NewDateTimeFromTime(time.Now().UTC())\n\t\t}\n\t}\n\n\tif _, isInt32 := doc[\"__v\"].(int32); !isInt32 {\n\t\tif v32, err := coerceInt32(doc[\"__v\"]); err == nil {\n\t\t\tdoc[\"__v\"] = v32\n\t\t} else {\n\t\t\tdoc[\"__v\"] = int32(0)\n\t\t}\n\t}\n}",
+          "claim": "In mongo_extjson_unwrapper.go, ensureReconstructedMongoTimestamps synthesizes createdAt and updatedAt as primitive.DateTime from _source_ts or _id ObjectID timestamp when missing on a reconstructed MongoDB document, and ensures __v is int32(0)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "A-RECON-SEGB-TS",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In recon_engine_segment_b.go, resolveSegmentBTSCol only overwrites tsCol with dstTS when errTS == nil && dstTS != \"\" && dstTS != \"_id_only\", preserving tsCol = \"_source_ts\" when timestamp_field is NULL.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_engine_segment_b.go:129-142\nfunc (rc *ReconCore) resolveSegmentBTSCol(ctx context.Context, ref MasterBindingRef, checkType string) string {\n\ttsCol := \"_source_ts\"\n\tspecTS := ParseTransformSpecTimestampField(ref.TransformSpec)\n\tif rc.registryRepo != nil {\n\t\tif entry, err := rc.registryRepo.GetByTargetTableAndSchema(ctx, ref.ShadowTable, ref.ShadowSchema); err == nil && entry != nil {\n\t\t\tif specTS != \"\" && (entry.TimestampField == nil || strings.TrimSpace(*entry.TimestampField) == \"\") {\n\t\t\t\tentry.TimestampField = &specTS\n\t\t\t}\n\t\t\t_, dstTS, errTS := rc.resolveSourceAndDestTSFields(ctx, *entry, checkType)\n\t\t\tif errTS == nil && dstTS != \"\" && dstTS != \"_id_only\" {\n\t\t\t\ttsCol = dstTS\n\t\t\t}\n\t\t}\n\t}",
+    "flow": "RunDeepCheckB / RunHashWindowCheckB -> resolveSegmentBTSCol",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4245,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7962,
+                "INCORRECT": 0.1402,
+                "UNSUPPORTED": 0.0637
+              },
+              "confidence": 0.4245,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 508,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In recon_engine_segment_b.go, resolveSegmentBTSCol only overwrites tsCol with dstTS when errTS == nil && dstTS != \"\" && dstTS != \"_id_only\", preserving tsCol = \"_source_ts\" when timestamp_field is NULL.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_engine_segment_b.go:129-142\nfunc (rc *ReconCore) resolveSegmentBTSCol(ctx context.Context, ref MasterBindingRef, checkType string) string {\n\ttsCol := \"_source_ts\"\n\tspecTS := ParseTransformSpecTimestampField(ref.TransformSpec)\n\tif rc.registryRepo != nil {\n\t\tif entry, err := rc.registryRepo.GetByTargetTableAndSchema(ctx, ref.ShadowTable, ref.ShadowSchema); err == nil && entry != nil {\n\t\t\tif specTS != \"\" && (entry.TimestampField == nil || strings.TrimSpace(*entry.TimestampField) == \"\") {\n\t\t\t\tentry.TimestampField = &specTS\n\t\t\t}\n\t\t\t_, dstTS, errTS := rc.resolveSourceAndDestTSFields(ctx, *entry, checkType)\n\t\t\tif errTS == nil && dstTS != \"\" && dstTS != \"_id_only\" {\n\t\t\t\ttsCol = dstTS\n\t\t\t}\n\t\t}\n\t}",
+          "flow": "RunDeepCheckB / RunHashWindowCheckB -> resolveSegmentBTSCol"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5317,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8351,
+                "INCORRECT": 0.1419,
+                "UNSUPPORTED": 0.023
+              },
+              "confidence": 0.5317,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 523,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Post-S4 Final Adversarial Audit (DG3) for TASK-11",
+          "function_workflow": "RunDeepCheckB / RunHashWindowCheckB -> resolveSegmentBTSCol",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_engine_segment_b.go:129-142\nfunc (rc *ReconCore) resolveSegmentBTSCol(ctx context.Context, ref MasterBindingRef, checkType string) string {\n\ttsCol := \"_source_ts\"\n\tspecTS := ParseTransformSpecTimestampField(ref.TransformSpec)\n\tif rc.registryRepo != nil {\n\t\tif entry, err := rc.registryRepo.GetByTargetTableAndSchema(ctx, ref.ShadowTable, ref.ShadowSchema); err == nil && entry != nil {\n\t\t\tif specTS != \"\" && (entry.TimestampField == nil || strings.TrimSpace(*entry.TimestampField) == \"\") {\n\t\t\t\tentry.TimestampField = &specTS\n\t\t\t}\n\t\t\t_, dstTS, errTS := rc.resolveSourceAndDestTSFields(ctx, *entry, checkType)\n\t\t\tif errTS == nil && dstTS != \"\" && dstTS != \"_id_only\" {\n\t\t\t\ttsCol = dstTS\n\t\t\t}\n\t\t}\n\t}",
+          "claim": "In recon_engine_segment_b.go, resolveSegmentBTSCol only overwrites tsCol with dstTS when errTS == nil && dstTS != \"\" && dstTS != \"_id_only\", preserving tsCol = \"_source_ts\" when timestamp_field is NULL."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7146,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9502,
+                "NO": 0.0498
+              },
+              "confidence": 0.7146,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 431,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_engine_segment_b.go:129-142\nfunc (rc *ReconCore) resolveSegmentBTSCol(ctx context.Context, ref MasterBindingRef, checkType string) string {\n\ttsCol := \"_source_ts\"\n\tspecTS := ParseTransformSpecTimestampField(ref.TransformSpec)\n\tif rc.registryRepo != nil {\n\t\tif entry, err := rc.registryRepo.GetByTargetTableAndSchema(ctx, ref.ShadowTable, ref.ShadowSchema); err == nil && entry != nil {\n\t\t\tif specTS != \"\" && (entry.TimestampField == nil || strings.TrimSpace(*entry.TimestampField) == \"\") {\n\t\t\t\tentry.TimestampField = &specTS\n\t\t\t}\n\t\t\t_, dstTS, errTS := rc.resolveSourceAndDestTSFields(ctx, *entry, checkType)\n\t\t\tif errTS == nil && dstTS != \"\" && dstTS != \"_id_only\" {\n\t\t\t\ttsCol = dstTS\n\t\t\t}\n\t\t}\n\t}",
+          "claim": "In recon_engine_segment_b.go, resolveSegmentBTSCol only overwrites tsCol with dstTS when errTS == nil && dstTS != \"\" && dstTS != \"_id_only\", preserving tsCol = \"_source_ts\" when timestamp_field is NULL."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "A-ROWDIFF-SKIP",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In recon_multi_shadow_b.go, shouldSkipMongoRowDiffCol returns true for source_field_types, sourceFieldTypes, source_field_values, sourceFieldValues, and stripped flat/optional columns that are nil on the MongoDB Master row.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go:165-180\nfunc shouldSkipMongoRowDiffCol(isMongoMaster bool, mrow map[string]any, targetCol string) bool {\n\tif !isMongoMaster {\n\t\treturn false\n\t}\n\tcol := strings.TrimSpace(targetCol)\n\tswitch col {\n\tcase \"source_field_types\", \"sourceFieldTypes\", \"source_field_values\", \"sourceFieldValues\":\n\t\treturn true\n\t}\n\tif _, isStripped := mongoStrippedRowDiffCols[col]; isStripped {\n\t\tif mrow != nil && resolveMasterRowDiffVal(mrow, col) == nil {\n\t\t\treturn true\n\t\t}\n\t}\n\treturn false\n}",
+    "flow": "RunRowDiffB -> shouldSkipMongoRowDiffCol",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.737,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9337,
+                "INCORRECT": 0.0382,
+                "UNSUPPORTED": 0.028
+              },
+              "confidence": 0.737,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 417,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In recon_multi_shadow_b.go, shouldSkipMongoRowDiffCol returns true for source_field_types, sourceFieldTypes, source_field_values, sourceFieldValues, and stripped flat/optional columns that are nil on the MongoDB Master row.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go:165-180\nfunc shouldSkipMongoRowDiffCol(isMongoMaster bool, mrow map[string]any, targetCol string) bool {\n\tif !isMongoMaster {\n\t\treturn false\n\t}\n\tcol := strings.TrimSpace(targetCol)\n\tswitch col {\n\tcase \"source_field_types\", \"sourceFieldTypes\", \"source_field_values\", \"sourceFieldValues\":\n\t\treturn true\n\t}\n\tif _, isStripped := mongoStrippedRowDiffCols[col]; isStripped {\n\t\tif mrow != nil && resolveMasterRowDiffVal(mrow, col) == nil {\n\t\t\treturn true\n\t\t}\n\t}\n\treturn false\n}",
+          "flow": "RunRowDiffB -> shouldSkipMongoRowDiffCol"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.597,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8737,
+                "INCORRECT": 0.1008,
+                "UNSUPPORTED": 0.0255
+              },
+              "confidence": 0.597,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 432,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Post-S4 Final Adversarial Audit (DG3) for TASK-11",
+          "function_workflow": "RunRowDiffB -> shouldSkipMongoRowDiffCol",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go:165-180\nfunc shouldSkipMongoRowDiffCol(isMongoMaster bool, mrow map[string]any, targetCol string) bool {\n\tif !isMongoMaster {\n\t\treturn false\n\t}\n\tcol := strings.TrimSpace(targetCol)\n\tswitch col {\n\tcase \"source_field_types\", \"sourceFieldTypes\", \"source_field_values\", \"sourceFieldValues\":\n\t\treturn true\n\t}\n\tif _, isStripped := mongoStrippedRowDiffCols[col]; isStripped {\n\t\tif mrow != nil && resolveMasterRowDiffVal(mrow, col) == nil {\n\t\t\treturn true\n\t\t}\n\t}\n\treturn false\n}",
+          "claim": "In recon_multi_shadow_b.go, shouldSkipMongoRowDiffCol returns true for source_field_types, sourceFieldTypes, source_field_values, sourceFieldValues, and stripped flat/optional columns that are nil on the MongoDB Master row."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.9007,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9871,
+                "NO": 0.0129
+              },
+              "confidence": 0.9007,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 344,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go:165-180\nfunc shouldSkipMongoRowDiffCol(isMongoMaster bool, mrow map[string]any, targetCol string) bool {\n\tif !isMongoMaster {\n\t\treturn false\n\t}\n\tcol := strings.TrimSpace(targetCol)\n\tswitch col {\n\tcase \"source_field_types\", \"sourceFieldTypes\", \"source_field_values\", \"sourceFieldValues\":\n\t\treturn true\n\t}\n\tif _, isStripped := mongoStrippedRowDiffCols[col]; isStripped {\n\t\tif mrow != nil && resolveMasterRowDiffVal(mrow, col) == nil {\n\t\t\treturn true\n\t\t}\n\t}\n\treturn false\n}",
+          "claim": "In recon_multi_shadow_b.go, shouldSkipMongoRowDiffCol returns true for source_field_types, sourceFieldTypes, source_field_values, sourceFieldValues, and stripped flat/optional columns that are nil on the MongoDB Master row."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "In mongo_stale_field_pruner.go, StaleMongoKeysToPrune skips keys that start with \"_\", equal targetKey, or equal \"source_field_types\" or \"sourceFieldTypes\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_stale_field_pruner.go:14-30\nfunc StaleMongoKeysToPrune(rec map[string]any, doc bson.M, targetKey string) []string {\n\tif doc == nil {\n\t\treturn nil\n\t}\n\tvar out []string\n\tfor k := range rec {\n\t\tif strings.HasPrefix(k, \"_\") || k == targetKey ||\n\t\t\tk == \"source_field_types\" || k == \"sourceFieldTypes\" {\n\t\t\tcontinue\n\t\t}\n\t\tif _, stillPresent := doc[k]; !stillPresent {\n\t\t\tout = append(out, k)\n\t\t}\n\t}\n\tsort.Strings(out)\n\treturn out\n}",
+    "flow": "BuildMongoOCCBulkModels -> StaleMongoKeysToPrune",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.0123,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.2625,
+                "INCORRECT": 0.343,
+                "UNSUPPORTED": 0.3945
+              },
+              "confidence": 0.0123,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 414,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In mongo_stale_field_pruner.go, StaleMongoKeysToPrune skips keys that start with \"_\", equal targetKey, or equal \"source_field_types\" or \"sourceFieldTypes\".",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_stale_field_pruner.go:14-30\nfunc StaleMongoKeysToPrune(rec map[string]any, doc bson.M, targetKey string) []string {\n\tif doc == nil {\n\t\treturn nil\n\t}\n\tvar out []string\n\tfor k := range rec {\n\t\tif strings.HasPrefix(k, \"_\") || k == targetKey ||\n\t\t\tk == \"source_field_types\" || k == \"sourceFieldTypes\" {\n\t\t\tcontinue\n\t\t}\n\t\tif _, stillPresent := doc[k]; !stillPresent {\n\t\t\tout = append(out, k)\n\t\t}\n\t}\n\tsort.Strings(out)\n\treturn out\n}",
+          "flow": "BuildMongoOCCBulkModels -> StaleMongoKeysToPrune"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.6149,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8896,
+                "INCORRECT": 0.0622,
+                "UNSUPPORTED": 0.0482
+              },
+              "confidence": 0.6149,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 428,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Post-S4 Final Adversarial Audit (DG3) for TASK-11",
+          "function_workflow": "BuildMongoOCCBulkModels -> StaleMongoKeysToPrune",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_stale_field_pruner.go:14-30\nfunc StaleMongoKeysToPrune(rec map[string]any, doc bson.M, targetKey string) []string {\n\tif doc == nil {\n\t\treturn nil\n\t}\n\tvar out []string\n\tfor k := range rec {\n\t\tif strings.HasPrefix(k, \"_\") || k == targetKey ||\n\t\t\tk == \"source_field_types\" || k == \"sourceFieldTypes\" {\n\t\t\tcontinue\n\t\t}\n\t\tif _, stillPresent := doc[k]; !stillPresent {\n\t\t\tout = append(out, k)\n\t\t}\n\t}\n\tsort.Strings(out)\n\treturn out\n}",
+          "claim": "In mongo_stale_field_pruner.go, StaleMongoKeysToPrune skips keys that start with \"_\", equal targetKey, or equal \"source_field_types\" or \"sourceFieldTypes\"."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8745,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9828,
+                "NO": 0.0172
+              },
+              "confidence": 0.8745,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 338,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_stale_field_pruner.go:14-30\nfunc StaleMongoKeysToPrune(rec map[string]any, doc bson.M, targetKey string) []string {\n\tif doc == nil {\n\t\treturn nil\n\t}\n\tvar out []string\n\tfor k := range rec {\n\t\tif strings.HasPrefix(k, \"_\") || k == targetKey ||\n\t\t\tk == \"source_field_types\" || k == \"sourceFieldTypes\" {\n\t\t\tcontinue\n\t\t}\n\t\tif _, stillPresent := doc[k]; !stillPresent {\n\t\t\tout = append(out, k)\n\t\t}\n\t}\n\tsort.Strings(out)\n\treturn out\n}",
+          "claim": "In mongo_stale_field_pruner.go, StaleMongoKeysToPrune skips keys that start with \"_\", equal targetKey, or equal \"source_field_types\" or \"sourceFieldTypes\"."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In mongo_stale_field_pruner.go, StaleMongoKeysToPrune only returns keys that start with an underscore \"_\" and deletes all non-underscore keys.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_stale_field_pruner.go:14-30\nfunc StaleMongoKeysToPrune(rec map[string]any, doc bson.M, targetKey string) []string {\n\tif doc == nil {\n\t\treturn nil\n\t}\n\tvar out []string\n\tfor k := range rec {\n\t\tif strings.HasPrefix(k, \"_\") || k == targetKey ||\n\t\t\tk == \"source_field_types\" || k == \"sourceFieldTypes\" {\n\t\t\tcontinue\n\t\t}\n\t\tif _, stillPresent := doc[k]; !stillPresent {\n\t\t\tout = append(out, k)\n\t\t}\n\t}\n\tsort.Strings(out)\n\treturn out\n}",
+    "flow": "BuildMongoOCCBulkModels -> StaleMongoKeysToPrune",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.2632,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0929,
+                "INCORRECT": 0.2181,
+                "UNSUPPORTED": 0.6891
+              },
+              "confidence": 0.2632,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 404,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In mongo_stale_field_pruner.go, StaleMongoKeysToPrune only returns keys that start with an underscore \"_\" and deletes all non-underscore keys.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_stale_field_pruner.go:14-30\nfunc StaleMongoKeysToPrune(rec map[string]any, doc bson.M, targetKey string) []string {\n\tif doc == nil {\n\t\treturn nil\n\t}\n\tvar out []string\n\tfor k := range rec {\n\t\tif strings.HasPrefix(k, \"_\") || k == targetKey ||\n\t\t\tk == \"source_field_types\" || k == \"sourceFieldTypes\" {\n\t\t\tcontinue\n\t\t}\n\t\tif _, stillPresent := doc[k]; !stillPresent {\n\t\t\tout = append(out, k)\n\t\t}\n\t}\n\tsort.Strings(out)\n\treturn out\n}",
+          "flow": "BuildMongoOCCBulkModels -> StaleMongoKeysToPrune"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.0798,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3419,
+                "INCORRECT": 0.4949,
+                "UNSUPPORTED": 0.1632
+              },
+              "confidence": 0.0798,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 419,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Post-S4 Final Adversarial Audit (DG3) for TASK-11",
+          "function_workflow": "BuildMongoOCCBulkModels -> StaleMongoKeysToPrune",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_stale_field_pruner.go:14-30\nfunc StaleMongoKeysToPrune(rec map[string]any, doc bson.M, targetKey string) []string {\n\tif doc == nil {\n\t\treturn nil\n\t}\n\tvar out []string\n\tfor k := range rec {\n\t\tif strings.HasPrefix(k, \"_\") || k == targetKey ||\n\t\t\tk == \"source_field_types\" || k == \"sourceFieldTypes\" {\n\t\t\tcontinue\n\t\t}\n\t\tif _, stillPresent := doc[k]; !stillPresent {\n\t\t\tout = append(out, k)\n\t\t}\n\t}\n\tsort.Strings(out)\n\treturn out\n}",
+          "claim": "In mongo_stale_field_pruner.go, StaleMongoKeysToPrune only returns keys that start with an underscore \"_\" and deletes all non-underscore keys."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5723,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9126,
+                "NO": 0.0874
+              },
+              "confidence": 0.5723,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 329,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_stale_field_pruner.go:14-30\nfunc StaleMongoKeysToPrune(rec map[string]any, doc bson.M, targetKey string) []string {\n\tif doc == nil {\n\t\treturn nil\n\t}\n\tvar out []string\n\tfor k := range rec {\n\t\tif strings.HasPrefix(k, \"_\") || k == targetKey ||\n\t\t\tk == \"source_field_types\" || k == \"sourceFieldTypes\" {\n\t\t\tcontinue\n\t\t}\n\t\tif _, stillPresent := doc[k]; !stillPresent {\n\t\t\tout = append(out, k)\n\t\t}\n\t}\n\tsort.Strings(out)\n\treturn out\n}",
+          "claim": "In mongo_stale_field_pruner.go, StaleMongoKeysToPrune only returns keys that start with an underscore \"_\" and deletes all non-underscore keys."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In recon_engine_segment_b.go, resolveSegmentBTSCol always returns \"_id_only\" when dstTS equals \"_id_only\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_engine_segment_b.go:129-142\nfunc (rc *ReconCore) resolveSegmentBTSCol(ctx context.Context, ref MasterBindingRef, checkType string) string {\n\ttsCol := \"_source_ts\"\n\tspecTS := ParseTransformSpecTimestampField(ref.TransformSpec)\n\tif rc.registryRepo != nil {\n\t\tif entry, err := rc.registryRepo.GetByTargetTableAndSchema(ctx, ref.ShadowTable, ref.ShadowSchema); err == nil && entry != nil {\n\t\t\tif specTS != \"\" && (entry.TimestampField == nil || strings.TrimSpace(*entry.TimestampField) == \"\") {\n\t\t\t\tentry.TimestampField = &specTS\n\t\t\t}\n\t\t\t_, dstTS, errTS := rc.resolveSourceAndDestTSFields(ctx, *entry, checkType)\n\t\t\tif errTS == nil && dstTS != \"\" && dstTS != \"_id_only\" {\n\t\t\t\ttsCol = dstTS\n\t\t\t}\n\t\t}\n\t}",
+    "flow": "RunDeepCheckB / RunHashWindowCheckB -> resolveSegmentBTSCol",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2855,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6913,
+                "INCORRECT": 0.2373,
+                "UNSUPPORTED": 0.0714
+              },
+              "confidence": 0.2855,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 482,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In recon_engine_segment_b.go, resolveSegmentBTSCol always returns \"_id_only\" when dstTS equals \"_id_only\".",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_engine_segment_b.go:129-142\nfunc (rc *ReconCore) resolveSegmentBTSCol(ctx context.Context, ref MasterBindingRef, checkType string) string {\n\ttsCol := \"_source_ts\"\n\tspecTS := ParseTransformSpecTimestampField(ref.TransformSpec)\n\tif rc.registryRepo != nil {\n\t\tif entry, err := rc.registryRepo.GetByTargetTableAndSchema(ctx, ref.ShadowTable, ref.ShadowSchema); err == nil && entry != nil {\n\t\t\tif specTS != \"\" && (entry.TimestampField == nil || strings.TrimSpace(*entry.TimestampField) == \"\") {\n\t\t\t\tentry.TimestampField = &specTS\n\t\t\t}\n\t\t\t_, dstTS, errTS := rc.resolveSourceAndDestTSFields(ctx, *entry, checkType)\n\t\t\tif errTS == nil && dstTS != \"\" && dstTS != \"_id_only\" {\n\t\t\t\ttsCol = dstTS\n\t\t\t}\n\t\t}\n\t}",
+          "flow": "RunDeepCheckB / RunHashWindowCheckB -> resolveSegmentBTSCol"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.3054,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3807,
+                "INCORRECT": 0.5962,
+                "UNSUPPORTED": 0.0231
+              },
+              "confidence": 0.3054,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 496,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Post-S4 Final Adversarial Audit (DG3) for TASK-11",
+          "function_workflow": "RunDeepCheckB / RunHashWindowCheckB -> resolveSegmentBTSCol",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_engine_segment_b.go:129-142\nfunc (rc *ReconCore) resolveSegmentBTSCol(ctx context.Context, ref MasterBindingRef, checkType string) string {\n\ttsCol := \"_source_ts\"\n\tspecTS := ParseTransformSpecTimestampField(ref.TransformSpec)\n\tif rc.registryRepo != nil {\n\t\tif entry, err := rc.registryRepo.GetByTargetTableAndSchema(ctx, ref.ShadowTable, ref.ShadowSchema); err == nil && entry != nil {\n\t\t\tif specTS != \"\" && (entry.TimestampField == nil || strings.TrimSpace(*entry.TimestampField) == \"\") {\n\t\t\t\tentry.TimestampField = &specTS\n\t\t\t}\n\t\t\t_, dstTS, errTS := rc.resolveSourceAndDestTSFields(ctx, *entry, checkType)\n\t\t\tif errTS == nil && dstTS != \"\" && dstTS != \"_id_only\" {\n\t\t\t\ttsCol = dstTS\n\t\t\t}\n\t\t}\n\t}",
+          "claim": "In recon_engine_segment_b.go, resolveSegmentBTSCol always returns \"_id_only\" when dstTS equals \"_id_only\"."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.0002,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.4923,
+                "NO": 0.5077
+              },
+              "confidence": 0.0002,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 404,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_engine_segment_b.go:129-142\nfunc (rc *ReconCore) resolveSegmentBTSCol(ctx context.Context, ref MasterBindingRef, checkType string) string {\n\ttsCol := \"_source_ts\"\n\tspecTS := ParseTransformSpecTimestampField(ref.TransformSpec)\n\tif rc.registryRepo != nil {\n\t\tif entry, err := rc.registryRepo.GetByTargetTableAndSchema(ctx, ref.ShadowTable, ref.ShadowSchema); err == nil && entry != nil {\n\t\t\tif specTS != \"\" && (entry.TimestampField == nil || strings.TrimSpace(*entry.TimestampField) == \"\") {\n\t\t\t\tentry.TimestampField = &specTS\n\t\t\t}\n\t\t\t_, dstTS, errTS := rc.resolveSourceAndDestTSFields(ctx, *entry, checkType)\n\t\t\tif errTS == nil && dstTS != \"\" && dstTS != \"_id_only\" {\n\t\t\t\ttsCol = dstTS\n\t\t\t}\n\t\t}\n\t}",
+          "claim": "In recon_engine_segment_b.go, resolveSegmentBTSCol always returns \"_id_only\" when dstTS equals \"_id_only\"."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

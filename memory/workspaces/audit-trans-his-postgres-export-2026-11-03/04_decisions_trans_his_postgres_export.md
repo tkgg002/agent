@@ -1,0 +1,7 @@
+# 04. Decisions Log — `audit-trans-his-postgres-export-2026-11-03`
+
+- [2026-11-03T11:09:38+07:00] **DG3 Claim Resolution (`A-F4-SUBQUERY` & `A-F6-IT-SKIP`):**
+  - **`A-F4-SUBQUERY` (`FLAG` -> `RESOLVED`):** Xác minh trực tiếp tại `REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/merchant/payout-request-export.pure.ts:53-58`: `getConfig` khai báo `subQueryClass: GetListTransHisByTransIdQuery` và `buildSubQueryParams` trả về `[...new Set(primaryData.map(c => c.transInfo?.transId))]` không lọc bỏ `undefined`.
+  - **`A-F6-IT-SKIP` (`FLAG` -> `RESOLVED`):** Xác minh trực tiếp tại `REF: /Users/trainguyen/Documents/work/centralized-export-service/test/integration/trans-his-pg.integration.test.ts:18-23`: dùng `describe.skipIf(!pgUrl)` skip toàn bộ file integration test khi biến `TRANS_HIS_PG_IT_URL` không được cấu hình mà không in `console.warn`.
+- [2026-11-03T11:35:20+07:00] [Agent:laya_gate] DG3 A-F2-F3-CONFIG FLAG resolved: REF: /Users/trainguyen/Documents/work/centralized-export-service/utils/trans-his-export-source.ts:30-39 verified directly and covered by unit test in trans-his-pg.connection.test.ts (EV-20261103T113336-1859).
+- [2026-11-03T11:35:21+07:00] [Agent:laya_gate] DG3 A-F5-STAMPEDE FLAG resolved: REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.model.ts:122-138 verified directly and covered by concurrency & retry unit tests in trans-his-pg.model.test.ts (EV-20261103T113336-1859).

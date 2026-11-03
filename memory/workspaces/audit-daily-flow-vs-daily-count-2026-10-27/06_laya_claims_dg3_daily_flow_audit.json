@@ -1,0 +1,44 @@
+[
+  {
+    "id": "A-RC-KAFKA-FALLBACK",
+    "kind": "target",
+    "claim": "Tại activity_log_read_repo_gorm.go:431-438, kafka_total cộng thêm fallback COALESCE((e.details->>'written')::bigint, e.rows_affected, 0) khi c và inserted đều NULL, nhưng kafka_c lại không có fallback này khiến Kafka.Total lớn hơn Kafka.C + Kafka.U + Kafka.D đối với các log legacy.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:431-438\n\t\t\tSUM(CASE WHEN e.operation = 'kafka-consumer' AND NOT (COALESCE(e.details->>'buffer_type' = 'snapshot', false) OR COALESCE((e.details->>'is_snapshot')::boolean, false))\n\t\t\t         THEN COALESCE((e.details->>'c')::bigint, (e.details->>'inserted')::bigint, 0)\n\t\t\t            + COALESCE((e.details->>'u')::bigint, (e.details->>'updated')::bigint, 0)\n\t\t\t            + COALESCE((e.details->>'d')::bigint, (e.details->>'deleted')::bigint, 0)\n\t\t\t            + CASE WHEN (e.details->>'c' IS NULL AND e.details->>'inserted' IS NULL) THEN COALESCE((e.details->>'written')::bigint, e.rows_affected, 0) ELSE 0 END\n\t\t\t         ELSE 0 END) AS kafka_total,\n\t\t\tSUM(CASE WHEN e.operation = 'kafka-consumer' AND NOT (COALESCE(e.details->>'buffer_type' = 'snapshot', false) OR COALESCE((e.details->>'is_snapshot')::boolean, false))\n\t\t\t         THEN COALESCE((e.details->>'c')::bigint, (e.details->>'inserted')::bigint, 0) ELSE 0 END) AS kafka_c,"
+  },
+  {
+    "id": "A-SNAPSHOT-MASTER-DOUBLE",
+    "kind": "target",
+    "claim": "Tại activity_log_read_repo_gorm.go:429-430, snapshot_master cộng đồng thời cả inserted + updated + deleted lẫn e.rows_affected khiến số liệu bị nhân đôi khi rows_affected đã bằng tổng inserted + updated + deleted.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:429-430\n\t\t\tSUM(CASE WHEN e.triggered_by = 'snapshot-hook' AND e.operation IN ('transmute','transmute_sub') AND e.status <> 'error'\n\t\t\t         THEN COALESCE((e.details->>'inserted')::bigint, 0) + COALESCE((e.details->>'updated')::bigint, 0) + COALESCE((e.details->>'deleted')::bigint, 0) + e.rows_affected ELSE 0 END) AS snapshot_master,"
+  },
+  {
+    "id": "A-UI-SUMMARY-COL-SHIFT",
+    "kind": "target",
+    "claim": "Tại ReconPipelineGrid.tsx:1357-1361, khối 4. GHI VÀO DB MASTER có cột Delete(d) nằm giữa Updated và Skipped, nhưng tại Table.Summary.Row (L1455-1458) lại thiếu ô Table.Summary.Cell cho totals.masterDeleted.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:1357-1361\n              { title: 'Inserted', dataIndex: ['master', 'inserted'], width: 80, align: 'right', render: (v: number) => !pipeline?.masterName ? <Text type=\"secondary\">—</Text> : <span style={{ color: '#52c41a' }}>{fmtNum(v)}</span> },\n              { title: 'Updated', dataIndex: ['master', 'updated'], width: 80, align: 'right', render: (v: number) => !pipeline?.masterName ? <Text type=\"secondary\">—</Text> : <span style={{ color: '#faad14' }}>{fmtNum(v)}</span> },\n              { title: 'Delete(d)', dataIndex: ['master', 'deleted'], width: 75, align: 'right', render: (v: number) => !pipeline?.masterName ? <Text type=\"secondary\">—</Text> : <span style={{ color: '#ff4d4f' }}>{fmtNum(v || 0)}</span> },\n              { title: 'Skipped', dataIndex: ['master', 'skipped'], width: 75, align: 'right', render: (v: number) => !pipeline?.masterName ? <Text type=\"secondary\">—</Text> : <Text type=\"secondary\">{fmtNum(v)}</Text> },\n            ],\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:1455-1458\n                <Table.Summary.Cell index={12} align=\"right\">{pipeline?.masterName ? <span style={{ color: '#52c41a' }}>{fmtNum(totals.masterInserted)}</span> : <Text type=\"secondary\">—</Text>}</Table.Summary.Cell>\n                <Table.Summary.Cell index={13} align=\"right\">{pipeline?.masterName ? <span style={{ color: '#faad14' }}>{fmtNum(totals.masterUpdated)}</span> : <Text type=\"secondary\">—</Text>}</Table.Summary.Cell>\n                <Table.Summary.Cell index={14} align=\"right\">{pipeline?.masterName ? <Text type=\"secondary\">{fmtNum(totals.masterSkipped)}</Text> : <Text type=\"secondary\">—</Text>}</Table.Summary.Cell>\n"
+  },
+  {
+    "id": "A-SHADOW-DEDUP",
+    "kind": "target",
+    "claim": "Tại batch_buffer.go:731, trước khi chạy SQL Upsert vào Shadow, hàm dedupByConflictKey(sc.Records) gộp các bản ghi trùng khóa chính trong cùng subChunk.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:726-732\n\t\t\t\tif !sc.IsDelete {\n\t\t\t\t\t// Dedup and merge by PrimaryKeyValue BEFORE signature grouping so\n\t\t\t\t\t// two events for the same document with different column subsets do\n\t\t\t\t\t// not land in separate signature groups and execute in non-deterministic\n\t\t\t\t\t// Go map iteration order.\n\t\t\t\t\tdeduped := dedupByConflictKey(sc.Records)"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "Trong GetDailyFlow, nếu p.Days <= 0 thì p.Days được gán giá trị mặc định là 14, và nếu p.Days > 90 thì được giới hạn về 90.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:388-394\nfunc (r *ActivityLogReadRepo) GetDailyFlow(ctx context.Context, p system.DailyFlowParams) (*system.DailyFlowResult, error) {\n\tif p.Days <= 0 {\n\t\tp.Days = 14\n\t}\n\tif p.Days > 90 {\n\t\tp.Days = 90\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "Trong GetDailyFlow, nếu p.Days <= 0 thì hàm trả về lỗi ngay lập tức và không gán giá trị mặc định.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:388-394\nfunc (r *ActivityLogReadRepo) GetDailyFlow(ctx context.Context, p system.DailyFlowParams) (*system.DailyFlowResult, error) {\n\tif p.Days <= 0 {\n\t\tp.Days = 14\n\t}\n\tif p.Days > 90 {\n\t\tp.Days = 90\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "SourceCountRunner.Run luôn tính toán cho ngày hiện tại (now) thay vì ngày hôm qua (AddDate(0, 0, -1)).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/sourcecount/source_count_runner.go:139-146\n\t// Tính toán ngày chốt sổ hôm qua (D-1) và khoảng nửa mở [startOfDay, nextDayStart)\n\tyesterday := now.In(locHCM).AddDate(0, 0, -1)\n\treportDateStr := yesterday.Format(\"2006-01-02\")\n\treportDate, _ := time.Parse(\"2006-01-02\", reportDateStr)\n\n\tstartOfDay := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, locHCM)\n\tnextDayStart := startOfDay.AddDate(0, 0, 1)"
+  }
+]

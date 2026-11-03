@@ -1,0 +1,105 @@
+{
+  "mode": "claim",
+  "stage": "dg3",
+  "workspace": "audit-daily-flow-vs-daily-count-2026-10-27",
+  "ts": "20261027T101438",
+  "trusted_rounds": [
+    "r2"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-daily-flow-vs-daily-count-2026-10-27/06_laya_raw_dg3_20261027T101438.json",
+  "claims": [
+    {
+      "id": "A-BACKFILL-COALESCE",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "bulkUpsertMaster chèn dữ liệu vào bảng Master bằng INSERT ... ON CONFLICT DO UPDATE ... RETURNING (xmax = 0) AS is_insert, nên các bản ghi mới lần đầu ghi vào Master (kể cả đã qua nhiều lần update ở Shadow) đều có xmax = 0 và được tính vào Inserted.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "trích dẫn không khớp /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1706-1719: query := fmt.Sprintf(",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4684
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1377
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7575
+        }
+      }
+    },
+    {
+      "id": "A-SUMMARY-COL-SHIFT",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Trong ReconPipelineGrid.tsx, dòng Table.Summary.Row chỉ render totals.masterTotal (index 11), totals.masterIns (index 12), totals.masterUpd (index 13) rồi nhảy sang totals.masterSkip (index 14) mà thiếu ô cho master.deleted, gây lệch cột.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "trích dẫn không khớp /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:1455-1461: <Table.Summary.Cell index={11} align=\"right\"><Text strong st",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2925
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.5555
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4554
+        }
+      }
+    },
+    {
+      "id": "A-KAFKA-C-FALLBACK",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Trong GetDailyFlow, kafka_total có nhánh ELSE cộng COALESCE((e.details->>'written')::bigint, e.rows_affected, 0) nhưng kafka_c chỉ lấy COALESCE((e.details->>'c')::bigint, (e.details->>'inserted')::bigint, 0) mà không có nhánh fallback.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "trích dẫn không khớp /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:431-438: COALESCE(SUM(CASE WHEN e.pipeline_stage = 'shadow_sync' AND ",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2727
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.0641
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4201
+        }
+      }
+    },
+    {
+      "id": "A-STATUS-TAUTOLOGY",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Trong GetDailyFlow, rec.Kafka.Total và rec.Shadow.Total đều được gán bằng row.KafkaTotal nên điều kiện isIngestOk := (rec.Kafka.Total == rec.Shadow.Total) luôn bằng true.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "trích dẫn không khớp /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:522-549: rec.Master.Total = row.MasterIns + row.MasterUpd + row.Maste",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.352
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.561
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.9755
+        }
+      }
+    }
+  ],
+  "gate": "BLOCK"
+}

@@ -1,0 +1,78 @@
+[
+  {
+    "id": "A-R4-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "P2 & R1: Laya :8200 reachability fallback (/openapi.json) and unconditional WriteVegaPhysicsSummary when liveAllowed=true",
+    "claim": "Hàm ensureLayaUp và BuildAndRunCalibratedLayaGate dùng CheckNeuralEndpointReachable(DefaultLayaHealthURL) để nhận diện chính xác Laya :8200 ngay cả khi /health trả 404, và luôn gọi WriteVegaPhysicsSummary khi liveAllowed=true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:692-700\n\tliveAllowed := (!isTempTestWorkspace(absWsDir) && !isLikelyGoTestProcess()) || os.Getenv(\"ORCH_LIVE_LAYA_IN_TESTS\") == \"1\"\n\tif g != nil && liveAllowed {\n\t\tg.WriteVegaPhysicsSummary(ctx, workspaceDir, stage, absRef, string(rawBytes)) // best-effort VegaML (:8222) metadata in its own file\n\t}\n\tif g != nil && g.AgentCoreDir != \"\" && liveAllowed && CheckNeuralEndpointReachable(DefaultLayaHealthURL) {",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:692-700",
+    "must_contain": [
+      "CheckNeuralEndpointReachable(DefaultLayaHealthURL)",
+      "WriteVegaPhysicsSummary"
+    ]
+  },
+  {
+    "id": "A-R4-02",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "R2: Merge canonical_questions.json in persistLocalVegaFeedbackMirror",
+    "claim": "Hàm persistLocalVegaFeedbackMirror đọc và unmarshal file canonical_questions.json hiện có trên đĩa trước khi gộp thêm các câu hỏi trong req.Questions.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/vega_human_gate.go:148-158\n\tif len(req.Questions) > 0 {\n\t\tqFile := filepath.Join(dataDir, \"canonical_questions.json\")\n\t\tvegaQ := make(map[string]map[string]any, len(req.Questions))\n\t\tif existingRaw, err := os.ReadFile(qFile); err == nil {\n\t\t\t_ = json.Unmarshal(existingRaw, &vegaQ)\n\t\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/vega_human_gate.go:148-158",
+    "must_contain": [
+      "os.ReadFile(qFile)",
+      "json.Unmarshal(existingRaw, &vegaQ)"
+    ]
+  },
+  {
+    "id": "A-R4-03",
+    "kind": "claim",
+    "basis": "code",
+    "basis": "code",
+    "flow": "P3: Agnostic Core regex split and isolated TempDir queue.db for TASK-13 test",
+    "claim": "TestRealRepoCentralizedExportService_AndTask13OnDiskRegeneration mở queue.db trong t.TempDir() và nạp TASK-13 trỏ tới repo thật để không phụ thuộc hay làm bẩn queue.db đang chạy.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_bridge_test.go:223-236\n\ttmpRoot := t.TempDir()\n\tqPath := filepath.Join(tmpRoot, \"queue.db\")\n\tqStore, err := queue.Open(qPath)\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\tdefer qStore.Close()",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_bridge_test.go:223-236",
+    "must_contain": [
+      "tmpRoot := t.TempDir()",
+      "queue.Open(qPath)"
+    ]
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG3 Control False 1",
+    "claim": "Hàm BuildAndRunCalibratedLayaGate xóa toàn bộ thư mục workspaceDir và tự chạy git push --force.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:692-700\n\tliveAllowed := (!isTempTestWorkspace(absWsDir) && !isLikelyGoTestProcess()) || os.Getenv(\"ORCH_LIVE_LAYA_IN_TESTS\") == \"1\"",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:692-700",
+    "must_contain": [
+      "FABRICATED_CONTROL_FALSE_FORCE_PUSH_TOKEN_111"
+    ]
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG3 Control False 2",
+    "claim": "Hàm persistLocalVegaFeedbackMirror kết nối trực tiếp vào PostgreSQL production để chạy DROP TABLE.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/vega_human_gate.go:148-158\n\tif len(req.Questions) > 0 {\n\t\tqFile := filepath.Join(dataDir, \"canonical_questions.json\")",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/vega_human_gate.go:148-158",
+    "must_contain": [
+      "FABRICATED_CONTROL_FALSE_DROP_TABLE_TOKEN_222"
+    ]
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "DG3 Control True",
+    "claim": "Hàm ensureLayaUp gọi CheckNeuralEndpointReachable(DefaultLayaHealthURL) để kiểm tra cổng Laya :8200.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/neural_gate_boot.go:13-24\nfunc (g *Gatekeeper) ensureLayaUp(ctx context.Context) bool {\n\tif CheckNeuralEndpointReachable(DefaultLayaHealthURL) {\n\t\treturn true\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/neural_gate_boot.go:13-24",
+    "must_contain": [
+      "CheckNeuralEndpointReachable(DefaultLayaHealthURL)"
+    ]
+  }
+]

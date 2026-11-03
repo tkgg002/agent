@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "BaseExportProcessor.execute catches sub-query errors at lines 236-238 and logs 'Error executing sub-query for job' without rethrowing.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/processors/BaseExportProcessor.ts:232-239\n              // 4. Merge data\n              const subDataList = Array.isArray(subResult) ? subResult : (subResult.data || []);\n              currentData = config.mergeData(currentData, subDataList);\n\n            } catch (err) {\n              this.context.broker.logger.error(`Error executing sub-query for job ${jobId}`, err);\n            }\n          }"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "GetListTransHisByTransIdPgHandler.execute extracts listTransId from query and calls transHisModel.find({ transId: { $in: listTransId } }, selectFields).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/domain/handlers/trans-his/GetListTransHisByTransIdPgHandler.ts:13-31\n    public async execute(query: GetListTransHisByTransIdQuery, context: any, options: any): Promise<any> {\n        const { listTransId } = query;\n\n        const transHisModel = this.mainProcess.models.TransHisPgModel;\n\n        const selectFields = {\n            _id: 1,\n            transId: 1,\n            status: 1\n        };\n\n        const filter = { transId: { $in: listTransId } };\n\n        const rawData = await transHisModel.find(filter, selectFields);\n\n        return {\n            data: rawData\n        };\n    }"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "TransHisPgModel.selectSql checks if this.hasIdempotencyKey is undefined and awaits this.run(HAS_IDEMPOTENCY_KEY_SQL, [], 3000) without caching an in-flight promise.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.model.ts:121-126\n\tprivate async selectSql(): Promise<string> {\n\t\tif (this.hasIdempotencyKey === undefined) {\n\t\t\tthis.hasIdempotencyKey = (await this.run(HAS_IDEMPOTENCY_KEY_SQL, [], 3000)).rows.length > 0;\n\t\t}\n\t\treturn this.hasIdempotencyKey ? SELECT_SQL.replace(REQUEST_ID_COLUMN, IDEMPOTENCY_KEY_COLUMN) : SELECT_SQL;\n\t}"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "start.ts calls readTransHisPgConfig() inside the else if (config.type === \"postgres\") branch and connects via this.postgresDbHandler.createConnection.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/start.ts:277-290\n                    } else if (config.type === \"postgres\") {\n                        const pg = readTransHisPgConfig();\n                        connection = await new Promise((resolve, reject) => {\n                            this.postgresDbHandler.createConnection({\n                                alias,\n                                host: pg.host!,\n                                port: pg.port!,\n                                database: pg.database!,\n                                username: pg.username!,\n                                password: pg.password!,\n                                poolSize: pg.poolSize!\n                            }, (err, pool) => err ? reject(err) : resolve(pool));\n                        });\n                    }"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "isDbEnabled in dbHandler/trans-his-pg.ts returns alias !== TRANS_HIS_PG_ALIAS || getTransHisExportSource() === \"postgres\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/dbHandler/trans-his-pg.ts:11-14\n/** Every database of DB_LIST is connected, except the trans-his Postgres when the exports read Mongo. */\nexport const isDbEnabled = (alias: string): boolean =>\n\talias !== TRANS_HIS_PG_ALIAS || getTransHisExportSource() === \"postgres\";"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "resolveSort in models/trans-his-pg/trans-his-pg.query.ts throws unsupported_sort when sort has more than one key or when sort[key] is neither 1 nor -1.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:515-525\nexport function resolveSort(sort: unknown): SortSpec {\n\tif (sort === undefined || sort === null) { return DEFAULT_SORT; }\n\tif (!isPlainObject(sort)) { return refuse(\"unsupported_sort\", \"sort (an object is expected)\"); }\n\tconst keys = Object.keys(sort);\n\tif (keys.length === 0) { return DEFAULT_SORT; }\n\tif (keys.length > 1) { return refuse(\"unsupported_sort\", \"sort (one key is expected)\"); }\n\tconst key = keys[0];\n\tif (sort[key] !== 1 && sort[key] !== -1) { return refuse(\"unsupported_sort\", `sort direction of \"${shown(key)}\" (1 or -1 is expected)`); }\n\tif (Object.prototype.hasOwnProperty.call(SORT_EXPRESSIONS, key)) {\n\t\treturn { ...SORT_EXPRESSIONS[key], direction: sort[key] === 1 ? \"ASC\" : \"DESC\" };\n\t}"
+  },
+  {
+    "id": "D-API",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "transHisModelNames in utils/trans-his-export-source.ts returns [\"TransHisPgModel\"] when getTransHisExportSource() === \"postgres\" and [\"TransHisModel\"] otherwise.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/utils/trans-his-export-source.ts:14-15\n/** The model the trans-his exports need in the current source. */\nexport const transHisModelNames = (): string[] => (getTransHisExportSource() === \"postgres\" ? [\"TransHisPgModel\"] : [\"TransHisModel\"]);"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "TransHisPgModel sets QUERY_TIMEOUT_MS to 300_000 in models/trans-his-pg/trans-his-pg.model.ts.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.model.ts:13-16\n// Client-side limit of one query (pg query_timeout): it only stops the wait, the server keeps running the query. There is no statement_timeout\n// because the HAProxy / PgBouncer endpoint rejects startup parameters, so the HAProxy / PgBouncer timeouts must be at least this long.\nconst QUERY_TIMEOUT_MS = 300_000;\n"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "TransHisPgModel sets QUERY_TIMEOUT_MS to 5000 in models/trans-his-pg/trans-his-pg.model.ts.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.model.ts:13-16\n// Client-side limit of one query (pg query_timeout): it only stops the wait, the server keeps running the query. There is no statement_timeout\n// because the HAProxy / PgBouncer endpoint rejects startup parameters, so the HAProxy / PgBouncer timeouts must be at least this long.\nconst QUERY_TIMEOUT_MS = 300_000;\n"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "transHisModelNames in utils/trans-his-export-source.ts always returns [\"TransHisModel\"] regardless of getTransHisExportSource().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/utils/trans-his-export-source.ts:14-15\n/** The model the trans-his exports need in the current source. */\nexport const transHisModelNames = (): string[] => (getTransHisExportSource() === \"postgres\" ? [\"TransHisPgModel\"] : [\"TransHisModel\"]);"
+  }
+]

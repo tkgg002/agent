@@ -1,0 +1,78 @@
+[
+  {
+    "id": "C-REQ-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "S2.5 Pre-Plan Critique: UI Modal Active Repo Leak & ResolveTaskTargetRepo",
+    "claim": "ResolveTaskTargetRepo trả về ngay label repo: kế thừa từ active_target_repo của task trước trong openDispatchModal mà không đối chiếu tên branch feat/auto-recon-export trong prompt.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:488-506\nfunc (s *Server) ResolveTaskTargetRepo(qt queue.QueuedTask) string {\n\tif explicit := extractSingleLabel(qt.Labels, \"repo:\", \"\"); explicit != \"\" {\n\t\tif st, err := os.Stat(explicit); err == nil && st.IsDir() {\n\t\t\treturn explicit\n\t\t}\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:488-506",
+    "must_contain": [
+      "func (s *Server) ResolveTaskTargetRepo(qt queue.QueuedTask) string {",
+      "if explicit := extractSingleLabel(qt.Labels, \"repo:\", \"\"); explicit != \"\""
+    ]
+  },
+  {
+    "id": "C-REALITY-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "S2.5 Reality Check: BuildUnifiedDG0CritiqueDoc Static Template & Self-Referential DG0",
+    "claim": "BuildUnifiedDG0CritiqueDoc chỉ ghép chuỗi tĩnh báo VERIFIED và PASS mà không kiểm tra xem targetRepo có đang đứng ở branch feat/auto-recon-export hay không.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/unified_doc_format.go:191-198\nfmt.Sprintf(\"| **`C-REQ-01`** | `Requirement` | `%s` | `01_requirements_%s.md:1` | `VERIFIED` — Đã khóa `%d` Sub-Tasks gắn với điểm chạm thật |\", repoSummary, suffix, len(subTasks)),",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/unified_doc_format.go:191-198",
+    "must_contain": [
+      "`C-REQ-01`",
+      "`VERIFIED` — Đã khóa"
+    ]
+  },
+  {
+    "id": "C-CONTRA-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "S2.5 Reality Check: inspectRealGitStatusAndDiff Missing Branch Diff Against Base",
+    "claim": "inspectRealGitStatusAndDiff chỉ chạy git status --short và git diff --stat của working tree chứ không lấy tên nhánh hiện tại và git diff develop...HEAD cho feature branch đã commit.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_bridge.go:107-123\nfunc (s *Server) inspectRealGitStatusAndDiff(targetRepo, taskKey string) (statusSummary string, diffStat string, patchBytes int64, patchExists bool) {\n\tif strings.TrimSpace(targetRepo) == \"\" {\n\t\ttargetRepo = s.Root\n\t}\n\tctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)\n\tdefer cancel()\n\n\tcmdStatus := exec.CommandContext(ctx, \"git\", \"-C\", targetRepo, \"status\", \"--short\")",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_bridge.go:107-123",
+    "must_contain": [
+      "func (s *Server) inspectRealGitStatusAndDiff(targetRepo, taskKey string)",
+      "cmdStatus := exec.CommandContext(ctx, \"git\", \"-C\", targetRepo, \"status\", \"--short\")"
+    ]
+  },
+  {
+    "id": "K1",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "DG0 Control True",
+    "claim": "DiscoverWorkspaceRepos giới hạn danh sách ở 32 repositories khi quét workRoot.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:421-426\nfull := filepath.Join(workRoot, e.Name())\naddRepo(e.Name(), full)\nif len(repos) >= 32 {\n\tbreak\n}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:421-426",
+    "must_contain": [
+      "if len(repos) >= 32 {",
+      "break"
+    ]
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG0 Control False 1",
+    "claim": "ResolveTaskTargetRepo đã tự động quét git branch để khớp feat/auto-recon-export.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:488-506\nfunc (s *Server) ResolveTaskTargetRepo(qt queue.QueuedTask) string {",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:488-506",
+    "must_contain": [
+      "NONEXISTENT_BRANCH_MATCHER_TOKEN_999"
+    ]
+  },
+  {
+    "id": "K3",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG0 Control False 2",
+    "claim": "BuildUnifiedDG0CritiqueDoc chặn cứng khi targetRepo lệch nhánh so với prompt.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/unified_doc_format.go:191-198\nfmt.Sprintf(\"| **`C-REQ-01`** | `Requirement` |\", repoSummary)",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/unified_doc_format.go:191-198",
+    "must_contain": [
+      "NONEXISTENT_DG0_BRANCH_BLOCKER_TOKEN_888"
+    ]
+  }
+]

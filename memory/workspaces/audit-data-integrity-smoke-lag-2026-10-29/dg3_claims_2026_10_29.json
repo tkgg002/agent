@@ -1,0 +1,51 @@
+[
+  {
+    "id": "A-FIND-1",
+    "kind": "claim",
+    "claim": "In recon_window_index_probe.go, objectIDBoundaryFromTime constructs a deterministic zero-padded ObjectID boundary by putting uint32(t.UTC().Truncate(time.Second).Unix()) into oid[0:4] in big-endian.",
+    "flow": "HashObjectIDWindow & HashSourceIDWindow -> objectIDBoundaryFromTime",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:24-28\nfunc objectIDBoundaryFromTime(t time.Time) primitive.ObjectID {\n\tvar oid primitive.ObjectID\n\tbinary.BigEndian.PutUint32(oid[0:4], uint32(t.UTC().Truncate(time.Second).Unix()))\n\treturn oid\n}"
+  },
+  {
+    "id": "A-FIND-2",
+    "kind": "claim",
+    "claim": "In recon_window_index_probe.go, HasColumnIndex returns true immediately for system columns _gpay_id, _source_id, and _source_ts.",
+    "flow": "verifySegmentAAtFreezeCutoff -> destAgent.HasColumnIndex",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:40-42\n\tif col == \"_gpay_id\" || col == \"_source_id\" || col == \"_source_ts\" {\n\t\treturn true\n\t}"
+  },
+  {
+    "id": "A-FIND-3",
+    "kind": "claim",
+    "claim": "In recon_smoke_guard.go, verifySegmentBAtFreezeCutoff subtracts post-cutoff records in [hi, nowUpper] on _source_ts and returns 0, shadowTotal, shadowActive, and 'ok' when shadowAtHi == masterAtHi.",
+    "flow": "RunTotalOnlyB -> verifySegmentBAtFreezeCutoff -> Step 1",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke_guard.go:204-218\n\t\tshadowAtHi := shadowActive - shAfterActive\n\t\tmasterAtHi := masterActive - msAfterActive\n\t\tif shadowAtHi == masterAtHi {\n\t\t\trc.logger.Info(\"[smoke-B] Transient gap resolved via backward freeze-cutoff subtraction at hi\",\n\t\t\t\tzap.String(\"shadow\", shadowRel),\n\t\t\t\tzap.String(\"master\", masterRel),\n\t\t\t\tzap.Int64(\"rawDiff\", diff),\n\t\t\t\tzap.Int64(\"shAfterHi\", shAfterActive),\n\t\t\t\tzap.Int64(\"msAfterHi\", msAfterActive),\n\t\t\t\tzap.Int64(\"countAtHi\", shadowAtHi),\n\t\t\t\tzap.Time(\"hi\", hi),\n\t\t\t)\n\t\t\treturn 0, shadowTotal, shadowActive, \"ok\"\n\t\t}"
+  },
+  {
+    "id": "A-FIND-4",
+    "kind": "claim",
+    "claim": "In recon_smoke.go CheckAllUnified, smokeCountCache entries for scanTargets are deleted before Step 3 prefetch.",
+    "flow": "CheckAllUnified -> Step 3",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:836-838\n\tfor i := range scanTargets {\n\t\trc.smokeCountCache.Delete(scanTargets[i].Relation)\n\t}"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In HasColumnIndex, if col is _gpay_id, _source_id, or _source_ts, the function returns true.",
+    "flow": "HasColumnIndex",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:40-42\n\tif col == \"_gpay_id\" || col == \"_source_id\" || col == \"_source_ts\" {\n\t\treturn true\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In HasColumnIndex, if col is _gpay_id, _source_id, or _source_ts, the function returns false and panics.",
+    "flow": "HasColumnIndex",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:40-42\n\tif col == \"_gpay_id\" || col == \"_source_id\" || col == \"_source_ts\" {\n\t\treturn true\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In verifySegmentBAtFreezeCutoff, when shadowAtHi equals masterAtHi, the function returns statusStr = 'drift'.",
+    "flow": "verifySegmentBAtFreezeCutoff",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke_guard.go:206-218\n\t\tif shadowAtHi == masterAtHi {\n\t\t\trc.logger.Info(\"[smoke-B] Transient gap resolved via backward freeze-cutoff subtraction at hi\",\n\t\t\t\tzap.String(\"shadow\", shadowRel),\n\t\t\t\tzap.String(\"master\", masterRel),\n\t\t\t\tzap.Int64(\"rawDiff\", diff),\n\t\t\t\tzap.Int64(\"shAfterHi\", shAfterActive),\n\t\t\t\tzap.Int64(\"msAfterHi\", msAfterActive),\n\t\t\t\tzap.Int64(\"countAtHi\", shadowAtHi),\n\t\t\t\tzap.Time(\"hi\", hi),\n\t\t\t)\n\t\t\treturn 0, shadowTotal, shadowActive, \"ok\"\n\t\t}"
+  }
+]

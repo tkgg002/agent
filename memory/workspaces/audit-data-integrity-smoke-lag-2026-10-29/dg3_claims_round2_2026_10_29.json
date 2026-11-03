@@ -1,0 +1,58 @@
+[
+  {
+    "id": "R2-F1",
+    "kind": "claim",
+    "claim": "HasColumnIndex caches results in a package-level map keyed only by lowercase tableName.col, so two different ReconDestAgent connections with the same schema.table share one cache entry.",
+    "flow": "verifySegmentAAtFreezeCutoff -> destAgent.HasColumnIndex -> pgColIndexCache",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:46-52\n\tcacheKey := strings.ToLower(tableName + \".\" + col)\n\tpgColIndexCacheMu.RLock()\n\tif indexed, ok := pgColIndexCache[cacheKey]; ok {\n\t\tpgColIndexCacheMu.RUnlock()\n\t\treturn indexed\n\t}\n\tpgColIndexCacheMu.RUnlock()"
+  },
+  {
+    "id": "R2-F2",
+    "kind": "claim",
+    "claim": "HasColumnIndex matches indexdef with LIKE '%(col%', so a column named created also matches an index defined on (created_at), producing a false positive.",
+    "flow": "HasColumnIndex -> pg_indexes LIKE pattern",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:62-63\n\tsql := `SELECT COUNT(*) FROM pg_indexes WHERE LOWER(schemaname) = LOWER(?) AND LOWER(tablename) = LOWER(?) AND LOWER(indexdef) LIKE ?`\n\tpattern := \"%(\" + strings.ToLower(col) + \"%\""
+  },
+  {
+    "id": "R2-F3",
+    "kind": "claim",
+    "claim": "For Postgres sources, verifySegmentAAtFreezeCutoff sets dstIndexed without calling HasColumnIndex and keeps the entry.TimestampField override, which differs from the approved demo that always calls HasColumnIndex.",
+    "flow": "verifySegmentAAtFreezeCutoff -> isPostgres branch",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke_guard.go:61-69\n\tif isPostgres(entry.SourceURL) {\n\t\tif entry.TimestampField != nil && *entry.TimestampField != \"\" {\n\t\t\tsrcTS = *entry.TimestampField\n\t\t\tdstTS = *entry.TimestampField\n\t\t} else {\n\t\t\tsrcTS, dstTS, errTS = rc.resolveSourceAndDestTSFields(ctx, entry, \"smoke\")\n\t\t}\n\t\tdstPK = rc.resolveShadowPKField(ctx, entry)\n\t\tdstIndexed = errTS == nil && srcTS != \"\" && dstTS != \"\""
+  },
+  {
+    "id": "R2-F4",
+    "kind": "claim",
+    "claim": "In RunTotalOnlyB, masterTotal and masterActive are reassigned from verifySegmentBAtFreezeCutoff and then written to metrics MasterTableRowCount and MasterActiveRowCount, so when resolved they report shadow counts instead of measured master counts.",
+    "flow": "RunTotalOnlyB -> verifySegmentBAtFreezeCutoff -> metrics",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:612-625\n\tdiff, masterTotal, masterActive, statusStr := rc.verifySegmentBAtFreezeCutoff(\n\t\tctx, masterAgent, ref, lo, hi,\n\t\tshadowActive-masterActive, shadowTotal, shadowActive, masterTotal, masterActive,\n\t)\n\n\tspan.SetAttributes(\n\t\tattribute.String(\"recon.status\", statusStr),\n\t\tattribute.Int64(\"recon.diff\", diff),\n\t\tattribute.Int64(\"db.row_count.shadow_active\", shadowActive),\n\t\tattribute.Int64(\"db.row_count.master_active\", masterActive),\n\t)\n\n\tmetrics.MasterTableRowCount.WithLabelValues(masterFQN).Set(float64(masterTotal))\n\tmetrics.MasterActiveRowCount.WithLabelValues(masterFQN).Set(float64(masterActive))"
+  },
+  {
+    "id": "R2-F5",
+    "kind": "claim",
+    "claim": "The existing ReconDestAgent design keeps per-agent caches as struct fields (colTypesMu and colTypes), not as package-level globals.",
+    "flow": "ReconDestAgent struct",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_dest_agent.go:26-27\n\tcolTypesMu    sync.RWMutex\n\tcolTypes      map[string]bool"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "HasColumnIndex returns true immediately for _gpay_id, _source_id and _source_ts.",
+    "flow": "HasColumnIndex",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:40-42\n\tif col == \"_gpay_id\" || col == \"_source_id\" || col == \"_source_ts\" {\n\t\treturn true\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "HasColumnIndex stores its cache inside the ReconDestAgent struct field colTypes.",
+    "flow": "HasColumnIndex",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:46-52\n\tcacheKey := strings.ToLower(tableName + \".\" + col)\n\tpgColIndexCacheMu.RLock()\n\tif indexed, ok := pgColIndexCache[cacheKey]; ok {\n\t\tpgColIndexCacheMu.RUnlock()\n\t\treturn indexed\n\t}\n\tpgColIndexCacheMu.RUnlock()"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In RunTotalOnlyB the metrics MasterTableRowCount is set from shadowTotal directly by name before calling verifySegmentBAtFreezeCutoff.",
+    "flow": "RunTotalOnlyB",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:612-625\n\tdiff, masterTotal, masterActive, statusStr := rc.verifySegmentBAtFreezeCutoff(\n\t\tctx, masterAgent, ref, lo, hi,\n\t\tshadowActive-masterActive, shadowTotal, shadowActive, masterTotal, masterActive,\n\t)\n\n\tspan.SetAttributes(\n\t\tattribute.String(\"recon.status\", statusStr),\n\t\tattribute.Int64(\"recon.diff\", diff),\n\t\tattribute.Int64(\"db.row_count.shadow_active\", shadowActive),\n\t\tattribute.Int64(\"db.row_count.master_active\", masterActive),\n\t)\n\n\tmetrics.MasterTableRowCount.WithLabelValues(masterFQN).Set(float64(masterTotal))\n\tmetrics.MasterActiveRowCount.WithLabelValues(masterFQN).Set(float64(masterActive))"
+  }
+]

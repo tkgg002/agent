@@ -1,0 +1,30 @@
+# [NO UNCOMMITTED GIT DIFF HUNK IN WORKTREE — VERIFIED ON-DISK SOURCE AT TargetRepo]
+# Sub-Task: TASK-10-M04 (agent) · Isolated Branch: task/TASK-10/task-10-m04
+# Context: agent/hooks/agy/tests/test_claim_linter.py:17 (class TestClaimLinter(unittest.TestCase):) · Deliverable: Tích hợp tầng Service / Handler & Kiểm thử nghiệm thu DoD tại `agent` (`test_claim_linter.py`)
+# Verified File: /Users/trainguyen/Documents/work/agent/hooks/agy/tests/test_claim_linter.py
+// VERIFIED ON-DISK SOURCE: /Users/trainguyen/Documents/work/agent/hooks/agy/tests/test_claim_linter.py (lines 17-41)
+  17 | class TestClaimLinter(unittest.TestCase):
+  18 |     def setUp(self) -> None:
+  19 |         self._t = tempfile.TemporaryDirectory()
+  20 |         self.ws = Path(self._t.name) / "ws"
+  21 |         (self.ws / "06_evidence").mkdir(parents=True)
+  22 |         self.st = [{"tool_calls": [{"name": "run_command", "args": {"CommandLine": "python3 tooling/evidence_run.py --workspace w --kind unit -- python3 -m unittest"}}]}]
+  23 | 
+  24 |     def tearDown(self) -> None:
+  25 |         self._t.cleanup()
+  26 | 
+  27 |     def _ev(self, **kw) -> None:
+  28 |         rec = {"id": EV, "cmd": "python3 -m unittest", "kind": "unit", "exit": 0, "stdout_tail": "Ran 49 tests\nOK", "src_fingerprint": "fp1"}
+  29 |         rec.update(kw)
+  30 |         (self.ws / "06_evidence" / f"{EV}.json").write_text(json.dumps(rec), encoding="utf-8")
+  31 | 
+  32 |     def test_claim_without_ev_rejected(self) -> None:
+  33 |         self.assertTrue(agy_guard.claim_issues("- hooks 49/49 PASS", self.ws, self.st, "fp1"))
+  34 | 
+  35 |     def test_valid_ev_passes(self) -> None:
+  36 |         self._ev()
+  37 |         self.assertEqual(agy_guard.claim_issues(f"- hooks 49/49 PASS ({EV})", self.ws, self.st, "fp1"), [])
+  38 | 
+  39 |     def test_number_not_in_output_rejected(self) -> None:
+  40 |         self._ev()
+  41 |         out = agy_guard.claim_issues(f"- hooks 50/50 PASS ({EV})", self.ws, self.st, "fp1")

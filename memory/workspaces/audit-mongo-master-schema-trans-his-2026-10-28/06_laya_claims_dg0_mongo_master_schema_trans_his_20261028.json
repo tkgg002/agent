@@ -1,0 +1,44 @@
+[
+    {
+      "id": "C-REQ-1",
+      "kind": "target",
+      "claim": "In mongo_bson_restorer.go, ApplySourceFieldTypesToBSONDoc deletes source_field_types and sourceFieldTypes from doc, but does not delete source_field_values or sourceFieldValues.",
+      "flow": "CoerceRecordToBSONDoc calls ApplySourceFieldTypesToBSONDoc(doc) before writing to MongoDB Master.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:64-72\n\trawMeta, hasSnake := doc[\"source_field_types\"]\n\tif !hasSnake {\n\t\trawMeta = doc[\"sourceFieldTypes\"]\n\t}\n\tdelete(doc, \"source_field_types\")\n\tdelete(doc, \"sourceFieldTypes\")\n\tif rawMeta == nil {\n\t\treturn\n\t}"
+    },
+    {
+      "id": "C-REALITY-1",
+      "kind": "target",
+      "claim": "In mongo_type_converter.go, convertMapToBSONM copies every key of map[string]any into bson.M via convertNestedElement without unwrapping MongoDB Extended JSON wrappers such as $numberInt, $numberLong, $date, or $oid.",
+      "flow": "coerceNestedBSON calls unmarshalJSONBytesToBSON which calls convertMapToBSONM on JSONB columns like info, sender, receiver, and error.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_type_converter.go:292-328\nfunc convertMapToBSONM(m map[string]any) bson.M {\n\tout := make(bson.M, len(m))\n\tfor k, v := range m {\n\t\tout[k] = convertNestedElement(v)\n\t}\n\treturn out\n}\n\nfunc convertSliceToBSONA(s []any) bson.A {\n\tout := make(bson.A, len(s))\n\tfor i, v := range s {\n\t\tout[i] = convertNestedElement(v)\n\t}\n\treturn out\n}\n\nfunc convertNestedElement(v any) any {\n\tswitch x := v.(type) {\n\tcase map[string]any:\n\t\treturn convertMapToBSONM(x)\n\tcase []any:\n\t\treturn convertSliceToBSONA(x)\n\tcase json.Number:\n\t\tif i, err := x.Int64(); err == nil {\n\t\t\tif i >= math.MinInt32 && i <= math.MaxInt32 {\n\t\t\t\treturn int32(i)\n\t\t\t}\n\t\t\treturn i\n\t\t}\n\t\tif f, err := x.Float64(); err == nil {\n\t\t\treturn f\n\t\t}\n\t\treturn x.String()\n\tdefault:\n\t\treturn v\n\t}\n}"
+    },
+    {
+      "id": "C-CONTRA-1",
+      "kind": "target",
+      "claim": "In mongo_bson_restorer.go, snakeToCamelCoreMap only defines 8 pairs and omits request_id, is_delete, and idempotency_key, while denormalizedFlatColumns includes request_id and is_delete which get deleted when checking typeMap[col] in snake_case.",
+      "flow": "ApplySourceFieldTypesToBSONDoc normalizes snakeToCamelCoreMap and deletes denormalizedFlatColumns not found in typeMap[col].",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:19-37\nvar snakeToCamelCoreMap = [][2]string{\n\t{\"trans_id\", \"transId\"},\n\t{\"sys_trans\", \"sysTrans\"},\n\t{\"original_trans_his_id\", \"originalTransHisId\"},\n\t{\"trans_type\", \"transType\"},\n\t{\"service_code\", \"serviceCode\"},\n\t{\"channel_id\", \"channelId\"},\n\t{\"created_at\", \"createdAt\"},\n\t{\"updated_at\", \"updatedAt\"},\n}\n\nvar denormalizedFlatColumns = []string{\n\t\"transaction_history_id\", \"transactionHistoryId\", \"is_delete\", \"isDelete\",\n\t\"request_id\", \"bill_id\", \"order_id\", \"fee\", \"partner_code\", \"master_merchant_code\",\n\t\"sender_customer_id\", \"sender_full_name\", \"sender_phone\",\n\t\"receiver_customer_id\", \"receiver_full_name\", \"receiver_phone\", \"receiver_email\",\n\t\"receiver_merchant_id\", \"receiver_merchant_code\", \"receiver_credit\",\n\t\"merchant_info_id\", \"merchant_info_name\", \"merchant_info_email\",\n}"
+    },
+    {
+      "id": "CTRL-T-1",
+      "kind": "control_true",
+      "claim": "CoerceToBSONValue returns nil, nil when val is nil.",
+      "flow": "CoerceRecordToBSONDoc calls CoerceToBSONValue.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_type_converter.go:24-27\nfunc CoerceToBSONValue(val any, dataType string, sourceFormat string) (any, error) {\n\tif val == nil {\n\t\treturn nil, nil\n\t}"
+    },
+    {
+      "id": "CTRL-F-1",
+      "kind": "control_false",
+      "claim": "ApplySourceFieldTypesToBSONDoc panics when doc is nil because it has no nil check at the start of the function.",
+      "flow": "Negative control for ApplySourceFieldTypesToBSONDoc nil check.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:43-46\nfunc ApplySourceFieldTypesToBSONDoc(doc bson.M) {\n\tif doc == nil {\n\t\treturn\n\t}"
+    },
+    {
+      "id": "CTRL-F-2",
+      "kind": "control_false",
+      "claim": "CoerceToBSONValue always returns a non-nil error whenever val is nil.",
+      "flow": "Negative control for CoerceToBSONValue nil handling.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_type_converter.go:24-27\nfunc CoerceToBSONValue(val any, dataType string, sourceFormat string) (any, error) {\n\tif val == nil {\n\t\treturn nil, nil\n\t}"
+    }
+]

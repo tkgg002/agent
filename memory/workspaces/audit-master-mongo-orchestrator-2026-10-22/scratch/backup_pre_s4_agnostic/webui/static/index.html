@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Coding Agents Orchestrator — Unified IDE Shell</title>
+  <link rel="stylesheet" href="/app.css" />
+  <link rel="stylesheet" href="/unified_doc_format.css" />
+</head>
+<body>
+  <div class="ide-app-shell">
+    <!-- SINGLE UNIFIED TOP HEADER BAR (38px) — NO DUPLICATE SECOND APP HEADER -->
+    <header class="global-switcher">
+      <div class="brand-cluster">
+        <span class="mac-dots"><i></i><i></i><i></i></span>
+        <span class="app-badge">AI-ORCHESTRATOR</span>
+        <span id="hdr-project-branch" class="branch-pill hidden" aria-hidden="true">ai-orchestrator · HEAD</span>
+        <span id="hdr-kernel-badge" class="kernel-pill hidden" aria-hidden="true" title="/agent Inner Governance Kernel (GEMINI.md + lessons/INDEX.md + H1..H7 + Laya DG1..DG3)">
+          🛡️ Kernel: /agent ACTIVE
+        </span>
+      </div>
+
+      <nav class="screen-tabs" role="tablist">
+        <button class="screen-tab active" data-screen="autopilot" onclick="switchScreen('autopilot')">
+          1. ⚡ Autopilot &amp; Task Runner
+        </button>
+        <button class="screen-tab" data-screen="wave" onclick="switchScreen('wave')">
+          2. ⛁ Wave 0..N Dependency DAG
+        </button>
+        <button class="screen-tab" data-screen="vibe" onclick="switchScreen('vibe')">
+          3. ⌨ Multi-Agent Terminal Grid (A..K)
+        </button>
+      </nav>
+
+      <div class="global-actions">
+        <label class="runner-select-wrap" title="Chọn AI Engine / Model Runner vận hành Task">
+          <span>CLI Runner:</span>
+          <select id="global-runner-select" class="runner-select" onchange="changeActiveRunner(this.value)">
+            <option value="antigravity">Antigravity (gemini-4-argon · Local)</option>
+            <option value="claude">Claude Code CLI (Opus / Sonnet)</option>
+            <option value="gemini">Gemini 2.5 Pro CLI</option>
+          </select>
+        </label>
+        <button class="btn-cli-setup" onclick="openCLISettingsModal()" title="Cấu hình CLI Binary, Model theo từng Role (Planner, Coder, QA, Security)">
+          ⚙ Setup CLI &amp; Model
+        </button>
+        <button id="btn-setup-telegram" class="btn-cli-setup btn-telegram-setup" onclick="openTelegramSettingsModal()" title="Cấu hình nối Telegram vào bước S3 & tự động chạy S4–S5 khi gửi APPROVE trên Telegram">
+          ✈️ Setup Telegram
+        </button>
+        <div id="gate-badges-strip" class="gate-badges-strip"></div>
+        <button id="hdr-primary-autopilot-btn" class="btn-cycle" onclick="triggerPrimaryTaskAction()" title="Chạy Autopilot có cổng duyệt APPROVE (Phase 1: S1-S3 dừng NEEDS_YOU -> Phase 2: APPROVE & chạy S4-S5)">
+          ▶ Chạy Autopilot
+        </button>
+        <button class="btn-dispatch" onclick="openDispatchModal()">+ Giao việc mới</button>
+      </div>
+    </header>
+
+    <!-- =====================================================================
+         ACTIVE TASK ISOLATION & LIFECYCLE ACTION BAR (38px)
+         ===================================================================== -->
+    <div id="cross-screen-context-bar" class="cross-context-bar">
+      <div class="cross-context-left">
+        <span class="cross-badge-title">🎯 Task đang chọn:</span>
+        <select id="active-task-select" class="task-picker-select" onchange="selectActiveTask(this.value)"></select>
+        <span id="active-task-stage-pill" class="stage-pill READY">READY</span>
+        <span id="cross-context-summary" class="cross-context-summary">
+          Repos: <code id="hdr-target-repo">cdc-cms-service, cdc-cms-web, centralized-data-service</code> · Worktree: <code id="hdr-iso-worktree">.orchestrator/worktrees/TASK-1</code> · Branch: <code id="hdr-iso-branch">task/TASK-1</code>
+        </span>
+      </div>
+      <div class="cross-context-actions">
+        <button class="stage-action-btn" onclick="runTaskAction('', 'plan')" title="Phase 1: Quét Target Repo thật + đối chiếu 268 bài học /agent + sinh S2 Investigation & S3 Solution + Code Demo rồi dừng ở NEEDS_YOU">
+          1. Plan S1–S3 (Stop @ NEEDS_YOU)
+        </button>
+        <button id="ctx-btn-approve-run" class="stage-action-btn approve-gate-btn" onclick="runTaskAction('', 'approve_and_run')" title="Duyệt giải pháp S3 & Code Demo -> Chạy tiếp Phase 2 (S4 Worktree Implementation + S5 QA & DG3 Audit)">
+          2. ✓ APPROVE &amp; Chạy S4–S5
+        </button>
+        <button class="stage-action-btn" onclick="runTaskAction('', 'implement')" title="Bước 3: Thực thi S4 trong Git Worktree cô lập & quét H4b Zero-Mockup">
+          3. Implement S4
+        </button>
+        <button class="stage-action-btn" onclick="runTaskAction('', 'qa')" title="Bước 4: Chạy S5 Local QA + Gatekeeper G1-G8 + DG3 + xuất audit_report.md">
+          4. QA &amp; DG3 (S5)
+        </button>
+        <button class="stage-action-btn primary-run" onclick="triggerPrimaryTaskAction()" id="ctx-btn-autopilot" title="Nếu READY: chạy Phase 1 tới NEEDS_YOU. Nếu đang NEEDS_YOU: APPROVE & chạy S4-S5 tới DONE">
+          ⚡ Autopilot (2-Phase Gate)
+        </button>
+        <button id="ctx-btn-stop-task" class="stage-action-btn stop-process-btn hidden" onclick="stopRunningProcess('', '')" title="Ngắt ngay tiến trình đang chạy (Cancel Context) & chuyển về NEEDS_YOU">
+          ⏹ Dừng Tiến Trình
+        </button>
+        <button id="ctx-btn-delete-task" class="stage-action-btn delete-task-btn" onclick="deleteSingleTask('')" title="Xóa Task đang chọn khỏi hàng đợi (lưu Tombstone không tự phục hồi)">
+          🗑 Xóa Task
+        </button>
+        <button id="btn-clear-cross-filter" class="cross-clear-btn hidden" onclick="clearCrossSelection()">✕ Reset lọc</button>
+      </div>
+    </div>
+
+    <!-- =====================================================================
+         GLOBAL LIVE RUNNING PROGRESS BANNER (TASK-CTRL-02 & TASK-CTRL-03)
+         ===================================================================== -->
+    <div id="global-running-progress-banner" class="global-running-banner hidden">
+      <div class="grb-top-row">
+        <div class="grb-left">
+          <span class="grb-spinner" id="grb-spinner-icon">⟳</span>
+          <span class="grb-status-pill" id="grb-status-pill">ĐANG CHẠY TIẾN TRÌNH</span>
+          <strong class="grb-task-label" id="grb-task-label">TASK-11 — Master MongoDB Destination</strong>
+          <span class="grb-subtask-pill hidden" id="grb-subtask-pill">🧩 Sub-Task: TASK-M01</span>
+          <span class="grb-step-badge" id="grb-step-badge">Step 4/17 · 32%</span>
+          <span class="grb-action-detail" id="grb-action-detail">Đang quét mã nguồn thật (file:line)...</span>
+        </div>
+        <div class="grb-right">
+          <span class="grb-role-pill" id="grb-role-pill">🧠 BRAIN · Slot A</span>
+          <span class="grb-elapsed-pill" id="grb-elapsed-pill">⏱ 00:01s</span>
+          <button id="grb-btn-stop" class="grb-stop-btn" onclick="stopRunningProcess('', '')" title="Dừng ngay lập tức tiến trình đang chạy">
+            ⏹ Dừng Tiến Trình
+          </button>
+        </div>
+      </div>
+      <div class="grb-progress-track">
+        <div class="grb-progress-fill" id="grb-progress-fill" style="width: 32%;"></div>
+      </div>
+    </div>
+
+    <!-- =====================================================================
+         UNIFIED 100VH IDE BODY: LEFT SIDEBAR + MAIN WORKSPACE VIEWPORT
+         ===================================================================== -->
+    <div class="ide-workspace-body">
+      <!-- LEFT UNIFIED SIDEBAR: LIVE TASK QUEUE + WORKFLOW 17 STEPS + PROJECTS -->
+      <aside class="ide-left-sidebar">
+        <!-- Section 1: Live Task Queue (Grouped by Repo, Status Filter & Direct Run Button) -->
+        <div class="sidebar-section task-queue-section">
+          <div class="vibe-col-hdr">
+            <span class="vibe-col-title" title="Hàng Đợi Task (Theo Repo)">Hàng Đợi Task (Theo Repo)</span>
+            <div class="vibe-col-actions">
+              <button id="btn-push-tg-task-menu" type="button" class="mini-tg-btn" onclick="sendTelegramTaskMenuNow(this)" title="Đẩy danh sách Hàng Đợi Task (/task) kèm nút Click-to-Run &amp; Duyệt Từng Sub-Task lên Telegram ngay">✈️ /task</button>
+              <button id="btn-cleanup-done-tasks" type="button" class="mini-clean-btn" onclick="deleteDoneTasksBulk()" title="Xóa gọn toàn bộ các Task đã hoàn tất (DONE) cho bớt rối">🧹 Dọn</button>
+              <button type="button" class="mini-add-btn" onclick="openDispatchModal()" title="Thêm Task mới (+ Chọn Repo &amp; Chia Sub-Tasks)">+ Task</button>
+            </div>
+          </div>
+          <div id="sidebar-queue-filter-bar" class="sb-queue-filter-bar">
+            <button type="button" class="sb-qf-btn active" data-qfilter="all" onclick="setSidebarQueueFilter('all')" title="Hiển thị toàn bộ Task theo Repo">Tất cả <b id="sb-qs-all">0</b></button>
+            <button type="button" class="sb-qf-btn running" data-qfilter="active" onclick="setSidebarQueueFilter('active')" title="Lọc Task đang chạy hoặc chờ chạy">⚡ Chạy <b id="sb-qs-running">0</b></button>
+            <button type="button" class="sb-qf-btn needs-you" data-qfilter="needs_you" onclick="setSidebarQueueFilter('needs_you')" title="Lọc Task đang chờ APPROVE S3 hoặc Duyệt Sub-Task">⏸ Duyệt <b id="sb-qs-needs-you">0</b></button>
+            <button type="button" class="sb-qf-btn done" data-qfilter="done" onclick="setSidebarQueueFilter('done')" title="Lọc Task đã hoàn tất">✓ Xong <b id="sb-qs-done">0</b></button>
+          </div>
+          <div id="sidebar-task-queue" class="sidebar-task-list"></div>
+        </div>
+
+        <!-- Section 2: 17-Step /agent Master Workflow S0..S6 (Scoped to Selected Task) -->
+        <div class="sidebar-section workflow-section">
+          <div class="vibe-col-hdr">
+            <span>Quy trình /agent · 17 Bước</span>
+            <span id="sidebar-wf-task-tag" class="mono-dim">TASK-1</span>
+          </div>
+          <div id="vibe-workflow-list" class="vibe-workflow-list"></div>
+        </div>
+
+        <!-- Section 3: Project & Agent Slots Summary (Scoped to Selected Task) -->
+        <div class="sidebar-section project-section">
+          <div class="vibe-col-hdr">
+            <span>Agent Slots (A..K) · Task</span>
+            <span id="vibe-proj-name" class="mono-dim">ai-orchestrator</span>
+          </div>
+          <div id="vibe-projects-list" class="vibe-projects-list"></div>
+        </div>
+      </aside>
+
+      <!-- MAIN WORKSPACE VIEWPORT (SWITCHES CLEANLY BETWEEN THE 3 VIEWS) -->
+      <main class="screens-viewport">
+        <!-- =================================================================
+             VIEW 1: AUTOPILOT & PER-TASK EXECUTION CORE (DEFAULT VIEW)
+             ================================================================= -->
+        <section id="screen-autopilot" class="screen-panel">
+          <div class="autopilot-frame">
+            <div class="autopilot-header-row">
+              <div class="autopilot-title-group">
+                <h2 class="autopilot-title">AUTOPILOT &amp; PER-TASK ISOLATION ENGINE</h2>
+                <span id="autopilot-filter-pill" class="autopilot-filter-pill"></span>
+              </div>
+              <div class="autopilot-hdr-right">
+                <span class="autopilot-model-hint" id="autopilot-model-routing">
+                  Planner: <b>gemini-4-argon (antigravity)</b> · Coder: <b>gemini-4-argon (antigravity)</b> · Scout: <b>$0.00</b>
+                </span>
+                <button class="btn-mini-cli" onclick="scrollToCoArchitectStudio()" title="Mở ngay khung Đối thoại & Định hướng Giải pháp với Agent">💬 Đối thoại Giải pháp</button>
+                <button class="btn-mini-cli" onclick="openCLISettingsModal()">⚙ Đổi CLI / Model</button>
+              </div>
+            </div>
+
+            <!-- ===============================================================
+                 LIVE EXECUTION & MULTI-REPO PROGRESS TELEMETRY HUD (LIVE-PROCESS-HUD-01)
+                 Answers at a glance: 1. WHAT is running | 2. WHO (Role/Slot/Model) | 3. WHERE (Repo/Worktree/file:line) | 4. HOW & PROGRESS %
+                 =============================================================== -->
+            <div class="live-telemetry-hud" id="live-telemetry-hud">
+              <div class="hud-top-bar">
+                <div class="hud-top-left">
+                  <span class="hud-live-badge" id="hud-live-indicator">⚡ LIVE TELEMETRY HUD</span>
+                  <strong id="hud-phase-label">✅ S6 Complete — Đã hoàn tất &amp; Kiểm chứng trên đĩa (100%)</strong>
+                </div>
+                <div class="hud-top-right">
+                  <span class="hud-stat-pill hidden" id="hud-elapsed-pill">⏱ <b id="hud-elapsed-sec">00:00s</b></span>
+                  <button id="hud-btn-stop-task" class="hud-stop-btn hidden" onclick="stopRunningProcess('', '')" title="Dừng ngay tiến trình đang chạy">⏹ Dừng Tiến Trình</button>
+                  <span class="hud-stat-pill">Sub-Tasks: <b id="hud-subtasks-ratio">10/10</b></span>
+                  <span class="hud-stat-pill">Workflow: <b id="hud-steps-ratio">17/17 bước</b></span>
+                  <span class="hud-stat-pill">Git Diff: <b id="hud-diff-lines">0 lines</b></span>
+                  <span class="hud-pct-badge" id="hud-overall-pct">100%</span>
+                </div>
+              </div>
+              <div class="hud-progress-track">
+                <div class="hud-progress-fill" id="hud-overall-progress-fill" style="width: 100%;"></div>
+              </div>
+              <div class="hud-cards-grid">
+                <div class="hud-card">
+                  <div class="hud-card-label">1. ĐANG CHẠY CÁI GÌ (WHAT IS RUNNING)</div>
+                  <div class="hud-card-main" id="hud-what-main">Step 17/17 · Đóng phiên &amp; Tự học</div>
+                  <div class="hud-card-sub" id="hud-what-sub">Sub-Task: <code>TASK-M10</code> — Kiểm thử E2E &amp; đối soát Reconciler</div>
+                </div>
+                <div class="hud-card">
+                  <div class="hud-card-label">2. AI / ROLE / MODEL NÀO LÀM (WHO IS RUNNING IT)</div>
+                  <div class="hud-card-main" id="hud-who-main">🛡️ GOVERNANCE VERIFIED · <code>Slot A → B/D/E → H</code></div>
+                  <div class="hud-card-sub" id="hud-who-sub">Model: <b id="hud-who-model">gemini-4-argon (antigravity)</b> · Skill: <code id="hud-who-skill">/brain-delegate · /muscle-execute · /qa-agent</code></div>
+                </div>
+                <div class="hud-card">
+                  <div class="hud-card-label">3. ĐANG CHẠY Ở ĐÂU (WHERE IS IT RUNNING)</div>
+                  <div class="hud-card-main" id="hud-where-main">📦 <code>centralized-data-service</code> · ⎇ <code>task/...</code></div>
+                  <div class="hud-card-sub" id="hud-where-sub">Điểm chạm (<code>file:line</code>): <code id="hud-where-file">internal/service/master/reconciler.go:108-195</code></div>
+                </div>
+                <div class="hud-card">
+                  <div class="hud-card-label">4. CHẠY NHƯ THẾ NÀO &amp; TIẾN ĐỘ TỪNG REPO (HOW &amp; PROGRESS %)</div>
+                  <div class="hud-card-cmd"><code id="hud-how-cmd">go test -race ./... &amp;&amp; git status --porcelain</code></div>
+                  <div class="hud-repo-bars" id="hud-repo-progress-list"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- /agent KERNEL ACTIVE BINDING & MATCHED LESSONS CARD (AGENT-VIS-01) -->
+            <div class="agent-kernel-card" id="agent-kernel-active-card">
+              <div class="ak-hdr">
+                <div class="ak-hdr-left">
+                  <span class="ak-badge">🛡️ /agent KERNEL ACTIVE</span>
+                  <strong id="ak-role-label">BRAIN — Chairman &amp; Architect (Propose-Only — Dừng chờ APPROVE)</strong>
+                </div>
+                <div class="ak-hdr-right">
+                  <span class="ak-meta-pill">📚 <b id="ak-total-lessons">272</b> Lessons (`INDEX.md`)</span>
+                  <span class="ak-meta-pill">🎯 Affected Repos: <code id="ak-target-repo">cdc-cms-service, cdc-cms-web, centralized-data-service</code></span>
+                </div>
+              </div>
+              <div class="ak-body-grid">
+                <div class="ak-col">
+                  <div class="ak-sub-label">Skills &amp; Lifecycle Hooks (`H1..H7`) đang áp dụng cho Task này:</div>
+                  <div id="ak-skills-hooks-strip" class="ak-chips-wrap"></div>
+                </div>
+                <div class="ak-col">
+                  <div class="ak-sub-label">Top Bài Học `/agent` Khớp Với Task Này (FTS5 Lesson Matcher):</div>
+                  <div id="ak-matched-lessons-list" class="ak-lessons-wrap"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4-Layer Physical Task Isolation Inspector Card -->
+            <div class="isolation-inspector-card">
+              <div class="iso-card-hdr">
+                <div>
+                  <span class="iso-title-badge">🔒 CÔ LẬP VẬT LÝ 4 LỚP (PER-TASK ISOLATION)</span>
+                  <strong id="iso-task-heading">TASK-1</strong>
+                </div>
+                <div class="iso-runner-status" id="iso-runner-status">
+                  Engine: <b>Antigravity (gemini-4-argon)</b> · Kernel: <b>/agent (GEMINI.md + 272 Lessons)</b>
+                </div>
+              </div>
+              <div class="iso-grid-4">
+                <div class="iso-cell">
+                  <span class="iso-label">1. Target Repo &amp; Git Worktree</span>
+                  <code id="iso-branch-val">task/TASK-1</code>
+                  <small id="iso-worktree-val">.orchestrator/worktrees/TASK-1</small>
+                </div>
+                <div class="iso-cell">
+                  <span class="iso-label">2. S1 Spec &amp; S3 Solution + Code Demo</span>
+                  <code id="iso-spec-val">.orchestrator/tasks/TASK-1/01_requirements.md</code>
+                  <small id="iso-plan-val">.orchestrator/tasks/TASK-1/09_tasks_solution.md</small>
+                </div>
+                <div class="iso-cell">
+                  <span class="iso-label">3. S5 Audit Report &amp; Git Diff riêng</span>
+                  <code id="iso-audit-val">.orchestrator/tasks/TASK-1/audit_report.md</code>
+                  <small id="iso-diff-val">.orchestrator/tasks/TASK-1/diff.patch</small>
+                </div>
+                <div class="iso-cell">
+                  <span class="iso-label">4. /agent Kernel Enforcement</span>
+                  <code id="iso-kernel-val">H1..H7 + Laya DG1/DG2/DG3</code>
+                  <small id="iso-runners-detected">Detecting local CLI runners...</small>
+                </div>
+              </div>
+            </div>
+
+            <!-- 6-Stage Graphical Pipeline Diagram (Scoped 100% to Selected Task!) -->
+            <div id="autopilot-flow" class="autopilot-flow"></div>
+
+            <!-- ===============================================================
+                 INTERACTIVE 5-TAB STEP REPORT, SOLUTION & CODE DEMO INSPECTOR (REPORT-01)
+                 =============================================================== -->
+            <div class="step-report-inspector" id="step-report-inspector-card">
+              <div class="sri-header">
+                <div class="sri-title-wrap">
+                  <span class="sri-badge">📑 BÁO CÁO WORKFLOW, GIẢI PHÁP &amp; CODE DEMO</span>
+                  <span id="sri-active-file" class="sri-file-pill">.orchestrator/tasks/TASK-1/09_tasks_solution.md</span>
+                </div>
+                <div class="sri-actions-wrap" id="sri-gate-actions">
+                  <button type="button" class="btn-mini-cli" onclick="scrollToCoArchitectStudio()">💬 Thảo luận &amp; Sửa Giải Pháp cùng Agent</button>
+                  <button id="sri-approve-btn" class="btn-approve-prominent hidden" onclick="runTaskAction('', 'approve_and_run')">
+                    ✓ APPROVE Giải Pháp S3 &amp; Chạy S4–S5 Ngay
+                  </button>
+                </div>
+              </div>
+
+              <!-- 6 Step Report Tabs (including S2.5 Pre-Plan Critique DG0 :8200) -->
+              <div class="sri-tabs" id="sri-tabs-bar">
+                <button type="button" class="sri-tab" data-step="S1" onclick="selectReportTab('S1')">
+                  📋 S1 Requirements &amp; Sub-Tasks
+                </button>
+                <button type="button" class="sri-tab" data-step="S2" onclick="selectReportTab('S2')">
+                  🔍 S2 Repo Investigation (file:line)
+                </button>
+                <button type="button" class="sri-tab" data-step="DG0" onclick="selectReportTab('DG0')">
+                  ⚡ S2.5 Phản Biện Trước Plan (DG0 :8200)
+                </button>
+                <button type="button" class="sri-tab active" data-step="S3" onclick="selectReportTab('S3')">
+                  💡 S3 Giải Pháp &amp; Code Demo
+                </button>
+                <button type="button" class="sri-tab" data-step="S4" onclick="selectReportTab('S4')">
+                  🔧 S4 Worktree &amp; Git Diff
+                </button>
+                <button type="button" class="sri-tab" data-step="S5" onclick="selectReportTab('S5')">
+                  🛡️ S5 Audit Report &amp; DG3
+                </button>
+              </div>
+
+              <!-- Step Report Content Area (Split: Markdown Report + Code Demo / Sub-Tasks Panel) -->
+              <div class="sri-body" id="sri-body-container">
+                <div class="sri-markdown-pane">
+                  <div class="sri-pane-hdr">
+                    <span id="sri-report-title">💡 S3 Single-Best Solution &amp; Concrete Code Demo</span>
+                    <span id="sri-report-status" class="stage-pill NEEDS_YOU">NEEDS_YOU</span>
+                  </div>
+                  <pre id="sri-markdown-content" class="sri-pre-block">Đang tải báo cáo...</pre>
+                </div>
+                <div class="sri-side-pane" id="sri-side-pane">
+                  <div class="sri-pane-hdr">
+                    <span id="sri-side-title">💻 Concrete Production Code Demo (S3 / DG2)</span>
+                    <button type="button" class="btn-copy-demo" onclick="copyActiveCodeDemo()">📋 Copy Code Demo</button>
+                  </div>
+                  <pre id="sri-code-demo-content" class="sri-code-block">// Code demo sẽ hiển thị tại đây...</pre>
+
+                  <!-- Inline Multi-Repo & Domain-Grouped Sub-Tasks Manager inside Step Report Inspector -->
+                  <div class="sri-subtasks-box">
+                    <div class="sri-subtasks-hdr">
+                      <span>🧩 Sub-Tasks Theo Nhóm Nghiệp Vụ, Role/Model &amp; Repo (<b id="sri-subtasks-count">10</b> tasks · <b id="sri-repos-count">3</b> repos)</span>
+                      <button type="button" class="btn-auto-subtasks" onclick="regenerateSubTasksForActiveTask()">⚡ Đồng bộ lại Sub-Tasks (08_tasks)</button>
+                    </div>
+                    <div id="sri-repo-filter-bar" class="sri-repo-filter-bar"></div>
+                    <!-- Sub-Task Fractal Lifecycle Inspector (Start -> Plan -> You -> Implement -> Local QA -> Isolated Branch + Input/Output Contracts) -->
+                    <div id="subtask-fractal-inspector" class="subtask-fractal-inspector"></div>
+                    <div id="sri-subtasks-list" class="sri-subtasks-list"></div>
+                    <form class="sri-add-subtask-form" onsubmit="addSubTaskToActiveTask(event)">
+                      <select id="inp-inline-subtask-repo" class="inline-repo-select" title="Chọn Repo cho Sub-Task mới"></select>
+                      <input id="inp-inline-subtask-ctx" type="text" class="inline-ctx-input" placeholder="Context file:line (VD: internal/api/handler.go:42)" />
+                      <input id="inp-inline-subtask-title" type="text" placeholder="Tên Sub-Task &amp; Mô tả (VD: Mở rộng API Test Connection hỗ trợ ping MongoDB)..." />
+                      <input id="inp-inline-subtask-dod" type="text" class="inline-dod-input" placeholder="Test / DoD (VD: POST /test trả về 200 OK)" />
+                      <button type="submit">+ Thêm Sub-Task</button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ===============================================================
+                   INTERACTIVE CO-ARCHITECT & SOLUTION PLANNING STUDIO (CO-ARCHITECT-CHAT-01)
+                   Allows the user to discuss, steer, and revise 09_tasks_solution.md & 08_tasks.md with the Agent!
+                   =============================================================== -->
+              <div class="co-architect-studio" id="co-architect-studio">
+                <div class="cas-header">
+                  <div class="cas-title-group">
+                    <span class="cas-badge">💬 ĐỐI THOẠI &amp; ĐỊNH HƯỚNG GIẢI PHÁP CÙNG AGENT (CO-ARCHITECT SOLUTION STUDIO)</span>
+                    <span class="cas-sub-hint">Trò chuyện trực tiếp với <b>BRAIN / MUSCLE / QA</b> để hỏi đáp kiến trúc, tinh chỉnh <code>09_tasks_solution.md</code> hoặc thêm Sub-Task trước &amp; trong khi chạy!</span>
+                  </div>
+                  <div class="cas-controls">
+                    <label class="cas-select-label">
+                      <span>Agent Role:</span>
+                      <select id="cas-role-select" class="cas-select">
+                        <option value="BRAIN">🧠 BRAIN · Architect (Slot A · /brain-delegate)</option>
+                        <option value="MUSCLE">🛠️ MUSCLE · Chief Engineer (Slot B · /muscle-execute)</option>
+                        <option value="QA">🧪 QA &amp; DG3 Auditor (Slot H · /qa-agent)</option>
+                      </select>
+                    </label>
+                    <label class="cas-select-label">
+                      <span>Model:</span>
+                      <select id="cas-model-select" class="cas-select">
+                        <option value="gemini-4-argon (antigravity)">gemini-4-argon (antigravity)</option>
+                        <option value="gemini-4-argon-thinking (antigravity)">gemini-4-argon-thinking (antigravity)</option>
+                        <option value="claude-opus-4-6">claude-opus-4-6</option>
+                        <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+                      </select>
+                    </label>
+                    <label class="cas-select-label">
+                      <span>Chế độ:</span>
+                      <select id="cas-mode-select" class="cas-select">
+                        <option value="discuss">💬 Thảo luận &amp; Giải thích Kiến trúc / Tiến độ</option>
+                        <option value="revise_solution">✍️ Cập nhật chỉ đạo thẳng vào 09_tasks_solution.md</option>
+                        <option value="update_subtasks">🧩 Thêm Sub-Task mới vào 08_tasks.md</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Quick Steering Prompts -->
+                <div class="cas-quick-prompts">
+                  <span class="cas-qp-label">Gợi ý định hướng nhanh:</span>
+                  <button type="button" class="cas-qp-btn" onclick="fillQuickSteeringPrompt('discuss', 'Giải thích rõ tiến trình đang chạy ở đâu, repo nào, model/role nào làm từng Sub-Task và tiến độ hiện tại?')">
+                    🔍 Hỏi tiến trình &amp; Role/Model từng Repo
+                  </button>
+                  <button type="button" class="cas-qp-btn" onclick="fillQuickSteeringPrompt('revise_solution', 'Bổ sung cơ chế Retry Exponential Backoff + Dead-Letter Queue (DLQ) khi BulkWrite MongoDB gặp lỗi transient network timeout, giữ nguyên OCC _source_ts.')">
+                    ✍️ Sửa Solution S3: Thêm Retry Backoff + DLQ cho MongoDB BulkWrite
+                  </button>
+                  <button type="button" class="cas-qp-btn" onclick="fillQuickSteeringPrompt('revise_solution', 'Đảm bảo kiểm soát Watermark Continuity và gửi nhịp InProgress/Heartbeat khi chạy multi-worker (WorkerCount > 1) để không xung đột AckWait.')">
+                    ✍️ Sửa Solution S3: Ràng buộc Watermark &amp; Multi-Worker Heartbeat
+                  </button>
+                  <button type="button" class="cas-qp-btn" onclick="fillQuickSteeringPrompt('update_subtasks', 'Viết thêm benchmark &amp; integration test kiểm tra hiệu năng CoerceToBSONValue với 10.000 bản ghi trên centralized-data-service')">
+                    🧩 + Thêm Sub-Task Benchmark BSON trên centralized-data-service
+                  </button>
+                </div>
+
+                <!-- Chat History Thread -->
+                <div class="cas-messages-list" id="co-architect-chat-messages"></div>
+
+                <!-- Chat Input Form -->
+                <form class="cas-input-form" onsubmit="sendCoArchitectChatMessage(event)">
+                  <textarea id="inp-co-architect-msg" rows="2" placeholder="Nhập câu hỏi kiến trúc, yêu cầu chỉnh sửa giải pháp (09_tasks_solution.md) hoặc chỉ đạo kỹ thuật cho Agent... (Nhấn Ctrl+Enter hoặc bấm Gửi)"></textarea>
+                  <div class="cas-form-actions">
+                    <button type="submit" class="btn-cas-send">💬 Gửi Định Hướng Cho Agent</button>
+                    <button type="button" class="btn-cas-revise" onclick="submitCoArchitectDirectRevise()" title="Ghi thẳng nội dung bạn vừa nhập vào 09_tasks_solution.md">
+                      ✍️ Ghi Thẳng Vào Giải Pháp S3 (`09_tasks_solution.md`)
+                    </button>
+                    <button type="button" class="btn-cas-approve" onclick="runTaskAction('', 'approve_and_run')" title="Duyệt phương án S3 hiện tại và chạy tiếp S4–S5">
+                      ✓ APPROVE Giải Pháp &amp; Chạy S4–S5
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- Split Bottom: Left = Cycle & Round Cost Ledger (Scoped to Task) | Right = Live Per-Task Execution Console -->
+            <div class="autopilot-split-bottom">
+              <div class="autopilot-ledger-col">
+                <div id="autopilot-cycles" class="autopilot-cycles"></div>
+                <div class="autopilot-total-row">
+                  <span class="total-label">Total cho Task đang chọn (SQLite autopilot_rounds)</span>
+                  <span id="autopilot-total-val" class="total-value">0 runs · 0 min · $0.00</span>
+                </div>
+                <div class="autopilot-legend">
+                  <span><i class="dot green"></i> done</span>
+                  <span><i class="dot blue"></i> running now</span>
+                  <span><i class="dot amber"></i> waiting on you (NEEDS_YOU)</span>
+                  <span><i class="dot dashed"></i> pending</span>
+                </div>
+              </div>
+
+              <div class="autopilot-console-col">
+                <div class="task-console-hdr">
+                  <span>📟 Live Task Execution Log (<code id="console-log-path">.orchestrator/tasks/TASK-1/terminal.log</code>)</span>
+                  <button class="mini-run-btn" onclick="triggerPrimaryTaskAction()" id="console-run-btn">▶ Chạy Autopilot Task này</button>
+                </div>
+                <div id="active-task-console" class="task-console-body"></div>
+                <form class="task-console-input-bar" onsubmit="sendQuickWorktreeCommand(event)">
+                  <input id="inp-quick-worktree-cmd" type="text" placeholder="Gõ lệnh shell chạy trực tiếp trong Worktree/Repo của Task này (VD: git status -sb, go test ./...)..." />
+                  <button type="submit">Chạy trong Worktree</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- =================================================================
+             VIEW 2: 3-TIER HIERARCHICAL WAVE 0..N DEPENDENCY DAG (EPIC -> TASK -> SUB-TASK)
+             ================================================================= -->
+        <section id="screen-wave" class="screen-panel hidden">
+          <div class="wave-frame">
+            <div class="wave-toolbar">
+              <div class="wave-toolbar-left">
+                <span class="wave-hierarchy-pill">
+                  🏛️ Phân Cấp 3 Tầng: <b>1. Epic (Chủ đề lớn)</b> ➔ <b>2. Tasks thuộc Epic</b> ➔ <b>3. Sub-Tasks Dependency DAG (Wave 0..N)</b>
+                </span>
+                <select id="filter-assignee" class="wave-select" onchange="renderWaveBoard()">
+                  <option value="">Anyone</option>
+                  <option value="Planner">Planner (Slot A · PM Opus)</option>
+                  <option value="Coder">Coder (Slot B/D · Opus/Sonnet)</option>
+                  <option value="Tester">Tester (Slot K · QA Agent)</option>
+                  <option value="Reviewer">Reviewer (Slot H · Laya Gate)</option>
+                  <option value="Security">Security (Slot I · Security Agent)</option>
+                </select>
+                <select id="filter-milestone" class="wave-select" onchange="renderWaveBoard()">
+                  <option value="">Any milestone</option>
+                  <option value="M0">M0</option>
+                  <option value="M1">M1</option>
+                  <option value="M2">M2</option>
+                  <option value="M3">M3</option>
+                </select>
+                <select id="filter-epic" class="wave-select" onchange="selectHierarchyEpic(this.value)">
+                  <option value="">Tất cả Epics</option>
+                  <option value="DATA">DATA</option>
+                  <option value="CORE">CORE</option>
+                  <option value="SRV">SRV</option>
+                  <option value="UX">UX</option>
+                  <option value="QA">QA</option>
+                  <option value="CLI">CLI</option>
+                  <option value="PM">PM</option>
+                </select>
+                <div class="wave-search-wrap">
+                  <input id="wave-search" type="text" class="wave-search" placeholder="Tìm Epic, Task, Sub-Task, repo, file:line..." oninput="renderWaveBoard()" />
+                </div>
+              </div>
+              <div class="wave-toolbar-right">
+                <span id="wave-item-count" class="wave-count-label">0 Epics · 0 Tasks · 0 Sub-Tasks</span>
+                <button class="wave-reset-btn" onclick="resetWaveHighlight()">Reset</button>
+              </div>
+            </div>
+
+            <div class="wave-status-strip">
+              <span class="st-metric"><i class="dot amber"></i> needs you <b id="cnt-needs-you">0</b></span>
+              <span class="st-metric"><i class="dot blue"></i> running <b id="cnt-running">0</b></span>
+              <span class="st-metric"><i class="dot purple"></i> in review <b id="cnt-in-review">0</b></span>
+              <span class="st-metric"><i class="dot indigo"></i> under way <b id="cnt-under-way">0</b></span>
+              <span class="st-metric"><i class="dot green"></i> ready <b id="cnt-ready">0</b></span>
+              <span class="st-metric"><i class="dot dashed"></i> blocked <b id="cnt-blocked">0</b></span>
+              <span class="st-metric"><i class="dot gray"></i> done <b id="cnt-done">0</b></span>
+              <span class="critical-legend"><i class="crit-line"></i> Đường nối phụ thuộc Sub-Tasks (Wave 0..N)</span>
+            </div>
+
+            <!-- 3-TIER HIERARCHICAL DRILL-DOWN BODY -->
+            <div class="wave-hierarchy-body" id="wave-hierarchy-body">
+              <!-- TIER 1: EPICS (INDEPENDENT THEMES — NO BEZIER LINES BETWEEN EPICS) -->
+              <div class="wave-tier-box" id="wave-tier-1-box">
+                <div class="wave-tier-hdr">
+                  <div class="wave-tier-title">
+                    <span class="tier-step-badge">TẦNG 1 · EPICS</span>
+                    <strong>🏛️ Chủ Đề Lớn (Epics — Độc lập nhau, không nối dây giữa các Epic; bấm chọn 1 Epic để lọc Tasks ở Tầng 2)</strong>
+                  </div>
+                  <span id="wave-tier-epics-meta" class="wave-tier-meta">Đang chọn: TẤT CẢ EPICS</span>
+                </div>
+                <div id="wave-tier-epics" class="wave-epics-row"></div>
+              </div>
+
+              <!-- TIER 2: TASKS BELONGING TO THE SELECTED EPIC -->
+              <div class="wave-tier-box" id="wave-tier-2-box">
+                <div class="wave-tier-hdr">
+                  <div class="wave-tier-title">
+                    <span class="tier-step-badge tier-2">TẦNG 2 · TASKS</span>
+                    <strong>📋 Danh Sách Tasks Thuộc Epic <code id="wave-selected-epic-label">TẤT CẢ EPICS</code> (Bấm chọn 1 Task để hiển thị sơ đồ Sub-Tasks ở Tầng 3)</strong>
+                  </div>
+                  <span id="wave-tier-tasks-meta" class="wave-tier-meta">0 Tasks</span>
+                </div>
+                <div id="wave-tier-tasks" class="wave-tasks-row"></div>
+              </div>
+
+              <!-- TIER 3: SUB-TASKS DEPENDENCY DAG (WAVE 0..N WITH SVG BEZIER LINES) OF THE SELECTED TASK -->
+              <div class="wave-tier-box wave-tier-3-box" id="wave-tier-3-box">
+                <div class="wave-tier-hdr">
+                  <div class="wave-tier-title">
+                    <span class="tier-step-badge tier-3">TẦNG 3 · SUB-TASKS DAG (WAVE 0..N)</span>
+                    <strong>🧩 Sơ Đồ Phụ Thuộc Sub-Tasks Của Task <code id="wave-selected-task-label">TASK-11</code> (Chia theo cột Wave 0..N kèm đường nối phụ thuộc)</strong>
+                  </div>
+                  <span id="wave-tier-subtasks-meta" class="wave-tier-meta">0 Sub-Tasks</span>
+                </div>
+                <div class="wave-canvas-scroll" id="wave-scroll-area">
+                  <div class="wave-canvas" id="wave-canvas">
+                    <svg id="wave-svg" class="wave-svg-overlay"></svg>
+                    <div id="wave-columns" class="wave-columns"></div>
+                  </div>
+                </div>
+                <!-- Sub-Task Fractal Lifecycle Inspector inside Wave DAG Tier 3 -->
+                <div id="wave-subtask-fractal-inspector" class="subtask-fractal-inspector wave-subtask-inspector"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- =================================================================
+             VIEW 3: MULTI-AGENT TERMINAL STUDIO (SLOTS A..K) — NO SECOND HEADER
+             ================================================================= -->
+        <section id="screen-vibe" class="screen-panel hidden">
+          <!-- Hidden marker preserving backward-compatible test substring "Vibe System Agent" -->
+          <div class="vibe-col-main" data-studio="Vibe System Agent">
+            <div class="vibe-runner-bar">
+              <div class="vibe-runner-left">
+                <b>Multi-Agent Terminal Grid (Slots A..K)</b>
+                <span class="vibe-sub-hint" id="vibe-active-filter-hint">
+                  100% Scoped theo Task đang chọn &amp; Target Repo
+                </span>
+                <div class="runner-pills">
+                  <button class="r-pill active" onclick="filterPanes('')">Tất cả (11 Slots)</button>
+                  <button class="r-pill" onclick="filterPanes('terminal')">▶_ Terminal (Slot C)</button>
+                  <button class="r-pill active-claude" onclick="filterPanes('claude')">⚡ AI Agents (A, B, D..K)</button>
+                </div>
+              </div>
+              <div class="vibe-runner-right">
+                <span id="vibe-branch-tag" class="mono-dim">⎇ HEAD</span>
+                <span id="vibe-ws-tab-name" class="mono-dim">feature-modular-agent-orchestrator</span>
+                <button class="r-icon-btn" onclick="toggleGitToast(true)">⎇ Git Status</button>
+                <button class="r-icon-btn" onclick="clearCrossSelection()">⊞ Reset</button>
+              </div>
+            </div>
+
+            <!-- Asymmetric Layout: 4 Collapsed Vertical Strips (C, A, I, G) + 6 Bento Grid Cells (E, K, B, H, D, F) + Status Bar J -->
+            <div class="vibe-studio-deck">
+              <div id="vibe-collapsed-strips" class="vibe-collapsed-strips"></div>
+              <div id="vibe-panes-grid" class="vibe-panes-grid"></div>
+            </div>
+            <div id="vibe-status-bar-j" class="vibe-status-bar-j"></div>
+
+            <!-- Floating Git Status Notification Toast -->
+            <div id="vibe-git-toast" class="vibe-git-toast hidden">
+              <div class="toast-title">Trạng thái Git Repository &amp; Worktree Thật</div>
+              <div class="toast-desc" id="toast-git-summary">
+                Đang kiểm tra nhánh <span id="toast-branch">HEAD</span>...
+              </div>
+              <div class="toast-actions">
+                <button class="btn-toast-later" onclick="toggleGitToast(false)">Đóng</button>
+                <button class="btn-toast-git" onclick="runGitStatusInTerminal()">Chạy git status ở Slot C</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- =======================================================================
+       MODAL 1: GIAO VIỆC MỚI — DUAL-MODE TASK INTAKE (TASK-INTAKE-DUAL-MODE-01)
+       Option 1: Đồng bộ từ Jira / Linear / GitHub / GitLab (Multi-Account Authen & Chọn Ticket)
+       Option 2: Nhập Thủ Công (Title + Detailed Description + Copy/Upload Tài Liệu BRD)
+       ======================================================================= -->
+  <div id="dispatch-modal" class="modal-backdrop hidden">
+    <div class="modal-card modal-card-wide">
+      <div class="modal-hdr">
+        <h3>+ Giao việc mới (2 Chế Độ Intake: Đồng Bộ Jira/Linear/GitHub Hoặc Nhập Title + Description + Tài Liệu BRD)</h3>
+        <button class="modal-close" onclick="closeDispatchModal()">×</button>
+      </div>
+      <form onsubmit="submitNewTask(event)" class="modal-form">
+        <!-- 2-OPTION TASK INTAKE MODE SWITCHER -->
+        <div class="intake-mode-tabs">
+          <button type="button" id="btn-intake-mode-tracker" class="intake-mode-btn" onclick="switchTaskIntakeMode('tracker')">
+            🔗 Option 1: Đồng bộ từ Jira / Linear / GitHub / GitLab (Multi-Account Authen &amp; Chọn Ticket)
+          </button>
+          <button type="button" id="btn-intake-mode-manual" class="intake-mode-btn active" onclick="switchTaskIntakeMode('manual')">
+            📝 Option 2: Nhập Thủ Công (Title + Mô Tả Chi Tiết + Copy/Upload Tài Liệu BRD)
+          </button>
+        </div>
+
+        <!-- ===================================================================
+             OPTION 1 PANEL: MULTI-TRACKER AUTHENTICATION & TICKET BROWSER
+             =================================================================== -->
+        <div id="intake-tracker-panel" class="intake-tracker-panel hidden">
+          <div class="tracker-bar-top">
+            <div class="tracker-conn-select-group">
+              <label>🔐 Tài khoản Quản lý Công việc đã xác thực (Multi-Account):</label>
+              <select id="inp-tracker-conn-select" onchange="loadTrackerIssuesForSelectedConn()"></select>
+            </div>
+            <div class="tracker-conn-actions">
+              <button type="button" class="btn-auto-subtasks" onclick="toggleNewTrackerAuthForm()">+ Kết nối tài khoản Jira / Linear / GitHub mới</button>
+              <button type="button" class="btn-mini-cli" onclick="loadTrackerIssuesForSelectedConn()">↻ Làm mới danh sách Ticket</button>
+            </div>
+          </div>
+
+          <!-- Collapsible New Tracker Account Authentication Form -->
+          <div id="new-tracker-auth-box" class="new-tracker-auth-box hidden">
+            <div class="nta-title">🔑 Thêm &amp; Xác Thực Tài Khoản Quản Lý Công Việc Mới (Token được Mask bảo mật theo Rule #20)</div>
+            <div class="form-grid-3">
+              <div class="form-row">
+                <label>Nền tảng (Provider)</label>
+                <select id="nta-provider">
+                  <option value="jira">Jira Cloud / Jira Data Center</option>
+                  <option value="linear">Linear.app</option>
+                  <option value="github">GitHub Issues / Projects</option>
+                  <option value="gitlab">GitLab Issues</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label>Tên gợi nhớ tài khoản / Workspace</label>
+                <input id="nta-name" type="text" placeholder="VD: Jira Cloud — Data-Hub Sprint" />
+              </div>
+              <div class="form-row">
+                <label>Project Key / Repo</label>
+                <input id="nta-project-key" type="text" placeholder="VD: DH, CDC, PLAT" />
+              </div>
+            </div>
+            <div class="form-grid-3">
+              <div class="form-row">
+                <label>Base URL / Endpoint</label>
+                <input id="nta-base-url" type="text" placeholder="VD: https://gpay-datahub.atlassian.net" />
+              </div>
+              <div class="form-row">
+                <label>Email / Username</label>
+                <input id="nta-email" type="text" placeholder="VD: arch@datahub.local" />
+              </div>
+              <div class="form-row">
+                <label>API Token / Personal Access Token (PAT)</label>
+                <input id="nta-token" type="password" placeholder="Nhập token (Tự động mask theo Rule #20)" />
+              </div>
+            </div>
+            <div class="nta-actions">
+              <span id="nta-test-status" class="nta-status-text">Hỗ trợ kết nối đồng thời nhiều tài khoản Jira, Linear, GitHub, GitLab.</span>
+              <div>
+                <button type="button" class="btn-mini-cli" onclick="testTrackerConnectionInModal()">⚡ Test Kết Nối</button>
+                <button type="button" class="btn-auto-subtasks" onclick="saveNewTrackerConnectionInModal()">✓ Lưu &amp; Đăng Nhập Tài Khoản Này</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Browsable / Searchable Tickets List from Selected Tracker -->
+          <div class="tracker-issues-browser">
+            <div class="tib-hdr">
+              <span>📋 Chọn Ticket từ hệ thống để tự động nạp Title, Description, BRD &amp; Affected Repos:</span>
+              <input id="inp-tracker-issue-search" type="text" class="tib-search-inp" placeholder="🔍 Tìm mã ticket (DH-401, PLAT-208...), tên tính năng, repo..." oninput="loadTrackerIssuesForSelectedConn()" />
+            </div>
+            <div id="tracker-issues-list" class="tracker-issues-list"></div>
+          </div>
+        </div>
+
+        <!-- ===================================================================
+             COMMON & OPTION 2 PANEL: TITLE + DETAILED DESCRIPTION + BRD DOCUMENT
+             =================================================================== -->
+        <div class="form-grid-2">
+          <div class="form-row">
+            <label>Mã Task / Ticket ID (External ID)</label>
+            <input id="inp-task-id" type="text" placeholder="VD: TASK-10 hoặc DH-401" required />
+          </div>
+          <div class="form-row">
+            <label>🎯 Primary Repository (Repo chính)</label>
+            <select id="inp-task-repo" onchange="syncPrimaryRepoToMultiCheckboxes()"></select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>📦 Các Repository bị ảnh hưởng bởi Task lớn này (Multi-Repo Epic — Sub-Tasks sẽ chia riêng tới từng Repo được chọn)</label>
+          <div id="inp-task-affected-repos" class="multi-repo-checkbox-grid"></div>
+        </div>
+
+        <div class="form-row">
+          <label>1️⃣ Tiêu đề công việc (Task Title)</label>
+          <input id="inp-task-title" type="text" placeholder="VD: tích hợp Master MongoDB Destination (Dynamic Schema &amp; Ordered BulkWrite OCC)..." required oninput="autoPreviewSubTasksOnTitle()" />
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-row">
+            <label>2️⃣ Mô tả chi tiết yêu cầu &amp; Tiêu chí nghiệm thu (Detailed Description &amp; Acceptance Criteria)</label>
+            <textarea id="inp-task-desc" rows="5" placeholder="Mô tả rõ bối cảnh nghiệp vụ, luồng dữ liệu, các API/Service cần thay đổi, xử lý lỗi biên, multi-worker concurrency và tiêu chí nghiệm thu (DoD)..."></textarea>
+          </div>
+          <div class="form-row">
+            <div class="brd-header-bar">
+              <label>3️⃣ Tài liệu BRD / PRD / Spec (Copy-Paste trực tiếp hoặc Upload file)</label>
+              <div class="brd-mini-actions">
+                <label class="btn-upload-brd" title="Tải nội dung từ file .md, .txt, .json trên máy của bạn">
+                  📂 Upload file BRD
+                  <input id="inp-task-brd-file" type="file" accept=".md,.txt,.json,.yaml,.yml" style="display:none" onchange="handleBRDFileUpload(event)" />
+                </label>
+                <button type="button" class="btn-auto-subtasks" onclick="loadSampleBRDIntoModal()" title="Nạp mẫu tài liệu BRD chuẩn Đa Repo">📋 Nạp mẫu BRD</button>
+              </div>
+            </div>
+            <textarea id="inp-task-brd" rows="5" placeholder="Copy-paste toàn bộ tài liệu BRD / PRD / Architecture Spec / API Contract vào đây (hoặc bấm Upload file BRD). Hệ thống sẽ lưu vào brd_source.md &amp; 01_requirements.md để phân rã Sub-Tasks chính xác tới từng Repo!"></textarea>
+          </div>
+        </div>
+
+        <div class="form-grid-3">
+          <div class="form-row">
+            <label>AI CLI Runner</label>
+            <select id="inp-task-runner">
+              <option value="antigravity">Antigravity (gemini-4-argon · Local)</option>
+              <option value="claude">Claude Code CLI</option>
+              <option value="gemini">Gemini 2.5 Pro CLI</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Model thực thi chính (Antigravity / Claude / Gemini)</label>
+            <select id="inp-task-model">
+              <option value="gemini-4-argon (antigravity)">gemini-4-argon (antigravity)</option>
+              <option value="gemini-4-argon-thinking (antigravity)">gemini-4-argon-thinking (antigravity)</option>
+              <option value="claude-opus-4-6">claude-opus-4-6 (High Reasoning)</option>
+              <option value="gemini-2.5-pro (antigravity)">gemini-2.5-pro (antigravity)</option>
+              <option value="claude-sonnet-4-6">claude-sonnet-4-6 (Fast Coder)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Độ phức tạp (Complexity)</label>
+            <select id="inp-task-complexity">
+              <option value="high">High → gemini-4-argon / Opus</option>
+              <option value="medium">Medium → gemini-4-argon / Sonnet</option>
+              <option value="low">Low → Sonnet / Flash</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid-3">
+          <div class="form-row">
+            <label>Milestone</label>
+            <select id="inp-task-milestone">
+              <option value="M2">M2</option>
+              <option value="M1">M1</option>
+              <option value="M0">M0</option>
+              <option value="M3">M3</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Epic</label>
+            <select id="inp-task-epic">
+              <option value="DATA">DATA</option>
+              <option value="CORE">CORE</option>
+              <option value="SRV">SRV</option>
+              <option value="UX">UX</option>
+              <option value="CLI">CLI</option>
+              <option value="QA">QA</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Assignee (Agent Slot)</label>
+            <select id="inp-task-assignee">
+              <option value="Coder">Coder → Slot B</option>
+              <option value="Planner">Planner → Slot A</option>
+              <option value="Tester">Tester → Slot K</option>
+              <option value="Reviewer">Reviewer → Slot H</option>
+              <option value="Security">Security → Slot I</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="subtask-builder-hdr">
+            <label>🧩 Chia nhỏ Sub-Tasks theo Nhóm Nghiệp Vụ &amp; Từng Repo (Hỗ trợ dán trực tiếp chuẩn `# 08 Tasks` kèm `Context (file:line)` &amp; `Test / DoD`)</label>
+            <button type="button" class="btn-auto-subtasks" onclick="fillDefaultSubTasksInModal()">⚡ Tự chia Sub-Tasks theo Repo &amp; Codebase (`08_tasks`)</button>
+          </div>
+          <textarea id="inp-task-subtasks" rows="4" placeholder="Để trống để hệ thống tự động đồng bộ từ /agent workspace (08_tasks_*.md) hoặc phân tích BRD + quét các Affected Repos sinh TASK-M01..M10 kèm file:line &amp; DoD!"></textarea>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-row">
+            <label>Phụ thuộc vào Task (Depends On)</label>
+            <input id="inp-task-deps" type="text" placeholder="Để trống nếu chạy ở Wave 0, hoặc VD: TASK-7" value="" />
+          </div>
+          <div class="form-row checkbox-row" style="justify-content: flex-end; padding-top: 18px;">
+            <label><input id="inp-task-critical" type="checkbox" checked /> Đánh dấu đường găng (Critical Path)</label>
+          </div>
+        </div>
+
+        <div class="form-row checkbox-row highlight-check">
+          <label>
+            <input id="inp-task-auto-autopilot" type="checkbox" checked />
+            <b>⚡ Chạy ngay Phase 1 (S1 Intake → S2 Quét Đa Repo → S2.5 Wave Phản Biện Trước Plan [Laya DG0 :8200 · 0 Token] → S3 Giải pháp &amp; Code Demo → Dừng ở NEEDS_YOU chờ bạn Đối Thoại hoặc APPROVE)</b>
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-cancel" onclick="closeDispatchModal()">Hủy</button>
+          <button type="submit" class="btn-submit">Tạo Task (Lưu BRD + Chia Sub-Tasks Đa Repo) &amp; Chạy Phase 1</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =======================================================================
+       MODAL 2: SETUP CLI & MODEL ROUTING (/api/settings/cli)
+       ======================================================================= -->
+  <div id="cli-settings-modal" class="modal-backdrop hidden">
+    <div class="modal-card modal-card-wide">
+      <div class="modal-hdr">
+        <h3>⚙ Setup CLI Binary &amp; Phân Phối Model Theo Role (`/agent` Kernel · `gemini-4-argon` + Local Laya `:8200`)</h3>
+        <button class="modal-close" onclick="closeCLISettingsModal()">×</button>
+      </div>
+      <form onsubmit="submitCLISettings(event)" class="modal-form">
+        <div class="form-grid-2">
+          <div class="form-row">
+            <label>Default AI CLI Runner</label>
+            <select id="cfg-default-runner">
+              <option value="antigravity">Antigravity (gemini-4-argon · Local)</option>
+              <option value="claude">Claude Code CLI</option>
+              <option value="gemini">Gemini 2.5 Pro CLI</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Planner Model (S1–S3 Brain · Architect &amp; Code Demo)</label>
+            <select id="cfg-planner-model">
+              <option value="gemini-4-argon (antigravity)">gemini-4-argon (antigravity)</option>
+              <option value="gemini-4-argon-thinking (antigravity)">gemini-4-argon-thinking (antigravity)</option>
+              <option value="claude-opus-4-6">claude-opus-4-6</option>
+              <option value="gemini-2.5-pro (antigravity)">gemini-2.5-pro (antigravity)</option>
+              <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-row">
+            <label>Coder High Model (S4 Muscle · Complex Multi-Repo Tasks)</label>
+            <select id="cfg-coder-high-model">
+              <option value="gemini-4-argon (antigravity)">gemini-4-argon (antigravity)</option>
+              <option value="gemini-4-argon-thinking (antigravity)">gemini-4-argon-thinking (antigravity)</option>
+              <option value="claude-opus-4-6">claude-opus-4-6</option>
+              <option value="gemini-2.5-pro (antigravity)">gemini-2.5-pro (antigravity)</option>
+              <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Coder Standard Model (S4 Muscle · Sub-Tasks)</label>
+            <select id="cfg-coder-std-model">
+              <option value="gemini-4-argon (antigravity)">gemini-4-argon (antigravity)</option>
+              <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+              <option value="gemini-2.5-pro (antigravity)">gemini-2.5-pro (antigravity)</option>
+              <option value="gemini-2.5-flash (antigravity)">gemini-2.5-flash (antigravity)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-row">
+            <label>QA Auditor Model (Slot K · Cross-Model S5B Gatekeeper G1–G8)</label>
+            <select id="cfg-qa-model">
+              <option value="claude-opus-4-6 (antigravity)">claude-opus-4-6 (antigravity)</option>
+              <option value="claude-opus-4-6">claude-opus-4-6</option>
+              <option value="claude-sonnet-4-6 (antigravity)">claude-sonnet-4-6 (antigravity)</option>
+              <option value="gemini-4-argon (antigravity)">gemini-4-argon (antigravity)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Laya Gate Engine (Slot H · Local `:8200` · 0 LLM Token · DG0/DG1/DG2/DG3)</label>
+            <select id="cfg-laya-gate-model">
+              <option value="convaiinnovations/laya (local :8200)">convaiinnovations/laya (local :8200)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-row">
+            <label>Security Guard (Slot I · `agy_guard.py` H1..H7 + Cross-Model Security)</label>
+            <select id="cfg-security-model">
+              <option value="agy_guard.py (H1..H7) · claude-sonnet-4-6 (antigravity)">agy_guard.py (H1..H7) · claude-sonnet-4-6 (antigravity)</option>
+              <option value="claude-sonnet-4-6 (antigravity)">claude-sonnet-4-6 (antigravity)</option>
+              <option value="claude-opus-4-6 (antigravity)">claude-opus-4-6 (antigravity)</option>
+              <option value="gemini-4-argon (antigravity)">gemini-4-argon (antigravity)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Circuit Breaker Max Self-Heal Retries (Tier-1 <code>S5 → S4 → S5</code>)</label>
+            <input id="cfg-max-self-heal-retries" type="number" min="1" max="5" value="3" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>Trạng thái CLI Binaries &amp; Model phát hiện trên máy của bạn:</label>
+          <div id="cfg-detected-runners-table" class="detected-runners-box"></div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-cancel" onclick="closeCLISettingsModal()">Đóng</button>
+          <button type="submit" class="btn-submit">Lưu Cấu Hình CLI &amp; Cross-Model</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODAL: SETUP TELEGRAM (S3 PLAN NOTIFICATION & REMOTE APPROVE AUTO-RUN)
+       ========================================================================= -->
+  <div id="telegram-settings-modal" class="modal-backdrop hidden">
+    <div class="modal-card modal-card-wide">
+      <div class="modal-hdr">
+        <span>✈️ Setup Telegram — Báo Cáo S3 &amp; Nhận Lệnh APPROVE Tự Chạy S4–S5</span>
+        <button class="modal-close" onclick="closeTelegramSettingsModal()">✕</button>
+      </div>
+      <form onsubmit="submitTelegramSettings(event)" class="modal-form">
+        <div class="form-row highlight-check">
+          <label class="chk-label">
+            <input id="tg-enabled" type="checkbox" checked />
+            Bật kết nối Telegram Bridge cho bước S3 (Tự gửi thông báo khi S3 Plan sẵn sàng &amp; tự chạy S4–S5 khi anh nhắn <code>APPROVE</code> trên Telegram)
+          </label>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-row">
+            <label>Bot Token (Tự động che mật khẩu theo Rule #20 · VD: <code>123456:ABC...</code>)</label>
+            <input id="tg-bot-token" type="password" placeholder="Nhập Bot Token mới (hoặc để trống giữ nguyên Token đang lưu)" />
+            <small id="tg-masked-token-hint" style="color:#67e8f9;font-size:10px;">Token đang lưu: Chưa cấu hình</small>
+          </div>
+          <div class="form-row">
+            <label>Chat ID / Group ID Nhận Thông Báo S3 &amp; Gửi Lệnh <code>APPROVE</code></label>
+            <input id="tg-chat-id" type="text" placeholder="VD: -100192837465 hoặc 849182736" />
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-row">
+            <label>Bot Username (Tùy chọn)</label>
+            <input id="tg-bot-username" type="text" placeholder="@tk001sea_bot" />
+          </div>
+          <div class="form-row">
+            <label>Cơ chế kích hoạt từ xa trên Telegram</label>
+            <div style="display:flex;flex-direction:column;gap:4px;padding-top:4px;font-size:10.5px;color:#e2e8f0;">
+              <label class="chk-label"><input id="tg-notify-s3" type="checkbox" checked /> Tự gửi tóm tắt S3 Plan + Sub-Tasks khi tới cổng <code>NEEDS_YOU</code></label>
+              <label class="chk-label"><input id="tg-auto-run" type="checkbox" checked /> Tự động chạy S4 ➔ S5 Audit Hook khi anh nhắn <code>APPROVE</code> hoặc <code>/approve TASK-11</code></label>
+              <label class="chk-label"><input id="tg-polling" type="checkbox" checked /> Bật Background Polling <code>getUpdates</code> + Webhook <code>/api/telegram/webhook</code></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <label>Nhật ký sự kiện Telegram S3, `/task` Menu &amp; Remote APPROVE gần nhất:</label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button type="button" class="btn-mini-cli" style="border-color:#38bdf8;color:#7dd3fc;" onclick="sendTelegramTaskMenuNow()">📋 Gửi Menu `/task` (Click-to-Run)</button>
+              <button type="button" class="btn-mini-cli" onclick="testTelegramS3Notification()">📤 Gửi Thử Thông Báo S3 Plan</button>
+              <button type="button" class="btn-mini-cli" style="border-color:#22c55e;color:#4ade80;" onclick="simulateTelegramRemoteApprove()">⚡ Giả Lập Nhắn "APPROVE" Từ Telegram</button>
+            </div>
+          </div>
+          <div id="tg-test-status" style="font-size:10.5px;color:#fcd34d;margin:2px 0;"></div>
+          <div id="tg-recent-events-box" class="detected-runners-box" style="max-height:150px;overflow-y:auto;"></div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-cancel" onclick="closeTelegramSettingsModal()">Đóng</button>
+          <button type="submit" class="btn-submit">Lưu Cấu Hình Telegram</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+  <script src="/unified_doc_format.js"></script>
+</body>
+</html>

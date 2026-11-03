@@ -1,0 +1,51 @@
+[
+  {
+    "id": "A3-FIX-1",
+    "kind": "claim",
+    "claim": "HasColumnIndex now reads its cache from the per-agent field da.idxCol under da.idxColMu instead of a package-level global.",
+    "flow": "HasColumnIndex -> da.idxCol",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:49-54\n\tda.idxColMu.RLock()\n\tindexed, ok := da.idxCol[cacheKey]\n\tda.idxColMu.RUnlock()\n\tif ok {\n\t\treturn indexed\n\t}"
+  },
+  {
+    "id": "A3-FIX-2",
+    "kind": "claim",
+    "claim": "HasColumnIndex queries pg_indexes with a case-insensitive regex built by leadingIndexColumnPattern instead of a LIKE prefix pattern.",
+    "flow": "HasColumnIndex -> pg_indexes",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:64-65\n\tsql := `SELECT COUNT(*) FROM pg_indexes WHERE LOWER(schemaname) = LOWER(?) AND LOWER(tablename) = LOWER(?) AND indexdef ~* ?`\n\tif err := tx.Raw(sql, schema, table, leadingIndexColumnPattern(col)).Scan(&count).Error; err != nil {"
+  },
+  {
+    "id": "A3-FIX-3",
+    "kind": "claim",
+    "claim": "RunTotalOnlyB writes rawMasterTotal and rawMasterActive captured before verifySegmentBAtFreezeCutoff into the master row count metrics.",
+    "flow": "RunTotalOnlyB -> metrics",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:626-627\n\tmetrics.MasterTableRowCount.WithLabelValues(masterFQN).Set(float64(rawMasterTotal))\n\tmetrics.MasterActiveRowCount.WithLabelValues(masterFQN).Set(float64(rawMasterActive))"
+  },
+  {
+    "id": "A3-FIX-4",
+    "kind": "claim",
+    "claim": "ReconDestAgent struct declares idxColMu and idxCol fields next to colTypesMu and colTypes.",
+    "flow": "ReconDestAgent struct",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_dest_agent.go:26-29\n\tcolTypesMu    sync.RWMutex\n\tcolTypes      map[string]bool\n\tidxColMu      sync.RWMutex\n\tidxCol        map[string]bool"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "The metrics MasterActiveRowCount is set from rawMasterActive.",
+    "flow": "RunTotalOnlyB",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:626-627\n\tmetrics.MasterTableRowCount.WithLabelValues(masterFQN).Set(float64(rawMasterTotal))\n\tmetrics.MasterActiveRowCount.WithLabelValues(masterFQN).Set(float64(rawMasterActive))"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "The metrics MasterTableRowCount is set from shadowTotal.",
+    "flow": "RunTotalOnlyB",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:626-627\n\tmetrics.MasterTableRowCount.WithLabelValues(masterFQN).Set(float64(rawMasterTotal))\n\tmetrics.MasterActiveRowCount.WithLabelValues(masterFQN).Set(float64(rawMasterActive))"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "HasColumnIndex still uses LOWER(indexdef) LIKE with a prefix pattern.",
+    "flow": "HasColumnIndex",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:64-65\n\tsql := `SELECT COUNT(*) FROM pg_indexes WHERE LOWER(schemaname) = LOWER(?) AND LOWER(tablename) = LOWER(?) AND indexdef ~* ?`\n\tif err := tx.Raw(sql, schema, table, leadingIndexColumnPattern(col)).Scan(&count).Error; err != nil {"
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "C-REQ-01",
+    "kind": "target",
+    "claim": "Trong server.go dòng 1208-1213, hàm executeAllSubTasksWaveByWave chỉ được gọi khi len(subTasks) > 0 và action == \"approve_all\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1208-1213\n\t\tsubTasks := s.loadOrGenerateSubTasks(*qt)\n\t\tif len(subTasks) > 0 && action == \"approve_all\" {\n\t\t\tsubTasks = s.executeAllSubTasksWaveByWave(execCtx, *qt, subTasks, stepDelay)\n\t\t\t_ = s.saveTaskSubTasks(qt.ExternalID, subTasks)\n\t\t}\n\t\treturn s.runAutonomousS4S5WithSelfHealing(execCtx, qt.ExternalID, activeRunner, stepDelay)"
+  },
+  {
+    "id": "C-REALITY-01",
+    "kind": "target",
+    "claim": "Trong telegram_bridge.go dòng 3022-3030, biến hunk được khởi tạo bằng fmt.Sprintf chứa chuỗi Isolated Remediation Hunk for và Isolation Boundary: Synthesized inside .orchestrator/tasks/%s/diff.patch.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_bridge.go:3022-3030\n\t\t\thunk := fmt.Sprintf(\n\t\t\t\t\"diff --git a/%s b/%s\\n--- a/%s\\n+++ b/%s\\n@@ -1,5 +1,11 @@\\n%s // Isolated Remediation Hunk for %s (%s)\\n+// Sub-Task: %s — %s\\n+// Context: %s\\n+// Isolation Boundary: Synthesized inside .orchestrator/tasks/%s/diff.patch\\n\",\n\t\t\t\tdiffRelPath, diffRelPath, diffRelPath, diffRelPath,\n\t\t\t\trealLinePreview,\n\t\t\t\tqt.ExternalID, st.TargetRepoName,\n\t\t\t\tst.SubTaskID, st.Title,\n\t\t\t\tst.ContextFileLine,\n\t\t\t\tsafeParent,\n\t\t\t)"
+  },
+  {
+    "id": "C-CONTRA-01",
+    "kind": "target",
+    "claim": "Trong task_inspector.go dòng 1423-1428, nếu combinedPatch chứa chuỗi \" b/\"+cleanRel thì candidateOK được đặt bằng true và thêm vào verifiedEvidences với hậu tố (in diff.patch).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:1423-1428\n\t\tif strings.TrimSpace(combinedPatch) != \"\" && cleanRel != \"\" {\n\t\t\tif !strings.HasSuffix(rel, \"/\") {\n\t\t\t\tif strings.Contains(combinedPatch, \" b/\"+cleanRel) || strings.Contains(combinedPatch, \"\\n+++ b/\"+cleanRel) || strings.Contains(combinedPatch, \" a/\"+cleanRel) {\n\t\t\t\t\tcandidateOK = true\n\t\t\t\t\tverifiedEvidences = append(verifiedEvidences, fmt.Sprintf(\"%s:%s (in diff.patch)\", filepath.Base(repoDir), rel))\n\t\t\t\t}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "claim": "Trong server.go dòng 1208-1213 hoàn toàn không có lời gọi loadOrGenerateSubTasks và không bao giờ kiểm tra len(subTasks) > 0.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:1208-1213\n\t\tsubTasks := s.loadOrGenerateSubTasks(*qt)\n\t\tif len(subTasks) > 0 && action == \"approve_all\" {\n\t\t\tsubTasks = s.executeAllSubTasksWaveByWave(execCtx, *qt, subTasks, stepDelay)\n\t\t\t_ = s.saveTaskSubTasks(qt.ExternalID, subTasks)\n\t\t}\n\t\treturn s.runAutonomousS4S5WithSelfHealing(execCtx, qt.ExternalID, activeRunner, stepDelay)"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "claim": "Trong subtask_git_apply.go dòng 177-181, hàm tryGitApplySectionToRepo luôn trả về true khi trimmed chứa chuỗi Isolated Remediation Hunk for.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/subtask_git_apply.go:177-181\nfunc tryGitApplySectionToRepo(ctx context.Context, repoDir, diffSection string) bool {\n\ttrimmed := stripTrailingMultiRepoSeparators(strings.TrimSpace(diffSection))\n\tif !strings.HasPrefix(trimmed, \"diff --git \") || strings.Contains(trimmed, \"Isolated Remediation Hunk for \") {\n\t\treturn false\n\t}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "claim": "Trong subtask_git_apply.go dòng 177-181, hàm tryGitApplySectionToRepo trả về false nếu trimmed không bắt đầu bằng diff --git hoặc chứa chuỗi Isolated Remediation Hunk for.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/subtask_git_apply.go:177-181\nfunc tryGitApplySectionToRepo(ctx context.Context, repoDir, diffSection string) bool {\n\ttrimmed := stripTrailingMultiRepoSeparators(strings.TrimSpace(diffSection))\n\tif !strings.HasPrefix(trimmed, \"diff --git \") || strings.Contains(trimmed, \"Isolated Remediation Hunk for \") {\n\t\treturn false\n\t}"
+  }
+]

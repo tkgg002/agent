@@ -1,0 +1,78 @@
+[
+  {
+    "id": "C-REALITY-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "S2.5 Reality Check: cdc-docker-dev Compose Location & cdc-bridge Network",
+    "claim": "File docker-compose.yml của nhóm cdc-docker-dev nằm tại /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/docker-compose.yml và sử dụng mạng ngoài cdc-bridge cho các container gpay-*.",
+    "evidence": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/docker-compose.yml:77-96\n  # 3b. Postgres MASTER-2 (secondary destination / master-2).\n  postgres-master-2:\n    image: postgres:15-alpine\n    container_name: gpay-postgres-master-2",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/docker-compose.yml:77-96",
+    "must_contain": [
+      "postgres-master-2:",
+      "container_name: gpay-postgres-master-2"
+    ]
+  },
+  {
+    "id": "C-REQ-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "S2.5 Pre-Plan Critique: ClickHouse Master DSN & Default Port 9000",
+    "claim": "Tầng kết nối Master ClickHouse trong centralized-data-service sử dụng giao thức clickhouse:// qua cổng mặc định 9000.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager_sql_masters.go:110-118\nfunc buildClickHouseMasterDSNFromFields(userInfo, host string, port int, db string) string {\n\tif db == \"\" || host == \"\" {\n\t\treturn \"\"\n\t}\n\tif port <= 0 {\n\t\tport = 9000\n\t}\n\treturn fmt.Sprintf(\"clickhouse://%s%s:%d/%s?dial_timeout=5s&read_timeout=30s\", userInfo, host, port, db)\n}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager_sql_masters.go:110-118",
+    "must_contain": [
+      "func buildClickHouseMasterDSNFromFields(userInfo, host string, port int, db string) string {",
+      "port = 9000"
+    ]
+  },
+  {
+    "id": "C-CONTRA-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "S2.5 Reality Check: Local Cached ClickHouse Image 25.5.6 & Port Availability",
+    "claim": "Máy local đã có sẵn image clickhouse/clickhouse-server:25.5.6 và cấu hình healthcheck chuẩn qua cổng 8123/ping.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/signoz/deploy/docker/docker-compose.yaml:10-30\nx-clickhouse-defaults: &clickhouse-defaults\n  !!merge <<: *common\n  image: clickhouse/clickhouse-server:25.5.6",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/signoz/deploy/docker/docker-compose.yaml:10-30",
+    "must_contain": [
+      "image: clickhouse/clickhouse-server:25.5.6",
+      "0.0.0.0:8123/ping"
+    ]
+  },
+  {
+    "id": "K1",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "DG0 Control True",
+    "claim": "Hàm defaultMasterPortForEngine trong cdc-cms-service trả về cổng mặc định 9000 cho engine clickhouse.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections_probe_sql.go:17-28\nfunc defaultMasterPortForEngine(engineType string) int {\n\tswitch normalizeMasterEngineType(engineType) {\n\tcase \"mongodb\":\n\t\treturn 27017\n\tcase \"mysql\":\n\t\treturn 3306\n\tcase \"clickhouse\":\n\t\treturn 9000",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections_probe_sql.go:17-28",
+    "must_contain": [
+      "case \"clickhouse\":",
+      "return 9000"
+    ]
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG0 Control False 1",
+    "claim": "Hàm defaultMasterPortForEngine trong cdc-cms-service trả về cổng 5432 cho clickhouse.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections_probe_sql.go:17-28\n\tcase \"clickhouse\":\n\t\treturn 9000",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections_probe_sql.go:17-28",
+    "must_contain": [
+      "NONEXISTENT_CLICKHOUSE_PORT_TOKEN_999"
+    ]
+  },
+  {
+    "id": "K3",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG0 Control False 2",
+    "claim": "File docker-compose.yml của cdc-docker-dev đã khai báo sẵn gpay-clickhouse.",
+    "evidence": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/docker-compose.yml:115-133\n  mysql:\n    image: mysql:8.0\n    container_name: gpay-mysql",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work-backup/cdc-system/cdc-docker-dev/docker-compose.yml:115-133",
+    "must_contain": [
+      "NONEXISTENT_GPAY_CLICKHOUSE_TOKEN_888"
+    ]
+  }
+]

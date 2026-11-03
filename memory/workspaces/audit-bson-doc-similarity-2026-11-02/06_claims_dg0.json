@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "claim",
+    "claim": "Hàm CoerceToBSONValue chuyển cột kiểu NUMERIC hoặc DECIMAL sang primitive.Decimal128 thông qua coerceDecimal128(val).",
+    "flow": "CoerceRecordToBSONDoc -> CoerceToBSONValue -> coerceDecimal128",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_type_converter.go:42-46\n\t// 3. NUMERIC / DECIMAL / DECIMAL128 -> primitive.Decimal128\n\tif strings.HasPrefix(dt, \"NUMERIC\") || strings.HasPrefix(dt, \"DECIMAL\") || dt == \"MONEY\" || sf == \"DECIMAL128\" {\n\t\treturn coerceDecimal128(val)\n\t}"
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "claim",
+    "claim": "Khi không có metadata kiểu cho trường value trong typeMap, ApplySourceFieldTypesToBSONDoc gọi coerceDefaultInt32IfInRange(rawVal) để thu hẹp số nguyên trong dải int32.",
+    "flow": "ApplySourceFieldTypesToBSONDoc -> coerceDefaultInt32IfInRange",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:165-169\n\tif rawVal, hasVal := doc[\"value\"]; hasVal && rawVal != nil && !hasTypeMeta(typeMap, \"value\") {\n\t\tif v32, ok := coerceDefaultInt32IfInRange(rawVal); ok {\n\t\t\tdoc[\"value\"] = v32\n\t\t}\n\t}"
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "claim",
+    "claim": "Hàm coerceDefaultInt32IfInRange hiện tại chỉ xử lý int32, int, int64 và json.Number mà chưa có nhánh cho primitive.Decimal128 nên trả về false khi rawVal đã được coerce sang Decimal128.",
+    "flow": "ApplySourceFieldTypesToBSONDoc -> coerceDefaultInt32IfInRange",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_extjson_unwrapper.go:318-336\nfunc coerceDefaultInt32IfInRange(val any) (any, bool) {\n\tswitch v := val.(type) {\n\tcase int32:\n\t\treturn v, true\n\tcase int:\n\t\tif v >= math.MinInt32 && v <= math.MaxInt32 {\n\t\t\treturn int32(v), true\n\t\t}\n\tcase int64:\n\t\tif v >= math.MinInt32 && v <= math.MaxInt32 {\n\t\t\treturn int32(v), true\n\t\t}\n\tcase json.Number:\n\t\tif i, err := v.Int64(); err == nil && i >= math.MinInt32 && i <= math.MaxInt32 {\n\t\t\treturn int32(i), true\n\t\t}\n\t}\n\treturn val, false\n}"
+  },
+  {
+    "id": "CTRL-T1",
+    "kind": "control_true",
+    "claim": "Hàm CoerceRecordToBSONDoc gọi ApplySourceFieldTypesToBSONDoc(doc) ở dòng 100 sau khi duyệt qua toàn bộ các phần tử trong rec.",
+    "flow": "CoerceRecordToBSONDoc -> ApplySourceFieldTypesToBSONDoc",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_type_converter.go:98-102\n\t\tdoc[k] = coerced\n\t}\n\tApplySourceFieldTypesToBSONDoc(doc)\n\treturn doc, nil\n}"
+  },
+  {
+    "id": "CTRL-F1",
+    "kind": "control_false",
+    "claim": "Hàm CoerceRecordToBSONDoc không bao giờ gọi ApplySourceFieldTypesToBSONDoc(doc) và luôn trả về nil.",
+    "flow": "CoerceRecordToBSONDoc",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_type_converter.go:98-102\n\t\tdoc[k] = coerced\n\t}\n\tApplySourceFieldTypesToBSONDoc(doc)\n\treturn doc, nil\n}"
+  },
+  {
+    "id": "CTRL-F2",
+    "kind": "control_false",
+    "claim": "Hàm ApplySourceFieldTypesToBSONDoc xóa vĩnh viễn trường _id ra khỏi document BSON.",
+    "flow": "ApplySourceFieldTypesToBSONDoc",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:59-65\n\tif existingID, ok := doc[\"_id\"]; ok && existingID != nil {\n\t\tif oid, err := coerceObjectID(existingID); err == nil && !oid.IsZero() {\n\t\t\tdoc[\"_id\"] = oid\n\t\t} else if idStr, isStr := existingID.(string); isStr && strings.TrimSpace(idStr) != \"\" {\n\t\t\tdoc[\"_id\"] = strings.TrimSpace(idStr)\n\t\t}\n\t}"
+  }
+]

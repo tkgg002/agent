@@ -1,0 +1,220 @@
+{
+  "mode": "claim",
+  "stage": "dg1",
+  "workspace": "master-mysql-clickhouse-2026-10-30",
+  "ts": "20261030T162736",
+  "trusted_rounds": [
+    "r2"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/master-mysql-clickhouse-2026-10-30/06_laya_raw_dg1_20261030T162736.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "ConnectionManager.GetMasterDB opens the master connection by calling m.reg.OpenGorm(dsn, 'master:'+key).",
+      "decision": "FLAG",
+      "resolved": "Verified directly in connection_manager.go: GetMasterDB calls m.reg.OpenGorm(dsn, 'master:'+key). REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:399-406",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3173
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1382
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.9264
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "MasterDDLGenerator.Apply checks if the binding is MongoDB and calls applyMongoCollectionAndIndexes, otherwise calls GetMasterDB.",
+      "decision": "FLAG",
+      "resolved": "Verified directly in master_ddl_generator.go: Apply branches on MongoDB to applyMongoCollectionAndIndexes, otherwise calls GetMasterDB. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator.go:352-357",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3635
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2934
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8085
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "TransmuterModule.bulkUpsertMaster checks binding.IsMongoDestination(ctx, t.connMgr) and delegates to t.bulkUpsertMongoMaster.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.8324
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6795
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8281
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "NewIndexManagerWithConn initializes the drivers map and registers newPostgresIndexDriver and newMongoIndexDriver.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.545
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6638
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8889
+        }
+      }
+    },
+    {
+      "id": "S-RECON-TX",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "ReconDestAgent.readOnlyDB starts a transaction with da.replica.WithContext(ctx).Begin() and executes SET TRANSACTION READ ONLY.",
+      "decision": "FLAG",
+      "resolved": "Verified directly in recon_dest_agent.go: readOnlyDB calls da.replica.WithContext(ctx).Begin() and tx.Exec('SET TRANSACTION READ ONLY'). REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_dest_agent.go:121-125",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6747
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.339
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8938
+        }
+      }
+    },
+    {
+      "id": "S-CMS-DB-SCOPE",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In create_master.go, when isMongoConn is true, Handle sets masterSchema = mongoDB and masterDatabase = &mongoDB from the connection's default_database.",
+      "decision": "FLAG",
+      "resolved": "Verified directly in create_master.go: when isMongoConn is true, Handle sets masterSchema = mongoDB and masterDatabase = &mongoDB. REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/create_master.go:176-191",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4244
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3422
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8883
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "ResolveGormDialector returns mysql.Open(cleanDSN) when engineType is 'mysql' or 'mariadb', clickhouse.Open(trimmedDSN) when engineType is 'clickhouse' or 'ch', and postgres.Open(trimmedDSN) as default.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3712
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6515
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.9276
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "FilterClickHouseOCCRecords skips records where prevTs > incomingTs + clickhouseOCCClockSkewToleranceMs when isFullSync is false and increments occSkipped.",
+      "decision": "FLAG",
+      "resolved": "Verified directly in 09_tasks_solution_master_mysql_clickhouse.md: FilterClickHouseOCCRecords checks !isFullSync && prevTs > incomingTs+clickhouseOCCClockSkewToleranceMs and increments occSkipped. REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/master-mysql-clickhouse-2026-10-30/09_tasks_solution_master_mysql_clickhouse.md:613-651",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4724
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.2365
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6849
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "defaultMasterPortForEngine returns 27017 for 'mongodb', 3306 for 'mysql', 9000 for 'clickhouse', and 5432 as default.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5828
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6836
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.9475
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

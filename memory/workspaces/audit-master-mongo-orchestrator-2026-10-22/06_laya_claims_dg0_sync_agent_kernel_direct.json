@@ -1,0 +1,79 @@
+[
+  {
+    "id": "C-REQ-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "S2.5 Pre-Plan Critique: gate.go currently hardcodes mockPollutionRe and denyCmdRe in Go instead of calling agy_guard.py",
+    "claim": "Trong internal/agentgate/gate.go dòng 22-30, Gatekeeper đang tự định nghĩa biểu thức chính quy mockPollutionRe (vẫn chứa tên hàm dự án con lookupMasterTargetsFn, runEventsFn) và denyCmdRe bằng Go thay vì gọi trực tiếp hooks/agy/agy_guard.py.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/gate.go:22-30\nvar (\n\t// Constructed via concatenation so this source file does not self-trigger pre-write regexes.\n\tmockPollutionRe = regexp.MustCompile(\n\t\t`(\\b[A-Za-z0-9_]+` + `Fn` + `\\s+func\\s*\\(|\\blookupMasterTargets` + `Fn\\b|\\brunEvents` + `Fn\\b|\\bsql` + `mock\\b|\\bfake` + `model\\b)`,\n\t)\n\tdenyCmdRe = regexp.MustCompile(\n\t\t`(?i)(\\bgit\\s+push\\b|\\bgit\\s+reset\\s+--hard\\b|\\bgit\\s+clean\\s+-[a-z]*f|\\brm\\s+-rf\\s+/(?:\\s|$))`,\n\t)\n)",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/gate.go:22-30",
+    "must_contain": [
+      "mockPollutionRe",
+      "denyCmdRe"
+    ]
+  },
+  {
+    "id": "C-REALITY-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "S2.5 Reality Check: agy_guard.py provides CLI entrypoint pre-write / pre-command with H2b, H3, H4t-Code, H4b, H5",
+    "claim": "File hooks/agy/agy_guard.py dòng 51-71 đã định nghĩa PROD_MOCK_POLLUTION, FAKE_REAL_TEST_RE và bộ hằng số H2b Global Lesson Hygiene Guard (LESSON_H3_RE, LESSON_REQUIRED_BULLETS, LESSON_LOCAL_PATH_RE, LESSON_MAX_LINES = 12).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:51-71\n# L02 & L14: Agnostic Anti-Mock-Pollution (không chứa tên biến riêng của dự án con)\nPROD_MOCK_POLLUTION = re.compile(\n    r\"(\\b\\w+Fn\\s+func\\s*\\(|\\bsqlmock\\b|\\bfakemodel\\b|\\bfake\\w+Repo\\b)\",\n)\nFAKE_REAL_TEST_RE = re.compile(\n    r\"func\\s+Test\\w*(RealPostgres|RealDB|RealNATS|RealMongo)\\w*[\\s\\S]{0,1500}(sqlmock\\.New|sqlite\\.Open\\(\\\"file::memory:|httptest\\.NewServer)\",\n)\n\n# H2b: Global Lesson Hygiene Guard constants (bảo vệ cấu trúc lessons.md ngay tại pre-write)\nLESSON_H3_RE = re.compile(r\"^###\\s+\\[(\\d{4}-\\d{2}-\\d{2})\\]\\s+(.+)$\")\nLESSON_PAREN_EN_RE = re.compile(r\"\\(([^()]{10,})\\)\\s*$\")\nLESSON_REQUIRED_BULLETS = (\n    \"- **Global Pattern:**\",\n    \"- **Bối cảnh (Trigger):**\",\n    \"- **Root Cause:**\",\n    \"- **Fix/Correct Flow:**\",\n    \"- **Tags:**\",\n)\nLESSON_LOCAL_PATH_RE = re.compile(r\"/Users/\\w+/Documents/work/\", re.I)\nLESSON_MAX_LINES = 12",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:51-71",
+    "must_contain": [
+      "PROD_MOCK_POLLUTION",
+      "FAKE_REAL_TEST_RE",
+      "LESSON_MAX_LINES = 12"
+    ]
+  },
+  {
+    "id": "C-CONTRA-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "S2.5 Contradiction Check: kernel_bridge.go TripwireEntry and MatchTripwires mismatch real tripwires.json schema",
+    "claim": "Trong internal/agentgate/kernel_bridge.go dòng 248-264, hàm MatchTripwires đang unmarshal tripwires.json vào struct có trường Tripwires []TripwireEntry thay vì mảng JSON cấp cao nhất do build_lessons_index.py sinh ra.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:248-264\n// MatchTripwires reads /agent/memory/global/lessons/tripwires.json and returns all tripwires matching prompt (G-08).\nfunc (g *Gatekeeper) MatchTripwires(prompt string) []TripwireEntry {\n\tif g == nil || g.AgentCoreDir == \"\" || strings.TrimSpace(prompt) == \"\" {\n\t\treturn nil\n\t}\n\ttwPath := filepath.Join(g.AgentCoreDir, \"memory\", \"global\", \"lessons\", \"tripwires.json\")\n\traw, err := os.ReadFile(twPath)\n\tif err != nil {\n\t\treturn nil\n\t}\n\tvar payload struct {\n\t\tTripwires []TripwireEntry `json:\"tripwires\"`\n\t}\n\tif err := json.Unmarshal(raw, &payload); err != nil {\n\t\treturn nil\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:248-264",
+    "must_contain": [
+      "MatchTripwires",
+      "Tripwires []TripwireEntry"
+    ]
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG0 Control False 1",
+    "claim": "Hàm MatchTripwires trong kernel_bridge.go đang kết nối tới cơ sở dữ liệu Oracle 19c qua cổng 1521 để tải tripwires.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:248-264\nfunc (g *Gatekeeper) MatchTripwires(prompt string) []TripwireEntry {\n\ttwPath := filepath.Join(g.AgentCoreDir, \"memory\", \"global\", \"lessons\", \"tripwires.json\")\n\traw, err := os.ReadFile(twPath)",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/agentgate/kernel_bridge.go:248-264",
+    "must_contain": [
+      "ORACLE_19C_PORT_1521_NONEXISTENT_TOKEN"
+    ]
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG0 Control False 2",
+    "claim": "File agy_guard.py cho phép một bài học trong lessons.md dài tối đa 9999 dòng và chứa đường dẫn /Users/ cục bộ.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:69-71\nLESSON_LOCAL_PATH_RE = re.compile(r\"/Users/\\w+/Documents/work/\", re.I)\nLESSON_MAX_LINES = 12",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:69-71",
+    "must_contain": [
+      "LESSON_MAX_LINES_9999_NONEXISTENT_TOKEN"
+    ]
+  },
+  {
+    "id": "K3",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "DG0 Control True",
+    "claim": "Hằng số LESSON_MAX_LINES trong hooks/agy/agy_guard.py được đặt bằng 12 và LESSON_LOCAL_PATH_RE chặn đường dẫn /Users/.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:69-71\nLESSON_LOCAL_PATH_RE = re.compile(r\"/Users/\\w+/Documents/work/\", re.I)\nLESSON_MAX_LINES = 12",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:69-71",
+    "must_contain": [
+      "LESSON_LOCAL_PATH_RE",
+      "LESSON_MAX_LINES = 12"
+    ]
+  }
+]

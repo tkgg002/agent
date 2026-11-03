@@ -1,0 +1,51 @@
+[
+  {
+    "id": "A-MUTEX",
+    "kind": "target",
+    "basis": "code",
+    "claim": "loadTelegramPersistedConfig and updateTelegramPersistedConfig in internal/webui/telegram_config_persistence.go lock and unlock telegramCfgMu.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_config_persistence.go:83-87\nfunc (s *Server) loadTelegramPersistedConfig() telegramPersistedConfig {\n\ttelegramCfgMu.Lock()\n\tdefer telegramCfgMu.Unlock()\n\treturn s.loadTelegramPersistedConfigLocked()\n}"
+  },
+  {
+    "id": "A-ATOMIC",
+    "kind": "target",
+    "basis": "code",
+    "claim": "saveTelegramPersistedConfigLocked in internal/webui/telegram_config_persistence.go writes marshaled JSON to tmp and calls os.Rename(tmp, p).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_config_persistence.go:184-193\n\traw, err := json.MarshalIndent(cfg, \"\", \"  \")\n\tif err != nil {\n\t\treturn err\n\t}\n\ttmp := fmt.Sprintf(\"%s.tmp.%d\", p, time.Now().UnixNano())\n\tif err := os.WriteFile(tmp, raw, 0o600); err != nil {\n\t\treturn err\n\t}\n\treturn os.Rename(tmp, p)\n}"
+  },
+  {
+    "id": "A-GUARD",
+    "kind": "target",
+    "basis": "code",
+    "claim": "saveTelegramPersistedConfigLocked in internal/webui/telegram_config_persistence.go preserves existing.BotTokenEncrypted or bak.BotTokenEncrypted when cfg.BotTokenEncrypted is empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_config_persistence.go:149-155\n\tif strings.TrimSpace(cfg.BotTokenEncrypted) == \"\" {\n\t\tif strings.TrimSpace(existing.BotTokenEncrypted) != \"\" {\n\t\t\tcfg.BotTokenEncrypted = existing.BotTokenEncrypted\n\t\t} else if bak.BotTokenEncrypted != \"\" {\n\t\t\tcfg.BotTokenEncrypted = bak.BotTokenEncrypted\n\t\t}\n\t}"
+  },
+  {
+    "id": "A-SYNC",
+    "kind": "target",
+    "basis": "code",
+    "claim": "ensureActiveTaskTelegramTopicAndSync in internal/webui/telegram_webui_sync.go calls ensureTelegramApprovePoller and notifyTelegramNewTaskIntakeAndTopic when qt.Stage is StageNeedsYou, StagePlanning, or StageRunning.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_webui_sync.go:11-27\nfunc (s *Server) ensureActiveTaskTelegramTopicAndSync(ctx context.Context, qt queue.QueuedTask, meta TaskIsolationDTO, subTasks []SubTaskDTO) {\n\tif s.isTestTaskOrTempRoot(qt.ExternalID) {\n\t\treturn\n\t}\n\ts.ensureTelegramApprovePoller()\n\ttgCfg := s.loadTelegramPersistedConfig()\n\tif !tgCfg.Enabled || strings.TrimSpace(tgCfg.BotTokenEncrypted) == \"\" || strings.TrimSpace(tgCfg.ChatID) == \"\" {\n\t\treturn\n\t}\n\tif tgCfg.TaskThreadIDs == nil || tgCfg.TaskThreadIDs[qt.ExternalID] <= 0 {\n\t\tif qt.Stage == queue.StageNeedsYou || qt.Stage == queue.StagePlanning || qt.Stage == queue.StageRunning {\n\t\t\t_ = s.notifyTelegramNewTaskIntakeAndTopic(ctx, qt, meta, subTasks)\n\t\t} else {\n\t\t\t_ = s.ensureTelegramTaskTopic(ctx, tgCfg, qt, false)\n\t\t}\n\t}\n}"
+  },
+  {
+    "id": "K1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "telegramSettingsPath in internal/webui/telegram_config_persistence.go joins root, .orchestrator, and telegram_settings.json.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_config_persistence.go:31-37\nfunc (s *Server) telegramSettingsPath() string {\n\troot := s.Root\n\tif strings.TrimSpace(root) == \"\" {\n\t\troot = \".\"\n\t}\n\treturn filepath.Join(root, \".orchestrator\", \"telegram_settings.json\")\n}"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "telegramSettingsPath in internal/webui/telegram_config_persistence.go returns /etc/hosts.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_config_persistence.go:31-37\nfunc (s *Server) telegramSettingsPath() string {\n\troot := s.Root\n\tif strings.TrimSpace(root) == \"\" {\n\t\troot = \".\"\n\t}\n\treturn filepath.Join(root, \".orchestrator\", \"telegram_settings.json\")\n}"
+  },
+  {
+    "id": "K3",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "telegramAPIBaseURL in internal/webui/telegram_config_persistence.go defaults to http://localhost:9999.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/telegram_config_persistence.go:24-29\nfunc telegramAPIBaseURL() string {\n\tif custom := strings.TrimSpace(os.Getenv(\"ORCH_TELEGRAM_API_BASE_URL\")); custom != \"\" {\n\t\treturn strings.TrimRight(custom, \"/\")\n\t}\n\treturn \"https://api.telegram.org\"\n}"
+  }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ-1",
+    "kind": "claim",
+    "claim": "ResolveEventDateHCM in cdc_event_date.go unconditionally formats any positive tsMs (SourceTsMs) into YYYY-MM-DD in GMT+7 without checking whether the event is within a midnight flush grace window relative to fallback.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/model/shadow/cdc_event_date.go:9-17\nfunc ResolveEventDateHCM(tsMs int64, fallback time.Time) string {\n\tif tsMs > 0 {\n\t\treturn time.UnixMilli(tsMs).In(locHCM).Format(\"2006-01-02\")\n\t}\n\tif fallback.IsZero() {\n\t\tfallback = time.Now()\n\t}\n\treturn fallback.In(locHCM).Format(\"2006-01-02\")\n}",
+    "flow": "BatchBuffer.flush and TransmuteHandler call ResolveEventDateHCM(r.SourceTsMs, time.Now()) and store event_date in cdc_activity_log.details."
+  },
+  {
+    "id": "C-REALITY-1",
+    "kind": "claim",
+    "claim": "In activity_log_read_repo_gorm.go, GetDailyFlow filters cdc_activity_log by created_at in act_filtered and groups act_daily by COALESCE(NULLIF(e.details->>'event_date', ''), TO_CHAR(e.started_at ...)), then LEFT JOINs act_daily against dates.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:406-428\n\tact_filtered AS (\n\t\tSELECT al.*\n\t\tFROM cdc_activity_log al\n\t\tWHERE al.created_at >= NOW() - ((? + 1) * INTERVAL '1 day')\n\t),\n\tact_daily AS (\n\t\tSELECT\n\t\t\tCOALESCE(NULLIF(e.details->>'event_date', ''), TO_CHAR(e.started_at AT TIME ZONE 'UTC' + (? * INTERVAL '1 minute'), 'YYYY-MM-DD')) AS day_str,",
+    "flow": "GetDailyFlow queries cdc_activity_log for the last N+1 days by created_at, buckets rows into day_str using details->>'event_date' first, and joins against the dates series."
+  },
+  {
+    "id": "C-CONTRA-1",
+    "kind": "claim",
+    "claim": "In kafka_consumer.go, op, afterRaw, and beforeRaw are unwrapped with unwrapAvroUnion, whereas sourceRaw is assigned event[\"source\"] directly without unwrapAvroUnion.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/kafka_consumer.go:583-586\n\top := unwrapAvroUnion(event[\"op\"])\n\tafterRaw := unwrapAvroUnion(event[\"after\"])\n\tbeforeRaw := unwrapAvroUnion(event[\"before\"])\n\tsourceRaw := event[\"source\"]",
+    "flow": "KafkaConsumer.processMessage decodes the Debezium event map and extracts op, after, before, and source fields."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In ReconPipelineGrid.tsx Summary.Row, index 13 renders totals.masterUpdated and index 14 renders totals.masterSkipped, omitting a cell for totals.masterDeleted.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:1455-1458\n                <Table.Summary.Cell index={12} align=\"right\">{pipeline?.masterName ? <span style={{ color: '#52c41a' }}>{fmtNum(totals.masterInserted)}</span> : <Text type=\"secondary\">—</Text>}</Table.Summary.Cell>\n                <Table.Summary.Cell index={13} align=\"right\">{pipeline?.masterName ? <span style={{ color: '#faad14' }}>{fmtNum(totals.masterUpdated)}</span> : <Text type=\"secondary\">—</Text>}</Table.Summary.Cell>\n                <Table.Summary.Cell index={14} align=\"right\">{pipeline?.masterName ? <Text type=\"secondary\">{fmtNum(totals.masterSkipped)}</Text> : <Text type=\"secondary\">—</Text>}</Table.Summary.Cell>",
+    "flow": "ReconPipelineGrid renders the footer summary cells for the 18-column daily reconciliation table."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "ResolveEventDateHCM in cdc_event_date.go always ignores tsMs and formats only time.Now() in UTC.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/model/shadow/cdc_event_date.go:9-17\nfunc ResolveEventDateHCM(tsMs int64, fallback time.Time) string {\n\tif tsMs > 0 {\n\t\treturn time.UnixMilli(tsMs).In(locHCM).Format(\"2006-01-02\")\n\t}\n\tif fallback.IsZero() {\n\t\tfallback = time.Now()\n\t}\n\treturn fallback.In(locHCM).Format(\"2006-01-02\")\n}",
+    "flow": "ResolveEventDateHCM converts tsMs to YYYY-MM-DD in GMT+7 when tsMs > 0."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In kafka_consumer.go, event[\"op\"] and event[\"after\"] are never passed to unwrapAvroUnion, while event[\"source\"] is always passed to unwrapAvroUnion.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/kafka_consumer.go:583-586\n\top := unwrapAvroUnion(event[\"op\"])\n\tafterRaw := unwrapAvroUnion(event[\"after\"])\n\tbeforeRaw := unwrapAvroUnion(event[\"before\"])\n\tsourceRaw := event[\"source\"]",
+    "flow": "KafkaConsumer.processMessage unwraps op, after, and before."
+  }
+]

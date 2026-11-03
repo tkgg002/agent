@@ -1,0 +1,58 @@
+[
+  {
+    "id": "A4-FIX-1",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In recon_window_index_probe.go, CountRowsBeforeCutoff starts span pg.count_rows with attributes db.table, db.pk_column, time.to, and recon.cutoff_ms, and queries raw_total and post_cutoff WHERE _source_ts >= ?.",
+    "flow": "scanExact -> CountRowsBeforeCutoff -> pg.count_rows",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:209-236\n\tctx, span := observability.ChildSpan(ctx, \"pg.count_rows\",\n\t\tattribute.String(\"db.table\", tableName),\n\t\tattribute.String(\"db.pk_column\", pkColumn),\n\t\tattribute.String(\"time.to\", cutoffHi.UTC().Format(time.RFC3339)),\n\t\tattribute.Int64(\"recon.cutoff_ms\", cutoffMs),\n\t)\n\t\t\tsql := fmt.Sprintf(\n\t\t\t\t`SELECT (SELECT COUNT(%s) FROM %s) AS raw_total, (SELECT COUNT(*) FROM %s WHERE \"_source_ts\" >= ?) AS post_cutoff`,\n\t\t\t\tquoteIdent(pkColumn), rel, rel,\n\t\t\t)"
+  },
+  {
+    "id": "A4-FIX-2",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In recon_window_index_probe.go, CountDeletedRowsBeforeCutoff starts span pg.count_deleted_rows with attributes db.table, time.to, and recon.cutoff_ms, and queries SELECT COUNT(*) FROM table WHERE _deleted = true AND _source_ts < ?.",
+    "flow": "scanExact -> CountDeletedRowsBeforeCutoff -> pg.count_deleted_rows",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:289-306\n\tctx, span := observability.ChildSpan(ctx, \"pg.count_deleted_rows\",\n\t\tattribute.String(\"db.table\", tableName),\n\t\tattribute.String(\"time.to\", cutoffHi.UTC().Format(time.RFC3339)),\n\t\tattribute.Int64(\"recon.cutoff_ms\", cutoffMs),\n\t)\n\tsql := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE \"_deleted\" = true AND \"_source_ts\" < ?`, quoteRelation(tableName))"
+  },
+  {
+    "id": "A4-FIX-3",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In recon_smoke.go, scanExact accepts cutoffHi time.Time, sets attribute time.to on prefetch.<kind>, and calls CountRowsBeforeCutoff and CountDeletedRowsBeforeCutoff.",
+    "flow": "CheckAllUnified -> scanExact -> CountRowsBeforeCutoff / CountDeletedRowsBeforeCutoff",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:118-137\nfunc (rc *ReconCore) scanExact(ctx context.Context, agent *ReconDestAgent, relation, kind string, cutoffHi time.Time) (total, active int64, err error) {\n\t\tattribute.String(\"time.to\", cutoffHi.UTC().Format(time.RFC3339)),\n\ttotal, err = agent.CountRowsBeforeCutoff(traceCtx, relation, \"_gpay_id\", cutoffHi)\n\tif del, errD := agent.CountDeletedRowsBeforeCutoff(traceCtx, relation, cutoffHi); errD == nil {"
+  },
+  {
+    "id": "A4-FIX-4",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In recon_smoke.go, RunTotalOnlyA sets attribute time.to on mongoSpan and calls rc.adjustSourceCountAtFreezeCutoff(fastCtx, entry, srcEst, hi).",
+    "flow": "RunTotalOnlyA -> adjustSourceCountAtFreezeCutoff",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:270-288\n\tmongoCtx, mongoSpan := observability.ChildSpan(fastCtx, spanName,\n\t\tattribute.String(\"db.system\", dbSystem),\n\t\tattribute.String(\"db.name\", entry.SourceDB),\n\t\tattribute.String(\"db.collection\", entry.SourceTable),\n\t\tattribute.String(\"time.to\", hi.UTC().Format(time.RFC3339)),\n\t)\n\tif mongoErr == nil {\n\t\tmongoSpan.SetAttributes(attribute.Int64(\"db.row_count.raw\", srcEst))\n\t\tsrcEst = rc.adjustSourceCountAtFreezeCutoff(fastCtx, entry, srcEst, hi)\n\t\tmongoSpan.SetAttributes(attribute.Int64(\"db.row_count\", srcEst))\n\t}"
+  },
+  {
+    "id": "CTRL-TRUE-A4-1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "In recon_smoke.go, CheckAllUnified computes cutoffHi := start.Add(-rc.cfg.WindowFreezeMargin) and passes cutoffHi to rc.scanExact.",
+    "flow": "CheckAllUnified Step 3 -> scanExact",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:852-869\n\tcutoffHi := start.Add(-rc.cfg.WindowFreezeMargin)\n\t\t\tt.Total, t.Active, t.Err = rc.scanExact(tCtx, t.Agent, t.Relation, t.Kind, cutoffHi)"
+  },
+  {
+    "id": "CTRL-FALSE-A4-1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In recon_window_index_probe.go, CountRowsBeforeCutoff executes TRUNCATE TABLE on the PostgreSQL shadow table.",
+    "flow": "CountRowsBeforeCutoff -> readOnlyDB",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:232-238\n\t\t\ttx := da.readOnlyDB(ctx)\n\t\t\tsql := fmt.Sprintf(\n\t\t\t\t`SELECT (SELECT COUNT(%s) FROM %s) AS raw_total, (SELECT COUNT(*) FROM %s WHERE \"_source_ts\" >= ?) AS post_cutoff`,\n\t\t\t\tquoteIdent(pkColumn), rel, rel,\n\t\t\t)"
+  },
+  {
+    "id": "CTRL-FALSE-A4-2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In recon_smoke.go, scanExact ignores cutoffHi and hardcodes total = 0 and active = 0 without querying the database.",
+    "flow": "scanExact -> CountRowsBeforeCutoff",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:132-141\n\ttotal, err = agent.CountRowsBeforeCutoff(traceCtx, relation, \"_gpay_id\", cutoffHi)\n\tif err != nil {\n\t\treturn 0, 0, err\n\t}"
+  }
+]

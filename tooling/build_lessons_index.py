@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Build 2-tier Lessons Index (INDEX.md + topics/*.md) from memory/global/lessons.md.
+"""Build 2-tier Lessons Index (INDEX.md + topics/*.md + tripwires.json) from memory/global/lessons.md.
 
 Guarantees:
 1. READ-ONLY on memory/global/lessons.md (never modifies or truncates lessons.md).
 2. 100% entry conservation: count(INDEX entries) == sum(topic entries) == count(lessons.md entries).
 3. INDEX.md size strictly < 15,000 bytes so S0 Boot fits comfortably in context budget.
+4. Global Hygiene Guard: Enforces 5-bullet schema, max line budget per entry, English summary in parens,
+   and blocks local path/task leakage when Agent appends new lessons.
 """
 from __future__ import annotations
 
@@ -20,6 +22,7 @@ AGENT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = AGENT_ROOT / "memory" / "global" / "lessons.md"
 DEFAULT_OUT_DIR = AGENT_ROOT / "memory" / "global" / "lessons"
 MAX_INDEX_BYTES = 15000
+MAX_ENTRY_LINES = 12
 
 TOPICS: List[Tuple[str, str, str, re.Pattern[str]]] = [
     (
@@ -78,6 +81,20 @@ TOPICS: List[Tuple[str, str, str, re.Pattern[str]]] = [
 H3_RE = re.compile(r"^###\s+\[([^\]]+)\]\s+(.*)$")
 PAREN_EN_RE = re.compile(r"\(([^()]{10,})\)\s*$")
 
+# Global Hygiene Guard constants
+REQUIRED_BULLETS: Tuple[str, ...] = (
+    "- **Global Pattern:**",
+    "- **Bối cảnh (Trigger):**",
+    "- **Root Cause:**",
+    "- **Fix/Correct Flow:**",
+    "- **Tags:**",
+)
+LOCAL_PATH_LEAK_RE = re.compile(r"/Users/\w+/Documents/work/", re.I)
+
+# G-08: lesson tripwire fields (máy đọc được) — ID ổn định, Trigger regex, Check tiền điều kiện, Require bằng chứng tuỳ chọn.
+TRIP_FIELD_RE = re.compile(r"^- \*\*(ID|Trigger|Check|Require):\*\*\s*(.+?)\s*$", re.M)
+TRIP_REQUIRED = ("id", "trigger", "check")
+
 
 @dataclass
 class LessonEntry:
@@ -91,9 +108,32 @@ class LessonEntry:
     short_label: str
 
 
-# G-08: lesson tripwire fields (máy đọc được) — ID ổn định, Trigger regex, Check tiền điều kiện, Require bằng chứng tuỳ chọn.
-TRIP_FIELD_RE = re.compile(r"^- \*\*(ID|Trigger|Check|Require):\*\*\s*(.+?)\s*$", re.M)
-TRIP_REQUIRED = ("id", "trigger", "check")
+def validate_global_hygiene(entries: List["LessonEntry"]) -> None:
+    """Enforce concise, 100% global structure on every lesson entry."""
+    if not entries:
+        raise RuntimeError("CRITICAL: No lesson entries parsed from lessons.md!")
+    for e in entries:
+        block_lines = [l for l in e.raw_block.splitlines() if l.strip()]
+        if len(block_lines) > MAX_ENTRY_LINES:
+            raise RuntimeError(
+                f"[GLOBAL HYGIENE BLOCK] Bài học tại lessons.md:L{e.line_no} dài {len(block_lines)} dòng "
+                f"(vượt trần {MAX_ENTRY_LINES} dòng). Phải tóm tắt gọn đúng 1 dòng cho mỗi trường!"
+            )
+        for req_bullet in REQUIRED_BULLETS:
+            if req_bullet not in e.raw_block:
+                raise RuntimeError(
+                    f"[GLOBAL HYGIENE BLOCK] Bài học tại lessons.md:L{e.line_no} thiếu trường bắt buộc '{req_bullet}'."
+                )
+        if LOCAL_PATH_LEAK_RE.search(e.raw_block):
+            raise RuntimeError(
+                f"[GLOBAL HYGIENE BLOCK] Bài học tại lessons.md:L{e.line_no} chứa đường dẫn máy cục bộ '/Users/...'. "
+                f"Phải trừu tượng hóa 100% thành Global Pattern!"
+            )
+        if not PAREN_EN_RE.search(e.title):
+            raise RuntimeError(
+                f"[GLOBAL HYGIENE BLOCK] Tiêu đề tại lessons.md:L{e.line_no} thiếu cụm tóm tắt Tiếng Anh "
+                f"trong ngoặc đơn '(...)' (tối thiểu 10 ký tự) ở cuối dòng để tạo nhãn cho INDEX.md."
+            )
 
 
 def parse_tripwire(entry: "LessonEntry") -> Optional[Dict[str, str]]:
@@ -229,9 +269,10 @@ def render_outputs(entries: List[LessonEntry]) -> Tuple[str, Dict[str, str]]:
             "## 2. Top Luật Vàng Bất Biến (Core Tripwires)",
             "- **G1 (No Overwrite):** Cấm `Overwrite=true` lên file memory; chỉ append vào `05_progress`, `04_decisions`, `lessons.md`.",
             "- **G2 (Propose-Only & Audit):** Khi Audit hoặc chưa có `APPROVE` của User sau `09_tasks_solution` -> cấm sửa source code.",
-            "- **G3 (Laya Gate):** Mọi giải pháp (DG1), code demo (DG2), audit (DG3) phải qua `laya_gate.py` (`PASS`).",
+            "- **G3 (Laya Gate):** Mọi giải pháp (DG0/DG1), code demo (DG2), audit (DG3) phải qua `laya_gate.py` (`PASS`).",
             "- **G4 (Runtime Exercise):** Build OK != Done. Phải chạy `checks` và `runtime_check` từ `.agent-project.json`.",
             "- **G5 (Clean Teardown & Locking):** Dừng goroutine nền trước khi đóng DB/Redis; TTL lock phải khớp chu kỳ ticker.",
+            "- **G6 (Global Lesson Hygiene):** Mọi bài học append vào `lessons.md` phải <= 12 dòng, đủ 5 trường, 100% Global (cấm chứa `/Users/...`).",
             "",
             "## 3. Danh mục 100% Bài học (`L001`–`L{:03d}`)".format(len(entries)),
         ]
@@ -241,7 +282,7 @@ def render_outputs(entries: List[LessonEntry]) -> Tuple[str, Dict[str, str]]:
         idx_lines.append(f"- L{e.idx:03d} [{e.date}] {e.topic_code}:L{e.line_no} {e.short_label}")
 
     index_md = "\n".join(idx_lines) + "\n"
-    for budget in (24, 20, 16, 12, 8):
+    for budget in (24, 20, 16, 12, 8, 7, 6, 5, 4):
         if len(index_md.encode("utf-8")) < MAX_INDEX_BYTES:
             break
         idx_lines_tight = idx_lines[: -len(entries)]
@@ -266,11 +307,17 @@ def _write_bundle(
     )
 
 
-def build_index(source_path: Path = DEFAULT_SOURCE, out_dir: Path = DEFAULT_OUT_DIR) -> Dict[str, int]:
+def build_index(
+    source_path: Path = DEFAULT_SOURCE,
+    out_dir: Path = DEFAULT_OUT_DIR,
+    enforce_hygiene: bool = True,
+) -> Dict[str, int]:
     before_text = source_path.read_text(encoding="utf-8")
     before_lines = len(before_text.splitlines())
 
     entries = parse_lessons(before_text)
+    if enforce_hygiene:
+        validate_global_hygiene(entries)
     index_md, topic_files = render_outputs(entries)
     tripwires = build_tripwires(entries)
 
@@ -313,16 +360,26 @@ def build_index(source_path: Path = DEFAULT_SOURCE, out_dir: Path = DEFAULT_OUT_
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Build 2-tier lessons index (INDEX.md + topics/*.md)")
+    ap = argparse.ArgumentParser(description="Build 2-tier lessons index (INDEX.md + topics/*.md + tripwires.json)")
     ap.add_argument("--source", default=str(DEFAULT_SOURCE), help="Path to lessons.md")
     ap.add_argument("--out-dir", default=str(DEFAULT_OUT_DIR), help="Output directory for INDEX.md and topics/")
+    ap.add_argument(
+        "--skip-hygiene",
+        action="store_true",
+        help="Skip Global Hygiene validation (only use for legacy uncleaned files)",
+    )
     args = ap.parse_args()
 
-    stats = build_index(Path(args.source), Path(args.out_dir))
+    stats = build_index(
+        Path(args.source),
+        Path(args.out_dir),
+        enforce_hygiene=not args.skip_hygiene,
+    )
     print(
         f"🟢 [LESSONS INDEX] Built successfully: "
         f"source_lines={stats['source_lines']}, "
         f"entries={stats['source_entries']}/{stats['index_entries']}/{stats['topic_entries']}, "
+        f"tripwires={stats['tripwires']}, "
         f"index_bytes={stats['index_bytes']} (<{MAX_INDEX_BYTES})"
     )
     return 0

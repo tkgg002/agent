@@ -1,0 +1,44 @@
+[
+  {
+    "id": "DG3-RUNNER-STREAM",
+    "kind": "target",
+    "basis": "code",
+    "claim": "streamAntigravityOutput in internal/runner/antigravity.go checks for type key before skipping and emits raw json lines when not a claude event envelope.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:256-261\n\t\t\t\t// If ev has Claude event wrapper field (\"type\"), it is a streaming event envelope:\n\t\t\t\tif _, hasType := ev[\"type\"]; hasType {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t}\n\t\t}"
+  },
+  {
+    "id": "DG3-BRIDGE-HONEST",
+    "kind": "target",
+    "basis": "code",
+    "claim": "invokeArchitectLLM in internal/webui/task_llm_bridge.go returns direct error reply on runner failure instead of dropping into mock analysis.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_bridge.go:234-247\n\t\t\tif streamErr != nil {\n\t\t\t\tcleanErr := streamErr.Error()\n\t\t\t\tif idx := strings.Index(cleanErr, \"TerminalQuotaError\"); idx >= 0 {\n\t\t\t\t\tcleanErr = cleanErr[idx:]\n\t\t\t\t} else if idx := strings.Index(cleanErr, \"Quota exceeded\"); idx >= 0 {\n\t\t\t\t\tcleanErr = cleanErr[idx:]\n\t\t\t\t}\n\t\t\t\tif len(cleanErr) > 260 {\n\t\t\t\t\tcleanErr = cleanErr[:260] + \"...\"\n\t\t\t\t}\n\t\t\t\terrReply := &ArchitectLLMAnalysis{\n\t\t\t\t\tDirectAnswer: fmt.Sprintf(\"⚠️ **Lỗi Model Runner (%s):** %s\\n*(Model AI CLI bị lỗi hoặc đã chạm ngưỡng hạn mức API. Vui lòng kiểm tra API Key hoặc runner trên máy.)*\", modelName, cleanErr),\n\t\t\t\t}\n\t\t\t\treturn errReply, nil\n\t\t\t}"
+  },
+  {
+    "id": "DG3-CHAT-DIRECT",
+    "kind": "target",
+    "basis": "code",
+    "claim": "renderContextualDiscussReply in internal/webui/task_chat_knowledge.go formats short direct conversation answers cleanly without appending unrelated code blocks.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_chat_knowledge.go:56-62\n\tif isDirectConversationOrGeneralQuestion(cleanMsg) && directAnswer != \"\" {\n\t\tvar sb strings.Builder\n\t\tsb.WriteString(fmt.Sprintf(\"> 🤖 **Co-Architect Studio** · **Model:** `%s` · **Role:** `%s (%s)` · **Task:** `%s`\\n\\n\",\n\t\t\tselectedModel, agentRoleLabel, agentSlot, qt.ExternalID))\n\t\tsb.WriteString(directAnswer)\n\t\treturn sb.String()\n\t}"
+  },
+  {
+    "id": "DG3-CTRL-FALSE-DROP",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "streamAntigravityOutput in internal/runner/antigravity.go drops all JSON lines unconditionally regardless of contents.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:256-261\n\t\t\t\t// If ev has Claude event wrapper field (\"type\"), it is a streaming event envelope:\n\t\t\t\tif _, hasType := ev[\"type\"]; hasType {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t}\n\t\t}"
+  },
+  {
+    "id": "DG3-CTRL-FALSE-DISCUSS",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "invokeArchitectLLM in internal/webui/task_llm_bridge.go completely bypasses the real model runner whenever actionMode is discuss.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_bridge.go:185-188\n\tif !isTestTaskOrTempRoot(s.Root, qt.ExternalID) && !strings.HasSuffix(os.Args[0], \".test\") {\n\t\tllmCtx, cancel := context.WithTimeout(ctx, 25*time.Second)\n\t\tdefer cancel()"
+  },
+  {
+    "id": "DG3-CTRL-TRUE-DEFAULT",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "buildGeminiCLIArgs in internal/runner/antigravity.go sets chosenModel to gemini-2.5-flash when no specific model is supplied.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/runner/antigravity.go:190-195\n\tchosenModel := cleanModel\n\tif chosenModel == \"\" || (!passModel && (strings.Contains(strings.ToLower(chosenModel), \"argon\") || strings.Contains(strings.ToLower(chosenModel), \"antigravity\"))) {\n\t\tchosenModel = \"gemini-2.5-flash\"\n\t}\n\tif chosenModel != \"\" {\n\t\targs = append(args, \"-m\", chosenModel)"
+  }
+]

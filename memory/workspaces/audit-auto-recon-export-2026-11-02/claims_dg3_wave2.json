@@ -1,0 +1,51 @@
+[
+  {
+    "id": "A-P1-BARREL",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "data-transfers/params/index.ts imports MerchantReconcileTransactionsExportParams from './auto-reconcile/merchant-reconcile-transactions-export.params', so params.ts must remain a pure DTO class without importing logics/export.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/index.ts:1-3\n// AUTO-RECONCILE\nimport { MerchantReconcileTransactionsExportParams } from \"./auto-reconcile/merchant-reconcile-transactions-export.params\";"
+  },
+  {
+    "id": "A-P2-UNITTEST",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "test/unit/logics/merchant-reconcile-transactions.export.test.ts asserts that buildListQuery(conditions).toSQLWithParams().sql does not match LIMIT or OFFSET at line 320.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/test/unit/logics/merchant-reconcile-transactions.export.test.ts:318-321\n        const conditions = ExportPure.buildMerchantReconcileFilter(ExportPure.validate(filters));\n        const { sql, parameters } = model.buildListQuery(conditions).toSQLWithParams();\n        expect(sql).not.toMatch(/LIMIT|OFFSET|x' OR 1=1/);\n        expect(sql).toContain(\"run_id = ?\");"
+  },
+  {
+    "id": "A-P3-HANDLER",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "GetAllMerchantReconcileTransactionsExportHandler.execute extracts cursor and limit at line 23 and runs Promise.all with transactions.getAll and transactions.countDocuments.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/domain/handlers/auto-reconcile/GetAllMerchantReconcileTransactionsExportHandler.ts:22-29\n        const transactions: MerchantReconcileResultModel = this.mainProcess.models.MerchantReconcileResultModel;\n        const { cursor, limit } = options?.params || {};\n        try {\n            const [page, total] = await Promise.all([\n                transactions.getAll(query.filterConditions, cursor, limit),\n                cursor ? Promise.resolve(0) : transactions.countDocuments(query.filterConditions)\n            ]);\n            return { data: page.data, total, nextCursor: page.nextCursor };"
+  },
+  {
+    "id": "A-P4-INTEGRATION",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "vitest.integration.config.ts includes only files matching 'test/integration/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/vitest.integration.config.ts:8-12\n    environment: \"node\",\n    setupFiles: [\"./test/setup.ts\"],\n    include: [\"test/integration/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}\"],\n    exclude: [\"node_modules\", \"dist\"],\n    testTimeout: 60000, // 60 seconds for integration tests"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "domain/queries/index.ts exports GetAllMerchantReconcileTransactionsExportQuery and GetFeeTotalsByGoopayCodesQuery.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/domain/queries/index.ts:1-4\n// auto-reconcile\nexport * from \"./auto-reconcile/GetAllMerchantReconcileTransactionsExportQuery\";\nexport * from \"./auto-reconcile/GetFeeTotalsByGoopayCodesQuery\";"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "vitest.integration.config.ts includes 'test/live/**/*.test.ts' in its test include array.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/vitest.integration.config.ts:8-12\n    environment: \"node\",\n    setupFiles: [\"./test/setup.ts\"],\n    include: [\"test/integration/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}\"],\n    exclude: [\"node_modules\", \"dist\"],\n    testTimeout: 60000, // 60 seconds for integration tests"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "domain/queries/index.ts does not export GetFeeTotalsByGoopayCodesQuery.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/domain/queries/index.ts:1-4\n// auto-reconcile\nexport * from \"./auto-reconcile/GetAllMerchantReconcileTransactionsExportQuery\";\nexport * from \"./auto-reconcile/GetFeeTotalsByGoopayCodesQuery\";"
+  }
+]

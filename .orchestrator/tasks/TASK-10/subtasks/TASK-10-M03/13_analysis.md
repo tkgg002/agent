@@ -1,0 +1,36 @@
+# 13 Analysis: TASK-10-M03 (`agent`)
+| Hạng mục | Phân loại | Bằng chứng `file:line` trên đĩa |
+| :--- | :---: | :--- |
+| Điểm chạm mã nguồn `agent/hooks/agy/tests/test_agy_guard.py:16 (def setUp(self) -> None:)` | `VERIFIED` | `/Users/trainguyen/Documents/work/agent/hooks/agy/tests/test_agy_guard.py` (missing on disk and not in diff.patch: agent:hooks/agy/tests/test_agy_guard.py) |
+| Hợp đồng Đầu vào (`Wave 1`) | `VERIFIED` | `UpstreamReady = false` (DependsOn: `TASK-10-M01, TASK-10-M02`) |
+| Nhánh cô lập (`Isolated Branch`) | `VERIFIED` | `task/TASK-10/task-10-m03` (`.orchestrator/worktrees/TASK-10/agent`) |
+
+## Trích xuất mã nguồn thực tế trên đĩa (`/Users/trainguyen/Documents/work/agent/hooks/agy/tests/test_agy_guard.py`)
+```go
+// VERIFIED ON-DISK SOURCE: /Users/trainguyen/Documents/work/agent/hooks/agy/tests/test_agy_guard.py (lines 16-40)
+  16 |     def setUp(self) -> None:
+  17 |         self._tmp = tempfile.TemporaryDirectory()
+  18 |         self.tmp = Path(self._tmp.name)
+  19 |         self.mem_root = self.tmp / "memory"
+  20 |         self.ws_root = self.mem_root / "workspaces"
+  21 |         self.state_dir = self.tmp / "state"
+  22 |         self.ws_root.mkdir(parents=True, exist_ok=True)
+  23 |         self.state_dir.mkdir(parents=True, exist_ok=True)
+  24 | 
+  25 |     def tearDown(self) -> None:
+  26 |         self._tmp.cleanup()
+  27 | 
+  28 |     def _write_transcript(self, lines: list[dict]) -> str:
+  29 |         tr = self.tmp / "transcript.jsonl"
+  30 |         tr.write_text("\n".join(json.dumps(x) for x in lines) + "\n", encoding="utf-8")
+  31 |         return str(tr)
+  32 | 
+  33 |     # 1. H2: Overwrite existing memory file -> deny
+  34 |     def test_01_h2_overwrite_existing_memory_denied(self) -> None:
+  35 |         lessons = self.mem_root / "global" / "lessons.md"
+  36 |         lessons.parent.mkdir(parents=True, exist_ok=True)
+  37 |         lessons.write_text("# Lessons\n", encoding="utf-8")
+  38 |         res = agy_guard.handle_pre_write(
+  39 |             {
+  40 |                 "toolCall": {
+```
