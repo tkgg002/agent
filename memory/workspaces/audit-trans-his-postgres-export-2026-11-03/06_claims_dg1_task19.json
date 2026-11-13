@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC-19",
+    "kind": "claim",
+    "claim": "In start.ts, loadEnvAndInitService calls SVC_ENV.setEnvironments and VaultSecurity.overWriteVaultEnv once before initService, and initService catches DB connection errors without retrying later.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/start.ts:289-324\n                } catch (error) {\n                    this.logger.error(`Failed to connect DB '${alias}':`, error.message);\n                }\n\n            }\n\n            this.logger.info(`Connected to ${successCount}/${DB_LIST.length} databases.`);\n            this.logger.info(\"Connections object keys before MainProcess instantiation:\", Object.keys(connections));\n\n            if (!connections.default) {\n                throw new Error(\"CRITICAL: Default database failed to connect!\");\n            }\n\n            // Initialize MainProcess\n            this.mainProcess = new MainProcess(this.broker, this.logger, connections, [paginate]);\n\n            // Register query handlers\n            this.queryHandlerFactory.registerHandlers(this.mainProcess);\n\n            this.logger.info(\"MainProcess & QueryHandlers initialized successfully.\");\n        } catch (err: any) {\n            this.logger.error(\"Database connection error:\", err.message);\n            throw new Error(\"Connect to database error\");\n        }\n    }\n\n    private async loadEnvAndInitService(): Promise<void> {\n        try {\n            SVC_ENV.setEnvironments(this.broker, ServiceName);\n            await VaultSecurity.overWriteVaultEnv();\n            const isMissingEnvVar = VaultSecurity.checkMissingEnvVariable();\n            if (isMissingEnvVar) {\n                throw Error(\"MIS_ENV_KEY\");\n            }\n            await this.initService();",
+    "flow": "start.ts constructor -> loadEnvAndInitService -> initService -> new MainProcess"
+  },
+  {
+    "id": "S-FIX-19",
+    "kind": "claim",
+    "claim": "In svc-env.ts, setEnvironments copies process.env into envServices and calls SVC_ENV.set for each key.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/svc-env.ts:182-199\n\tsetEnvironments(broker: ServiceBroker, serviceName: string) {\n\t\tlet envServices = JSON.parse(JSON.stringify(process.env));\n\n\t\tconst brokerEnv = broker.envServices ? broker.envServices[serviceName] : null;\n\t\tif (brokerEnv && !_.isEmpty(brokerEnv)) {\n\t\t\tenvServices = { ...envServices, ...brokerEnv };\n\t\t}\n\n\t\tconst serviceEnv = broker.services.find(x => x.name === serviceName)?.settings?.envServices;\n\t\tif (serviceEnv && !_.isEmpty(serviceEnv)) {\n\t\t\tenvServices = { ...envServices, ...serviceEnv };\n\t\t}\n\n\t\tObject.keys(envServices).forEach(key => {\n\t\t\tSVC_ENV.set(key, envServices[key] || \"\");\n\t\t});\n\t\treturn Promise.resolve();\n\t}",
+    "flow": "SVC_ENV.setEnvironments -> process.env copy -> SVC_ENV.set"
+  },
+  {
+    "id": "S-IMPACT-19",
+    "kind": "claim",
+    "claim": "In domain/handlers/trans-his/GetAllTransHisExportPgHandler.ts, execute assigns const Model = this.mainProcess.models.TransHisPgModel and calls Model.getPage and Model.countDocuments.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/domain/handlers/trans-his/GetAllTransHisExportPgHandler.ts:14-24\n  public async execute(query: GetAllTransHisExportQuery, context: any, options: any): Promise<any> {\n\n    const { filter, sort, select } = query;\n    const { cursor, limit } = options?.params || {};\n\n    const Model = this.mainProcess.models.TransHisPgModel;\n\n    const [page, total] = await Promise.all([\n      Model.getPage(filter, sort, select, cursor, limit),\n      cursor ? Promise.resolve(0) : Model.countDocuments(filter)\n    ]);",
+    "flow": "GetAllTransHisExportPgHandler.execute -> this.mainProcess.models.TransHisPgModel"
+  },
+  {
+    "id": "S-PATTERN-19",
+    "kind": "claim",
+    "claim": "In data-transfers/main-process.ts, initializeModels iterates over Object.keys(this.connections) and instantiates each ModelClass from ModelRegistry[alias] into this.models[modelName].",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/data-transfers/main-process.ts:43-91\n  private initializeModels(plugins: any[]) {\n    Object.keys(this.connections).forEach(alias => {\n      const connection = this.connections[alias];\n\n      let isReady = false;\n      if (connection) {\n        if (\"readyState\" in connection) {\n          isReady = (connection as any).readyState === 1;\n        } else if (\"ended\" in connection) {\n          isReady = !(connection as any).ended;\n        } else {\n          isReady = true;\n        }\n      }\n\n      if (!isReady) {\n        this.logger.warn(`[MainProcess] Connection '${alias}' is not ready. Skipping models.`);\n        return;\n      }\n\n      const ModelClasses = ModelRegistry[alias];\n\n      if (!ModelClasses || ModelClasses.length === 0) {\n        this.logger.debug(`[MainProcess] No models registered for DB alias '${alias}'.`);\n        return;\n      }\n\n      this.logger.info(`[MainProcess] Initializing ${ModelClasses.length} models for DB '${alias}'...`);\n\n      ModelClasses.forEach(ModelClass => {\n        try {\n          const modelName = ModelClass.name || ModelClass.prototype.constructor.name;\n\n          if (connection.models && connection.models[modelName]) {\n            this.logger.warn(`[MainProcess] Model '${modelName}' already exists in DB '${alias}'. Skipping re-initialization.`);\n            return;\n          }\n\n          if (this.models[modelName]) {\n            this.logger.warn(`[MainProcess] Duplicate model name '${modelName}'. Overwriting! Check your naming.`);\n          }\n\n          this.models[modelName] = new ModelClass(connection, this.logger, plugins);\n\n        } catch (err) {\n          this.logger.error(`[MainProcess] Failed to init model for DB '${alias}':`, err);\n        }\n      });",
+    "flow": "MainProcess.initializeModels -> ModelRegistry[alias] -> this.models[modelName]"
+  },
+  {
+    "id": "D-BEHAV-19",
+    "kind": "claim",
+    "claim": "In logics/processors/BaseExportProcessor.ts, execute calls this.getConfig() and then this.validatePrerequisites(mainProcess, config) inside a try/catch block.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/processors/BaseExportProcessor.ts:157-168\n    try {\n      config = await this.getConfig();\n      this.validatePrerequisites(mainProcess, config);\n    } catch (validationError: any) {\n      this.context.broker.logger.error(`[ExportJob Validation Failed] JobId: ${jobId}, Type: ${this.constructor.name}`, validationError);\n\n      await this.redis.setJobProgress(jobId, 100, \"FAILED\", {\n        error: validationError.message || \"Prerequisite validation failed\"\n      });\n\n      throw validationError;\n    }",
+    "flow": "BaseExportProcessor.execute -> getConfig -> validatePrerequisites"
+  },
+  {
+    "id": "D-EDGE-19",
+    "kind": "claim",
+    "claim": "In dbHandler/DbConnectorFactory.ts, connect deletes key from this.pendingConnections in the finally block and stores connection in this.connections after connectPostgres succeeds.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/dbHandler/DbConnectorFactory.ts:96-118\n          case DbType.POSTGRES:\n            if (!config.host || !config.database) { throw new Error(\"Postgres requires host & database\"); }\n            connection = await this.connectPostgres(config);\n            break;\n          case DbType.MARIADB:\n            if (!config.host || !config.database) { throw new Error(\"MariaDB requires host & database\"); }\n            connection = await this.connectMariaDB(config);\n            break;\n          default:\n            throw new Error(`Unsupported DB type: ${config.type}`);\n        }\n\n        // store connection in cache\n        this.connections.set(key, connection);\n        return connection;\n      } catch (error) {\n        this.logger.error(`Failed to connect ${config.type} (${alias}):`, error);\n        throw error;\n      } finally {\n        // Remove from pending map\n        this.pendingConnections.delete(key);\n      }\n    })();",
+    "flow": "DbConnectorFactory.connect -> connectPostgres -> catch/finally"
+  },
+  {
+    "id": "D-API-19",
+    "kind": "claim",
+    "claim": "In logics/health-check.logic.ts, checkDetailed iterates over DB_LIST and calls this.mainProcess.isDbConnected(alias) to report CONNECTED or DISCONNECTED for each alias.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/health-check.logic.ts:27-39\n        for (const db of DB_LIST) {\n            const alias = db.alias;\n            const models = ModelRegistry[alias]\n                ? ModelRegistry[alias].map((m: any) => m.name || m.prototype?.constructor?.name)\n                : [];\n\n            try {\n                const isConnected = this.mainProcess.isDbConnected(alias);\n                dbStatus[alias] = {\n                    status: isConnected ? \"CONNECTED\" : \"DISCONNECTED\",\n                    models\n                };",
+    "flow": "HealthCheckLogic.checkDetailed -> mainProcess.isDbConnected"
+  },
+  {
+    "id": "CTRL-TRUE-19",
+    "kind": "control_true",
+    "claim": "In security/vault.security.ts, overWriteVaultEnv calls this.getVaultEnvs() and sets each key from vaultData onto SVC_ENV.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/security/vault.security.ts:6-17\n\tpublic static async overWriteVaultEnv(): Promise<void> {\n\t\tconst vaultResponse = await this.getVaultEnvs();\n\t\tconst vaultData = vaultResponse?.data || null;\n\t\tif (!vaultData) {\n\t\t\tconsole.log(SVC_ENV.get().SERVICE_NAME + \".HAVE_NOT_VAULT_ENV\" + (vaultResponse?.error && ` with error: ${JSON.stringify(vaultResponse.error)}`));\n\t\t\treturn;\n\t\t}\n\t\tconsole.log(SVC_ENV.get().SERVICE_NAME + \"-overWriteVaultEnv\");\n\t\tObject.keys(vaultData).forEach(keyVault => {\n\t\t\tSVC_ENV.set(keyVault, vaultData[keyVault]);\n\t\t});\n\t}",
+    "flow": "VaultSecurity.overWriteVaultEnv -> SVC_ENV.set"
+  },
+  {
+    "id": "CTRL-FALSE-19A",
+    "kind": "control_false",
+    "claim": "In utils/trans-his-export-source.ts, getTransHisExportSource defaults to 'mariadb' when TRANS_HIS_EXPORT_SOURCE is not set.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/utils/trans-his-export-source.ts:6-12\nexport const getTransHisExportSource = (): TransHisExportSource => {\n\tconst source = String(SVC_ENV.get().TRANS_HIS_EXPORT_SOURCE || \"mongo\").trim().toLowerCase();\n\tif (source !== \"mongo\" && source !== \"postgres\") {\n\t\tthrow new Error(`Invalid TRANS_HIS_EXPORT_SOURCE \"${source}\": expected \"mongo\" or \"postgres\"`);\n\t}\n\treturn source;\n};",
+    "flow": "getTransHisExportSource default value check"
+  },
+  {
+    "id": "CTRL-FALSE-19B",
+    "kind": "control_false",
+    "claim": "In defined/app-setting.ts, the 'trans-his-pg' entry in DB_LIST uses type 'mongodb' and uriEnvKey 'TRANS_HIS_PG_URI'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/defined/app-setting.ts:35-45\n\t{\n\t\talias: \"trans-his-pg\",\n\t\ttype: \"postgres\",\n\t\thostEnvKey: \"TRANS_HIS_PG_HOST\",\n\t\tportEnvKey: \"TRANS_HIS_PG_PORT\",\n\t\tdbEnvKey: \"TRANS_HIS_PG_DB\",\n\t\tuserEnvKey: \"TRANS_HIS_PG_USER\",\n\t\tpassEnvKey: \"TRANS_HIS_PG_PASS\",\n\t\tpoolSizeEnvKey: \"TRANS_HIS_PG_POOLSIZE\"\n\t}\n];",
+    "flow": "defined/app-setting.ts DB_LIST"
+  }
+]

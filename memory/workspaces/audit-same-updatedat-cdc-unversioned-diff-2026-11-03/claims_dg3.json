@@ -1,38 +1,45 @@
 [
   {
-    "id": "A-FINDING-1",
+    "id": "A-FIX-1",
     "kind": "claim",
-    "claim": "In internal/handler/shadow/utils.go, extractSourceTsMs extracts raw := m[\"ts_ms\"] from the source map after calling unwrapAvroUnion(source).",
-    "flow": "KafkaConsumer calls extractSourceTsMs(sourceRaw) to populate Record.SourceTsMs.",
-    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/utils.go:72-84\nfunc extractSourceTsMs(source interface{}) int64 {\n\tsource = unwrapAvroUnion(source)\n\tm, ok := source.(map[string]interface{})\n\tif !ok {\n\t\treturn 0\n\t}\n\traw := m[\"ts_ms\"]"
+    "claim": "In internal/handler/shadow/utils.go, parseAnyInt64 delegates Avro union unwrapping to unwrapAvroUnion(raw), and extractSourceTsMs adds parseAnyInt64(m[\"ord\"]) capped at 999 when tsMs > 0 and tsMs%1000 == 0.",
+    "flow": "KafkaConsumer calls extractSourceTsMs(sourceRaw) -> parseAnyInt64(m[\"ts_ms\"]) -> adds MongoDB oplog ord (1..999) when ts_ms is whole-second.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/utils.go:72-112\nfunc parseAnyInt64(raw interface{}) int64 {\n\traw = unwrapAvroUnion(raw)\n\tswitch v := raw.(type) {\n\tcase int64:\n\t\treturn v\n\tcase int:\n\t\treturn int64(v)\n\tcase int32:\n\t\treturn int64(v)\n\tcase float64:\n\t\treturn int64(v)\n\tcase json.Number:\n\t\tn, _ := v.Int64()\n\t\treturn n\n\tcase string:\n\t\tn, err := strconv.ParseInt(v, 10, 64)\n\t\tif err != nil {\n\t\t\treturn 0\n\t\t}\n\t\treturn n\n\t}\n\treturn 0\n}\n\nfunc extractSourceTsMs(source interface{}) int64 {\n\tsource = unwrapAvroUnion(source)\n\tm, ok := source.(map[string]interface{})\n\tif !ok {\n\t\treturn 0\n\t}\n\ttsMs := parseAnyInt64(m[\"ts_ms\"])\n\tif tsMs > 0 && tsMs%1000 == 0 {\n\t\tif ord := parseAnyInt64(m[\"ord\"]); ord > 0 {\n\t\t\tif ord > 999 {\n\t\t\t\tord = 999\n\t\t\t}\n\t\t\ttsMs += ord\n\t\t}\n\t}\n\treturn tsMs\n}"
   },
   {
-    "id": "A-FINDING-2",
+    "id": "A-FIX-2",
     "kind": "claim",
-    "claim": "In internal/service/shadow/schema_adapter.go, buildOCCWhereClause formats timeClause with _source_ts < EXCLUDED._source_ts and only permits _source_ts = EXCLUDED._source_ts when existing _source is 'snapshot:v2'.",
-    "flow": "buildOCCWhereClause generates the WHERE condition for ON CONFLICT DO UPDATE on shadow tables.",
-    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:771-783\n\t\tif _, hasSourceCol := schema.Columns[\"_source\"]; hasSourceCol {\n\t\t\ttimeClause = fmt.Sprintf(\n\t\t\t\t`(%s.\"_source_ts\" IS NULL `+\n\t\t\t\t\t`OR %s.\"_source_ts\" < EXCLUDED.\"_source_ts\" `+\n\t\t\t\t\t`OR (%s.\"_source_ts\" = EXCLUDED.\"_source_ts\" `+\n\t\t\t\t\t`    AND %s.\"_source\" = 'snapshot:v2' `+\n\t\t\t\t\t`    AND EXCLUDED.\"_source\" <> 'snapshot:v2'))`,\n\t\t\t\tqualifiedTable, qualifiedTable, qualifiedTable, qualifiedTable,\n\t\t\t)\n\t\t} else {\n\t\t\ttimeClause = fmt.Sprintf(`(%s.\"_source_ts\" IS NULL OR %s.\"_source_ts\" < EXCLUDED.\"_source_ts\")`,\n\t\t\t\tqualifiedTable, qualifiedTable)\n\t\t}"
+    "claim": "In internal/service/shadow/schema_adapter.go, buildOCCWhereClause allows updates when _source_ts = EXCLUDED._source_ts and EXCLUDED._source <> 'snapshot:v2', or when _source_ts <= EXCLUDED._source_ts if the _source column is absent.",
+    "flow": "buildOCCWhereClause generates timeClause for ON CONFLICT DO UPDATE on shadow tables.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:771-782\n\t\tif _, hasSourceCol := schema.Columns[\"_source\"]; hasSourceCol {\n\t\t\ttimeClause = fmt.Sprintf(\n\t\t\t\t`(%s.\"_source_ts\" IS NULL `+\n\t\t\t\t\t`OR %s.\"_source_ts\" < EXCLUDED.\"_source_ts\" `+\n\t\t\t\t\t`OR (%s.\"_source_ts\" = EXCLUDED.\"_source_ts\" `+\n\t\t\t\t\t`    AND EXCLUDED.\"_source\" <> 'snapshot:v2'))`,\n\t\t\t\tqualifiedTable, qualifiedTable, qualifiedTable,\n\t\t\t)\n\t\t} else {\n\t\t\ttimeClause = fmt.Sprintf(`(%s.\"_source_ts\" IS NULL OR %s.\"_source_ts\" <= EXCLUDED.\"_source_ts\")`,\n\t\t\t\tqualifiedTable, qualifiedTable)\n\t\t}"
   },
   {
-    "id": "A-FINDING-3",
+    "id": "A-HONESTY-3",
     "kind": "claim",
-    "claim": "In TransHisModel, transId is configured with unique: true, and createTransHis in start.ts calls both createIpAddress(ctx) and createTrans(ctx) whereas updateTransHisStatus calls updateTransStatus(ctx).",
-    "flow": "CashInPublish invokes createTransHis and updateTransHis without await -> MongoDB executes insertOne first so updateOne matches the row (n:1, nModified:1) while createTransHis logs completion 23ms later.",
-    "evidence": "REF: /Users/trainguyen/Documents/work/core-trans-proxy-history-service/models/transHis.model.ts:28-32\n\t\t\t\ttransId: {\n\t\t\t\t\ttype: String,\n\t\t\t\t\trequired: [true, \"transId required\"],\n\t\t\t\t\tunique: true,\n\t\t\t\t},\nREF: /Users/trainguyen/Documents/work/core-trans-proxy-history-service/start.ts:50-55\n\t\t\t\tcreateTransHis: (ctx) => {\n\t\t\t\t\tthis.ipAddressSavePublish.createIpAddress(ctx);\n\t\t\t\t\treturn this.transHisSavePublish.createTrans(ctx);\n\t\t\t\t},\n\t\t\t\tupdateTransHisStatus: (ctx) =>\n\t\t\t\t\tthis.transHisSavePublish.updateTransStatus(ctx),"
+    "claim": "In test/internal/service/schema_adapter_ordering_test.go, setupTestDB opens an in-memory SQLite database via sqlite.Open(\"file::memory:?cache=shared\") and attaches ':memory:' AS public.",
+    "flow": "TestEventOrdering_SameSecondPositiveTs_UpdatesAndGuardsSnapshot calls setupTestDB(t) -> runs SQL against in-memory SQLite.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/test/internal/service/schema_adapter_ordering_test.go:15-21\nfunc setupTestDB(t *testing.T) (*gorm.DB, func()) {\n\tdb, err := gorm.Open(sqlite.Open(\"file::memory:?cache=shared\"), &gorm.Config{})\n\trequire.NoError(t, err)\n\n\terr = db.Exec(\"ATTACH DATABASE ':memory:' AS public\").Error\n\trequire.NoError(t, err)"
+  },
+  {
+    "id": "A-SINKWORKER-4",
+    "kind": "claim",
+    "claim": "In internal/sinkworker/utils.go, extractSourceTsMs adds numericMs(unwrapAvroUnion(src[\"ord\"])) capped at 999 when ts > 0 and ts%1000 == 0.",
+    "flow": "sinkworker.Worker calls extractSourceTsMs(envelope) -> parses src[\"ts_ms\"] -> adds ord (1..999) when ts is divisible by 1000.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/sinkworker/utils.go:88-104\nfunc extractSourceTsMs(envelope map[string]any) int64 {\n\tsrcRaw := unwrapAvroUnion(envelope[\"source\"])\n\tif src, ok := srcRaw.(map[string]any); ok && src != nil {\n\t\tif ts := numericMs(unwrapAvroUnion(src[\"ts_ms\"])); ts > 0 {\n\t\t\tif ts%1000 == 0 {\n\t\t\t\tif ord := numericMs(unwrapAvroUnion(src[\"ord\"])); ord > 0 {\n\t\t\t\t\tif ord > 999 {\n\t\t\t\t\t\tord = 999\n\t\t\t\t\t}\n\t\t\t\t\tts += ord\n\t\t\t\t}\n\t\t\t}\n\t\t\treturn ts\n\t\t}\n\t}\n\treturn numericMs(unwrapAvroUnion(envelope[\"ts_ms\"]))\n}"
   },
   {
     "id": "CTRL-TRUE-1",
     "kind": "control_true",
     "claim": "In internal/handler/shadow/utils.go, extractSourceTsMs returns 0 when source cannot be cast to map[string]interface{}.",
     "flow": "extractSourceTsMs unwraps Avro union -> checks map type assertion -> returns 0 if !ok.",
-    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/utils.go:72-78\nfunc extractSourceTsMs(source interface{}) int64 {\n\tsource = unwrapAvroUnion(source)\n\tm, ok := source.(map[string]interface{})\n\tif !ok {\n\t\treturn 0\n\t}\n\traw := m[\"ts_ms\"]"
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/utils.go:96-101\nfunc extractSourceTsMs(source interface{}) int64 {\n\tsource = unwrapAvroUnion(source)\n\tm, ok := source.(map[string]interface{})\n\tif !ok {\n\t\treturn 0\n\t}"
   },
   {
     "id": "CTRL-FALSE-1",
     "kind": "control_false",
     "claim": "In internal/handler/shadow/utils.go, extractSourceTsMs returns -1 instead of 0 when source is not a map[string]interface{}.",
     "flow": "extractSourceTsMs checks map type assertion.",
-    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/utils.go:72-78\nfunc extractSourceTsMs(source interface{}) int64 {\n\tsource = unwrapAvroUnion(source)\n\tm, ok := source.(map[string]interface{})\n\tif !ok {\n\t\treturn 0\n\t}\n\traw := m[\"ts_ms\"]"
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/utils.go:96-101\nfunc extractSourceTsMs(source interface{}) int64 {\n\tsource = unwrapAvroUnion(source)\n\tm, ok := source.(map[string]interface{})\n\tif !ok {\n\t\treturn 0\n\t}"
   },
   {
     "id": "CTRL-FALSE-2",

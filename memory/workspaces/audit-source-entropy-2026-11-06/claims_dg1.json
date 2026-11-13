@@ -1,0 +1,70 @@
+[
+ {
+  "id": "S-RC-1",
+  "kind": "claim",
+  "basis": "code",
+  "flow": "F2 removed type still referenced",
+  "claim": "The test file still constructs servicerecon.PipelineFlowInfo, a type that go vet reports as undefined, so a refactor removed it without updating the test.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/test/internal/service/recon_pipeline_span_test.go:12-12\n\tflow := &servicerecon.PipelineFlowInfo{",
+  "must_contain": [
+   "servicerecon.PipelineFlowInfo"
+  ]
+ },
+ {
+  "id": "S-RC-2",
+  "kind": "claim",
+  "basis": "code",
+  "flow": "F2 interface signature drift",
+  "claim": "The ReconReader interface now takes targetTables []string while the test stub still implements GetActiveReconJobs with a string parameter, breaking the test build.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/recon/recon_reader.go:136-136\n\tGetActiveReconJobs(ctx context.Context, targetTables []string) ([]ActiveReconJob, error)\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/test/internal/app/queries/queries_test.go:337-337\nfunc (s *stubReconReader) GetActiveReconJobs(context.Context, string) ([]reconQueries.ActiveReconJob, error) {",
+  "must_contain": [
+   "targetTables []string"
+  ]
+ },
+ {
+  "id": "S-FIX-1",
+  "kind": "claim",
+  "basis": "code",
+  "flow": "F3 dead backup code inside module",
+  "claim": "Backup code under docs/server_bk calls NewSnapshotRunner with the old 8-argument signature, so go build ./... cannot pass until dead backup code is moved out of the module.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/docs/server_bk/worker_server_init.go:681-681\n\tsnapshotRunner := handlerorchestration.NewSnapshotRunner(db, eventHandler, registrySvc, connectionRepo, sourceObjectRepo, shadowBindingRepo, natsClient.Conn, logger)",
+  "must_contain": [
+   "NewSnapshotRunner"
+  ]
+ },
+ {
+  "id": "S-FIX-2",
+  "kind": "claim",
+  "basis": "code",
+  "flow": "F3 scratch package duplicate main",
+  "claim": "Two files in the same scratch directory, check_conn.go and check_bindings.go, are both package main and both declare func main, so the package has a duplicate main declaration.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/scratch/check_conn.go:1-1\npackage main\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/scratch/check_conn.go:12-12\nfunc main() {\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/scratch/check_bindings.go:1-1\npackage main\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/scratch/check_bindings.go:12-12\nfunc main() {",
+  "must_contain": [
+   "func main()"
+  ]
+ },
+ {
+  "id": "CTRL-TRUE-1",
+  "kind": "control_true",
+  "basis": "code",
+  "flow": "control",
+  "claim": "The ReconReader interface method GetActiveReconJobs accepts a slice of target table names.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/recon/recon_reader.go:136-136\n\tGetActiveReconJobs(ctx context.Context, targetTables []string) ([]ActiveReconJob, error)"
+ },
+ {
+  "id": "CTRL-FALSE-1",
+  "kind": "control_false",
+  "basis": "code",
+  "flow": "control",
+  "claim": "The ReconReader interface method GetActiveReconJobs accepts a single string table name and returns an int count.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/recon/recon_reader.go:136-136\n\tGetActiveReconJobs(ctx context.Context, targetTables []string) ([]ActiveReconJob, error)"
+ },
+ {
+  "id": "CTRL-FALSE-2",
+  "kind": "control_false",
+  "basis": "code",
+  "flow": "control",
+  "claim": "The backup worker_server_init.go calls NewSnapshotRunner with all 11 arguments required by the current signature, including the []string and two string parameters.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/docs/server_bk/worker_server_init.go:681-681\n\tsnapshotRunner := handlerorchestration.NewSnapshotRunner(db, eventHandler, registrySvc, connectionRepo, sourceObjectRepo, shadowBindingRepo, natsClient.Conn, logger)"
+ }
+]

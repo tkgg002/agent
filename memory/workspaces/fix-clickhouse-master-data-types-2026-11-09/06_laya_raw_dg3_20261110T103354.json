@@ -1,0 +1,911 @@
+[
+  {
+    "id": "A-F1-NULLABLE-DDL",
+    "kind": "claim",
+    "claim": "In master_ddl_generator_clickhouse.go lines 102-147, generateClickHouseDDL calls mapToClickHouseColumnType(r.DataType, true), wrapping all 33 business columns (String, DateTime64(3, 'UTC'), Decimal(38, 10), UInt8) in Nullable(...) so that NULL values from PostgreSQL/Shadow are preserved in ClickHouse instead of becoming default zero values.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_clickhouse.go:100-147\n\t\tbaseType = \"String\"\n\t}\n\tif isNullable {\n\t\treturn fmt.Sprintf(\"Nullable(%s)\", baseType)\n\t}\n\treturn baseType\n}\n\nfunc (g *MasterDDLGenerator) generateClickHouseDDL(ctx context.Context, reg *masterDDLBindingRow, rules []mastermodel.MappingRuleV2) (*MasterDDLResult, error) {\n\tdbName := resolveClickHouseDatabase(reg)\n\tres := &MasterDDLResult{\n\t\tMasterName:   reg.MasterTable,\n\t\tMasterSchema: dbName,\n\t\tRuleCount:    len(rules),\n\t}\n\n\tcols := []string{\n\t\t\"`_gpay_id` Int64\",\n\t\t\"`_source_ts` Nullable(Int64)\",\n\t\t\"`_deleted` UInt8 DEFAULT 0\",\n\t\t\"`_updated_at` DateTime64(3, 'UTC') DEFAULT now64(3)\",\n\t\t\"`_transmuted_at` UInt64 DEFAULT toUInt64(toUnixTimestamp64Milli(now64(3)))\",\n\t}\n\tseen := map[string]bool{\n\t\t\"_gpay_id\": true, \"_source_id\": true, \"_raw_data\": true, \"_source\": true,\n\t\t\"_source_ts\": true, \"_synced_at\": true, \"_version\": true, \"_hash\": true,\n\t\t\"_deleted\": true, \"_created_at\": true, \"_updated_at\": true, \"_transmuted_at\": true,\n\t}\n\n\tvar financialCols []string\n\ttblQualified := quoteClickHouseQualified(reg, reg.MasterTable)\n\n\tfor _, r := range rules {\n\t\tif !ddlIdentRe.MatchString(r.TargetColumn) || seen[r.TargetColumn] {\n\t\t\tcontinue\n\t\t}\n\t\tif !shadow.IsTypeWhitelisted(r.DataType) {\n\t\t\tcontinue\n\t\t}\n\t\tseen[r.TargetColumn] = true\n\t\tchType := mapToClickHouseColumnType(r.DataType, true)",
+    "flow": "ClickHouse CREATE TABLE DDL generation in MasterDDLGenerator.generateClickHouseDDL.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4832,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8061,
+                "INCORRECT": 0.1682,
+                "UNSUPPORTED": 0.0257
+              },
+              "confidence": 0.4832,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 851,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In master_ddl_generator_clickhouse.go lines 102-147, generateClickHouseDDL calls mapToClickHouseColumnType(r.DataType, true), wrapping all 33 business columns (String, DateTime64(3, 'UTC'), Decimal(38, 10), UInt8) in Nullable(...) so that NULL values from PostgreSQL/Shadow are preserved in ClickHouse instead of becoming default zero values.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_clickhouse.go:100-147\n\t\tbaseType = \"String\"\n\t}\n\tif isNullable {\n\t\treturn fmt.Sprintf(\"Nullable(%s)\", baseType)\n\t}\n\treturn baseType\n}\n\nfunc (g *MasterDDLGenerator) generateClickHouseDDL(ctx context.Context, reg *masterDDLBindingRow, rules []mastermodel.MappingRuleV2) (*MasterDDLResult, error) {\n\tdbName := resolveClickHouseDatabase(reg)\n\tres := &MasterDDLResult{\n\t\tMasterName:   reg.MasterTable,\n\t\tMasterSchema: dbName,\n\t\tRuleCount:    len(rules),\n\t}\n\n\tcols := []string{\n\t\t\"`_gpay_id` Int64\",\n\t\t\"`_source_ts` Nullable(Int64)\",\n\t\t\"`_deleted` UInt8 DEFAULT 0\",\n\t\t\"`_updated_at` DateTime64(3, 'UTC') DEFAULT now64(3)\",\n\t\t\"`_transmuted_at` UInt64 DEFAULT toUInt64(toUnixTimestamp64Milli(now64(3)))\",\n\t}\n\tseen := map[string]bool{\n\t\t\"_gpay_id\": true, \"_source_id\": true, \"_raw_data\": true, \"_source\": true,\n\t\t\"_source_ts\": true, \"_synced_at\": true, \"_version\": true, \"_hash\": true,\n\t\t\"_deleted\": true, \"_created_at\": true, \"_updated_at\": true, \"_transmuted_at\": true,\n\t}\n\n\tvar financialCols []string\n\ttblQualified := quoteClickHouseQualified(reg, reg.MasterTable)\n\n\tfor _, r := range rules {\n\t\tif !ddlIdentRe.MatchString(r.TargetColumn) || seen[r.TargetColumn] {\n\t\t\tcontinue\n\t\t}\n\t\tif !shadow.IsTypeWhitelisted(r.DataType) {\n\t\t\tcontinue\n\t\t}\n\t\tseen[r.TargetColumn] = true\n\t\tchType := mapToClickHouseColumnType(r.DataType, true)",
+          "flow": "ClickHouse CREATE TABLE DDL generation in MasterDDLGenerator.generateClickHouseDDL."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4501,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8049,
+                "INCORRECT": 0.1456,
+                "UNSUPPORTED": 0.0495
+              },
+              "confidence": 0.4501,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 882,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Verify ClickHouse DDL generation vs UI Mapping Rules (33) for goopay_clickhouse.transaction_history_1_test_field (binding #94)",
+          "function_workflow": "ClickHouse CREATE TABLE DDL generation in MasterDDLGenerator.generateClickHouseDDL.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_clickhouse.go:100-147\n\t\tbaseType = \"String\"\n\t}\n\tif isNullable {\n\t\treturn fmt.Sprintf(\"Nullable(%s)\", baseType)\n\t}\n\treturn baseType\n}\n\nfunc (g *MasterDDLGenerator) generateClickHouseDDL(ctx context.Context, reg *masterDDLBindingRow, rules []mastermodel.MappingRuleV2) (*MasterDDLResult, error) {\n\tdbName := resolveClickHouseDatabase(reg)\n\tres := &MasterDDLResult{\n\t\tMasterName:   reg.MasterTable,\n\t\tMasterSchema: dbName,\n\t\tRuleCount:    len(rules),\n\t}\n\n\tcols := []string{\n\t\t\"`_gpay_id` Int64\",\n\t\t\"`_source_ts` Nullable(Int64)\",\n\t\t\"`_deleted` UInt8 DEFAULT 0\",\n\t\t\"`_updated_at` DateTime64(3, 'UTC') DEFAULT now64(3)\",\n\t\t\"`_transmuted_at` UInt64 DEFAULT toUInt64(toUnixTimestamp64Milli(now64(3)))\",\n\t}\n\tseen := map[string]bool{\n\t\t\"_gpay_id\": true, \"_source_id\": true, \"_raw_data\": true, \"_source\": true,\n\t\t\"_source_ts\": true, \"_synced_at\": true, \"_version\": true, \"_hash\": true,\n\t\t\"_deleted\": true, \"_created_at\": true, \"_updated_at\": true, \"_transmuted_at\": true,\n\t}\n\n\tvar financialCols []string\n\ttblQualified := quoteClickHouseQualified(reg, reg.MasterTable)\n\n\tfor _, r := range rules {\n\t\tif !ddlIdentRe.MatchString(r.TargetColumn) || seen[r.TargetColumn] {\n\t\t\tcontinue\n\t\t}\n\t\tif !shadow.IsTypeWhitelisted(r.DataType) {\n\t\t\tcontinue\n\t\t}\n\t\tseen[r.TargetColumn] = true\n\t\tchType := mapToClickHouseColumnType(r.DataType, true)",
+          "claim": "In master_ddl_generator_clickhouse.go lines 102-147, generateClickHouseDDL calls mapToClickHouseColumnType(r.DataType, true), wrapping all 33 business columns (String, DateTime64(3, 'UTC'), Decimal(38, 10), UInt8) in Nullable(...) so that NULL values from PostgreSQL/Shadow are preserved in ClickHouse instead of becoming default zero values."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7985,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9686,
+                "NO": 0.0314
+              },
+              "confidence": 0.7985,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 772,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_clickhouse.go:100-147\n\t\tbaseType = \"String\"\n\t}\n\tif isNullable {\n\t\treturn fmt.Sprintf(\"Nullable(%s)\", baseType)\n\t}\n\treturn baseType\n}\n\nfunc (g *MasterDDLGenerator) generateClickHouseDDL(ctx context.Context, reg *masterDDLBindingRow, rules []mastermodel.MappingRuleV2) (*MasterDDLResult, error) {\n\tdbName := resolveClickHouseDatabase(reg)\n\tres := &MasterDDLResult{\n\t\tMasterName:   reg.MasterTable,\n\t\tMasterSchema: dbName,\n\t\tRuleCount:    len(rules),\n\t}\n\n\tcols := []string{\n\t\t\"`_gpay_id` Int64\",\n\t\t\"`_source_ts` Nullable(Int64)\",\n\t\t\"`_deleted` UInt8 DEFAULT 0\",\n\t\t\"`_updated_at` DateTime64(3, 'UTC') DEFAULT now64(3)\",\n\t\t\"`_transmuted_at` UInt64 DEFAULT toUInt64(toUnixTimestamp64Milli(now64(3)))\",\n\t}\n\tseen := map[string]bool{\n\t\t\"_gpay_id\": true, \"_source_id\": true, \"_raw_data\": true, \"_source\": true,\n\t\t\"_source_ts\": true, \"_synced_at\": true, \"_version\": true, \"_hash\": true,\n\t\t\"_deleted\": true, \"_created_at\": true, \"_updated_at\": true, \"_transmuted_at\": true,\n\t}\n\n\tvar financialCols []string\n\ttblQualified := quoteClickHouseQualified(reg, reg.MasterTable)\n\n\tfor _, r := range rules {\n\t\tif !ddlIdentRe.MatchString(r.TargetColumn) || seen[r.TargetColumn] {\n\t\t\tcontinue\n\t\t}\n\t\tif !shadow.IsTypeWhitelisted(r.DataType) {\n\t\t\tcontinue\n\t\t}\n\t\tseen[r.TargetColumn] = true\n\t\tchType := mapToClickHouseColumnType(r.DataType, true)",
+          "claim": "In master_ddl_generator_clickhouse.go lines 102-147, generateClickHouseDDL calls mapToClickHouseColumnType(r.DataType, true), wrapping all 33 business columns (String, DateTime64(3, 'UTC'), Decimal(38, 10), UInt8) in Nullable(...) so that NULL values from PostgreSQL/Shadow are preserved in ClickHouse instead of becoming default zero values."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-F2-SYSTEM-COLS-AND-ORDER",
+    "kind": "claim",
+    "claim": "In master_ddl_generator_clickhouse.go lines 155-166, generateClickHouseDDL creates the table with ENGINE = ReplacingMergeTree(_transmuted_at) ORDER BY (_gpay_id) and 2 minmax skipping indexes on _source_ts and _updated_at, while master_mapping_rule_repo_gorm.go line 154 orders UI rules by m.target_column ASC.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_clickhouse.go:155-167\n\tres.CreateSQL = fmt.Sprintf(\n\t\t\"CREATE TABLE IF NOT EXISTS %s (\\n  %s\\n) ENGINE = ReplacingMergeTree(_transmuted_at)\\nORDER BY (`_gpay_id`);\",\n\t\ttblQualified,\n\t\tstrings.Join(cols, \",\\n  \"),\n\t)\n\n\tres.IndexSQL = []string{\n\t\tfmt.Sprintf(\"ALTER TABLE %s ADD INDEX IF NOT EXISTS %s (`_source_ts`) TYPE minmax GRANULARITY 4;\",\n\t\t\ttblQualified, quoteMySQLIdent(\"ix_\"+reg.MasterTable+\"_source_ts\")),\n\t\tfmt.Sprintf(\"ALTER TABLE %s ADD INDEX IF NOT EXISTS %s (`_updated_at`) TYPE minmax GRANULARITY 4;\",\n\t\t\ttblQualified, quoteMySQLIdent(\"ix_\"+reg.MasterTable+\"_updated_at\")),\n\t}\n\treturn res, nil",
+    "flow": "ClickHouse ReplacingMergeTree engine and index DDL generation.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.257,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6312,
+                "INCORRECT": 0.3124,
+                "UNSUPPORTED": 0.0565
+              },
+              "confidence": 0.257,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 520,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In master_ddl_generator_clickhouse.go lines 155-166, generateClickHouseDDL creates the table with ENGINE = ReplacingMergeTree(_transmuted_at) ORDER BY (_gpay_id) and 2 minmax skipping indexes on _source_ts and _updated_at, while master_mapping_rule_repo_gorm.go line 154 orders UI rules by m.target_column ASC.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_clickhouse.go:155-167\n\tres.CreateSQL = fmt.Sprintf(\n\t\t\"CREATE TABLE IF NOT EXISTS %s (\\n  %s\\n) ENGINE = ReplacingMergeTree(_transmuted_at)\\nORDER BY (`_gpay_id`);\",\n\t\ttblQualified,\n\t\tstrings.Join(cols, \",\\n  \"),\n\t)\n\n\tres.IndexSQL = []string{\n\t\tfmt.Sprintf(\"ALTER TABLE %s ADD INDEX IF NOT EXISTS %s (`_source_ts`) TYPE minmax GRANULARITY 4;\",\n\t\t\ttblQualified, quoteMySQLIdent(\"ix_\"+reg.MasterTable+\"_source_ts\")),\n\t\tfmt.Sprintf(\"ALTER TABLE %s ADD INDEX IF NOT EXISTS %s (`_updated_at`) TYPE minmax GRANULARITY 4;\",\n\t\t\ttblQualified, quoteMySQLIdent(\"ix_\"+reg.MasterTable+\"_updated_at\")),\n\t}\n\treturn res, nil",
+          "flow": "ClickHouse ReplacingMergeTree engine and index DDL generation."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1459,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5125,
+                "INCORRECT": 0.3889,
+                "UNSUPPORTED": 0.0986
+              },
+              "confidence": 0.1459,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 551,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Verify ClickHouse DDL generation vs UI Mapping Rules (33) for goopay_clickhouse.transaction_history_1_test_field (binding #94)",
+          "function_workflow": "ClickHouse ReplacingMergeTree engine and index DDL generation.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_clickhouse.go:155-167\n\tres.CreateSQL = fmt.Sprintf(\n\t\t\"CREATE TABLE IF NOT EXISTS %s (\\n  %s\\n) ENGINE = ReplacingMergeTree(_transmuted_at)\\nORDER BY (`_gpay_id`);\",\n\t\ttblQualified,\n\t\tstrings.Join(cols, \",\\n  \"),\n\t)\n\n\tres.IndexSQL = []string{\n\t\tfmt.Sprintf(\"ALTER TABLE %s ADD INDEX IF NOT EXISTS %s (`_source_ts`) TYPE minmax GRANULARITY 4;\",\n\t\t\ttblQualified, quoteMySQLIdent(\"ix_\"+reg.MasterTable+\"_source_ts\")),\n\t\tfmt.Sprintf(\"ALTER TABLE %s ADD INDEX IF NOT EXISTS %s (`_updated_at`) TYPE minmax GRANULARITY 4;\",\n\t\t\ttblQualified, quoteMySQLIdent(\"ix_\"+reg.MasterTable+\"_updated_at\")),\n\t}\n\treturn res, nil",
+          "claim": "In master_ddl_generator_clickhouse.go lines 155-166, generateClickHouseDDL creates the table with ENGINE = ReplacingMergeTree(_transmuted_at) ORDER BY (_gpay_id) and 2 minmax skipping indexes on _source_ts and _updated_at, while master_mapping_rule_repo_gorm.go line 154 orders UI rules by m.target_column ASC."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7475,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9577,
+                "NO": 0.0423
+              },
+              "confidence": 0.7475,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 446,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_clickhouse.go:155-167\n\tres.CreateSQL = fmt.Sprintf(\n\t\t\"CREATE TABLE IF NOT EXISTS %s (\\n  %s\\n) ENGINE = ReplacingMergeTree(_transmuted_at)\\nORDER BY (`_gpay_id`);\",\n\t\ttblQualified,\n\t\tstrings.Join(cols, \",\\n  \"),\n\t)\n\n\tres.IndexSQL = []string{\n\t\tfmt.Sprintf(\"ALTER TABLE %s ADD INDEX IF NOT EXISTS %s (`_source_ts`) TYPE minmax GRANULARITY 4;\",\n\t\t\ttblQualified, quoteMySQLIdent(\"ix_\"+reg.MasterTable+\"_source_ts\")),\n\t\tfmt.Sprintf(\"ALTER TABLE %s ADD INDEX IF NOT EXISTS %s (`_updated_at`) TYPE minmax GRANULARITY 4;\",\n\t\t\ttblQualified, quoteMySQLIdent(\"ix_\"+reg.MasterTable+\"_updated_at\")),\n\t}\n\treturn res, nil",
+          "claim": "In master_ddl_generator_clickhouse.go lines 155-166, generateClickHouseDDL creates the table with ENGINE = ReplacingMergeTree(_transmuted_at) ORDER BY (_gpay_id) and 2 minmax skipping indexes on _source_ts and _updated_at, while master_mapping_rule_repo_gorm.go line 154 orders UI rules by m.target_column ASC."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-F3-CLONE-NULL-DATATYPE",
+    "kind": "claim",
+    "claim": "In master_multi_shadow_repo_gorm.go lines 49-64, cloneAllShadowRulesTx inserts shadow-linked rules into cdc_system.mapping_rule_master without setting m.data_type so m.data_type remains NULL and inherits v2.data_type via COALESCE.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:49-64\n\t\tif err := db.WithContext(ctx).Exec(`\n\t\t\tINSERT INTO `+masterRuleTable+`\n\t\t\t  (master_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by)\n\t\t\tSELECT ?, v2.id, v2.target_column, true, 'pending', ?, ?\n\t\t\t  FROM `+v2Table+` v2\n\t\t\t WHERE v2.shadow_binding_id = ?\n\t\t\t   AND COALESCE(v2.is_active, true) = true\n\t\t\t   AND NOT EXISTS (\n\t\t\t     SELECT 1 FROM `+masterRuleTable+` mm\n\t\t\t      WHERE mm.master_binding_id = ? AND mm.mapping_v2_id = v2.id)\n\t\t\t   AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,\n\t\t\tmasterBindingID, createdBy, updatedBy, sbID, masterBindingID, reservedCols,\n\t\t).Error; err != nil {\n\t\t\treturn err\n\t\t}",
+    "flow": "Rule cloning from mapping_rule_v2 to mapping_rule_master during Master creation/approval.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1277,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5593,
+                "INCORRECT": 0.3048,
+                "UNSUPPORTED": 0.1358
+              },
+              "confidence": 0.1277,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 606,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In master_multi_shadow_repo_gorm.go lines 49-64, cloneAllShadowRulesTx inserts shadow-linked rules into cdc_system.mapping_rule_master without setting m.data_type so m.data_type remains NULL and inherits v2.data_type via COALESCE.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:49-64\n\t\tif err := db.WithContext(ctx).Exec(`\n\t\t\tINSERT INTO `+masterRuleTable+`\n\t\t\t  (master_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by)\n\t\t\tSELECT ?, v2.id, v2.target_column, true, 'pending', ?, ?\n\t\t\t  FROM `+v2Table+` v2\n\t\t\t WHERE v2.shadow_binding_id = ?\n\t\t\t   AND COALESCE(v2.is_active, true) = true\n\t\t\t   AND NOT EXISTS (\n\t\t\t     SELECT 1 FROM `+masterRuleTable+` mm\n\t\t\t      WHERE mm.master_binding_id = ? AND mm.mapping_v2_id = v2.id)\n\t\t\t   AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,\n\t\t\tmasterBindingID, createdBy, updatedBy, sbID, masterBindingID, reservedCols,\n\t\t).Error; err != nil {\n\t\t\treturn err\n\t\t}",
+          "flow": "Rule cloning from mapping_rule_v2 to mapping_rule_master during Master creation/approval."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2488,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6716,
+                "INCORRECT": 0.2389,
+                "UNSUPPORTED": 0.0895
+              },
+              "confidence": 0.2488,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 637,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Verify ClickHouse DDL generation vs UI Mapping Rules (33) for goopay_clickhouse.transaction_history_1_test_field (binding #94)",
+          "function_workflow": "Rule cloning from mapping_rule_v2 to mapping_rule_master during Master creation/approval.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:49-64\n\t\tif err := db.WithContext(ctx).Exec(`\n\t\t\tINSERT INTO `+masterRuleTable+`\n\t\t\t  (master_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by)\n\t\t\tSELECT ?, v2.id, v2.target_column, true, 'pending', ?, ?\n\t\t\t  FROM `+v2Table+` v2\n\t\t\t WHERE v2.shadow_binding_id = ?\n\t\t\t   AND COALESCE(v2.is_active, true) = true\n\t\t\t   AND NOT EXISTS (\n\t\t\t     SELECT 1 FROM `+masterRuleTable+` mm\n\t\t\t      WHERE mm.master_binding_id = ? AND mm.mapping_v2_id = v2.id)\n\t\t\t   AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,\n\t\t\tmasterBindingID, createdBy, updatedBy, sbID, masterBindingID, reservedCols,\n\t\t).Error; err != nil {\n\t\t\treturn err\n\t\t}",
+          "claim": "In master_multi_shadow_repo_gorm.go lines 49-64, cloneAllShadowRulesTx inserts shadow-linked rules into cdc_system.mapping_rule_master without setting m.data_type so m.data_type remains NULL and inherits v2.data_type via COALESCE."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.3838,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8474,
+                "NO": 0.1526
+              },
+              "confidence": 0.3838,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 523,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:49-64\n\t\tif err := db.WithContext(ctx).Exec(`\n\t\t\tINSERT INTO `+masterRuleTable+`\n\t\t\t  (master_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by)\n\t\t\tSELECT ?, v2.id, v2.target_column, true, 'pending', ?, ?\n\t\t\t  FROM `+v2Table+` v2\n\t\t\t WHERE v2.shadow_binding_id = ?\n\t\t\t   AND COALESCE(v2.is_active, true) = true\n\t\t\t   AND NOT EXISTS (\n\t\t\t     SELECT 1 FROM `+masterRuleTable+` mm\n\t\t\t      WHERE mm.master_binding_id = ? AND mm.mapping_v2_id = v2.id)\n\t\t\t   AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,\n\t\t\tmasterBindingID, createdBy, updatedBy, sbID, masterBindingID, reservedCols,\n\t\t).Error; err != nil {\n\t\t\treturn err\n\t\t}",
+          "claim": "In master_multi_shadow_repo_gorm.go lines 49-64, cloneAllShadowRulesTx inserts shadow-linked rules into cdc_system.mapping_rule_master without setting m.data_type so m.data_type remains NULL and inherits v2.data_type via COALESCE."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In postgresDataTypes.ts lines 1-10, VARCHAR and TEXT are included in POSTGRES_DATA_TYPES.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/constants/postgresDataTypes.ts:1-10\nexport const POSTGRES_DATA_TYPES = [\n  'VARCHAR',\n  'VARCHAR(50)',\n  'VARCHAR(100)',\n  'VARCHAR(255)',\n  'CHAR',\n  'TEXT',\n  'INTEGER',\n  'BIGINT',\n  'SMALLINT',",
+    "flow": "POSTGRES_DATA_TYPES definition.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4066,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7777,
+                "INCORRECT": 0.1694,
+                "UNSUPPORTED": 0.0529
+              },
+              "confidence": 0.4066,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 266,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In postgresDataTypes.ts lines 1-10, VARCHAR and TEXT are included in POSTGRES_DATA_TYPES.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/constants/postgresDataTypes.ts:1-10\nexport const POSTGRES_DATA_TYPES = [\n  'VARCHAR',\n  'VARCHAR(50)',\n  'VARCHAR(100)',\n  'VARCHAR(255)',\n  'CHAR',\n  'TEXT',\n  'INTEGER',\n  'BIGINT',\n  'SMALLINT',",
+          "flow": "POSTGRES_DATA_TYPES definition."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.2144,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.4408,
+                "INCORRECT": 0.5055,
+                "UNSUPPORTED": 0.0537
+              },
+              "confidence": 0.2144,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 297,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Verify ClickHouse DDL generation vs UI Mapping Rules (33) for goopay_clickhouse.transaction_history_1_test_field (binding #94)",
+          "function_workflow": "POSTGRES_DATA_TYPES definition.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/constants/postgresDataTypes.ts:1-10\nexport const POSTGRES_DATA_TYPES = [\n  'VARCHAR',\n  'VARCHAR(50)',\n  'VARCHAR(100)',\n  'VARCHAR(255)',\n  'CHAR',\n  'TEXT',\n  'INTEGER',\n  'BIGINT',\n  'SMALLINT',",
+          "claim": "In postgresDataTypes.ts lines 1-10, VARCHAR and TEXT are included in POSTGRES_DATA_TYPES."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.9624,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.996,
+                "NO": 0.004
+              },
+              "confidence": 0.9624,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 196,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/constants/postgresDataTypes.ts:1-10\nexport const POSTGRES_DATA_TYPES = [\n  'VARCHAR',\n  'VARCHAR(50)',\n  'VARCHAR(100)',\n  'VARCHAR(255)',\n  'CHAR',\n  'TEXT',\n  'INTEGER',\n  'BIGINT',\n  'SMALLINT',",
+          "claim": "In postgresDataTypes.ts lines 1-10, VARCHAR and TEXT are included in POSTGRES_DATA_TYPES."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In postgresDataTypes.ts lines 1-10, POSTGRES_DATA_TYPES is an empty array with zero elements.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/constants/postgresDataTypes.ts:1-10\nexport const POSTGRES_DATA_TYPES = [\n  'VARCHAR',\n  'VARCHAR(50)',\n  'VARCHAR(100)',\n  'VARCHAR(255)',\n  'CHAR',\n  'TEXT',\n  'INTEGER',\n  'BIGINT',\n  'SMALLINT',",
+    "flow": "POSTGRES_DATA_TYPES definition.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.1057,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.4074,
+                "INCORRECT": 0.4666,
+                "UNSUPPORTED": 0.1259
+              },
+              "confidence": 0.1057,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 267,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In postgresDataTypes.ts lines 1-10, POSTGRES_DATA_TYPES is an empty array with zero elements.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/constants/postgresDataTypes.ts:1-10\nexport const POSTGRES_DATA_TYPES = [\n  'VARCHAR',\n  'VARCHAR(50)',\n  'VARCHAR(100)',\n  'VARCHAR(255)',\n  'CHAR',\n  'TEXT',\n  'INTEGER',\n  'BIGINT',\n  'SMALLINT',",
+          "flow": "POSTGRES_DATA_TYPES definition."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3112,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4933,
+                "INCORRECT": 0.4928,
+                "UNSUPPORTED": 0.0139
+              },
+              "confidence": 0.3112,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 298,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Verify ClickHouse DDL generation vs UI Mapping Rules (33) for goopay_clickhouse.transaction_history_1_test_field (binding #94)",
+          "function_workflow": "POSTGRES_DATA_TYPES definition.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/constants/postgresDataTypes.ts:1-10\nexport const POSTGRES_DATA_TYPES = [\n  'VARCHAR',\n  'VARCHAR(50)',\n  'VARCHAR(100)',\n  'VARCHAR(255)',\n  'CHAR',\n  'TEXT',\n  'INTEGER',\n  'BIGINT',\n  'SMALLINT',",
+          "claim": "In postgresDataTypes.ts lines 1-10, POSTGRES_DATA_TYPES is an empty array with zero elements."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.4148,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.1404,
+                "NO": 0.8596
+              },
+              "confidence": 0.4148,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 197,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/constants/postgresDataTypes.ts:1-10\nexport const POSTGRES_DATA_TYPES = [\n  'VARCHAR',\n  'VARCHAR(50)',\n  'VARCHAR(100)',\n  'VARCHAR(255)',\n  'CHAR',\n  'TEXT',\n  'INTEGER',\n  'BIGINT',\n  'SMALLINT',",
+          "claim": "In postgresDataTypes.ts lines 1-10, POSTGRES_DATA_TYPES is an empty array with zero elements."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In transmuter_utils.go lines 391-400, isTextColumnType returns false when dataType is text.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:391-400\nfunc isTimestampColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(dataType))\n\treturn strings.HasPrefix(dt, \"timestamp\") || strings.HasPrefix(dt, \"datetime\")\n}\n\n// isTextColumnType reports whether the mapping rule targets a text or varchar column\nfunc isTextColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(dataType))\n\treturn dt == \"text\" || dt == \"string\" || strings.HasPrefix(dt, \"varchar\") || strings.HasPrefix(dt, \"char\") || strings.HasPrefix(dt, \"fixedstring\")\n}",
+    "flow": "isTextColumnType helper.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.212,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6293,
+                "INCORRECT": 0.28,
+                "UNSUPPORTED": 0.0908
+              },
+              "confidence": 0.212,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 365,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmuter_utils.go lines 391-400, isTextColumnType returns false when dataType is text.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:391-400\nfunc isTimestampColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(dataType))\n\treturn strings.HasPrefix(dt, \"timestamp\") || strings.HasPrefix(dt, \"datetime\")\n}\n\n// isTextColumnType reports whether the mapping rule targets a text or varchar column\nfunc isTextColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(dataType))\n\treturn dt == \"text\" || dt == \"string\" || strings.HasPrefix(dt, \"varchar\") || strings.HasPrefix(dt, \"char\") || strings.HasPrefix(dt, \"fixedstring\")\n}",
+          "flow": "isTextColumnType helper."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3226,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7391,
+                "INCORRECT": 0.1676,
+                "UNSUPPORTED": 0.0934
+              },
+              "confidence": 0.3226,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 396,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Verify ClickHouse DDL generation vs UI Mapping Rules (33) for goopay_clickhouse.transaction_history_1_test_field (binding #94)",
+          "function_workflow": "isTextColumnType helper.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:391-400\nfunc isTimestampColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(dataType))\n\treturn strings.HasPrefix(dt, \"timestamp\") || strings.HasPrefix(dt, \"datetime\")\n}\n\n// isTextColumnType reports whether the mapping rule targets a text or varchar column\nfunc isTextColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(dataType))\n\treturn dt == \"text\" || dt == \"string\" || strings.HasPrefix(dt, \"varchar\") || strings.HasPrefix(dt, \"char\") || strings.HasPrefix(dt, \"fixedstring\")\n}",
+          "claim": "In transmuter_utils.go lines 391-400, isTextColumnType returns false when dataType is text."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7944,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9677,
+                "NO": 0.0323
+              },
+              "confidence": 0.7944,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 297,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:391-400\nfunc isTimestampColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(dataType))\n\treturn strings.HasPrefix(dt, \"timestamp\") || strings.HasPrefix(dt, \"datetime\")\n}\n\n// isTextColumnType reports whether the mapping rule targets a text or varchar column\nfunc isTextColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(dataType))\n\treturn dt == \"text\" || dt == \"string\" || strings.HasPrefix(dt, \"varchar\") || strings.HasPrefix(dt, \"char\") || strings.HasPrefix(dt, \"fixedstring\")\n}",
+          "claim": "In transmuter_utils.go lines 391-400, isTextColumnType returns false when dataType is text."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

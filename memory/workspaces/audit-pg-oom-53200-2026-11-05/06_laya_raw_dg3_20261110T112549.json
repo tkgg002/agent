@@ -1,0 +1,1056 @@
+[
+  {
+    "id": "S-DIFF-1",
+    "kind": "claim",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/transmute_job_repo.go:277-307\n\t\t       updated_at = CASE\n\t\t           WHEN status IN ('PENDING', 'PAUSED')\n\t\t             OR updated_at < NOW() - INTERVAL '45 seconds'\n\t\t             OR (status = 'FAILED' AND error_message LIKE 'reaper:%') THEN NOW()\n\t\t           ELSE updated_at\n\t\t       END\n\t\t WHERE job_id = ?\n\t\t   AND (\n\t\t       status IN ('PENDING', 'RUNNING', 'PAUSED')\n\t\t       OR (cancel_requested = true AND status = 'FAILED' AND error_message LIKE 'reaper:%')\n\t\t   )\n\t`, jobID).Error\n\tif err != nil {\n\t\treturn err\n\t}\n\t// E1: Release any stuck 'running' transmute_schedule row matching master_binding_id or trace_id.\n\t// Note: transmute_schedule_last_status_check allows ('success','failed','running','skipped'), so last_status is set to 'failed' with last_error = 'cancelled by user'.\n\treturn r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_schedule ts\n\t\t   SET last_status = 'failed',\n\t\t       last_error  = 'cancelled by user',\n\t\t       updated_at  = NOW()\n\t\t  FROM cdc_system.transmute_jobs tj\n\t\t WHERE tj.job_id = ?\n\t\t   AND tj.status = 'CANCELLED'\n\t\t   AND ts.last_status = 'running'\n\t\t   AND (\n\t\t       (tj.master_binding_id IS NOT NULL AND tj.master_binding_id > 0 AND ts.master_binding_id = tj.master_binding_id)\n\t\t       OR (COALESCE(tj.trace_id, '') <> '' AND ts.last_trace_id = tj.trace_id)\n\t\t   )\n\t`, jobID).Error",
+    "claim": "In transmute_job_repo.go RequestCancel, updated_at is inside CASE ... ELSE updated_at, and the second UPDATE sets ts.last_status = 'failed', last_error = 'cancelled by user' when tj.status = 'CANCELLED' and ts.last_status = 'running', returning .Error.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.328,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7218,
+                "INCORRECT": 0.2167,
+                "UNSUPPORTED": 0.0615
+              },
+              "confidence": 0.328,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 844,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmute_job_repo.go RequestCancel, updated_at is inside CASE ... ELSE updated_at, and the second UPDATE sets ts.last_status = 'failed', last_error = 'cancelled by user' when tj.status = 'CANCELLED' and ts.last_status = 'running', returning .Error.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/transmute_job_repo.go:277-307\n\t\t       updated_at = CASE\n\t\t           WHEN status IN ('PENDING', 'PAUSED')\n\t\t             OR updated_at < NOW() - INTERVAL '45 seconds'\n\t\t             OR (status = 'FAILED' AND error_message LIKE 'reaper:%') THEN NOW()\n\t\t           ELSE updated_at\n\t\t       END\n\t\t WHERE job_id = ?\n\t\t   AND (\n\t\t       status IN ('PENDING', 'RUNNING', 'PAUSED')\n\t\t       OR (cancel_requested = true AND status = 'FAILED' AND error_message LIKE 'reaper:%')\n\t\t   )\n\t`, jobID).Error\n\tif err != nil {\n\t\treturn err\n\t}\n\t// E1: Release any stuck 'running' transmute_schedule row matching master_binding_id or trace_id.\n\t// Note: transmute_schedule_last_status_check allows ('success','failed','running','skipped'), so last_status is set to 'failed' with last_error = 'cancelled by user'.\n\treturn r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_schedule ts\n\t\t   SET last_status = 'failed',\n\t\t       last_error  = 'cancelled by user',\n\t\t       updated_at  = NOW()\n\t\t  FROM cdc_system.transmute_jobs tj\n\t\t WHERE tj.job_id = ?\n\t\t   AND tj.status = 'CANCELLED'\n\t\t   AND ts.last_status = 'running'\n\t\t   AND (\n\t\t       (tj.master_binding_id IS NOT NULL AND tj.master_binding_id > 0 AND ts.master_binding_id = tj.master_binding_id)\n\t\t       OR (COALESCE(tj.trace_id, '') <> '' AND ts.last_trace_id = tj.trace_id)\n\t\t   )\n\t`, jobID).Error",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.2504,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2893,
+                "INCORRECT": 0.6437,
+                "UNSUPPORTED": 0.067
+              },
+              "confidence": 0.2504,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 850,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/transmute_job_repo.go:277-307\n\t\t       updated_at = CASE\n\t\t           WHEN status IN ('PENDING', 'PAUSED')\n\t\t             OR updated_at < NOW() - INTERVAL '45 seconds'\n\t\t             OR (status = 'FAILED' AND error_message LIKE 'reaper:%') THEN NOW()\n\t\t           ELSE updated_at\n\t\t       END\n\t\t WHERE job_id = ?\n\t\t   AND (\n\t\t       status IN ('PENDING', 'RUNNING', 'PAUSED')\n\t\t       OR (cancel_requested = true AND status = 'FAILED' AND error_message LIKE 'reaper:%')\n\t\t   )\n\t`, jobID).Error\n\tif err != nil {\n\t\treturn err\n\t}\n\t// E1: Release any stuck 'running' transmute_schedule row matching master_binding_id or trace_id.\n\t// Note: transmute_schedule_last_status_check allows ('success','failed','running','skipped'), so last_status is set to 'failed' with last_error = 'cancelled by user'.\n\treturn r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_schedule ts\n\t\t   SET last_status = 'failed',\n\t\t       last_error  = 'cancelled by user',\n\t\t       updated_at  = NOW()\n\t\t  FROM cdc_system.transmute_jobs tj\n\t\t WHERE tj.job_id = ?\n\t\t   AND tj.status = 'CANCELLED'\n\t\t   AND ts.last_status = 'running'\n\t\t   AND (\n\t\t       (tj.master_binding_id IS NOT NULL AND tj.master_binding_id > 0 AND ts.master_binding_id = tj.master_binding_id)\n\t\t       OR (COALESCE(tj.trace_id, '') <> '' AND ts.last_trace_id = tj.trace_id)\n\t\t   )\n\t`, jobID).Error",
+          "claim": "In transmute_job_repo.go RequestCancel, updated_at is inside CASE ... ELSE updated_at, and the second UPDATE sets ts.last_status = 'failed', last_error = 'cancelled by user' when tj.status = 'CANCELLED' and ts.last_status = 'running', returning .Error."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7521,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9588,
+                "NO": 0.0412
+              },
+              "confidence": 0.7521,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 783,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/transmute_job_repo.go:277-307\n\t\t       updated_at = CASE\n\t\t           WHEN status IN ('PENDING', 'PAUSED')\n\t\t             OR updated_at < NOW() - INTERVAL '45 seconds'\n\t\t             OR (status = 'FAILED' AND error_message LIKE 'reaper:%') THEN NOW()\n\t\t           ELSE updated_at\n\t\t       END\n\t\t WHERE job_id = ?\n\t\t   AND (\n\t\t       status IN ('PENDING', 'RUNNING', 'PAUSED')\n\t\t       OR (cancel_requested = true AND status = 'FAILED' AND error_message LIKE 'reaper:%')\n\t\t   )\n\t`, jobID).Error\n\tif err != nil {\n\t\treturn err\n\t}\n\t// E1: Release any stuck 'running' transmute_schedule row matching master_binding_id or trace_id.\n\t// Note: transmute_schedule_last_status_check allows ('success','failed','running','skipped'), so last_status is set to 'failed' with last_error = 'cancelled by user'.\n\treturn r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_schedule ts\n\t\t   SET last_status = 'failed',\n\t\t       last_error  = 'cancelled by user',\n\t\t       updated_at  = NOW()\n\t\t  FROM cdc_system.transmute_jobs tj\n\t\t WHERE tj.job_id = ?\n\t\t   AND tj.status = 'CANCELLED'\n\t\t   AND ts.last_status = 'running'\n\t\t   AND (\n\t\t       (tj.master_binding_id IS NOT NULL AND tj.master_binding_id > 0 AND ts.master_binding_id = tj.master_binding_id)\n\t\t       OR (COALESCE(tj.trace_id, '') <> '' AND ts.last_trace_id = tj.trace_id)\n\t\t   )\n\t`, jobID).Error",
+          "claim": "In transmute_job_repo.go RequestCancel, updated_at is inside CASE ... ELSE updated_at, and the second UPDATE sets ts.last_status = 'failed', last_error = 'cancelled by user' when tj.status = 'CANCELLED' and ts.last_status = 'running', returning .Error."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "S-DIFF-2",
+    "kind": "claim",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:188-199\nfunc (r *SnapshotRunner) markProgressPaused(progressID int64) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    error_msg = 'paused by worker shutdown (auto-resumable)',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}",
+    "claim": "In snapshot_runner_lifecycle.go, markProgressPaused updates cdc_system.snapshot_progress setting status = 'paused', error_msg = 'paused by worker shutdown (auto-resumable)', and updated_at = NOW().",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3721,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7475,
+                "INCORRECT": 0.2031,
+                "UNSUPPORTED": 0.0494
+              },
+              "confidence": 0.3721,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 372,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In snapshot_runner_lifecycle.go, markProgressPaused updates cdc_system.snapshot_progress setting status = 'paused', error_msg = 'paused by worker shutdown (auto-resumable)', and updated_at = NOW().",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:188-199\nfunc (r *SnapshotRunner) markProgressPaused(progressID int64) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    error_msg = 'paused by worker shutdown (auto-resumable)',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4327,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7982,
+                "INCORRECT": 0.1447,
+                "UNSUPPORTED": 0.0571
+              },
+              "confidence": 0.4327,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 378,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:188-199\nfunc (r *SnapshotRunner) markProgressPaused(progressID int64) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    error_msg = 'paused by worker shutdown (auto-resumable)',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}",
+          "claim": "In snapshot_runner_lifecycle.go, markProgressPaused updates cdc_system.snapshot_progress setting status = 'paused', error_msg = 'paused by worker shutdown (auto-resumable)', and updated_at = NOW()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7507,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9585,
+                "NO": 0.0415
+              },
+              "confidence": 0.7507,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 311,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:188-199\nfunc (r *SnapshotRunner) markProgressPaused(progressID int64) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    error_msg = 'paused by worker shutdown (auto-resumable)',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}",
+          "claim": "In snapshot_runner_lifecycle.go, markProgressPaused updates cdc_system.snapshot_progress setting status = 'paused', error_msg = 'paused by worker shutdown (auto-resumable)', and updated_at = NOW()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "S-DIFF-3",
+    "kind": "claim",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:240-255\n\t\tWHERE (\n\t\t\tstatus = 'running'\n\t\t\tAND updated_at < NOW() - INTERVAL '45 seconds'\n\t\t) OR (\n\t\t\tstatus = 'paused'\n\t\t\tAND error_msg LIKE 'paused by worker shutdown%'\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t) OR (\n\t\t\tstatus IN ('paused', 'error')\n\t\t\tAND error_msg LIKE 'Heartbeat timeout:%'\n\t\t\tAND last_seen_id IS NOT NULL\n\t\t\tAND last_seen_id <> ''\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t)",
+    "claim": "In snapshot_runner_lifecycle.go, recoverOrphanedSnapshots includes OR (status = 'paused' AND error_msg LIKE 'paused by worker shutdown%' AND (total_rows = 0 OR rows_processed < total_rows) AND updated_at > NOW() - INTERVAL '24 hours').",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1952,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5642,
+                "INCORRECT": 0.3613,
+                "UNSUPPORTED": 0.0745
+              },
+              "confidence": 0.1952,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 482,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In snapshot_runner_lifecycle.go, recoverOrphanedSnapshots includes OR (status = 'paused' AND error_msg LIKE 'paused by worker shutdown%' AND (total_rows = 0 OR rows_processed < total_rows) AND updated_at > NOW() - INTERVAL '24 hours').",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:240-255\n\t\tWHERE (\n\t\t\tstatus = 'running'\n\t\t\tAND updated_at < NOW() - INTERVAL '45 seconds'\n\t\t) OR (\n\t\t\tstatus = 'paused'\n\t\t\tAND error_msg LIKE 'paused by worker shutdown%'\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t) OR (\n\t\t\tstatus IN ('paused', 'error')\n\t\t\tAND error_msg LIKE 'Heartbeat timeout:%'\n\t\t\tAND last_seen_id IS NOT NULL\n\t\t\tAND last_seen_id <> ''\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t)",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3003,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7068,
+                "INCORRECT": 0.2209,
+                "UNSUPPORTED": 0.0722
+              },
+              "confidence": 0.3003,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 487,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:240-255\n\t\tWHERE (\n\t\t\tstatus = 'running'\n\t\t\tAND updated_at < NOW() - INTERVAL '45 seconds'\n\t\t) OR (\n\t\t\tstatus = 'paused'\n\t\t\tAND error_msg LIKE 'paused by worker shutdown%'\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t) OR (\n\t\t\tstatus IN ('paused', 'error')\n\t\t\tAND error_msg LIKE 'Heartbeat timeout:%'\n\t\t\tAND last_seen_id IS NOT NULL\n\t\t\tAND last_seen_id <> ''\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t)",
+          "claim": "In snapshot_runner_lifecycle.go, recoverOrphanedSnapshots includes OR (status = 'paused' AND error_msg LIKE 'paused by worker shutdown%' AND (total_rows = 0 OR rows_processed < total_rows) AND updated_at > NOW() - INTERVAL '24 hours')."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7075,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9486,
+                "NO": 0.0514
+              },
+              "confidence": 0.7075,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 420,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:240-255\n\t\tWHERE (\n\t\t\tstatus = 'running'\n\t\t\tAND updated_at < NOW() - INTERVAL '45 seconds'\n\t\t) OR (\n\t\t\tstatus = 'paused'\n\t\t\tAND error_msg LIKE 'paused by worker shutdown%'\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t) OR (\n\t\t\tstatus IN ('paused', 'error')\n\t\t\tAND error_msg LIKE 'Heartbeat timeout:%'\n\t\t\tAND last_seen_id IS NOT NULL\n\t\t\tAND last_seen_id <> ''\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t)",
+          "claim": "In snapshot_runner_lifecycle.go, recoverOrphanedSnapshots includes OR (status = 'paused' AND error_msg LIKE 'paused by worker shutdown%' AND (total_rows = 0 OR rows_processed < total_rows) AND updated_at > NOW() - INTERVAL '24 hours')."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "S-DIFF-4",
+    "kind": "claim",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/transmute_job_repo.go:179-193\n\tif status == \"CANCELLED\" {\n\t\t_ = r.db.WithContext(ctx).Exec(`\n\t\t\tUPDATE cdc_system.transmute_schedule ts\n\t\t\t   SET last_status = 'failed',\n\t\t\t       last_error  = 'cancelled by user',\n\t\t\t       updated_at  = NOW()\n\t\t\t  FROM cdc_system.transmute_jobs tj\n\t\t\t WHERE tj.job_id = ?\n\t\t\t   AND ts.last_status = 'running'\n\t\t\t   AND (\n\t\t\t       (tj.master_binding_id IS NOT NULL AND tj.master_binding_id > 0 AND ts.master_binding_id = tj.master_binding_id)\n\t\t\t       OR (COALESCE(tj.trace_id, '') <> '' AND ts.last_trace_id = tj.trace_id)\n\t\t\t   )\n\t\t`, jobID).Error\n\t}",
+    "claim": "In centralized-data-service transmute_job_repo.go UpdateStatus, when status == \"CANCELLED\", it updates cdc_system.transmute_schedule setting last_status = 'failed' and last_error = 'cancelled by user' where ts.last_status = 'running'.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2618,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6677,
+                "INCORRECT": 0.2591,
+                "UNSUPPORTED": 0.0732
+              },
+              "confidence": 0.2618,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 525,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In centralized-data-service transmute_job_repo.go UpdateStatus, when status == \"CANCELLED\", it updates cdc_system.transmute_schedule setting last_status = 'failed' and last_error = 'cancelled by user' where ts.last_status = 'running'.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/transmute_job_repo.go:179-193\n\tif status == \"CANCELLED\" {\n\t\t_ = r.db.WithContext(ctx).Exec(`\n\t\t\tUPDATE cdc_system.transmute_schedule ts\n\t\t\t   SET last_status = 'failed',\n\t\t\t       last_error  = 'cancelled by user',\n\t\t\t       updated_at  = NOW()\n\t\t\t  FROM cdc_system.transmute_jobs tj\n\t\t\t WHERE tj.job_id = ?\n\t\t\t   AND ts.last_status = 'running'\n\t\t\t   AND (\n\t\t\t       (tj.master_binding_id IS NOT NULL AND tj.master_binding_id > 0 AND ts.master_binding_id = tj.master_binding_id)\n\t\t\t       OR (COALESCE(tj.trace_id, '') <> '' AND ts.last_trace_id = tj.trace_id)\n\t\t\t   )\n\t\t`, jobID).Error\n\t}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3623,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7549,
+                "INCORRECT": 0.1781,
+                "UNSUPPORTED": 0.067
+              },
+              "confidence": 0.3623,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 530,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/transmute_job_repo.go:179-193\n\tif status == \"CANCELLED\" {\n\t\t_ = r.db.WithContext(ctx).Exec(`\n\t\t\tUPDATE cdc_system.transmute_schedule ts\n\t\t\t   SET last_status = 'failed',\n\t\t\t       last_error  = 'cancelled by user',\n\t\t\t       updated_at  = NOW()\n\t\t\t  FROM cdc_system.transmute_jobs tj\n\t\t\t WHERE tj.job_id = ?\n\t\t\t   AND ts.last_status = 'running'\n\t\t\t   AND (\n\t\t\t       (tj.master_binding_id IS NOT NULL AND tj.master_binding_id > 0 AND ts.master_binding_id = tj.master_binding_id)\n\t\t\t       OR (COALESCE(tj.trace_id, '') <> '' AND ts.last_trace_id = tj.trace_id)\n\t\t\t   )\n\t\t`, jobID).Error\n\t}",
+          "claim": "In centralized-data-service transmute_job_repo.go UpdateStatus, when status == \"CANCELLED\", it updates cdc_system.transmute_schedule setting last_status = 'failed' and last_error = 'cancelled by user' where ts.last_status = 'running'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8413,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9769,
+                "NO": 0.0231
+              },
+              "confidence": 0.8413,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 463,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/transmute_job_repo.go:179-193\n\tif status == \"CANCELLED\" {\n\t\t_ = r.db.WithContext(ctx).Exec(`\n\t\t\tUPDATE cdc_system.transmute_schedule ts\n\t\t\t   SET last_status = 'failed',\n\t\t\t       last_error  = 'cancelled by user',\n\t\t\t       updated_at  = NOW()\n\t\t\t  FROM cdc_system.transmute_jobs tj\n\t\t\t WHERE tj.job_id = ?\n\t\t\t   AND ts.last_status = 'running'\n\t\t\t   AND (\n\t\t\t       (tj.master_binding_id IS NOT NULL AND tj.master_binding_id > 0 AND ts.master_binding_id = tj.master_binding_id)\n\t\t\t       OR (COALESCE(tj.trace_id, '') <> '' AND ts.last_trace_id = tj.trace_id)\n\t\t\t   )\n\t\t`, jobID).Error\n\t}",
+          "claim": "In centralized-data-service transmute_job_repo.go UpdateStatus, when status == \"CANCELLED\", it updates cdc_system.transmute_schedule setting last_status = 'failed' and last_error = 'cancelled by user' where ts.last_status = 'running'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "CTRL-T-1",
+    "kind": "control_true",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:188-199\nfunc (r *SnapshotRunner) markProgressPaused(progressID int64) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    error_msg = 'paused by worker shutdown (auto-resumable)',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}",
+    "claim": "markProgressPaused returns early if progressID <= 0 or r.db == nil, and otherwise updates cdc_system.snapshot_progress WHERE id = ? AND status = 'running'.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.369,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7585,
+                "INCORRECT": 0.1766,
+                "UNSUPPORTED": 0.0649
+              },
+              "confidence": 0.369,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 362,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "markProgressPaused returns early if progressID <= 0 or r.db == nil, and otherwise updates cdc_system.snapshot_progress WHERE id = ? AND status = 'running'.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:188-199\nfunc (r *SnapshotRunner) markProgressPaused(progressID int64) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    error_msg = 'paused by worker shutdown (auto-resumable)',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.6225,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8835,
+                "INCORRECT": 0.0955,
+                "UNSUPPORTED": 0.021
+              },
+              "confidence": 0.6225,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 367,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:188-199\nfunc (r *SnapshotRunner) markProgressPaused(progressID int64) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    error_msg = 'paused by worker shutdown (auto-resumable)',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}",
+          "claim": "markProgressPaused returns early if progressID <= 0 or r.db == nil, and otherwise updates cdc_system.snapshot_progress WHERE id = ? AND status = 'running'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8713,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9822,
+                "NO": 0.0178
+              },
+              "confidence": 0.8713,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 300,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:188-199\nfunc (r *SnapshotRunner) markProgressPaused(progressID int64) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    error_msg = 'paused by worker shutdown (auto-resumable)',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}",
+          "claim": "markProgressPaused returns early if progressID <= 0 or r.db == nil, and otherwise updates cdc_system.snapshot_progress WHERE id = ? AND status = 'running'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-F-1",
+    "kind": "control_false",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:188-199\nfunc (r *SnapshotRunner) markProgressPaused(progressID int64) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    error_msg = 'paused by worker shutdown (auto-resumable)',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}",
+    "claim": "markProgressPaused deletes the row from cdc_system.snapshot_progress instead of updating status = 'paused'.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5522,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8552,
+                "INCORRECT": 0.1113,
+                "UNSUPPORTED": 0.0335
+              },
+              "confidence": 0.5522,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 346,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "markProgressPaused deletes the row from cdc_system.snapshot_progress instead of updating status = 'paused'.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:188-199\nfunc (r *SnapshotRunner) markProgressPaused(progressID int64) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    error_msg = 'paused by worker shutdown (auto-resumable)',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3423,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6677,
+                "INCORRECT": 0.308,
+                "UNSUPPORTED": 0.0242
+              },
+              "confidence": 0.3423,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 351,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:188-199\nfunc (r *SnapshotRunner) markProgressPaused(progressID int64) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    error_msg = 'paused by worker shutdown (auto-resumable)',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}",
+          "claim": "markProgressPaused deletes the row from cdc_system.snapshot_progress instead of updating status = 'paused'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5218,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8971,
+                "NO": 0.1029
+              },
+              "confidence": 0.5218,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 284,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:188-199\nfunc (r *SnapshotRunner) markProgressPaused(progressID int64) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    error_msg = 'paused by worker shutdown (auto-resumable)',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}",
+          "claim": "markProgressPaused deletes the row from cdc_system.snapshot_progress instead of updating status = 'paused'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-F-2",
+    "kind": "control_false",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/transmute_job_repo.go:179-185\n\tif status == \"CANCELLED\" {\n\t\t_ = r.db.WithContext(ctx).Exec(`\n\t\t\tUPDATE cdc_system.transmute_schedule ts\n\t\t\t   SET last_status = 'failed',\n\t\t\t       last_error  = 'cancelled by user',\n\t\t\t       updated_at  = NOW()",
+    "claim": "When status == \"CANCELLED\", UpdateStatus sets last_status = 'running' and never updates last_error.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3324,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6826,
+                "INCORRECT": 0.2832,
+                "UNSUPPORTED": 0.0342
+              },
+              "confidence": 0.3324,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 298,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "When status == \"CANCELLED\", UpdateStatus sets last_status = 'running' and never updates last_error.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/transmute_job_repo.go:179-185\n\tif status == \"CANCELLED\" {\n\t\t_ = r.db.WithContext(ctx).Exec(`\n\t\t\tUPDATE cdc_system.transmute_schedule ts\n\t\t\t   SET last_status = 'failed',\n\t\t\t       last_error  = 'cancelled by user',\n\t\t\t       updated_at  = NOW()",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4185,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7165,
+                "INCORRECT": 0.2737,
+                "UNSUPPORTED": 0.0098
+              },
+              "confidence": 0.4185,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 304,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/transmute_job_repo.go:179-185\n\tif status == \"CANCELLED\" {\n\t\t_ = r.db.WithContext(ctx).Exec(`\n\t\t\tUPDATE cdc_system.transmute_schedule ts\n\t\t\t   SET last_status = 'failed',\n\t\t\t       last_error  = 'cancelled by user',\n\t\t\t       updated_at  = NOW()",
+          "claim": "When status == \"CANCELLED\", UpdateStatus sets last_status = 'running' and never updates last_error."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.9745,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0025,
+                "NO": 0.9975
+              },
+              "confidence": 0.9745,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 237,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/transmute_job_repo.go:179-185\n\tif status == \"CANCELLED\" {\n\t\t_ = r.db.WithContext(ctx).Exec(`\n\t\t\tUPDATE cdc_system.transmute_schedule ts\n\t\t\t   SET last_status = 'failed',\n\t\t\t       last_error  = 'cancelled by user',\n\t\t\t       updated_at  = NOW()",
+          "claim": "When status == \"CANCELLED\", UpdateStatus sets last_status = 'running' and never updates last_error."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

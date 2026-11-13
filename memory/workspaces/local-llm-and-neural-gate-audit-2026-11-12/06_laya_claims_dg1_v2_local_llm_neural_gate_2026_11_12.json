@@ -1,0 +1,82 @@
+[
+  {
+    "id": "S-RC-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Root cause: each TTT head needs MIN_FIT_EXAMPLES labelled examples; c_req_check and dg0_dg1_routing have fewer.",
+    "claim": "MIN_FIT_EXAMPLES defaults to 6.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/sidecar/vegaml/vega_systemone_sidecar.py:41-41\nMIN_FIT_EXAMPLES = int(os.getenv(\"VEGA_MIN_FIT\", \"6\"))"
+  },
+  {
+    "id": "S-RC-02",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Root cause: every Human Gate feedback request triggers an automatic full refit.",
+    "claim": "The feedback request sets AutoFit to true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/vega_human_gate.go:127-127\n\t\tAutoFit:   true,"
+  },
+  {
+    "id": "S-RC-03",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Root cause: when the reviewer does not approve, the routing label becomes REJECT_REWRITE_PLAN.",
+    "claim": "When approved is false, dg0_dg1_routing is set to REJECT_REWRITE_PLAN.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/vega_human_gate.go:118-120\n\tif !approved {\n\t\tlabels[\"dg0_dg1_routing\"] = \"REJECT_REWRITE_PLAN\"\n\t}"
+  },
+  {
+    "id": "S-FIX-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Fix: replay script maps control claim kinds to verdict labels.",
+    "claim": "VERDICT_BY_KIND maps control_true to CORRECT and control_false to INCORRECT.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/local-llm-and-neural-gate-audit-2026-11-12/09_tasks_solution_local_llm_neural_gate_2026_11_12.md:61-61\nVERDICT_BY_KIND = {\"control_true\": \"CORRECT\", \"control_false\": \"INCORRECT\"}"
+  },
+  {
+    "id": "S-IMPACT-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Impact: the agent core keeps using Laya on port 8200; VegaML replay does not change it.",
+    "claim": "DEFAULT_URL uses port 8200.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:42-42\nDEFAULT_URL = \"http://127.0.0.1:8200/v1/predict\""
+  },
+  {
+    "id": "S-PATTERN-01",
+    "kind": "solution",
+    "basis": "code",
+    "flow": "Pattern: the script backs up the feedback file before applying.",
+    "claim": "Before posting, the script copies FEEDBACK_FILE to a sibling whose name ends with .bak_ plus a timestamp.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/local-llm-and-neural-gate-audit-2026-11-12/09_tasks_solution_local_llm_neural_gate_2026_11_12.md:123-124\n    if FEEDBACK_FILE.exists():\n        shutil.copy2(FEEDBACK_FILE, FEEDBACK_FILE.with_name(FEEDBACK_FILE.name + f\".bak_{time.strftime('%Y%m%dT%H%M')}\"))"
+  },
+  {
+    "id": "K1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Control false: wrong default value.",
+    "claim": "MIN_FIT_EXAMPLES defaults to 60.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/sidecar/vegaml/vega_systemone_sidecar.py:41-41\nMIN_FIT_EXAMPLES = int(os.getenv(\"VEGA_MIN_FIT\", \"6\"))"
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Control false: inverted boolean.",
+    "claim": "The feedback request sets AutoFit to false.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/vega_human_gate.go:127-127\n\t\tAutoFit:   true,"
+  },
+  {
+    "id": "K3",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Control false: wrong label value.",
+    "claim": "When approved is false, dg0_dg1_routing is set to PASS_TO_HUMAN_GATE.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/vega_human_gate.go:118-120\n\tif !approved {\n\t\tlabels[\"dg0_dg1_routing\"] = \"REJECT_REWRITE_PLAN\"\n\t}"
+  },
+  {
+    "id": "K4",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "Control true: literal match.",
+    "claim": "DEFAULT_URL is assigned the string http://127.0.0.1:8200/v1/predict.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:42-42\nDEFAULT_URL = \"http://127.0.0.1:8200/v1/predict\""
+  }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "A-F1-NULLABLE-DDL",
+    "kind": "claim",
+    "claim": "In master_ddl_generator_clickhouse.go lines 102-147, generateClickHouseDDL calls mapToClickHouseColumnType(r.DataType, true), wrapping all 33 business columns (String, DateTime64(3, 'UTC'), Decimal(38, 10), UInt8) in Nullable(...) so that NULL values from PostgreSQL/Shadow are preserved in ClickHouse instead of becoming default zero values.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_clickhouse.go:100-147\n\t\tbaseType = \"String\"\n\t}\n\tif isNullable {\n\t\treturn fmt.Sprintf(\"Nullable(%s)\", baseType)\n\t}\n\treturn baseType\n}\n\nfunc (g *MasterDDLGenerator) generateClickHouseDDL(ctx context.Context, reg *masterDDLBindingRow, rules []mastermodel.MappingRuleV2) (*MasterDDLResult, error) {\n\tdbName := resolveClickHouseDatabase(reg)\n\tres := &MasterDDLResult{\n\t\tMasterName:   reg.MasterTable,\n\t\tMasterSchema: dbName,\n\t\tRuleCount:    len(rules),\n\t}\n\n\tcols := []string{\n\t\t\"`_gpay_id` Int64\",\n\t\t\"`_source_ts` Nullable(Int64)\",\n\t\t\"`_deleted` UInt8 DEFAULT 0\",\n\t\t\"`_updated_at` DateTime64(3, 'UTC') DEFAULT now64(3)\",\n\t\t\"`_transmuted_at` UInt64 DEFAULT toUInt64(toUnixTimestamp64Milli(now64(3)))\",\n\t}\n\tseen := map[string]bool{\n\t\t\"_gpay_id\": true, \"_source_id\": true, \"_raw_data\": true, \"_source\": true,\n\t\t\"_source_ts\": true, \"_synced_at\": true, \"_version\": true, \"_hash\": true,\n\t\t\"_deleted\": true, \"_created_at\": true, \"_updated_at\": true, \"_transmuted_at\": true,\n\t}\n\n\tvar financialCols []string\n\ttblQualified := quoteClickHouseQualified(reg, reg.MasterTable)\n\n\tfor _, r := range rules {\n\t\tif !ddlIdentRe.MatchString(r.TargetColumn) || seen[r.TargetColumn] {\n\t\t\tcontinue\n\t\t}\n\t\tif !shadow.IsTypeWhitelisted(r.DataType) {\n\t\t\tcontinue\n\t\t}\n\t\tseen[r.TargetColumn] = true\n\t\tchType := mapToClickHouseColumnType(r.DataType, true)",
+    "flow": "ClickHouse CREATE TABLE DDL generation in MasterDDLGenerator.generateClickHouseDDL."
+  },
+  {
+    "id": "A-F2-SYSTEM-COLS-AND-ORDER",
+    "kind": "claim",
+    "claim": "In master_ddl_generator_clickhouse.go lines 155-166, generateClickHouseDDL creates the table with ENGINE = ReplacingMergeTree(_transmuted_at) ORDER BY (_gpay_id) and 2 minmax skipping indexes on _source_ts and _updated_at, while master_mapping_rule_repo_gorm.go line 154 orders UI rules by m.target_column ASC.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_clickhouse.go:155-167\n\tres.CreateSQL = fmt.Sprintf(\n\t\t\"CREATE TABLE IF NOT EXISTS %s (\\n  %s\\n) ENGINE = ReplacingMergeTree(_transmuted_at)\\nORDER BY (`_gpay_id`);\",\n\t\ttblQualified,\n\t\tstrings.Join(cols, \",\\n  \"),\n\t)\n\n\tres.IndexSQL = []string{\n\t\tfmt.Sprintf(\"ALTER TABLE %s ADD INDEX IF NOT EXISTS %s (`_source_ts`) TYPE minmax GRANULARITY 4;\",\n\t\t\ttblQualified, quoteMySQLIdent(\"ix_\"+reg.MasterTable+\"_source_ts\")),\n\t\tfmt.Sprintf(\"ALTER TABLE %s ADD INDEX IF NOT EXISTS %s (`_updated_at`) TYPE minmax GRANULARITY 4;\",\n\t\t\ttblQualified, quoteMySQLIdent(\"ix_\"+reg.MasterTable+\"_updated_at\")),\n\t}\n\treturn res, nil",
+    "flow": "ClickHouse ReplacingMergeTree engine and index DDL generation."
+  },
+  {
+    "id": "A-F3-CLONE-NULL-DATATYPE",
+    "kind": "claim",
+    "claim": "In master_multi_shadow_repo_gorm.go lines 49-64, cloneAllShadowRulesTx inserts shadow-linked rules into cdc_system.mapping_rule_master without setting m.data_type so m.data_type remains NULL and inherits v2.data_type via COALESCE.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:49-64\n\t\tif err := db.WithContext(ctx).Exec(`\n\t\t\tINSERT INTO `+masterRuleTable+`\n\t\t\t  (master_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by)\n\t\t\tSELECT ?, v2.id, v2.target_column, true, 'pending', ?, ?\n\t\t\t  FROM `+v2Table+` v2\n\t\t\t WHERE v2.shadow_binding_id = ?\n\t\t\t   AND COALESCE(v2.is_active, true) = true\n\t\t\t   AND NOT EXISTS (\n\t\t\t     SELECT 1 FROM `+masterRuleTable+` mm\n\t\t\t      WHERE mm.master_binding_id = ? AND mm.mapping_v2_id = v2.id)\n\t\t\t   AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,\n\t\t\tmasterBindingID, createdBy, updatedBy, sbID, masterBindingID, reservedCols,\n\t\t).Error; err != nil {\n\t\t\treturn err\n\t\t}",
+    "flow": "Rule cloning from mapping_rule_v2 to mapping_rule_master during Master creation/approval."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In postgresDataTypes.ts lines 1-10, VARCHAR and TEXT are included in POSTGRES_DATA_TYPES.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/constants/postgresDataTypes.ts:1-10\nexport const POSTGRES_DATA_TYPES = [\n  'VARCHAR',\n  'VARCHAR(50)',\n  'VARCHAR(100)',\n  'VARCHAR(255)',\n  'CHAR',\n  'TEXT',\n  'INTEGER',\n  'BIGINT',\n  'SMALLINT',",
+    "flow": "POSTGRES_DATA_TYPES definition."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In postgresDataTypes.ts lines 1-10, POSTGRES_DATA_TYPES is an empty array with zero elements.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/constants/postgresDataTypes.ts:1-10\nexport const POSTGRES_DATA_TYPES = [\n  'VARCHAR',\n  'VARCHAR(50)',\n  'VARCHAR(100)',\n  'VARCHAR(255)',\n  'CHAR',\n  'TEXT',\n  'INTEGER',\n  'BIGINT',\n  'SMALLINT',",
+    "flow": "POSTGRES_DATA_TYPES definition."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In transmuter_utils.go lines 391-400, isTextColumnType returns false when dataType is text.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:391-400\nfunc isTimestampColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(dataType))\n\treturn strings.HasPrefix(dt, \"timestamp\") || strings.HasPrefix(dt, \"datetime\")\n}\n\n// isTextColumnType reports whether the mapping rule targets a text or varchar column\nfunc isTextColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(dataType))\n\treturn dt == \"text\" || dt == \"string\" || strings.HasPrefix(dt, \"varchar\") || strings.HasPrefix(dt, \"char\") || strings.HasPrefix(dt, \"fixedstring\")\n}",
+    "flow": "isTextColumnType helper."
+  }
+]

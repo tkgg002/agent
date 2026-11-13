@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "claim",
+    "claim": "On MasterMappingFieldsPage, the Master Data Type column unconditionally sets types = POSTGRES_DATA_TYPES instead of selecting ClickHouse data types when the master binding targets ClickHouse.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx:762-768\n      title: 'Master Data Type',\n      dataIndex: 'data_type',\n      width: 280,\n      render: (t: string, record) => {\n        if (record.id < 0) return <Tag color=\"orange\">OBJECT</Tag>;\n        const types = POSTGRES_DATA_TYPES;",
+    "flow": "MasterMappingFieldsPage renders Master Data Type Select options from POSTGRES_DATA_TYPES for all bindings."
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "claim",
+    "claim": "In cdc-cms-service dbutil.IsValidDataType, the allowed map only contains PostgreSQL data types and rejects ClickHouse native types such as STRING, INT64, UINT8, FLOAT64, DATETIME64.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/pkgs/utils/dbutil/validate.go:28-35\n\tallowed := map[string]bool{\n\t\t\"VARCHAR\": true, \"CHAR\": true, \"TEXT\": true, \"INTEGER\": true, \"INT\": true,\n\t\t\"BIGINT\": true, \"SMALLINT\": true, \"NUMERIC\": true, \"DECIMAL\": true, \"REAL\": true,\n\t\t\"DOUBLE PRECISION\": true, \"BOOLEAN\": true, \"BOOL\": true, \"DATE\": true,\n\t\t\"TIMESTAMP\": true, \"TIMESTAMPTZ\": true, \"JSONB\": true, \"JSON\": true, \"UUID\": true,\n\t\t\"OBJECTID\": true, \"OID\": true,\n\t}\n\treturn allowed[base]",
+    "flow": "UpdateDataType calls dbutil.IsValidDataType before saving master rule data_type."
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "claim",
+    "claim": "In centralized-data-service mapToClickHouseColumnType, the switch statement only matches PostgreSQL type names and falls back to String for unmapped strings like INT64, UINT8, FLOAT64, or DATETIME64.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_clickhouse.go:47-70\nfunc mapToClickHouseColumnType(pgType string, isNullable bool) string {\n\tupper := strings.ToUpper(strings.TrimSpace(pgType))\n\tvar baseType string\n\tswitch {\n\tcase upper == \"BIGINT\" || upper == \"INT8\":\n\t\tbaseType = \"Int64\"\n\tcase upper == \"INTEGER\" || upper == \"INT\" || upper == \"INT4\":\n\t\tbaseType = \"Int32\"\n\tcase upper == \"SMALLINT\" || upper == \"INT2\":\n\t\tbaseType = \"Int16\"\n\tcase upper == \"BOOLEAN\" || upper == \"BOOL\":\n\t\tbaseType = \"UInt8\"\n\tcase upper == \"DOUBLE PRECISION\" || upper == \"FLOAT8\" || upper == \"REAL\" || upper == \"FLOAT4\":\n\t\tbaseType = \"Float64\"\n\tcase strings.HasPrefix(upper, \"NUMERIC\") || strings.HasPrefix(upper, \"DECIMAL\"):\n\t\tbaseType = \"Decimal(38, 10)\"\n\tcase upper == \"TIMESTAMPTZ\" || upper == \"TIMESTAMP WITH TIME ZONE\" || upper == \"TIMESTAMP\":\n\t\tbaseType = \"DateTime64(3, 'UTC')\"\n\tcase upper == \"DATE\":\n\t\tbaseType = \"Date32\"\n\tdefault:\n\t\tbaseType = \"String\"\n\t}",
+    "flow": "generateClickHouseDDL and reconcileClickHouseColumn call mapToClickHouseColumnType(r.DataType, true)."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "MasterListItem in list_masters.go includes MasterEngineType mapped to json field master_engine_type.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/master/list_masters.go:20-23\n\tMasterDatabase       *string         `json:\"master_database,omitempty\"`\n\tMasterConnectionCode *string         `json:\"master_connection_code,omitempty\"`\n\tMasterEngineType     *string         `json:\"master_engine_type,omitempty\"`",
+    "flow": "GET /api/v1/masters returns MasterListItem slice."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In MasterMappingFieldsPage.tsx lines 762-768, the column title is 'Shadow Table Name' and types is set to CLICKHOUSE_ONLY_TYPES.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx:762-768\n      title: 'Master Data Type',\n      dataIndex: 'data_type',\n      width: 280,\n      render: (t: string, record) => {\n        if (record.id < 0) return <Tag color=\"orange\">OBJECT</Tag>;\n        const types = POSTGRES_DATA_TYPES;",
+    "flow": "Column definition in MasterMappingFieldsPage."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In validate.go lines 28-35, allowed map is completely empty and returns false for VARCHAR and BIGINT.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/pkgs/utils/dbutil/validate.go:28-35\n\tallowed := map[string]bool{\n\t\t\"VARCHAR\": true, \"CHAR\": true, \"TEXT\": true, \"INTEGER\": true, \"INT\": true,\n\t\t\"BIGINT\": true, \"SMALLINT\": true, \"NUMERIC\": true, \"DECIMAL\": true, \"REAL\": true,\n\t\t\"DOUBLE PRECISION\": true, \"BOOLEAN\": true, \"BOOL\": true, \"DATE\": true,\n\t\t\"TIMESTAMP\": true, \"TIMESTAMPTZ\": true, \"JSONB\": true, \"JSON\": true, \"UUID\": true,\n\t\t\"OBJECTID\": true, \"OID\": true,\n\t}\n\treturn allowed[base]",
+    "flow": "IsValidDataType validation."
+  }
+]

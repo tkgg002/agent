@@ -1,0 +1,50 @@
+{
+  "stage": "dg0",
+  "workspace": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-trans-his-postgres-export-2026-11-03",
+  "claims": [
+    {
+      "id": "C-REQ-1",
+      "category": "C-REQ",
+      "statement": "Original HealthCheckLogic design in commit 1ea8d1f8 iterates DB_LIST and delegates connection status strictly to this.mainProcess.isDbConnected(alias) without alias-specific branching or model ping calls. REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/health-check.logic.ts:30-53",
+      "ref": "/Users/trainguyen/Documents/work/centralized-export-service/logics/health-check.logic.ts:30-53",
+      "role": "target"
+    },
+    {
+      "id": "C-REALITY-1",
+      "category": "C-REALITY",
+      "statement": "start.ts currently imports trans-his-specific helpers (getTransHisExportSource, isDbEnabled, readPostgresDbConfig, readTransHisPgConfig, TRANS_HIS_PG_ALIAS) into the generic service bootstrapper instead of dispatching purely by config.type === 'postgres' through PostgresDb.createConnection like MariaDb. REF: /Users/trainguyen/Documents/work/centralized-export-service/start.ts:25-31",
+      "ref": "/Users/trainguyen/Documents/work/centralized-export-service/start.ts:25-31",
+      "role": "target"
+    },
+    {
+      "id": "C-CONTRA-1",
+      "category": "C-CONTRA",
+      "statement": "MainProcess.isDbConnected(alias) in data-transfers/main-process.ts checks Mongoose readyState === 1 or connection truthiness, and can polymorphically inspect pg.Pool.ended without leaking Postgres or TransHisPgModel knowledge into HealthCheckLogic. REF: /Users/trainguyen/Documents/work/centralized-export-service/data-transfers/main-process.ts:32-38",
+      "ref": "/Users/trainguyen/Documents/work/centralized-export-service/data-transfers/main-process.ts:32-38",
+      "role": "target"
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "category": "C-REALITY",
+      "statement": "MariaDb in dbHandler/mariadb.ts accepts ConnectOptions and delegates connection creation to DbConnectorFactory.getInstance(this.logger).connect(config, options.alias). REF: /Users/trainguyen/Documents/work/centralized-export-service/dbHandler/mariadb.ts:23-52",
+      "ref": "/Users/trainguyen/Documents/work/centralized-export-service/dbHandler/mariadb.ts:23-52",
+      "role": "control_true"
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "category": "C-CONTRA",
+      "statement": "HealthCheckLogic on develop already contains a private pingReconcileMariaDb method that calls CentralReconModel.ping() directly for the reconcile alias. REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/health-check.logic.ts:30-53",
+      "ref": "/Users/trainguyen/Documents/work/centralized-export-service/logics/health-check.logic.ts:30-53",
+      "role": "control_false",
+      "contradiction": true
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "category": "C-CONTRA",
+      "statement": "MainProcess.isDbConnected in data-transfers/main-process.ts executes a raw SQL DROP TABLE statement whenever checking connection status. REF: /Users/trainguyen/Documents/work/centralized-export-service/data-transfers/main-process.ts:32-38",
+      "ref": "/Users/trainguyen/Documents/work/centralized-export-service/data-transfers/main-process.ts:32-38",
+      "role": "control_false",
+      "contradiction": true
+    }
+  ]
+}

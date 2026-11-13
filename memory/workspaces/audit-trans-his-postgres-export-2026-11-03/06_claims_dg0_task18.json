@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ-18",
+    "kind": "claim",
+    "claim": "BaseExportProcessor.validatePrerequisites throws 'Model Check Failed: Missing required models [TransHisPgModel]. Available models: [...]' when getRequiredModelName() returns 'TransHisPgModel' and mainProcess.models['TransHisPgModel'] is undefined.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/processors/BaseExportProcessor.ts:65-79\n    const rawRequired = this.getRequiredModelName();\n    const requiredModels = Array.isArray(rawRequired) ? rawRequired : [rawRequired];\n\n    const missingModels: string[] = [];\n\n    requiredModels.forEach(modelName => {\n      if (!mainProcess.models[modelName]) {\n        missingModels.push(modelName);\n      }\n    });\n\n    if (missingModels.length > 0) {\n      const availableModels = Object.keys(mainProcess.models).join(\", \");\n      throw new Error(`Model Check Failed: Missing required models [${missingModels.join(\", \")}]. Available models: [${availableModels}]`);\n    }",
+    "flow": "ExportWorker.processJobLogic -> BaseExportProcessor.execute -> validatePrerequisites -> missingModels check"
+  },
+  {
+    "id": "C-REALITY-18",
+    "kind": "claim",
+    "claim": "In start.ts, initService loops over DB_LIST and catches connection errors per alias without rethrowing for non-default databases, so when 'trans-his-pg' fails to connect, connections['trans-his-pg'] is omitted while MainProcess initializes the other 15 databases including CentralReconModel.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/start.ts:271-304\n                    } else if (config.type === \"postgres\") {\n                        connection = await new Promise((resolve, reject) => {\n                            this.postgresDbHandler.createConnection({\n                                alias,\n                                host: SVC_ENV.get()[config.hostEnvKey],\n                                port: SVC_ENV.get()[config.portEnvKey],\n                                database: SVC_ENV.get()[config.dbEnvKey],\n                                username: SVC_ENV.get()[config.userEnvKey],\n                                password: SVC_ENV.get()[config.passEnvKey],\n                                poolSize: SVC_ENV.get()[config.poolSizeEnvKey] || 10\n                            }, (err, pool) => err ? reject(err) : resolve(pool));\n                        });\n                    }\n                    if (connection) {\n                        connections[alias] = connection;\n                        successCount++;\n                        this.logger.info(`DB '${alias}' (${config.type}) connected.`);\n                    }\n                } catch (error) {\n                    this.logger.error(`Failed to connect DB '${alias}':`, error.message);\n                }\n\n            }\n\n            this.logger.info(`Connected to ${successCount}/${DB_LIST.length} databases.`);\n            this.logger.info(\"Connections object keys before MainProcess instantiation:\", Object.keys(connections));\n\n            if (!connections.default) {\n                throw new Error(\"CRITICAL: Default database failed to connect!\");\n            }\n\n            // Initialize MainProcess\n            this.mainProcess = new MainProcess(this.broker, this.logger, connections, [paginate]);",
+    "flow": "start.ts initService -> DB_LIST loop -> catch error on trans-his-pg -> new MainProcess(connections)"
+  },
+  {
+    "id": "C-CONTRA-18",
+    "kind": "claim",
+    "claim": "svc-env.ts includes RECONCILE_MARIADB_HOST..POOLSIZE in REQUIRED_KEYS but omits TRANS_HIS_PG_HOST..POOLSIZE, so missing TRANS_HIS_PG_* variables in Vault or env are not caught by VaultSecurity.checkMissingEnvVariable().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/svc-env.ts:162-170\n\t\"RECONCILE_MARIADB_HOST\",\n\t\"RECONCILE_MARIADB_PORT\",\n\t\"RECONCILE_MARIADB_DB\",\n\t\"RECONCILE_MARIADB_USER\",\n\t\"RECONCILE_MARIADB_PASS\",\n\t\"RECONCILE_MARIADB_POOLSIZE\",\n\n\t\"EXPORT_STORAGE_PATH\"\n];",
+    "flow": "start.ts loadEnvAndInitService -> VaultSecurity.overWriteVaultEnv -> VaultSecurity.checkMissingEnvVariable -> REQUIRED_KEYS"
+  },
+  {
+    "id": "CTRL-TRUE-18",
+    "kind": "control_true",
+    "claim": "ModelRegistry in models/index.ts maps alias 'trans-his-pg' to [TransHisPgModel] and alias 'reconcile' to [CentralReconModel].",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/index.ts:162-175\n  \"reconcile\": [\n    CentralReconModel\n  ],\n  \"ticket\": [\n    TicketHistoryModel,\n    TicketCategoriesModel\n  ],\n  \"trans-his\": [\n    TransHisModel\n  ],\n  \"trans-his-pg\": [\n    TransHisPgModel\n  ]\n};",
+    "flow": "MainProcess.initializeModels -> ModelRegistry[alias]"
+  },
+  {
+    "id": "CTRL-FALSE-18A",
+    "kind": "control_false",
+    "claim": "ModelRegistry in models/index.ts does not include TransHisPgModel under any alias and instead registers CentralReconModel under 'trans-his-pg'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/index.ts:162-175\n  \"reconcile\": [\n    CentralReconModel\n  ],\n  \"ticket\": [\n    TicketHistoryModel,\n    TicketCategoriesModel\n  ],\n  \"trans-his\": [\n    TransHisModel\n  ],\n  \"trans-his-pg\": [\n    TransHisPgModel\n  ]\n};",
+    "flow": "MainProcess.initializeModels -> ModelRegistry[alias]"
+  },
+  {
+    "id": "CTRL-FALSE-18B",
+    "kind": "control_false",
+    "claim": "BaseExportProcessor.validatePrerequisites ignores missing models and never throws an error when mainProcess.models is missing a required model.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/processors/BaseExportProcessor.ts:70-79\n    requiredModels.forEach(modelName => {\n      if (!mainProcess.models[modelName]) {\n        missingModels.push(modelName);\n      }\n    });\n\n    if (missingModels.length > 0) {\n      const availableModels = Object.keys(mainProcess.models).join(\", \");\n      throw new Error(`Model Check Failed: Missing required models [${missingModels.join(\", \")}]. Available models: [${availableModels}]`);\n    }",
+    "flow": "BaseExportProcessor.validatePrerequisites model validation"
+  }
+]

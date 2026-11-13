@@ -1,0 +1,58 @@
+[
+    {
+      "id": "S-RC-27",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In recon_dest_query.go, CountRows executes a single read-only query SELECT COUNT(*) FROM quoteRelation(tableName) inside da.breaker.Execute and rolls back the transaction on defer.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_dest_query.go:35-44\n\tresult, err := da.breaker.Execute(func() (interface{}, error) {\n\t\tvar count int64\n\t\ttx := da.readOnlyDB(ctx)\n\t\tdefer tx.Rollback()\n\t\tsql := fmt.Sprintf(`SELECT COUNT(*) FROM %s`, quoteRelation(tableName))\n\t\tif err := tx.Raw(sql).Scan(&count).Error; err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\treturn count, nil\n\t})"
+    },
+    {
+      "id": "S-FIX-28",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In recon_window_index_probe.go, CountRowsBeforeCutoff checks da.IsNonPostgresSQL() and delegates to sqlDialectCountRows and sqlDialectCountInWindow before running the PostgreSQL cutoff query.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:209-219\n\tif da.IsNonPostgresSQL() {\n\t\ttotal, err := da.sqlDialectCountRows(ctx, tableName, pkColumn)\n\t\tif err != nil {\n\t\t\treturn 0, err\n\t\t}\n\t\tpost, errW := da.sqlDialectCountInWindow(ctx, tableName, \"_source_ts\", cutoffHi, time.Now().UTC().Add(time.Minute))\n\t\tif errW == nil && total >= post {\n\t\t\ttotal -= post\n\t\t}\n\t\treturn total, nil\n\t}"
+    },
+    {
+      "id": "S-IMPACT-29",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In recon_window_index_probe.go, CountRowsBeforeCutoff executes SELECT (SELECT COUNT(*) FROM rel) AS raw_total, (SELECT COUNT(*) FROM rel WHERE \"_source_ts\" >= ?) AS post_cutoff inside a single readOnlyDB transaction.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:239-252\n\tresult, err := da.breaker.Execute(func() (interface{}, error) {\n\t\tvar row cutoffCountRow\n\t\trel := quoteRelation(tableName)\n\t\ttx := da.readOnlyDB(ctx)\n\t\tdefer tx.Rollback()\n\t\tsql := fmt.Sprintf(\n\t\t\t`SELECT (SELECT COUNT(*) FROM %s) AS raw_total, (SELECT COUNT(*) FROM %s WHERE \"_source_ts\" >= ?) AS post_cutoff`,\n\t\t\trel, rel,\n\t\t)\n\t\tif err := tx.Raw(sql, cutoffMs).Scan(&row).Error; err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\treturn row, nil\n\t})"
+    },
+    {
+      "id": "S-PATTERN-30",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In recon_window_index_probe.go, CountDeletedRowsBeforeCutoff checks da.IsNonPostgresSQL() and delegates to sqlDialectCountDeletedRows and sqlDialectCountRecentDeletedRows.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:287-297\n\tif da.IsNonPostgresSQL() {\n\t\tdelTotal, err := da.sqlDialectCountDeletedRows(ctx, tableName)\n\t\tif err != nil {\n\t\t\treturn 0, err\n\t\t}\n\t\tdelPost, errW := da.sqlDialectCountRecentDeletedRows(ctx, tableName, \"_source_ts\", cutoffHi, time.Now().UTC().Add(time.Minute))\n\t\tif errW == nil && delTotal >= delPost {\n\t\t\tdelTotal -= delPost\n\t\t}\n\t\treturn delTotal, nil\n\t}"
+    },
+    {
+      "id": "D-BEHAV-31",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In recon_fallback_test.go, TestCountRows_FallbackTransactionIsolation verifies that CountRows executes SELECT COUNT(*) FROM \"my_table\" in one read-only transaction and returns 42.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_fallback_test.go:53-66\nfunc TestCountRows_FallbackTransactionIsolation(t *testing.T) {\n\tda, mock := setupMockedDestAgent(t)\n\n\t// CountRows executes SELECT COUNT(*) directly without column extraction or error fallback\n\texpectTxReadOnly(mock)\n\tmock.ExpectQuery(regexp.QuoteMeta(`SELECT COUNT(*) FROM \"my_table\"`)).\n\t\tWillReturnRows(sqlmock.NewRows([]string{\"count\"}).AddRow(int64(42)))\n\tmock.ExpectRollback()\n\n\tcnt, err := da.CountRows(context.Background(), \"my_table\", \"non_existent_id\")\n\tassert.NoError(t, err)\n\tassert.Equal(t, int64(42), cnt)\n\tassert.NoError(t, mock.ExpectationsWereMet())\n}"
+    },
+    {
+      "id": "CTRL-T-31",
+      "kind": "control_true",
+      "basis": "code",
+      "claim": "In recon_window_index_probe.go, CountRowsBeforeCutoff returns da.CountRows(ctx, tableName, pkColumn) when cutoffHi.IsZero() is true.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:193-196\nfunc (da *ReconDestAgent) CountRowsBeforeCutoff(ctx context.Context, tableName, pkColumn string, cutoffHi time.Time) (int64, error) {\n\tif cutoffHi.IsZero() {\n\t\treturn da.CountRows(ctx, tableName, pkColumn)\n\t}"
+    },
+    {
+      "id": "CTRL-F-31A",
+      "kind": "control_false",
+      "basis": "code",
+      "claim": "In recon_dest_query.go, CountRows drops the table using DROP TABLE before counting rows.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_dest_query.go:35-44\n\tresult, err := da.breaker.Execute(func() (interface{}, error) {\n\t\tvar count int64\n\t\ttx := da.readOnlyDB(ctx)\n\t\tdefer tx.Rollback()\n\t\tsql := fmt.Sprintf(`SELECT COUNT(*) FROM %s`, quoteRelation(tableName))\n\t\tif err := tx.Raw(sql).Scan(&count).Error; err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\treturn count, nil\n\t})"
+    },
+    {
+      "id": "CTRL-F-31B",
+      "kind": "control_false",
+      "basis": "code",
+      "claim": "In recon_window_index_probe.go, CountDeletedRowsBeforeCutoff always returns -1 without querying any database when cutoffHi is non-zero.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:287-297\n\tif da.IsNonPostgresSQL() {\n\t\tdelTotal, err := da.sqlDialectCountDeletedRows(ctx, tableName)\n\t\tif err != nil {\n\t\t\treturn 0, err\n\t\t}\n\t\tdelPost, errW := da.sqlDialectCountRecentDeletedRows(ctx, tableName, \"_source_ts\", cutoffHi, time.Now().UTC().Add(time.Minute))\n\t\tif errW == nil && delTotal >= delPost {\n\t\t\tdelTotal -= delPost\n\t\t}\n\t\treturn delTotal, nil\n\t}"
+    }
+]

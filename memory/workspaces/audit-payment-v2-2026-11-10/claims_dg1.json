@@ -1,0 +1,44 @@
+[
+  {
+    "id": "S-RC-1",
+    "kind": "claim",
+    "claim": "In coerceForColumn, composite equals isMap || isSlice, and when composite is true, json.Marshal(v) is called and returned as string(b).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:361-375\n\t_, isMap := v.(map[string]any)\n\t_, isSlice := v.([]any)\n\tcomposite := isMap || isSlice\n\tif isJSONColumnType(dataType) || composite {\n\t\tif isJSONColumnType(dataType) {\n\t\t\tif s, ok := v.(string); ok {\n\t\t\t\tif trimmed := strings.TrimSpace(s); (strings.HasPrefix(trimmed, \"{\") || strings.HasPrefix(trimmed, \"[\") || (strings.HasPrefix(trimmed, \"\\\"\") && strings.HasSuffix(trimmed, \"\\\"\"))) && json.Valid([]byte(trimmed)) {\n\t\t\t\t\treturn trimmed\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif b, err := json.Marshal(v); err == nil {\n\t\t\treturn string(b)\n\t\t}\n\t}",
+    "flow": "coerceForColumn marshals []any slices via json.Marshal."
+  },
+  {
+    "id": "S-FIX-1",
+    "kind": "claim",
+    "claim": "In extractColumns, rules whose SourceField starts with @type_presence: call parseTypePresenceFields and buildTypePresenceSubset.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1728-1733\n\t\tif isTypePresenceRule(r.SourceField) {\n\t\t\tfields := parseTypePresenceFields(r.SourceField)\n\t\t\tsubsetMap := buildTypePresenceSubset(rawStr, fields)\n\t\t\trec[r.TargetColumn] = coerceForColumn(subsetMap, r.DataType)\n\t\t\tcontinue\n\t\t}",
+    "flow": "extractColumns evaluates @type_presence directives before resolveRuleGJSONValue."
+  },
+  {
+    "id": "D-BEHAV-1",
+    "kind": "demo",
+    "claim": "formatPostgresArrayLiteral formats items into a brace-enclosed comma-separated string returning \"{\" + strings.Join(parts, \",\") + \"}\", true.",
+    "evidence": "DEMO:\n\tparts := make([]string, 0, len(items))\n\tfor _, it := range items {\n\t\tit = unwrapMongoExtJSON(it)\n\t\tif it == nil {\n\t\t\tparts = append(parts, \"NULL\")\n\t\t\tcontinue\n\t\t}\n\t\ts := fmt.Sprintf(\"%v\", it)\n\t\tescaped := strings.ReplaceAll(s, `\\`, `\\\\`)\n\t\tescaped = strings.ReplaceAll(escaped, `\"`, `\\\"`)\n\t\tparts = append(parts, `\"`+escaped+`\"`)\n\t}\n\treturn \"{\" + strings.Join(parts, \",\") + \"}\", true",
+    "flow": "formatPostgresArrayLiteral builds a PostgreSQL array literal string."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "ApplySourceFieldTypesToBSONDoc deletes both source_field_types and sourceFieldTypes from doc.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:89-91\n\tdelete(doc, \"source_field_types\")\n\tdelete(doc, \"sourceFieldTypes\")",
+    "flow": "ApplySourceFieldTypesToBSONDoc removes source_field_types metadata keys."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "ApplySourceFieldTypesToBSONDoc never deletes source_field_types or sourceFieldTypes from doc.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:89-91\n\tdelete(doc, \"source_field_types\")\n\tdelete(doc, \"sourceFieldTypes\")",
+    "flow": "ApplySourceFieldTypesToBSONDoc removes source_field_types metadata keys."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "When isTypePresenceRule(r.SourceField) is true, extractColumns panics immediately without calling buildTypePresenceSubset.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1728-1733\n\t\tif isTypePresenceRule(r.SourceField) {\n\t\t\tfields := parseTypePresenceFields(r.SourceField)\n\t\t\tsubsetMap := buildTypePresenceSubset(rawStr, fields)\n\t\t\trec[r.TargetColumn] = coerceForColumn(subsetMap, r.DataType)\n\t\t\tcontinue\n\t\t}",
+    "flow": "extractColumns handles @type_presence:{...} rules."
+  }
+]

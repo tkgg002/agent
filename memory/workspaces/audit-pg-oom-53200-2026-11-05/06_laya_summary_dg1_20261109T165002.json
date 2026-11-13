@@ -1,0 +1,175 @@
+{
+  "mode": "claim",
+  "stage": "dg1",
+  "workspace": "audit-pg-oom-53200-2026-11-05",
+  "ts": "20261109T165002",
+  "trusted_rounds": [
+    "r1",
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/06_laya_raw_dg1_20261109T165002.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In TableDebouncer.workerLoop in debounce.go:185-214, when td.ctx.Done() fires, it only takes td.tasks and returns without draining batches remaining in td.flushCh, while in-flight goroutines in case batch := <-td.flushCh receive td.ctx directly without td.wg tracking.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "INCORRECT",
+          "confidence": 0.2472
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.291
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6346
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In SnapshotRunner.Stop() in Demo P13-2 of 09_tasks_solution_pg_oom_53200.md:1821-1839, r.stopping.Store(true) is set so in-flight snapshots finish their current batch and pause at the batch boundary, only calling r.stopCancel() if r.wg.Wait() does not finish within 10 seconds.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.7032
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.7067
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.706
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In RequestCancel in Demo P13-7 of 09_tasks_solution_pg_oom_53200.md:2233-2264, PENDING, PAUSED, or stale RUNNING jobs (>45s without heartbeat) are immediately transitioned to status = 'CANCELLED' with finished_at = NOW() and transmute_schedule.last_status = 'cancelled'.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4433
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4188
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6208
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In TransmuteHandler.Stop() in Demo P13-5 of 09_tasks_solution_pg_oom_53200.md:2119-2155, Stop() first signals long-running TransmuterModule jobs via h.svc.SetStopping(true) and waits on h.wg.Wait(), then stops all TableDebouncers via td.Stop().",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.406
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6476
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.763
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In TransmuterModule.Run in Demo P13-4 of 09_tasks_solution_pg_oom_53200.md:1978-1994, each chunk iteration checks IsCancelRequested (finishing with CANCELLED) and t.IsStopping() (finishing with PAUSED at the chunk boundary).",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3438
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6479
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8448
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In TableDebouncer.drainRemainingOnStop() in Demo P13-1 of 09_tasks_solution_pg_oom_53200.md:1758-1785, all queued batches in td.flushCh and remaining events in td.tasks are flushed with context.Background() before workerLoop returns.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3984
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6398
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7085
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In MasterTransmuteJobHandler.CancelTransmute in Demo P13-7 of 09_tasks_solution_pg_oom_53200.md:2301-2323, PENDING, RUNNING, and PAUSED jobs are accepted, RequestCancel is called, cdc.cmd.transmute-cancel is published via h.natsPublisher, and the updated job status is returned.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5774
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1932
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7385
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

@@ -1,0 +1,1223 @@
+[
+  {
+    "id": "G1-RECOVER-GUARD",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "GetByConnectorName loads options_json from cdc_system.connection_registry, BuildStoredConfigBaseline filters !IsKeepOrMaskedSecret(v) && !IsMaskedURI(v) when merging liveCfg, ValidateNoMaskedSecrets rejects any unresolved masked secret or URI before Kafka Connect calls, and UpdateSystemConnectorConfigCommand uses PreResolved to avoid duplicate GetConfig calls.",
+    "workflow": "SystemConnectorsHandler.UpdateConfig/Recover -> resolveEffectiveConnectorConfig -> ValidateNoMaskedSecrets -> UpdateSystemConnectorConfigHandler.Handle",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/source/system_connector_repo_gorm.go:125-171\nfunc (r *systemConnectorRepoGorm) GetByConnectorName(ctx context.Context, connectorName string) (*model.Source, error) {\n\tvar s model.Source\n\terr := r.db.WithContext(ctx).Where(\"connector_name = ?\", connectorName).First(&s).Error\n\tnotFound := false\n\tif err != nil {\n\t\tif errors.Is(err, gorm.ErrRecordNotFound) {\n\t\t\tnotFound = true\n\t\t} else {\n\t\t\treturn nil, err\n\t\t}\n\t}\n\tvar regRow struct {\n\t\tEngineType  string `gorm:\"column:engine_type\"`\n\t\tHost        string `gorm:\"column:host\"`\n\t\tPort        int    `gorm:\"column:port\"`\n\t\tDefaultDB   string `gorm:\"column:default_database\"`\n\t\tOptionsJSON string `gorm:\"column:options_json\"`\n\t}\n\t_ = r.db.WithContext(ctx).Raw(`\n\t\tSELECT COALESCE(engine_type, '') AS engine_type,\n\t\t       COALESCE(host, '') AS host,\n\t\t       COALESCE(port, 0) AS port,\n\t\t       COALESCE(default_database, '') AS default_database,\n\t\t       COALESCE(options_json::text, '') AS options_json\n\t\tFROM cdc_system.connection_registry\n\t\tWHERE connection_code = ?\n\t\tLIMIT 1\n\t`, connectorName).Scan(&regRow).Error\n\tif notFound {\n\t\tif regRow.OptionsJSON == \"\" && regRow.Host == \"\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\ts.ConnectorName = connectorName\n\t\ts.SourceType = regRow.EngineType\n\t\ts.DatabaseIncludeList = regRow.DefaultDB\n\t}\n\tif (s.ServerAddress == \"\" || strings.Contains(s.ServerAddress, \"***\")) && regRow.Host != \"\" {\n\t\tif regRow.Port > 0 && !strings.Contains(regRow.Host, \"://\") {\n\t\t\ts.ServerAddress = regRow.Host + \":\" + strconv.Itoa(regRow.Port)\n\t\t} else {\n\t\t\ts.ServerAddress = regRow.Host\n\t\t}\n\t}\n\tif regRow.OptionsJSON != \"\" && regRow.OptionsJSON != \"{}\" {\n\t\ts.OptionsJSON = []byte(regRow.OptionsJSON)\n\t}\n\treturn &s, nil\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector_secrets.go:277-381\nfunc BuildStoredConfigBaseline(fp *model.Source, liveCfg map[string]string, incoming map[string]string) map[string]string {\n\tbaseline := make(map[string]string)\n\tif fp != nil {\n\t\tif len(fp.RawConfigSanitized) > 0 {\n\t\t\tvar rawMap map[string]string\n\t\t\tif err := json.Unmarshal(fp.RawConfigSanitized, &rawMap); err == nil {\n\t\t\t\tfor k, v := range rawMap {\n\t\t\t\t\tif !IsKeepOrMaskedSecret(v) && !IsMaskedURI(v) {\n\t\t\t\t\t\tbaseline[k] = v\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif addr := strings.TrimSpace(fp.ServerAddress); addr != \"\" && !IsMaskedURI(addr) {\n\t\t\tif fp.SourceType == \"mongodb\" || strings.HasPrefix(addr, \"mongodb://\") || strings.HasPrefix(addr, \"mongodb+srv://\") {\n\t\t\t\tbaseline[\"mongodb.connection.string\"] = addr\n\t\t\t}\n\t\t}\n\t\tif len(fp.OptionsJSON) > 0 {\n\t\t\tvar opts map[string]string\n\t\t\tif err := json.Unmarshal(fp.OptionsJSON, &opts); err == nil {\n\t\t\t\tuser := strings.TrimSpace(opts[\"username\"])\n\t\t\t\tpass := opts[\"password\"]\n\t\t\t\turi := strings.TrimSpace(opts[\"uri\"])\n\t\t\t\tsslmode := strings.TrimSpace(opts[\"sslmode\"])\n\n\t\t\t\tif uri != \"\" && !IsKeepOrMaskedSecret(uri) && !IsMaskedURI(uri) {\n\t\t\t\t\tbaseline[\"mongodb.connection.string\"] = uri\n\t\t\t\t}\n\t\t\t\tif user != \"\" && !IsKeepOrMaskedSecret(user) {\n\t\t\t\t\tif baseline[\"database.user\"] == \"\" {\n\t\t\t\t\t\tbaseline[\"database.user\"] = user\n\t\t\t\t\t}\n\t\t\t\t\tif baseline[\"sftp.username\"] == \"\" {\n\t\t\t\t\t\tbaseline[\"sftp.username\"] = user\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif pass != \"\" && !IsKeepOrMaskedSecret(pass) {\n\t\t\t\t\tbaseline[\"database.password\"] = pass\n\t\t\t\t\tbaseline[\"mongodb.password\"] = pass\n\t\t\t\t\tbaseline[\"sftp.password\"] = pass\n\t\t\t\t}\n\t\t\t\tif sslmode != \"\" && baseline[\"database.sslmode\"] == \"\" {\n\t\t\t\t\tbaseline[\"database.sslmode\"] = sslmode\n\t\t\t\t}\n\t\t\t\tif user != \"\" && !IsKeepOrMaskedSecret(user) {\n\t\t\t\t\tcredTemplate := \"sftp://\" + url.UserPassword(user, pass).String() + \"@localhost/\"\n\t\t\t\t\tif !IsKeepOrMaskedSecret(pass) && pass != \"\" {\n\t\t\t\t\t\tcredTemplate = \"sftp://\" + user + \":\" + pass + \"@localhost/\"\n\t\t\t\t\t} else {\n\t\t\t\t\t\tcredTemplate = \"sftp://\" + user + \"@localhost/\"\n\t\t\t\t\t}\n\t\t\t\t\tif inFS := strings.TrimSpace(incoming[\"fs.uris\"]); inFS != \"\" && IsMaskedURI(inFS) {\n\t\t\t\t\t\trestoredFS := RestoreMaskedURI(inFS, credTemplate)\n\t\t\t\t\t\tif !IsMaskedURI(restoredFS) {\n\t\t\t\t\t\t\tbaseline[\"fs.uris\"] = restoredFS\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\tif baseline[\"mongodb.connection.string\"] == \"\" {\n\t\t\t\t\t\tif inMongo := strings.TrimSpace(incoming[\"mongodb.connection.string\"]); inMongo != \"\" && IsMaskedURI(inMongo) {\n\t\t\t\t\t\t\tmongoTemplate := \"mongodb://\" + user + \"@localhost/\"\n\t\t\t\t\t\t\tif pass != \"\" && !IsKeepOrMaskedSecret(pass) {\n\t\t\t\t\t\t\t\tmongoTemplate = \"mongodb://\" + user + \":\" + pass + \"@localhost/\"\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\trestoredMongo := RestoreMaskedURI(inMongo, mongoTemplate)\n\t\t\t\t\t\t\tif !IsMaskedURI(restoredMongo) {\n\t\t\t\t\t\t\t\tbaseline[\"mongodb.connection.string\"] = restoredMongo\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\tfor k, v := range liveCfg {\n\t\tif !IsKeepOrMaskedSecret(v) && !IsMaskedURI(v) {\n\t\t\tbaseline[k] = v\n\t\t}\n\t}\n\treturn baseline\n}\n\n// ValidateNoMaskedSecrets is a fail-closed guard that rejects any configuration map\n// that still contains masked secrets (***, __KEEP__), masked URIs (***:***), or\n// missing required database credentials before calling Kafka Connect.\nfunc ValidateNoMaskedSecrets(cfg map[string]string) error {\n\tif len(cfg) == 0 {\n\t\treturn errors.New(\"config required\")\n\t}\n\tfor k, v := range cfg {\n\t\tif IsKeepOrMaskedSecret(v) {\n\t\t\treturn fmt.Errorf(\"config key %q contains unresolved masked secret; please enter the password\", k)\n\t\t}\n\t\tif IsMaskedURI(v) {\n\t\t\treturn fmt.Errorf(\"config key %q contains masked credentials in URI; please enter the full URI with credentials\", k)\n\t\t}\n\t}\n\tcls := cfg[\"connector.class\"]\n\tif strings.Contains(cls, \"PostgresConnector\") || strings.Contains(cls, \"MySqlConnector\") || strings.Contains(cls, \"SqlServerConnector\") {\n\t\tif strings.TrimSpace(cfg[\"database.password\"]) == \"\" {\n\t\t\treturn errors.New(\"database.password is required and could not be recovered; please enter the password\")\n\t\t}\n\t}\n\treturn nil\n}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go:363-419\ntype UpdateSystemConnectorConfigCommand struct {\n\tports.SyncCommandMixin\n\tName          string            `json:\"name\"`\n\tConfig        map[string]string `json:\"config\"`\n\tFingerprint   *model.Source     `json:\"fingerprint,omitempty\"`\n\tUpdatedBy     string            `json:\"updated_by,omitempty\"`\n\tPreResolved   bool              `json:\"pre_resolved,omitempty\"`\n\tLiveLookupErr error             `json:\"-\"`\n}\n\nfunc (UpdateSystemConnectorConfigCommand) Type() string { return \"system-connector.update-config\" }\n\nfunc (c UpdateSystemConnectorConfigCommand) Validate() error {\n\tif c.Name == \"\" {\n\t\treturn errors.New(\"name required\")\n\t}\n\tif len(c.Config) == 0 {\n\t\treturn errors.New(\"config required\")\n\t}\n\treturn nil\n}\n\ntype UpdateSystemConnectorConfigHandler struct {\n\twriter     KafkaConnectorWriter\n\tsourceRepo SourceFingerprintRepo\n\tlogger     *zap.Logger\n}\n\nfunc NewUpdateSystemConnectorConfigHandler(w KafkaConnectorWriter, repo SourceFingerprintRepo, logger *zap.Logger) *UpdateSystemConnectorConfigHandler {\n\treturn &UpdateSystemConnectorConfigHandler{writer: w, sourceRepo: repo, logger: logger}\n}\n\nfunc (h *UpdateSystemConnectorConfigHandler) Handle(ctx context.Context, c ports.Command) (json.RawMessage, error) {\n\tcmd, ok := c.(UpdateSystemConnectorConfigCommand)\n\tif !ok {\n\t\treturn nil, errors.New(\"system-connector.update-config: command type mismatch\")\n\t}\n\tif h.writer == nil {\n\t\treturn nil, errors.New(\"kafka connect client not ready\")\n\t}\n\n\tvar merged map[string]string\n\tvar err error\n\tif cmd.PreResolved {\n\t\tmerged = cmd.Config\n\t\terr = cmd.LiveLookupErr\n\t} else {\n\t\tvar current map[string]string\n\t\tcurrent, err = h.writer.GetConfig(ctx, cmd.Name)\n\t\tvar fp *model.Source\n\t\tif h.sourceRepo != nil {\n\t\t\tfp, _ = h.sourceRepo.GetByConnectorName(ctx, cmd.Name)\n\t\t}\n\t\tbaseline := BuildStoredConfigBaseline(fp, current, cmd.Config)\n\t\tmerged = MergeConnectorConfigPreservingSecrets(baseline, cmd.Config)\n\t}\n\tif err != nil {",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2161,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5584,
+                "INCORRECT": 0.3819,
+                "UNSUPPORTED": 0.0597
+              },
+              "confidence": 0.2161,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "GetByConnectorName loads options_json from cdc_system.connection_registry, BuildStoredConfigBaseline filters !IsKeepOrMaskedSecret(v) && !IsMaskedURI(v) when merging liveCfg, ValidateNoMaskedSecrets rejects any unresolved masked secret or URI before Kafka Connect calls, and UpdateSystemConnectorConfigCommand uses PreResolved to avoid duplicate GetConfig calls.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/source/system_connector_repo_gorm.go:125-171\nfunc (r *systemConnectorRepoGorm) GetByConnectorName(ctx context.Context, connectorName string) (*model.Source, error) {\n\tvar s model.Source\n\terr := r.db.WithContext(ctx).Where(\"connector_name = ?\", connectorName).First(&s).Error\n\tnotFound := false\n\tif err != nil {\n\t\tif errors.Is(err, gorm.ErrRecordNotFound) {\n\t\t\tnotFound = true\n\t\t} else {\n\t\t\treturn nil, err\n\t\t}\n\t}\n\tvar regRow struct {\n\t\tEngineType  string `gorm:\"column:engine_type\"`\n\t\tHost        string `gorm:\"column:host\"`\n\t\tPort        int    `gorm:\"column:port\"`\n\t\tDefaultDB   string `gorm:\"column:default_database\"`\n\t\tOptionsJSON string `gorm:\"column:options_json\"`\n\t}\n\t_ = r.db.WithContext(ctx).Raw(`\n\t\tSELECT COALESCE(engine_type, '') AS engine_type,\n\t\t       COALESCE(host, '') AS host,\n\t\t       COALESCE(port, 0) AS port,\n\t\t       COALESCE(default_database, '') AS default_database,\n\t\t       COALESCE(options_json::text, '') AS options_json\n\t\tFROM cdc_system.connection_registry\n\t\tWHERE connection_code = ?\n\t\tLIMIT 1\n\t`, connectorName).Scan(&regRow).Error\n\tif notFound {\n\t\tif regRow.OptionsJSON == \"\" && regRow.Host == \"\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\ts.ConnectorName = connectorName\n\t\ts.SourceType = regRow.EngineType\n\t\ts.DatabaseIncludeList = regRow.DefaultDB\n\t}\n\tif (s.ServerAddress == \"\" || strings.Contains(s.ServerAddress, \"***\")) && regRow.Host != \"\" {\n\t\tif regRow.Port > 0 && !strings.Contains(regRow.Host, \"://\") {\n\t\t\ts.ServerAddress = regRow.Host + \":\" + strconv.Itoa(regRow.Port)\n\t\t} else {\n\t\t\ts.ServerAddress = regRow.Host\n\t\t}\n\t}\n\tif regRow.OptionsJSON != \"\" && regRow.OptionsJSON != \"{}\" {\n\t\ts.OptionsJSON = []byte(regRow.OptionsJSON)\n\t}\n\treturn &s, nil\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector_secrets.go:277-381\nfunc BuildStoredConfigBaseline(fp *model.Source, liveCfg map[string]string, incoming map[string]string) map[string]string {\n\tbaseline := make(map[string]string)\n\tif fp != nil {\n\t\tif len(fp.RawConfigSanitized) > 0 {\n\t\t\tvar rawMap map[string]string\n\t\t\tif err := json.Unmarshal(fp.RawConfigSanitized, &rawMap); err == nil {\n\t\t\t\tfor k, v := range rawMap {\n\t\t\t\t\tif !IsKeepOrMaskedSecret(v) && !IsMaskedURI(v) {\n\t\t\t\t\t\tbaseline[k] = v\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif addr := strings.TrimSpace(fp.ServerAddress); addr != \"\" && !IsMaskedURI(addr) {\n\t\t\tif fp.SourceType == \"mongodb\" || strings.HasPrefix(addr, \"mongodb://\") || strings.HasPrefix(addr, \"mongodb+srv://\") {\n\t\t\t\tbaseline[\"mongodb.connection.string\"] = addr\n\t\t\t}\n\t\t}\n\t\tif len(fp.OptionsJSON) > 0 {\n\t\t\tvar opts map[string]string\n\t\t\tif err := json.Unmarshal(fp.OptionsJSON, &opts); err == nil {\n\t\t\t\tuser := strings.TrimSpace(opts[\"username\"])\n\t\t\t\tpass := opts[\"password\"]\n\t\t\t\turi := strings.TrimSpace(opts[\"uri\"])\n\t\t\t\tsslmode := strings.TrimSpace(opts[\"sslmode\"])\n\n\t\t\t\tif uri != \"\" && !IsKeepOrMaskedSecret(uri) && !IsMaskedURI(uri) {\n\t\t\t\t\tbaseline[\"mongodb.connection.string\"] = uri\n\t\t\t\t}\n\t\t\t\tif user != \"\" && !IsKeepOrMaskedSecret(user) {\n\t\t\t\t\tif baseline[\"database.user\"] == \"\" {\n\t\t\t\t\t\tbaseline[\"database.user\"] = user\n\t\t\t\t\t}\n\t\t\t\t\tif baseline[\"sftp.username\"] == \"\" {\n\t\t\t\t\t\tbaseline[\"sftp.username\"] = user\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif pass != \"\" && !IsKeepOrMaskedSecret(pass) {\n\t\t\t\t\tbaseline[\"database.password\"] = pass\n\t\t\t\t\tbaseline[\"mongodb.password\"] = pass\n\t\t\t\t\tbaseline[\"sftp.password\"] = pass\n\t\t\t\t}\n\t\t\t\tif sslmode != \"\" && baseline[\"database.sslmode\"] == \"\" {\n\t\t\t\t\tbaseline[\"database.sslmode\"] = sslmode\n\t\t\t\t}\n\t\t\t\tif user != \"\" && !IsKeepOrMaskedSecret(user) {\n\t\t\t\t\tcredTemplate := \"sftp://\" + url.UserPassword(user, pass).String() + \"@localhost/\"\n\t\t\t\t\tif !IsKeepOrMaskedSecret(pass) && pass != \"\" {\n\t\t\t\t\t\tcredTemplate = \"sftp://\" + user + \":\" + pass + \"@localhost/\"\n\t\t\t\t\t} else {\n\t\t\t\t\t\tcredTemplate = \"sftp://\" + user + \"@localhost/\"\n\t\t\t\t\t}\n\t\t\t\t\tif inFS := strings.TrimSpace(incoming[\"fs.uris\"]); inFS != \"\" && IsMaskedURI(inFS) {\n\t\t\t\t\t\trestoredFS := RestoreMaskedURI(inFS, credTemplate)\n\t\t\t\t\t\tif !IsMaskedURI(restoredFS) {\n\t\t\t\t\t\t\tbaseline[\"fs.uris\"] = restoredFS\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\tif baseline[\"mongodb.connection.string\"] == \"\" {\n\t\t\t\t\t\tif inMongo := strings.TrimSpace(incoming[\"mongodb.connection.string\"]); inMongo != \"\" && IsMaskedURI(inMongo) {\n\t\t\t\t\t\t\tmongoTemplate := \"mongodb://\" + user + \"@localhost/\"\n\t\t\t\t\t\t\tif pass != \"\" && !IsKeepOrMaskedSecret(pass) {\n\t\t\t\t\t\t\t\tmongoTemplate = \"mongodb://\" + user + \":\" + pass + \"@localhost/\"\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\trestoredMongo := RestoreMaskedURI(inMongo, mongoTemplate)\n\t\t\t\t\t\t\tif !IsMaskedURI(restoredMongo) {\n\t\t\t\t\t\t\t\tbaseline[\"mongodb.connection.string\"] = restoredMongo\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\tfor k, v := range liveCfg {\n\t\tif !IsKeepOrMaskedSecret(v) && !IsMaskedURI(v) {\n\t\t\tbaseline[k] = v\n\t\t}\n\t}\n\treturn baseline\n}\n\n// ValidateNoMaskedSecrets is a fail-closed guard that rejects any configuration map\n// that still contains masked secrets (***, __KEEP__), masked URIs (***:***), or\n// missing required database credentials before calling Kafka Connect.\nfunc ValidateNoMaskedSecrets(cfg map[string]string) error {\n\tif len(cfg) == 0 {\n\t\treturn errors.New(\"config required\")\n\t}\n\tfor k, v := range cfg {\n\t\tif IsKeepOrMaskedSecret(v) {\n\t\t\treturn fmt.Errorf(\"config key %q contains unresolved masked secret; please enter the password\", k)\n\t\t}\n\t\tif IsMaskedURI(v) {\n\t\t\treturn fmt.Errorf(\"config key %q contains masked credentials in URI; please enter the full URI with credentials\", k)\n\t\t}\n\t}\n\tcls := cfg[\"connector.class\"]\n\tif strings.Contains(cls, \"PostgresConnector\") || strings.Contains(cls, \"MySqlConnector\") || strings.Contains(cls, \"SqlServerConnector\") {\n\t\tif strings.TrimSpace(cfg[\"database.password\"]) == \"\" {\n\t\t\treturn errors.New(\"database.password is required and could not be recovered; please enter the password\")\n\t\t}\n\t}\n\treturn nil\n}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go:363-419\ntype UpdateSystemConnectorConfigCommand struct {\n\tports.SyncCommandMixin\n\tName          string            `json:\"name\"`\n\tConfig        map[string]string `json:\"config\"`\n\tFingerprint   *model.Source     `json:\"fingerprint,omitempty\"`\n\tUpdatedBy     string            `json:\"updated_by,omitempty\"`\n\tPreResolved   bool              `json:\"pre_resolved,omitempty\"`\n\tLiveLookupErr error             `json:\"-\"`\n}\n\nfunc (UpdateSystemConnectorConfigCommand) Type() string { return \"system-connector.update-config\" }\n\nfunc (c UpdateSystemConnectorConfigCommand) Validate() error {\n\tif c.Name == \"\" {\n\t\treturn errors.New(\"name required\")\n\t}\n\tif len(c.Config) == 0 {\n\t\treturn errors.New(\"config required\")\n\t}\n\treturn nil\n}\n\ntype UpdateSystemConnectorConfigHandler struct {\n\twriter     KafkaConnectorWriter\n\tsourceRepo SourceFingerprintRepo\n\tlogger     *zap.Logger\n}\n\nfunc NewUpdateSystemConnectorConfigHandler(w KafkaConnectorWriter, repo SourceFingerprintRepo, logger *zap.Logger) *UpdateSystemConnectorConfigHandler {\n\treturn &UpdateSystemConnectorConfigHandler{writer: w, sourceRepo: repo, logger: logger}\n}\n\nfunc (h *UpdateSystemConnectorConfigHandler) Handle(ctx context.Context, c ports.Command) (json.RawMessage, error) {\n\tcmd, ok := c.(UpdateSystemConnectorConfigCommand)\n\tif !ok {\n\t\treturn nil, errors.New(\"system-connector.update-config: command type mismatch\")\n\t}\n\tif h.writer == nil {\n\t\treturn nil, errors.New(\"kafka connect client not ready\")\n\t}\n\n\tvar merged map[string]string\n\tvar err error\n\tif cmd.PreResolved {\n\t\tmerged = cmd.Config\n\t\terr = cmd.LiveLookupErr\n\t} else {\n\t\tvar current map[string]string\n\t\tcurrent, err = h.writer.GetConfig(ctx, cmd.Name)\n\t\tvar fp *model.Source\n\t\tif h.sourceRepo != nil {\n\t\t\tfp, _ = h.sourceRepo.GetByConnectorName(ctx, cmd.Name)\n\t\t}\n\t\tbaseline := BuildStoredConfigBaseline(fp, current, cmd.Config)\n\t\tmerged = MergeConnectorConfigPreservingSecrets(baseline, cmd.Config)\n\t}\n\tif err != nil {",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.1255,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.4224,
+                "INCORRECT": 0.4686,
+                "UNSUPPORTED": 0.109
+              },
+              "confidence": 0.1255,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/source/system_connector_repo_gorm.go:125-171\nfunc (r *systemConnectorRepoGorm) GetByConnectorName(ctx context.Context, connectorName string) (*model.Source, error) {\n\tvar s model.Source\n\terr := r.db.WithContext(ctx).Where(\"connector_name = ?\", connectorName).First(&s).Error\n\tnotFound := false\n\tif err != nil {\n\t\tif errors.Is(err, gorm.ErrRecordNotFound) {\n\t\t\tnotFound = true\n\t\t} else {\n\t\t\treturn nil, err\n\t\t}\n\t}\n\tvar regRow struct {\n\t\tEngineType  string `gorm:\"column:engine_type\"`\n\t\tHost        string `gorm:\"column:host\"`\n\t\tPort        int    `gorm:\"column:port\"`\n\t\tDefaultDB   string `gorm:\"column:default_database\"`\n\t\tOptionsJSON string `gorm:\"column:options_json\"`\n\t}\n\t_ = r.db.WithContext(ctx).Raw(`\n\t\tSELECT COALESCE(engine_type, '') AS engine_type,\n\t\t       COALESCE(host, '') AS host,\n\t\t       COALESCE(port, 0) AS port,\n\t\t       COALESCE(default_database, '') AS default_database,\n\t\t       COALESCE(options_json::text, '') AS options_json\n\t\tFROM cdc_system.connection_registry\n\t\tWHERE connection_code = ?\n\t\tLIMIT 1\n\t`, connectorName).Scan(&regRow).Error\n\tif notFound {\n\t\tif regRow.OptionsJSON == \"\" && regRow.Host == \"\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\ts.ConnectorName = connectorName\n\t\ts.SourceType = regRow.EngineType\n\t\ts.DatabaseIncludeList = regRow.DefaultDB\n\t}\n\tif (s.ServerAddress == \"\" || strings.Contains(s.ServerAddress, \"***\")) && regRow.Host != \"\" {\n\t\tif regRow.Port > 0 && !strings.Contains(regRow.Host, \"://\") {\n\t\t\ts.ServerAddress = regRow.Host + \":\" + strconv.Itoa(regRow.Port)\n\t\t} else {\n\t\t\ts.ServerAddress = regRow.Host\n\t\t}\n\t}\n\tif regRow.OptionsJSON != \"\" && regRow.OptionsJSON != \"{}\" {\n\t\ts.OptionsJSON = []byte(regRow.OptionsJSON)\n\t}\n\treturn &s, nil\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector_secrets.go:277-381\nfunc BuildStoredConfigBaseline(fp *model.Source, liveCfg map[string]string, incoming map[string]string) map[string]string {\n\tbaseline := make(map[string]string)\n\tif fp != nil {\n\t\tif len(fp.RawConfigSanitized) > 0 {\n\t\t\tvar rawMap map[string]string\n\t\t\tif err := json.Unmarshal(fp.RawConfigSanitized, &rawMap); err == nil {\n\t\t\t\tfor k, v := range rawMap {\n\t\t\t\t\tif !IsKeepOrMaskedSecret(v) && !IsMaskedURI(v) {\n\t\t\t\t\t\tbaseline[k] = v\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif addr := strings.TrimSpace(fp.ServerAddress); addr != \"\" && !IsMaskedURI(addr) {\n\t\t\tif fp.SourceType == \"mongodb\" || strings.HasPrefix(addr, \"mongodb://\") || strings.HasPrefix(addr, \"mongodb+srv://\") {\n\t\t\t\tbaseline[\"mongodb.connection.string\"] = addr\n\t\t\t}\n\t\t}\n\t\tif len(fp.OptionsJSON) > 0 {\n\t\t\tvar opts map[string]string\n\t\t\tif err := json.Unmarshal(fp.OptionsJSON, &opts); err == nil {\n\t\t\t\tuser := strings.TrimSpace(opts[\"username\"])\n\t\t\t\tpass := opts[\"password\"]\n\t\t\t\turi := strings.TrimSpace(opts[\"uri\"])\n\t\t\t\tsslmode := strings.TrimSpace(opts[\"sslmode\"])\n\n\t\t\t\tif uri != \"\" && !IsKeepOrMaskedSecret(uri) && !IsMaskedURI(uri) {\n\t\t\t\t\tbaseline[\"mongodb.connection.string\"] = uri\n\t\t\t\t}\n\t\t\t\tif user != \"\" && !IsKeepOrMaskedSecret(user) {\n\t\t\t\t\tif baseline[\"database.user\"] == \"\" {\n\t\t\t\t\t\tbaseline[\"database.user\"] = user\n\t\t\t\t\t}\n\t\t\t\t\tif baseline[\"sftp.username\"] == \"\" {\n\t\t\t\t\t\tbaseline[\"sftp.username\"] = user\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif pass != \"\" && !IsKeepOrMaskedSecret(pass) {\n\t\t\t\t\tbaseline[\"database.password\"] = pass\n\t\t\t\t\tbaseline[\"mongodb.password\"] = pass\n\t\t\t\t\tbaseline[\"sftp.password\"] = pass\n\t\t\t\t}\n\t\t\t\tif sslmode != \"\" && baseline[\"database.sslmode\"] == \"\" {\n\t\t\t\t\tbaseline[\"database.sslmode\"] = sslmode\n\t\t\t\t}\n\t\t\t\tif user != \"\" && !IsKeepOrMaskedSecret(user) {\n\t\t\t\t\tcredTemplate := \"sftp://\" + url.UserPassword(user, pass).String() + \"@localhost/\"\n\t\t\t\t\tif !IsKeepOrMaskedSecret(pass) && pass != \"\" {\n\t\t\t\t\t\tcredTemplate = \"sftp://\" + user + \":\" + pass + \"@localhost/\"\n\t\t\t\t\t} else {\n\t\t\t\t\t\tcredTemplate = \"sftp://\" + user + \"@localhost/\"\n\t\t\t\t\t}\n\t\t\t\t\tif inFS := strings.TrimSpace(incoming[\"fs.uris\"]); inFS != \"\" && IsMaskedURI(inFS) {\n\t\t\t\t\t\trestoredFS := RestoreMaskedURI(inFS, credTemplate)\n\t\t\t\t\t\tif !IsMaskedURI(restoredFS) {\n\t\t\t\t\t\t\tbaseline[\"fs.uris\"] = restoredFS\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\tif baseline[\"mongodb.connection.string\"] == \"\" {\n\t\t\t\t\t\tif inMongo := strings.TrimSpace(incoming[\"mongodb.connection.string\"]); inMongo != \"\" && IsMaskedURI(inMongo) {\n\t\t\t\t\t\t\tmongoTemplate := \"mongodb://\" + user + \"@localhost/\"\n\t\t\t\t\t\t\tif pass != \"\" && !IsKeepOrMaskedSecret(pass) {\n\t\t\t\t\t\t\t\tmongoTemplate = \"mongodb://\" + user + \":\" + pass + \"@localhost/\"\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\trestoredMongo := RestoreMaskedURI(inMongo, mongoTemplate)\n\t\t\t\t\t\t\tif !IsMaskedURI(restoredMongo) {\n\t\t\t\t\t\t\t\tbaseline[\"mongodb.connection.string\"] = restoredMongo\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\tfor k, v := range liveCfg {\n\t\tif !IsKeepOrMaskedSecret(v) && !IsMaskedURI(v) {\n\t\t\tbaseline[k] = v\n\t\t}\n\t}\n\treturn baseline\n}\n\n// ValidateNoMaskedSecrets is a fail-closed guard that rejects any configuration map\n// that still contains masked secrets (***, __KEEP__), masked URIs (***:***), or\n// missing required database credentials before calling Kafka Connect.\nfunc ValidateNoMaskedSecrets(cfg map[string]string) error {\n\tif len(cfg) == 0 {\n\t\treturn errors.New(\"config required\")\n\t}\n\tfor k, v := range cfg {\n\t\tif IsKeepOrMaskedSecret(v) {\n\t\t\treturn fmt.Errorf(\"config key %q contains unresolved masked secret; please enter the password\", k)\n\t\t}\n\t\tif IsMaskedURI(v) {\n\t\t\treturn fmt.Errorf(\"config key %q contains masked credentials in URI; please enter the full URI with credentials\", k)\n\t\t}\n\t}\n\tcls := cfg[\"connector.class\"]\n\tif strings.Contains(cls, \"PostgresConnector\") || strings.Contains(cls, \"MySqlConnector\") || strings.Contains(cls, \"SqlServerConnector\") {\n\t\tif strings.TrimSpace(cfg[\"database.password\"]) == \"\" {\n\t\t\treturn errors.New(\"database.password is required and could not be recovered; please enter the password\")\n\t\t}\n\t}\n\treturn nil\n}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go:363-419\ntype UpdateSystemConnectorConfigCommand struct {\n\tports.SyncCommandMixin\n\tName          string            `json:\"name\"`\n\tConfig        map[string]string `json:\"config\"`\n\tFingerprint   *model.Source     `json:\"fingerprint,omitempty\"`\n\tUpdatedBy     string            `json:\"updated_by,omitempty\"`\n\tPreResolved   bool              `json:\"pre_resolved,omitempty\"`\n\tLiveLookupErr error             `json:\"-\"`\n}\n\nfunc (UpdateSystemConnectorConfigCommand) Type() string { return \"system-connector.update-config\" }\n\nfunc (c UpdateSystemConnectorConfigCommand) Validate() error {\n\tif c.Name == \"\" {\n\t\treturn errors.New(\"name required\")\n\t}\n\tif len(c.Config) == 0 {\n\t\treturn errors.New(\"config required\")\n\t}\n\treturn nil\n}\n\ntype UpdateSystemConnectorConfigHandler struct {\n\twriter     KafkaConnectorWriter\n\tsourceRepo SourceFingerprintRepo\n\tlogger     *zap.Logger\n}\n\nfunc NewUpdateSystemConnectorConfigHandler(w KafkaConnectorWriter, repo SourceFingerprintRepo, logger *zap.Logger) *UpdateSystemConnectorConfigHandler {\n\treturn &UpdateSystemConnectorConfigHandler{writer: w, sourceRepo: repo, logger: logger}\n}\n\nfunc (h *UpdateSystemConnectorConfigHandler) Handle(ctx context.Context, c ports.Command) (json.RawMessage, error) {\n\tcmd, ok := c.(UpdateSystemConnectorConfigCommand)\n\tif !ok {\n\t\treturn nil, errors.New(\"system-connector.update-config: command type mismatch\")\n\t}\n\tif h.writer == nil {\n\t\treturn nil, errors.New(\"kafka connect client not ready\")\n\t}\n\n\tvar merged map[string]string\n\tvar err error\n\tif cmd.PreResolved {\n\t\tmerged = cmd.Config\n\t\terr = cmd.LiveLookupErr\n\t} else {\n\t\tvar current map[string]string\n\t\tcurrent, err = h.writer.GetConfig(ctx, cmd.Name)\n\t\tvar fp *model.Source\n\t\tif h.sourceRepo != nil {\n\t\t\tfp, _ = h.sourceRepo.GetByConnectorName(ctx, cmd.Name)\n\t\t}\n\t\tbaseline := BuildStoredConfigBaseline(fp, current, cmd.Config)\n\t\tmerged = MergeConnectorConfigPreservingSecrets(baseline, cmd.Config)\n\t}\n\tif err != nil {",
+          "claim": "GetByConnectorName loads options_json from cdc_system.connection_registry, BuildStoredConfigBaseline filters !IsKeepOrMaskedSecret(v) && !IsMaskedURI(v) when merging liveCfg, ValidateNoMaskedSecrets rejects any unresolved masked secret or URI before Kafka Connect calls, and UpdateSystemConnectorConfigCommand uses PreResolved to avoid duplicate GetConfig calls."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6081,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9229,
+                "NO": 0.0771
+              },
+              "confidence": 0.6081,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/source/system_connector_repo_gorm.go:125-171\nfunc (r *systemConnectorRepoGorm) GetByConnectorName(ctx context.Context, connectorName string) (*model.Source, error) {\n\tvar s model.Source\n\terr := r.db.WithContext(ctx).Where(\"connector_name = ?\", connectorName).First(&s).Error\n\tnotFound := false\n\tif err != nil {\n\t\tif errors.Is(err, gorm.ErrRecordNotFound) {\n\t\t\tnotFound = true\n\t\t} else {\n\t\t\treturn nil, err\n\t\t}\n\t}\n\tvar regRow struct {\n\t\tEngineType  string `gorm:\"column:engine_type\"`\n\t\tHost        string `gorm:\"column:host\"`\n\t\tPort        int    `gorm:\"column:port\"`\n\t\tDefaultDB   string `gorm:\"column:default_database\"`\n\t\tOptionsJSON string `gorm:\"column:options_json\"`\n\t}\n\t_ = r.db.WithContext(ctx).Raw(`\n\t\tSELECT COALESCE(engine_type, '') AS engine_type,\n\t\t       COALESCE(host, '') AS host,\n\t\t       COALESCE(port, 0) AS port,\n\t\t       COALESCE(default_database, '') AS default_database,\n\t\t       COALESCE(options_json::text, '') AS options_json\n\t\tFROM cdc_system.connection_registry\n\t\tWHERE connection_code = ?\n\t\tLIMIT 1\n\t`, connectorName).Scan(&regRow).Error\n\tif notFound {\n\t\tif regRow.OptionsJSON == \"\" && regRow.Host == \"\" {\n\t\t\treturn nil, nil\n\t\t}\n\t\ts.ConnectorName = connectorName\n\t\ts.SourceType = regRow.EngineType\n\t\ts.DatabaseIncludeList = regRow.DefaultDB\n\t}\n\tif (s.ServerAddress == \"\" || strings.Contains(s.ServerAddress, \"***\")) && regRow.Host != \"\" {\n\t\tif regRow.Port > 0 && !strings.Contains(regRow.Host, \"://\") {\n\t\t\ts.ServerAddress = regRow.Host + \":\" + strconv.Itoa(regRow.Port)\n\t\t} else {\n\t\t\ts.ServerAddress = regRow.Host\n\t\t}\n\t}\n\tif regRow.OptionsJSON != \"\" && regRow.OptionsJSON != \"{}\" {\n\t\ts.OptionsJSON = []byte(regRow.OptionsJSON)\n\t}\n\treturn &s, nil\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector_secrets.go:277-381\nfunc BuildStoredConfigBaseline(fp *model.Source, liveCfg map[string]string, incoming map[string]string) map[string]string {\n\tbaseline := make(map[string]string)\n\tif fp != nil {\n\t\tif len(fp.RawConfigSanitized) > 0 {\n\t\t\tvar rawMap map[string]string\n\t\t\tif err := json.Unmarshal(fp.RawConfigSanitized, &rawMap); err == nil {\n\t\t\t\tfor k, v := range rawMap {\n\t\t\t\t\tif !IsKeepOrMaskedSecret(v) && !IsMaskedURI(v) {\n\t\t\t\t\t\tbaseline[k] = v\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif addr := strings.TrimSpace(fp.ServerAddress); addr != \"\" && !IsMaskedURI(addr) {\n\t\t\tif fp.SourceType == \"mongodb\" || strings.HasPrefix(addr, \"mongodb://\") || strings.HasPrefix(addr, \"mongodb+srv://\") {\n\t\t\t\tbaseline[\"mongodb.connection.string\"] = addr\n\t\t\t}\n\t\t}\n\t\tif len(fp.OptionsJSON) > 0 {\n\t\t\tvar opts map[string]string\n\t\t\tif err := json.Unmarshal(fp.OptionsJSON, &opts); err == nil {\n\t\t\t\tuser := strings.TrimSpace(opts[\"username\"])\n\t\t\t\tpass := opts[\"password\"]\n\t\t\t\turi := strings.TrimSpace(opts[\"uri\"])\n\t\t\t\tsslmode := strings.TrimSpace(opts[\"sslmode\"])\n\n\t\t\t\tif uri != \"\" && !IsKeepOrMaskedSecret(uri) && !IsMaskedURI(uri) {\n\t\t\t\t\tbaseline[\"mongodb.connection.string\"] = uri\n\t\t\t\t}\n\t\t\t\tif user != \"\" && !IsKeepOrMaskedSecret(user) {\n\t\t\t\t\tif baseline[\"database.user\"] == \"\" {\n\t\t\t\t\t\tbaseline[\"database.user\"] = user\n\t\t\t\t\t}\n\t\t\t\t\tif baseline[\"sftp.username\"] == \"\" {\n\t\t\t\t\t\tbaseline[\"sftp.username\"] = user\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif pass != \"\" && !IsKeepOrMaskedSecret(pass) {\n\t\t\t\t\tbaseline[\"database.password\"] = pass\n\t\t\t\t\tbaseline[\"mongodb.password\"] = pass\n\t\t\t\t\tbaseline[\"sftp.password\"] = pass\n\t\t\t\t}\n\t\t\t\tif sslmode != \"\" && baseline[\"database.sslmode\"] == \"\" {\n\t\t\t\t\tbaseline[\"database.sslmode\"] = sslmode\n\t\t\t\t}\n\t\t\t\tif user != \"\" && !IsKeepOrMaskedSecret(user) {\n\t\t\t\t\tcredTemplate := \"sftp://\" + url.UserPassword(user, pass).String() + \"@localhost/\"\n\t\t\t\t\tif !IsKeepOrMaskedSecret(pass) && pass != \"\" {\n\t\t\t\t\t\tcredTemplate = \"sftp://\" + user + \":\" + pass + \"@localhost/\"\n\t\t\t\t\t} else {\n\t\t\t\t\t\tcredTemplate = \"sftp://\" + user + \"@localhost/\"\n\t\t\t\t\t}\n\t\t\t\t\tif inFS := strings.TrimSpace(incoming[\"fs.uris\"]); inFS != \"\" && IsMaskedURI(inFS) {\n\t\t\t\t\t\trestoredFS := RestoreMaskedURI(inFS, credTemplate)\n\t\t\t\t\t\tif !IsMaskedURI(restoredFS) {\n\t\t\t\t\t\t\tbaseline[\"fs.uris\"] = restoredFS\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\tif baseline[\"mongodb.connection.string\"] == \"\" {\n\t\t\t\t\t\tif inMongo := strings.TrimSpace(incoming[\"mongodb.connection.string\"]); inMongo != \"\" && IsMaskedURI(inMongo) {\n\t\t\t\t\t\t\tmongoTemplate := \"mongodb://\" + user + \"@localhost/\"\n\t\t\t\t\t\t\tif pass != \"\" && !IsKeepOrMaskedSecret(pass) {\n\t\t\t\t\t\t\t\tmongoTemplate = \"mongodb://\" + user + \":\" + pass + \"@localhost/\"\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\trestoredMongo := RestoreMaskedURI(inMongo, mongoTemplate)\n\t\t\t\t\t\t\tif !IsMaskedURI(restoredMongo) {\n\t\t\t\t\t\t\t\tbaseline[\"mongodb.connection.string\"] = restoredMongo\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\tfor k, v := range liveCfg {\n\t\tif !IsKeepOrMaskedSecret(v) && !IsMaskedURI(v) {\n\t\t\tbaseline[k] = v\n\t\t}\n\t}\n\treturn baseline\n}\n\n// ValidateNoMaskedSecrets is a fail-closed guard that rejects any configuration map\n// that still contains masked secrets (***, __KEEP__), masked URIs (***:***), or\n// missing required database credentials before calling Kafka Connect.\nfunc ValidateNoMaskedSecrets(cfg map[string]string) error {\n\tif len(cfg) == 0 {\n\t\treturn errors.New(\"config required\")\n\t}\n\tfor k, v := range cfg {\n\t\tif IsKeepOrMaskedSecret(v) {\n\t\t\treturn fmt.Errorf(\"config key %q contains unresolved masked secret; please enter the password\", k)\n\t\t}\n\t\tif IsMaskedURI(v) {\n\t\t\treturn fmt.Errorf(\"config key %q contains masked credentials in URI; please enter the full URI with credentials\", k)\n\t\t}\n\t}\n\tcls := cfg[\"connector.class\"]\n\tif strings.Contains(cls, \"PostgresConnector\") || strings.Contains(cls, \"MySqlConnector\") || strings.Contains(cls, \"SqlServerConnector\") {\n\t\tif strings.TrimSpace(cfg[\"database.password\"]) == \"\" {\n\t\t\treturn errors.New(\"database.password is required and could not be recovered; please enter the password\")\n\t\t}\n\t}\n\treturn nil\n}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go:363-419\ntype UpdateSystemConnectorConfigCommand struct {\n\tports.SyncCommandMixin\n\tName          string            `json:\"name\"`\n\tConfig        map[string]string `json:\"config\"`\n\tFingerprint   *model.Source     `json:\"fingerprint,omitempty\"`\n\tUpdatedBy     string            `json:\"updated_by,omitempty\"`\n\tPreResolved   bool              `json:\"pre_resolved,omitempty\"`\n\tLiveLookupErr error             `json:\"-\"`\n}\n\nfunc (UpdateSystemConnectorConfigCommand) Type() string { return \"system-connector.update-config\" }\n\nfunc (c UpdateSystemConnectorConfigCommand) Validate() error {\n\tif c.Name == \"\" {\n\t\treturn errors.New(\"name required\")\n\t}\n\tif len(c.Config) == 0 {\n\t\treturn errors.New(\"config required\")\n\t}\n\treturn nil\n}\n\ntype UpdateSystemConnectorConfigHandler struct {\n\twriter     KafkaConnectorWriter\n\tsourceRepo SourceFingerprintRepo\n\tlogger     *zap.Logger\n}\n\nfunc NewUpdateSystemConnectorConfigHandler(w KafkaConnectorWriter, repo SourceFingerprintRepo, logger *zap.Logger) *UpdateSystemConnectorConfigHandler {\n\treturn &UpdateSystemConnectorConfigHandler{writer: w, sourceRepo: repo, logger: logger}\n}\n\nfunc (h *UpdateSystemConnectorConfigHandler) Handle(ctx context.Context, c ports.Command) (json.RawMessage, error) {\n\tcmd, ok := c.(UpdateSystemConnectorConfigCommand)\n\tif !ok {\n\t\treturn nil, errors.New(\"system-connector.update-config: command type mismatch\")\n\t}\n\tif h.writer == nil {\n\t\treturn nil, errors.New(\"kafka connect client not ready\")\n\t}\n\n\tvar merged map[string]string\n\tvar err error\n\tif cmd.PreResolved {\n\t\tmerged = cmd.Config\n\t\terr = cmd.LiveLookupErr\n\t} else {\n\t\tvar current map[string]string\n\t\tcurrent, err = h.writer.GetConfig(ctx, cmd.Name)\n\t\tvar fp *model.Source\n\t\tif h.sourceRepo != nil {\n\t\t\tfp, _ = h.sourceRepo.GetByConnectorName(ctx, cmd.Name)\n\t\t}\n\t\tbaseline := BuildStoredConfigBaseline(fp, current, cmd.Config)\n\t\tmerged = MergeConnectorConfigPreservingSecrets(baseline, cmd.Config)\n\t}\n\tif err != nil {",
+          "claim": "GetByConnectorName loads options_json from cdc_system.connection_registry, BuildStoredConfigBaseline filters !IsKeepOrMaskedSecret(v) && !IsMaskedURI(v) when merging liveCfg, ValidateNoMaskedSecrets rejects any unresolved masked secret or URI before Kafka Connect calls, and UpdateSystemConnectorConfigCommand uses PreResolved to avoid duplicate GetConfig calls."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "G2-HOST-BOUND-INTROSPECTION",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "DiscoverPostgresTablesPost and resolveMongoIntrospectionURI enforce host-bound secret resolution: stored connector credentials are only resolved when host/port/username (for Postgres) or SameURIHostAuthority (for MongoDB URI) matches the connector's stored configuration.",
+    "workflow": "IntrospectionHandler.DiscoverPostgresTablesPost / DiscoverMongoDatabasesPost / DiscoverMongoCollectionsPost -> resolveStoredConnectorConfig",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler_postgres.go:101-139\n\tif strings.TrimSpace(pass) == \"\" || sourceCmd.IsKeepOrMaskedSecret(pass) {\n\t\tif strings.TrimSpace(body.ConnectorName) != \"\" {\n\t\t\tstoredCfg, fp := h.resolveStoredConnectorConfig(c.UserContext(), body.ConnectorName, nil)\n\t\t\tstoredHost := strings.TrimSpace(storedCfg[\"database.hostname\"])\n\t\t\tstoredPort := strings.TrimSpace(storedCfg[\"database.port\"])\n\t\t\tstoredUser := strings.TrimSpace(storedCfg[\"database.user\"])\n\t\t\tif storedHost == \"\" && fp != nil && strings.TrimSpace(fp.ServerAddress) != \"\" {\n\t\t\t\taddrParts := strings.SplitN(strings.TrimSpace(fp.ServerAddress), \":\", 2)\n\t\t\t\tstoredHost = addrParts[0]\n\t\t\t\tif len(addrParts) == 2 && storedPort == \"\" {\n\t\t\t\t\tstoredPort = addrParts[1]\n\t\t\t\t}\n\t\t\t}\n\t\t\tif storedPort == \"\" {\n\t\t\t\tstoredPort = \"5432\"\n\t\t\t}\n\t\t\tif storedHost != \"\" && (!strings.EqualFold(host, storedHost) || port != storedPort || (storedUser != \"\" && user != storedUser)) {\n\t\t\t\treturn c.JSON(fiber.Map{\n\t\t\t\t\t\"status\":        \"auth_err\",\n\t\t\t\t\t\"error\":         \"Host/Port/Username đã thay đổi so với cấu hình hiện tại của connector — vui lòng nhập lại Password để kiểm tra kết nối.\",\n\t\t\t\t\t\"database\":      database,\n\t\t\t\t\t\"sanitized_dsn\": sanitizedDSN,\n\t\t\t\t})\n\t\t\t}\n\t\t\tif storedHost != \"\" {\n\t\t\t\tif storedPass := storedCfg[\"database.password\"]; storedPass != \"\" && !sourceCmd.IsKeepOrMaskedSecret(storedPass) {\n\t\t\t\t\tpass = storedPass\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif strings.TrimSpace(pass) == \"\" || sourceCmd.IsKeepOrMaskedSecret(pass) {\n\t\t\treturn c.JSON(fiber.Map{\n\t\t\t\t\"status\":        \"auth_err\",\n\t\t\t\t\"error\":         \"Vui lòng nhập Password để kiểm tra kết nối PostgreSQL.\",\n\t\t\t\t\"database\":      database,\n\t\t\t\t\"sanitized_dsn\": sanitizedDSN,\n\t\t\t})\n\t\t}\n\t}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:83-105\nfunc (h *IntrospectionHandler) resolveMongoIntrospectionURI(ctx context.Context, rawURI, connectorName string) (string, error) {\n\ttrimmed := strings.TrimSpace(rawURI)\n\tif trimmed == \"\" || (!sourceCmd.IsMaskedURI(trimmed) && !sourceCmd.IsKeepOrMaskedSecret(trimmed)) {\n\t\treturn rawURI, nil\n\t}\n\tname := strings.TrimSpace(connectorName)\n\tif name == \"\" {\n\t\treturn \"\", errors.New(\"Connection URL đang chứa thông tin xác thực bị che (***) — vui lòng nhập lại username:password thật.\")\n\t}\n\tstoredCfg, _ := h.resolveStoredConnectorConfig(ctx, name, map[string]string{\"mongodb.connection.string\": trimmed})\n\tstoredURI := strings.TrimSpace(storedCfg[\"mongodb.connection.string\"])\n\tif storedURI == \"\" || sourceCmd.IsMaskedURI(storedURI) {\n\t\treturn \"\", errors.New(\"Không tìm thấy thông tin xác thực đã lưu của connector — vui lòng nhập lại username:password trong Connection URL.\")\n\t}\n\tif !sourceCmd.IsKeepOrMaskedSecret(trimmed) && !sourceCmd.SameURIHostAuthority(trimmed, storedURI) {\n\t\treturn \"\", errors.New(\"Host/Port trong Connection URL đã thay đổi so với cấu hình hiện tại của connector — vui lòng nhập lại username:password cho host mới.\")\n\t}\n\trestored := sourceCmd.RestoreMaskedURI(trimmed, storedURI)\n\tif sourceCmd.IsMaskedURI(restored) || sourceCmd.IsKeepOrMaskedSecret(restored) {\n\t\treturn \"\", errors.New(\"Không thể khôi phục thông tin xác thực từ URI — vui lòng nhập lại username:password thật.\")\n\t}\n\treturn restored, nil\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2494,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6282,
+                "INCORRECT": 0.3117,
+                "UNSUPPORTED": 0.0602
+              },
+              "confidence": 0.2494,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "DiscoverPostgresTablesPost and resolveMongoIntrospectionURI enforce host-bound secret resolution: stored connector credentials are only resolved when host/port/username (for Postgres) or SameURIHostAuthority (for MongoDB URI) matches the connector's stored configuration.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler_postgres.go:101-139\n\tif strings.TrimSpace(pass) == \"\" || sourceCmd.IsKeepOrMaskedSecret(pass) {\n\t\tif strings.TrimSpace(body.ConnectorName) != \"\" {\n\t\t\tstoredCfg, fp := h.resolveStoredConnectorConfig(c.UserContext(), body.ConnectorName, nil)\n\t\t\tstoredHost := strings.TrimSpace(storedCfg[\"database.hostname\"])\n\t\t\tstoredPort := strings.TrimSpace(storedCfg[\"database.port\"])\n\t\t\tstoredUser := strings.TrimSpace(storedCfg[\"database.user\"])\n\t\t\tif storedHost == \"\" && fp != nil && strings.TrimSpace(fp.ServerAddress) != \"\" {\n\t\t\t\taddrParts := strings.SplitN(strings.TrimSpace(fp.ServerAddress), \":\", 2)\n\t\t\t\tstoredHost = addrParts[0]\n\t\t\t\tif len(addrParts) == 2 && storedPort == \"\" {\n\t\t\t\t\tstoredPort = addrParts[1]\n\t\t\t\t}\n\t\t\t}\n\t\t\tif storedPort == \"\" {\n\t\t\t\tstoredPort = \"5432\"\n\t\t\t}\n\t\t\tif storedHost != \"\" && (!strings.EqualFold(host, storedHost) || port != storedPort || (storedUser != \"\" && user != storedUser)) {\n\t\t\t\treturn c.JSON(fiber.Map{\n\t\t\t\t\t\"status\":        \"auth_err\",\n\t\t\t\t\t\"error\":         \"Host/Port/Username đã thay đổi so với cấu hình hiện tại của connector — vui lòng nhập lại Password để kiểm tra kết nối.\",\n\t\t\t\t\t\"database\":      database,\n\t\t\t\t\t\"sanitized_dsn\": sanitizedDSN,\n\t\t\t\t})\n\t\t\t}\n\t\t\tif storedHost != \"\" {\n\t\t\t\tif storedPass := storedCfg[\"database.password\"]; storedPass != \"\" && !sourceCmd.IsKeepOrMaskedSecret(storedPass) {\n\t\t\t\t\tpass = storedPass\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif strings.TrimSpace(pass) == \"\" || sourceCmd.IsKeepOrMaskedSecret(pass) {\n\t\t\treturn c.JSON(fiber.Map{\n\t\t\t\t\"status\":        \"auth_err\",\n\t\t\t\t\"error\":         \"Vui lòng nhập Password để kiểm tra kết nối PostgreSQL.\",\n\t\t\t\t\"database\":      database,\n\t\t\t\t\"sanitized_dsn\": sanitizedDSN,\n\t\t\t})\n\t\t}\n\t}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:83-105\nfunc (h *IntrospectionHandler) resolveMongoIntrospectionURI(ctx context.Context, rawURI, connectorName string) (string, error) {\n\ttrimmed := strings.TrimSpace(rawURI)\n\tif trimmed == \"\" || (!sourceCmd.IsMaskedURI(trimmed) && !sourceCmd.IsKeepOrMaskedSecret(trimmed)) {\n\t\treturn rawURI, nil\n\t}\n\tname := strings.TrimSpace(connectorName)\n\tif name == \"\" {\n\t\treturn \"\", errors.New(\"Connection URL đang chứa thông tin xác thực bị che (***) — vui lòng nhập lại username:password thật.\")\n\t}\n\tstoredCfg, _ := h.resolveStoredConnectorConfig(ctx, name, map[string]string{\"mongodb.connection.string\": trimmed})\n\tstoredURI := strings.TrimSpace(storedCfg[\"mongodb.connection.string\"])\n\tif storedURI == \"\" || sourceCmd.IsMaskedURI(storedURI) {\n\t\treturn \"\", errors.New(\"Không tìm thấy thông tin xác thực đã lưu của connector — vui lòng nhập lại username:password trong Connection URL.\")\n\t}\n\tif !sourceCmd.IsKeepOrMaskedSecret(trimmed) && !sourceCmd.SameURIHostAuthority(trimmed, storedURI) {\n\t\treturn \"\", errors.New(\"Host/Port trong Connection URL đã thay đổi so với cấu hình hiện tại của connector — vui lòng nhập lại username:password cho host mới.\")\n\t}\n\trestored := sourceCmd.RestoreMaskedURI(trimmed, storedURI)\n\tif sourceCmd.IsMaskedURI(restored) || sourceCmd.IsKeepOrMaskedSecret(restored) {\n\t\treturn \"\", errors.New(\"Không thể khôi phục thông tin xác thực từ URI — vui lòng nhập lại username:password thật.\")\n\t}\n\treturn restored, nil\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1045,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5337,
+                "INCORRECT": 0.3163,
+                "UNSUPPORTED": 0.15
+              },
+              "confidence": 0.1045,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler_postgres.go:101-139\n\tif strings.TrimSpace(pass) == \"\" || sourceCmd.IsKeepOrMaskedSecret(pass) {\n\t\tif strings.TrimSpace(body.ConnectorName) != \"\" {\n\t\t\tstoredCfg, fp := h.resolveStoredConnectorConfig(c.UserContext(), body.ConnectorName, nil)\n\t\t\tstoredHost := strings.TrimSpace(storedCfg[\"database.hostname\"])\n\t\t\tstoredPort := strings.TrimSpace(storedCfg[\"database.port\"])\n\t\t\tstoredUser := strings.TrimSpace(storedCfg[\"database.user\"])\n\t\t\tif storedHost == \"\" && fp != nil && strings.TrimSpace(fp.ServerAddress) != \"\" {\n\t\t\t\taddrParts := strings.SplitN(strings.TrimSpace(fp.ServerAddress), \":\", 2)\n\t\t\t\tstoredHost = addrParts[0]\n\t\t\t\tif len(addrParts) == 2 && storedPort == \"\" {\n\t\t\t\t\tstoredPort = addrParts[1]\n\t\t\t\t}\n\t\t\t}\n\t\t\tif storedPort == \"\" {\n\t\t\t\tstoredPort = \"5432\"\n\t\t\t}\n\t\t\tif storedHost != \"\" && (!strings.EqualFold(host, storedHost) || port != storedPort || (storedUser != \"\" && user != storedUser)) {\n\t\t\t\treturn c.JSON(fiber.Map{\n\t\t\t\t\t\"status\":        \"auth_err\",\n\t\t\t\t\t\"error\":         \"Host/Port/Username đã thay đổi so với cấu hình hiện tại của connector — vui lòng nhập lại Password để kiểm tra kết nối.\",\n\t\t\t\t\t\"database\":      database,\n\t\t\t\t\t\"sanitized_dsn\": sanitizedDSN,\n\t\t\t\t})\n\t\t\t}\n\t\t\tif storedHost != \"\" {\n\t\t\t\tif storedPass := storedCfg[\"database.password\"]; storedPass != \"\" && !sourceCmd.IsKeepOrMaskedSecret(storedPass) {\n\t\t\t\t\tpass = storedPass\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif strings.TrimSpace(pass) == \"\" || sourceCmd.IsKeepOrMaskedSecret(pass) {\n\t\t\treturn c.JSON(fiber.Map{\n\t\t\t\t\"status\":        \"auth_err\",\n\t\t\t\t\"error\":         \"Vui lòng nhập Password để kiểm tra kết nối PostgreSQL.\",\n\t\t\t\t\"database\":      database,\n\t\t\t\t\"sanitized_dsn\": sanitizedDSN,\n\t\t\t})\n\t\t}\n\t}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:83-105\nfunc (h *IntrospectionHandler) resolveMongoIntrospectionURI(ctx context.Context, rawURI, connectorName string) (string, error) {\n\ttrimmed := strings.TrimSpace(rawURI)\n\tif trimmed == \"\" || (!sourceCmd.IsMaskedURI(trimmed) && !sourceCmd.IsKeepOrMaskedSecret(trimmed)) {\n\t\treturn rawURI, nil\n\t}\n\tname := strings.TrimSpace(connectorName)\n\tif name == \"\" {\n\t\treturn \"\", errors.New(\"Connection URL đang chứa thông tin xác thực bị che (***) — vui lòng nhập lại username:password thật.\")\n\t}\n\tstoredCfg, _ := h.resolveStoredConnectorConfig(ctx, name, map[string]string{\"mongodb.connection.string\": trimmed})\n\tstoredURI := strings.TrimSpace(storedCfg[\"mongodb.connection.string\"])\n\tif storedURI == \"\" || sourceCmd.IsMaskedURI(storedURI) {\n\t\treturn \"\", errors.New(\"Không tìm thấy thông tin xác thực đã lưu của connector — vui lòng nhập lại username:password trong Connection URL.\")\n\t}\n\tif !sourceCmd.IsKeepOrMaskedSecret(trimmed) && !sourceCmd.SameURIHostAuthority(trimmed, storedURI) {\n\t\treturn \"\", errors.New(\"Host/Port trong Connection URL đã thay đổi so với cấu hình hiện tại của connector — vui lòng nhập lại username:password cho host mới.\")\n\t}\n\trestored := sourceCmd.RestoreMaskedURI(trimmed, storedURI)\n\tif sourceCmd.IsMaskedURI(restored) || sourceCmd.IsKeepOrMaskedSecret(restored) {\n\t\treturn \"\", errors.New(\"Không thể khôi phục thông tin xác thực từ URI — vui lòng nhập lại username:password thật.\")\n\t}\n\treturn restored, nil\n}",
+          "claim": "DiscoverPostgresTablesPost and resolveMongoIntrospectionURI enforce host-bound secret resolution: stored connector credentials are only resolved when host/port/username (for Postgres) or SameURIHostAuthority (for MongoDB URI) matches the connector's stored configuration."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6295,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9288,
+                "NO": 0.0712
+              },
+              "confidence": 0.6295,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler_postgres.go:101-139\n\tif strings.TrimSpace(pass) == \"\" || sourceCmd.IsKeepOrMaskedSecret(pass) {\n\t\tif strings.TrimSpace(body.ConnectorName) != \"\" {\n\t\t\tstoredCfg, fp := h.resolveStoredConnectorConfig(c.UserContext(), body.ConnectorName, nil)\n\t\t\tstoredHost := strings.TrimSpace(storedCfg[\"database.hostname\"])\n\t\t\tstoredPort := strings.TrimSpace(storedCfg[\"database.port\"])\n\t\t\tstoredUser := strings.TrimSpace(storedCfg[\"database.user\"])\n\t\t\tif storedHost == \"\" && fp != nil && strings.TrimSpace(fp.ServerAddress) != \"\" {\n\t\t\t\taddrParts := strings.SplitN(strings.TrimSpace(fp.ServerAddress), \":\", 2)\n\t\t\t\tstoredHost = addrParts[0]\n\t\t\t\tif len(addrParts) == 2 && storedPort == \"\" {\n\t\t\t\t\tstoredPort = addrParts[1]\n\t\t\t\t}\n\t\t\t}\n\t\t\tif storedPort == \"\" {\n\t\t\t\tstoredPort = \"5432\"\n\t\t\t}\n\t\t\tif storedHost != \"\" && (!strings.EqualFold(host, storedHost) || port != storedPort || (storedUser != \"\" && user != storedUser)) {\n\t\t\t\treturn c.JSON(fiber.Map{\n\t\t\t\t\t\"status\":        \"auth_err\",\n\t\t\t\t\t\"error\":         \"Host/Port/Username đã thay đổi so với cấu hình hiện tại của connector — vui lòng nhập lại Password để kiểm tra kết nối.\",\n\t\t\t\t\t\"database\":      database,\n\t\t\t\t\t\"sanitized_dsn\": sanitizedDSN,\n\t\t\t\t})\n\t\t\t}\n\t\t\tif storedHost != \"\" {\n\t\t\t\tif storedPass := storedCfg[\"database.password\"]; storedPass != \"\" && !sourceCmd.IsKeepOrMaskedSecret(storedPass) {\n\t\t\t\t\tpass = storedPass\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif strings.TrimSpace(pass) == \"\" || sourceCmd.IsKeepOrMaskedSecret(pass) {\n\t\t\treturn c.JSON(fiber.Map{\n\t\t\t\t\"status\":        \"auth_err\",\n\t\t\t\t\"error\":         \"Vui lòng nhập Password để kiểm tra kết nối PostgreSQL.\",\n\t\t\t\t\"database\":      database,\n\t\t\t\t\"sanitized_dsn\": sanitizedDSN,\n\t\t\t})\n\t\t}\n\t}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler.go:83-105\nfunc (h *IntrospectionHandler) resolveMongoIntrospectionURI(ctx context.Context, rawURI, connectorName string) (string, error) {\n\ttrimmed := strings.TrimSpace(rawURI)\n\tif trimmed == \"\" || (!sourceCmd.IsMaskedURI(trimmed) && !sourceCmd.IsKeepOrMaskedSecret(trimmed)) {\n\t\treturn rawURI, nil\n\t}\n\tname := strings.TrimSpace(connectorName)\n\tif name == \"\" {\n\t\treturn \"\", errors.New(\"Connection URL đang chứa thông tin xác thực bị che (***) — vui lòng nhập lại username:password thật.\")\n\t}\n\tstoredCfg, _ := h.resolveStoredConnectorConfig(ctx, name, map[string]string{\"mongodb.connection.string\": trimmed})\n\tstoredURI := strings.TrimSpace(storedCfg[\"mongodb.connection.string\"])\n\tif storedURI == \"\" || sourceCmd.IsMaskedURI(storedURI) {\n\t\treturn \"\", errors.New(\"Không tìm thấy thông tin xác thực đã lưu của connector — vui lòng nhập lại username:password trong Connection URL.\")\n\t}\n\tif !sourceCmd.IsKeepOrMaskedSecret(trimmed) && !sourceCmd.SameURIHostAuthority(trimmed, storedURI) {\n\t\treturn \"\", errors.New(\"Host/Port trong Connection URL đã thay đổi so với cấu hình hiện tại của connector — vui lòng nhập lại username:password cho host mới.\")\n\t}\n\trestored := sourceCmd.RestoreMaskedURI(trimmed, storedURI)\n\tif sourceCmd.IsMaskedURI(restored) || sourceCmd.IsKeepOrMaskedSecret(restored) {\n\t\treturn \"\", errors.New(\"Không thể khôi phục thông tin xác thực từ URI — vui lòng nhập lại username:password thật.\")\n\t}\n\treturn restored, nil\n}",
+          "claim": "DiscoverPostgresTablesPost and resolveMongoIntrospectionURI enforce host-bound secret resolution: stored connector credentials are only resolved when host/port/username (for Postgres) or SameURIHostAuthority (for MongoDB URI) matches the connector's stored configuration."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "G3-URI-EDGE-CASES",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "debezium_connector_secrets.go handles comma-separated multi-URI fs.uris lists, restores username-only URIs (len(curParts) == 1) without appending :***, applies IsMaskedURI across all config keys in MergeConnectorConfigPreservingSecrets, and extractCredentialsAsOptions uses u.User.Username() and u.User.Password().",
+    "workflow": "RestoreMaskedURI / MergeConnectorConfigPreservingSecrets / extractCredentialsAsOptions",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector_secrets.go:180-272\n\t\treturn incomingURI\n\t}\n\tif IsKeepOrMaskedSecret(inTrim) {\n\t\treturn currentURI\n\t}\n\tinScheme, inUserInfo, inHostPort, inPathQuery, inHasUser := splitURIAuthority(inTrim)\n\t_, curUserInfo, _, _, curHasUser := splitURIAuthority(curTrim)\n\tif !inHasUser || !curHasUser || curUserInfo == \"\" {\n\t\treturn incomingURI\n\t}\n\tinParts := strings.SplitN(inUserInfo, \":\", 2)\n\tcurParts := strings.SplitN(curUserInfo, \":\", 2)\n\n\tresolvedUser := inParts[0]\n\tif isMaskedOrEmptyUserInfoPart(resolvedUser) && !isMaskedOrEmptyUserInfoPart(curParts[0]) {\n\t\tresolvedUser = curParts[0]\n\t}\n\tif len(inParts) == 2 {\n\t\tresolvedPass := inParts[1]\n\t\tif isMaskedUserInfoPart(resolvedPass) {\n\t\t\tif len(curParts) == 2 && !isMaskedUserInfoPart(curParts[1]) {\n\t\t\t\tresolvedPass = curParts[1]\n\t\t\t} else if len(curParts) == 1 && !isMaskedOrEmptyUserInfoPart(curParts[0]) {\n\t\t\t\t// G3: currentURI has only username without password — strip \":***\"\n\t\t\t\treturn inScheme + resolvedUser + \"@\" + inHostPort + inPathQuery\n\t\t\t}\n\t\t}\n\t\treturn inScheme + resolvedUser + \":\" + resolvedPass + \"@\" + inHostPort + inPathQuery\n\t}\n\tif isMaskedUserInfoPart(inParts[0]) && len(curParts) == 2 && !isMaskedUserInfoPart(curParts[1]) {\n\t\treturn inScheme + resolvedUser + \":\" + curParts[1] + \"@\" + inHostPort + inPathQuery\n\t}\n\treturn inScheme + resolvedUser + \"@\" + inHostPort + inPathQuery\n}\n\n// RestoreMaskedURI restores masked username/password in incomingURI (single or comma-separated\n// multi-URI list) from currentURI while preserving any host/port/path/query changes in incomingURI.\nfunc RestoreMaskedURI(incomingURI, currentURI string) string {\n\tinTrim := strings.TrimSpace(incomingURI)\n\tcurTrim := strings.TrimSpace(currentURI)\n\tif inTrim == \"\" || curTrim == \"\" {\n\t\treturn incomingURI\n\t}\n\tif IsKeepOrMaskedSecret(inTrim) {\n\t\treturn currentURI\n\t}\n\tinList, inMulti := splitMultiURIList(inTrim)\n\tcurList, _ := splitMultiURIList(curTrim)\n\tif len(curList) == 0 {\n\t\treturn incomingURI\n\t}\n\tif !inMulti {\n\t\treturn restoreSingleMaskedURI(inTrim, curList[0])\n\t}\n\trestored := make([]string, len(inList))\n\tfor i, seg := range inList {\n\t\tcurSeg := curList[0]\n\t\tif i < len(curList) {\n\t\t\tcurSeg = curList[i]\n\t\t}\n\t\trestored[i] = restoreSingleMaskedURI(seg, curSeg)\n\t}\n\treturn strings.Join(restored, \",\")\n}\n\n// MergeConnectorConfigPreservingSecrets merges incoming config into current config while\n// preserving existing secrets whenever incoming contains __KEEP__, masked asterisks/bullets,\n// empty sensitive values, or masked URIs across any config key.\nfunc MergeConnectorConfigPreservingSecrets(current, incoming map[string]string) map[string]string {\n\tmerged := make(map[string]string, len(current)+len(incoming))\n\tfor k, v := range current {\n\t\tmerged[k] = v\n\t}\n\tfor k, v := range incoming {\n\t\tif IsKeepOrMaskedSecret(v) {\n\t\t\tif curVal, ok := current[k]; ok && strings.TrimSpace(curVal) != \"\" && !IsKeepOrMaskedSecret(curVal) {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\t\tif strings.TrimSpace(v) == \"\" && IsSensitiveConnectorKey(k) {\n\t\t\tif curVal, ok := current[k]; ok && strings.TrimSpace(curVal) != \"\" && !IsKeepOrMaskedSecret(curVal) {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\t\tif IsMaskedURI(v) {\n\t\t\tif curURI, ok := current[k]; ok && strings.TrimSpace(curURI) != \"\" && !IsMaskedURI(curURI) {\n\t\t\t\tv = RestoreMaskedURI(v, curURI)\n\t\t\t}\n\t\t}\n\t\tmerged[k] = v\n\t}\n\treturn merged\n}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_credentials.go:171-218\nfunc extractCredentialsAsOptions(cfg map[string]string) []byte {\n\topts := make(map[string]string)\n\t// Postgres / Mysql / SQL Server\n\tif user, ok := cfg[\"database.user\"]; ok && !isKeepOrMaskedSecret(user) {\n\t\topts[\"username\"] = strings.TrimSpace(user)\n\t}\n\tif pass, ok := cfg[\"database.password\"]; ok && !isKeepOrMaskedSecret(pass) {\n\t\topts[\"password\"] = pass\n\t}\n\tif sslmode, ok := cfg[\"database.sslmode\"]; ok && strings.TrimSpace(sslmode) != \"\" {\n\t\topts[\"sslmode\"] = strings.TrimSpace(sslmode)\n\t}\n\t// MongoDB\n\tif user, ok := cfg[\"mongodb.user\"]; ok && !isKeepOrMaskedSecret(user) {\n\t\topts[\"username\"] = strings.TrimSpace(user)\n\t}\n\tif pass, ok := cfg[\"mongodb.password\"]; ok && !isKeepOrMaskedSecret(pass) {\n\t\topts[\"password\"] = pass\n\t}\n\tif mongoURI := strings.TrimSpace(cfg[\"mongodb.connection.string\"]); mongoURI != \"\" && !isKeepOrMaskedSecret(mongoURI) && !sourceCmd.IsMaskedURI(mongoURI) {\n\t\topts[\"uri\"] = mongoURI\n\t}\n\t// SFTP — kafka-connect-fs: credentials embedded in fs.uris = sftp://user:pass@host:port/path\n\tif fsURI, ok := cfg[\"fs.uris\"]; ok && strings.TrimSpace(fsURI) != \"\" {\n\t\tfirstURI := strings.TrimSpace(strings.Split(fsURI, \",\")[0])\n\t\tif u, err := url.Parse(firstURI); err == nil && u.User != nil {\n\t\t\tuname := u.User.Username()\n\t\t\tif !isKeepOrMaskedSecret(uname) {\n\t\t\t\topts[\"username\"] = uname\n\t\t\t}\n\t\t\tif pwd, hasPwd := u.User.Password(); hasPwd && !isKeepOrMaskedSecret(pwd) {\n\t\t\t\topts[\"password\"] = pwd\n\t\t\t}\n\t\t}\n\t}\n\t// SFTP — Confluent legacy format (sftp.username / sftp.password)\n\tif user, ok := cfg[\"sftp.username\"]; ok && opts[\"username\"] == \"\" && !isKeepOrMaskedSecret(user) {\n\t\topts[\"username\"] = strings.TrimSpace(user)\n\t}\n\tif pass, ok := cfg[\"sftp.password\"]; ok && opts[\"password\"] == \"\" && !isKeepOrMaskedSecret(pass) {\n\t\topts[\"password\"] = pass\n\t}\n\tif len(opts) == 0 {\n\t\treturn nil\n\t}\n\tb, _ := json.Marshal(opts)\n\treturn b\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2877,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5229,
+                "INCORRECT": 0.4546,
+                "UNSUPPORTED": 0.0224
+              },
+              "confidence": 0.2877,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "debezium_connector_secrets.go handles comma-separated multi-URI fs.uris lists, restores username-only URIs (len(curParts) == 1) without appending :***, applies IsMaskedURI across all config keys in MergeConnectorConfigPreservingSecrets, and extractCredentialsAsOptions uses u.User.Username() and u.User.Password().",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector_secrets.go:180-272\n\t\treturn incomingURI\n\t}\n\tif IsKeepOrMaskedSecret(inTrim) {\n\t\treturn currentURI\n\t}\n\tinScheme, inUserInfo, inHostPort, inPathQuery, inHasUser := splitURIAuthority(inTrim)\n\t_, curUserInfo, _, _, curHasUser := splitURIAuthority(curTrim)\n\tif !inHasUser || !curHasUser || curUserInfo == \"\" {\n\t\treturn incomingURI\n\t}\n\tinParts := strings.SplitN(inUserInfo, \":\", 2)\n\tcurParts := strings.SplitN(curUserInfo, \":\", 2)\n\n\tresolvedUser := inParts[0]\n\tif isMaskedOrEmptyUserInfoPart(resolvedUser) && !isMaskedOrEmptyUserInfoPart(curParts[0]) {\n\t\tresolvedUser = curParts[0]\n\t}\n\tif len(inParts) == 2 {\n\t\tresolvedPass := inParts[1]\n\t\tif isMaskedUserInfoPart(resolvedPass) {\n\t\t\tif len(curParts) == 2 && !isMaskedUserInfoPart(curParts[1]) {\n\t\t\t\tresolvedPass = curParts[1]\n\t\t\t} else if len(curParts) == 1 && !isMaskedOrEmptyUserInfoPart(curParts[0]) {\n\t\t\t\t// G3: currentURI has only username without password — strip \":***\"\n\t\t\t\treturn inScheme + resolvedUser + \"@\" + inHostPort + inPathQuery\n\t\t\t}\n\t\t}\n\t\treturn inScheme + resolvedUser + \":\" + resolvedPass + \"@\" + inHostPort + inPathQuery\n\t}\n\tif isMaskedUserInfoPart(inParts[0]) && len(curParts) == 2 && !isMaskedUserInfoPart(curParts[1]) {\n\t\treturn inScheme + resolvedUser + \":\" + curParts[1] + \"@\" + inHostPort + inPathQuery\n\t}\n\treturn inScheme + resolvedUser + \"@\" + inHostPort + inPathQuery\n}\n\n// RestoreMaskedURI restores masked username/password in incomingURI (single or comma-separated\n// multi-URI list) from currentURI while preserving any host/port/path/query changes in incomingURI.\nfunc RestoreMaskedURI(incomingURI, currentURI string) string {\n\tinTrim := strings.TrimSpace(incomingURI)\n\tcurTrim := strings.TrimSpace(currentURI)\n\tif inTrim == \"\" || curTrim == \"\" {\n\t\treturn incomingURI\n\t}\n\tif IsKeepOrMaskedSecret(inTrim) {\n\t\treturn currentURI\n\t}\n\tinList, inMulti := splitMultiURIList(inTrim)\n\tcurList, _ := splitMultiURIList(curTrim)\n\tif len(curList) == 0 {\n\t\treturn incomingURI\n\t}\n\tif !inMulti {\n\t\treturn restoreSingleMaskedURI(inTrim, curList[0])\n\t}\n\trestored := make([]string, len(inList))\n\tfor i, seg := range inList {\n\t\tcurSeg := curList[0]\n\t\tif i < len(curList) {\n\t\t\tcurSeg = curList[i]\n\t\t}\n\t\trestored[i] = restoreSingleMaskedURI(seg, curSeg)\n\t}\n\treturn strings.Join(restored, \",\")\n}\n\n// MergeConnectorConfigPreservingSecrets merges incoming config into current config while\n// preserving existing secrets whenever incoming contains __KEEP__, masked asterisks/bullets,\n// empty sensitive values, or masked URIs across any config key.\nfunc MergeConnectorConfigPreservingSecrets(current, incoming map[string]string) map[string]string {\n\tmerged := make(map[string]string, len(current)+len(incoming))\n\tfor k, v := range current {\n\t\tmerged[k] = v\n\t}\n\tfor k, v := range incoming {\n\t\tif IsKeepOrMaskedSecret(v) {\n\t\t\tif curVal, ok := current[k]; ok && strings.TrimSpace(curVal) != \"\" && !IsKeepOrMaskedSecret(curVal) {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\t\tif strings.TrimSpace(v) == \"\" && IsSensitiveConnectorKey(k) {\n\t\t\tif curVal, ok := current[k]; ok && strings.TrimSpace(curVal) != \"\" && !IsKeepOrMaskedSecret(curVal) {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\t\tif IsMaskedURI(v) {\n\t\t\tif curURI, ok := current[k]; ok && strings.TrimSpace(curURI) != \"\" && !IsMaskedURI(curURI) {\n\t\t\t\tv = RestoreMaskedURI(v, curURI)\n\t\t\t}\n\t\t}\n\t\tmerged[k] = v\n\t}\n\treturn merged\n}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_credentials.go:171-218\nfunc extractCredentialsAsOptions(cfg map[string]string) []byte {\n\topts := make(map[string]string)\n\t// Postgres / Mysql / SQL Server\n\tif user, ok := cfg[\"database.user\"]; ok && !isKeepOrMaskedSecret(user) {\n\t\topts[\"username\"] = strings.TrimSpace(user)\n\t}\n\tif pass, ok := cfg[\"database.password\"]; ok && !isKeepOrMaskedSecret(pass) {\n\t\topts[\"password\"] = pass\n\t}\n\tif sslmode, ok := cfg[\"database.sslmode\"]; ok && strings.TrimSpace(sslmode) != \"\" {\n\t\topts[\"sslmode\"] = strings.TrimSpace(sslmode)\n\t}\n\t// MongoDB\n\tif user, ok := cfg[\"mongodb.user\"]; ok && !isKeepOrMaskedSecret(user) {\n\t\topts[\"username\"] = strings.TrimSpace(user)\n\t}\n\tif pass, ok := cfg[\"mongodb.password\"]; ok && !isKeepOrMaskedSecret(pass) {\n\t\topts[\"password\"] = pass\n\t}\n\tif mongoURI := strings.TrimSpace(cfg[\"mongodb.connection.string\"]); mongoURI != \"\" && !isKeepOrMaskedSecret(mongoURI) && !sourceCmd.IsMaskedURI(mongoURI) {\n\t\topts[\"uri\"] = mongoURI\n\t}\n\t// SFTP — kafka-connect-fs: credentials embedded in fs.uris = sftp://user:pass@host:port/path\n\tif fsURI, ok := cfg[\"fs.uris\"]; ok && strings.TrimSpace(fsURI) != \"\" {\n\t\tfirstURI := strings.TrimSpace(strings.Split(fsURI, \",\")[0])\n\t\tif u, err := url.Parse(firstURI); err == nil && u.User != nil {\n\t\t\tuname := u.User.Username()\n\t\t\tif !isKeepOrMaskedSecret(uname) {\n\t\t\t\topts[\"username\"] = uname\n\t\t\t}\n\t\t\tif pwd, hasPwd := u.User.Password(); hasPwd && !isKeepOrMaskedSecret(pwd) {\n\t\t\t\topts[\"password\"] = pwd\n\t\t\t}\n\t\t}\n\t}\n\t// SFTP — Confluent legacy format (sftp.username / sftp.password)\n\tif user, ok := cfg[\"sftp.username\"]; ok && opts[\"username\"] == \"\" && !isKeepOrMaskedSecret(user) {\n\t\topts[\"username\"] = strings.TrimSpace(user)\n\t}\n\tif pass, ok := cfg[\"sftp.password\"]; ok && opts[\"password\"] == \"\" && !isKeepOrMaskedSecret(pass) {\n\t\topts[\"password\"] = pass\n\t}\n\tif len(opts) == 0 {\n\t\treturn nil\n\t}\n\tb, _ := json.Marshal(opts)\n\treturn b\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1504,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6,
+                "INCORRECT": 0.2577,
+                "UNSUPPORTED": 0.1423
+              },
+              "confidence": 0.1504,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector_secrets.go:180-272\n\t\treturn incomingURI\n\t}\n\tif IsKeepOrMaskedSecret(inTrim) {\n\t\treturn currentURI\n\t}\n\tinScheme, inUserInfo, inHostPort, inPathQuery, inHasUser := splitURIAuthority(inTrim)\n\t_, curUserInfo, _, _, curHasUser := splitURIAuthority(curTrim)\n\tif !inHasUser || !curHasUser || curUserInfo == \"\" {\n\t\treturn incomingURI\n\t}\n\tinParts := strings.SplitN(inUserInfo, \":\", 2)\n\tcurParts := strings.SplitN(curUserInfo, \":\", 2)\n\n\tresolvedUser := inParts[0]\n\tif isMaskedOrEmptyUserInfoPart(resolvedUser) && !isMaskedOrEmptyUserInfoPart(curParts[0]) {\n\t\tresolvedUser = curParts[0]\n\t}\n\tif len(inParts) == 2 {\n\t\tresolvedPass := inParts[1]\n\t\tif isMaskedUserInfoPart(resolvedPass) {\n\t\t\tif len(curParts) == 2 && !isMaskedUserInfoPart(curParts[1]) {\n\t\t\t\tresolvedPass = curParts[1]\n\t\t\t} else if len(curParts) == 1 && !isMaskedOrEmptyUserInfoPart(curParts[0]) {\n\t\t\t\t// G3: currentURI has only username without password — strip \":***\"\n\t\t\t\treturn inScheme + resolvedUser + \"@\" + inHostPort + inPathQuery\n\t\t\t}\n\t\t}\n\t\treturn inScheme + resolvedUser + \":\" + resolvedPass + \"@\" + inHostPort + inPathQuery\n\t}\n\tif isMaskedUserInfoPart(inParts[0]) && len(curParts) == 2 && !isMaskedUserInfoPart(curParts[1]) {\n\t\treturn inScheme + resolvedUser + \":\" + curParts[1] + \"@\" + inHostPort + inPathQuery\n\t}\n\treturn inScheme + resolvedUser + \"@\" + inHostPort + inPathQuery\n}\n\n// RestoreMaskedURI restores masked username/password in incomingURI (single or comma-separated\n// multi-URI list) from currentURI while preserving any host/port/path/query changes in incomingURI.\nfunc RestoreMaskedURI(incomingURI, currentURI string) string {\n\tinTrim := strings.TrimSpace(incomingURI)\n\tcurTrim := strings.TrimSpace(currentURI)\n\tif inTrim == \"\" || curTrim == \"\" {\n\t\treturn incomingURI\n\t}\n\tif IsKeepOrMaskedSecret(inTrim) {\n\t\treturn currentURI\n\t}\n\tinList, inMulti := splitMultiURIList(inTrim)\n\tcurList, _ := splitMultiURIList(curTrim)\n\tif len(curList) == 0 {\n\t\treturn incomingURI\n\t}\n\tif !inMulti {\n\t\treturn restoreSingleMaskedURI(inTrim, curList[0])\n\t}\n\trestored := make([]string, len(inList))\n\tfor i, seg := range inList {\n\t\tcurSeg := curList[0]\n\t\tif i < len(curList) {\n\t\t\tcurSeg = curList[i]\n\t\t}\n\t\trestored[i] = restoreSingleMaskedURI(seg, curSeg)\n\t}\n\treturn strings.Join(restored, \",\")\n}\n\n// MergeConnectorConfigPreservingSecrets merges incoming config into current config while\n// preserving existing secrets whenever incoming contains __KEEP__, masked asterisks/bullets,\n// empty sensitive values, or masked URIs across any config key.\nfunc MergeConnectorConfigPreservingSecrets(current, incoming map[string]string) map[string]string {\n\tmerged := make(map[string]string, len(current)+len(incoming))\n\tfor k, v := range current {\n\t\tmerged[k] = v\n\t}\n\tfor k, v := range incoming {\n\t\tif IsKeepOrMaskedSecret(v) {\n\t\t\tif curVal, ok := current[k]; ok && strings.TrimSpace(curVal) != \"\" && !IsKeepOrMaskedSecret(curVal) {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\t\tif strings.TrimSpace(v) == \"\" && IsSensitiveConnectorKey(k) {\n\t\t\tif curVal, ok := current[k]; ok && strings.TrimSpace(curVal) != \"\" && !IsKeepOrMaskedSecret(curVal) {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\t\tif IsMaskedURI(v) {\n\t\t\tif curURI, ok := current[k]; ok && strings.TrimSpace(curURI) != \"\" && !IsMaskedURI(curURI) {\n\t\t\t\tv = RestoreMaskedURI(v, curURI)\n\t\t\t}\n\t\t}\n\t\tmerged[k] = v\n\t}\n\treturn merged\n}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_credentials.go:171-218\nfunc extractCredentialsAsOptions(cfg map[string]string) []byte {\n\topts := make(map[string]string)\n\t// Postgres / Mysql / SQL Server\n\tif user, ok := cfg[\"database.user\"]; ok && !isKeepOrMaskedSecret(user) {\n\t\topts[\"username\"] = strings.TrimSpace(user)\n\t}\n\tif pass, ok := cfg[\"database.password\"]; ok && !isKeepOrMaskedSecret(pass) {\n\t\topts[\"password\"] = pass\n\t}\n\tif sslmode, ok := cfg[\"database.sslmode\"]; ok && strings.TrimSpace(sslmode) != \"\" {\n\t\topts[\"sslmode\"] = strings.TrimSpace(sslmode)\n\t}\n\t// MongoDB\n\tif user, ok := cfg[\"mongodb.user\"]; ok && !isKeepOrMaskedSecret(user) {\n\t\topts[\"username\"] = strings.TrimSpace(user)\n\t}\n\tif pass, ok := cfg[\"mongodb.password\"]; ok && !isKeepOrMaskedSecret(pass) {\n\t\topts[\"password\"] = pass\n\t}\n\tif mongoURI := strings.TrimSpace(cfg[\"mongodb.connection.string\"]); mongoURI != \"\" && !isKeepOrMaskedSecret(mongoURI) && !sourceCmd.IsMaskedURI(mongoURI) {\n\t\topts[\"uri\"] = mongoURI\n\t}\n\t// SFTP — kafka-connect-fs: credentials embedded in fs.uris = sftp://user:pass@host:port/path\n\tif fsURI, ok := cfg[\"fs.uris\"]; ok && strings.TrimSpace(fsURI) != \"\" {\n\t\tfirstURI := strings.TrimSpace(strings.Split(fsURI, \",\")[0])\n\t\tif u, err := url.Parse(firstURI); err == nil && u.User != nil {\n\t\t\tuname := u.User.Username()\n\t\t\tif !isKeepOrMaskedSecret(uname) {\n\t\t\t\topts[\"username\"] = uname\n\t\t\t}\n\t\t\tif pwd, hasPwd := u.User.Password(); hasPwd && !isKeepOrMaskedSecret(pwd) {\n\t\t\t\topts[\"password\"] = pwd\n\t\t\t}\n\t\t}\n\t}\n\t// SFTP — Confluent legacy format (sftp.username / sftp.password)\n\tif user, ok := cfg[\"sftp.username\"]; ok && opts[\"username\"] == \"\" && !isKeepOrMaskedSecret(user) {\n\t\topts[\"username\"] = strings.TrimSpace(user)\n\t}\n\tif pass, ok := cfg[\"sftp.password\"]; ok && opts[\"password\"] == \"\" && !isKeepOrMaskedSecret(pass) {\n\t\topts[\"password\"] = pass\n\t}\n\tif len(opts) == 0 {\n\t\treturn nil\n\t}\n\tb, _ := json.Marshal(opts)\n\treturn b\n}",
+          "claim": "debezium_connector_secrets.go handles comma-separated multi-URI fs.uris lists, restores username-only URIs (len(curParts) == 1) without appending :***, applies IsMaskedURI across all config keys in MergeConnectorConfigPreservingSecrets, and extractCredentialsAsOptions uses u.User.Username() and u.User.Password()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5483,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9054,
+                "NO": 0.0946
+              },
+              "confidence": 0.5483,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector_secrets.go:180-272\n\t\treturn incomingURI\n\t}\n\tif IsKeepOrMaskedSecret(inTrim) {\n\t\treturn currentURI\n\t}\n\tinScheme, inUserInfo, inHostPort, inPathQuery, inHasUser := splitURIAuthority(inTrim)\n\t_, curUserInfo, _, _, curHasUser := splitURIAuthority(curTrim)\n\tif !inHasUser || !curHasUser || curUserInfo == \"\" {\n\t\treturn incomingURI\n\t}\n\tinParts := strings.SplitN(inUserInfo, \":\", 2)\n\tcurParts := strings.SplitN(curUserInfo, \":\", 2)\n\n\tresolvedUser := inParts[0]\n\tif isMaskedOrEmptyUserInfoPart(resolvedUser) && !isMaskedOrEmptyUserInfoPart(curParts[0]) {\n\t\tresolvedUser = curParts[0]\n\t}\n\tif len(inParts) == 2 {\n\t\tresolvedPass := inParts[1]\n\t\tif isMaskedUserInfoPart(resolvedPass) {\n\t\t\tif len(curParts) == 2 && !isMaskedUserInfoPart(curParts[1]) {\n\t\t\t\tresolvedPass = curParts[1]\n\t\t\t} else if len(curParts) == 1 && !isMaskedOrEmptyUserInfoPart(curParts[0]) {\n\t\t\t\t// G3: currentURI has only username without password — strip \":***\"\n\t\t\t\treturn inScheme + resolvedUser + \"@\" + inHostPort + inPathQuery\n\t\t\t}\n\t\t}\n\t\treturn inScheme + resolvedUser + \":\" + resolvedPass + \"@\" + inHostPort + inPathQuery\n\t}\n\tif isMaskedUserInfoPart(inParts[0]) && len(curParts) == 2 && !isMaskedUserInfoPart(curParts[1]) {\n\t\treturn inScheme + resolvedUser + \":\" + curParts[1] + \"@\" + inHostPort + inPathQuery\n\t}\n\treturn inScheme + resolvedUser + \"@\" + inHostPort + inPathQuery\n}\n\n// RestoreMaskedURI restores masked username/password in incomingURI (single or comma-separated\n// multi-URI list) from currentURI while preserving any host/port/path/query changes in incomingURI.\nfunc RestoreMaskedURI(incomingURI, currentURI string) string {\n\tinTrim := strings.TrimSpace(incomingURI)\n\tcurTrim := strings.TrimSpace(currentURI)\n\tif inTrim == \"\" || curTrim == \"\" {\n\t\treturn incomingURI\n\t}\n\tif IsKeepOrMaskedSecret(inTrim) {\n\t\treturn currentURI\n\t}\n\tinList, inMulti := splitMultiURIList(inTrim)\n\tcurList, _ := splitMultiURIList(curTrim)\n\tif len(curList) == 0 {\n\t\treturn incomingURI\n\t}\n\tif !inMulti {\n\t\treturn restoreSingleMaskedURI(inTrim, curList[0])\n\t}\n\trestored := make([]string, len(inList))\n\tfor i, seg := range inList {\n\t\tcurSeg := curList[0]\n\t\tif i < len(curList) {\n\t\t\tcurSeg = curList[i]\n\t\t}\n\t\trestored[i] = restoreSingleMaskedURI(seg, curSeg)\n\t}\n\treturn strings.Join(restored, \",\")\n}\n\n// MergeConnectorConfigPreservingSecrets merges incoming config into current config while\n// preserving existing secrets whenever incoming contains __KEEP__, masked asterisks/bullets,\n// empty sensitive values, or masked URIs across any config key.\nfunc MergeConnectorConfigPreservingSecrets(current, incoming map[string]string) map[string]string {\n\tmerged := make(map[string]string, len(current)+len(incoming))\n\tfor k, v := range current {\n\t\tmerged[k] = v\n\t}\n\tfor k, v := range incoming {\n\t\tif IsKeepOrMaskedSecret(v) {\n\t\t\tif curVal, ok := current[k]; ok && strings.TrimSpace(curVal) != \"\" && !IsKeepOrMaskedSecret(curVal) {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\t\tif strings.TrimSpace(v) == \"\" && IsSensitiveConnectorKey(k) {\n\t\t\tif curVal, ok := current[k]; ok && strings.TrimSpace(curVal) != \"\" && !IsKeepOrMaskedSecret(curVal) {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\t\tif IsMaskedURI(v) {\n\t\t\tif curURI, ok := current[k]; ok && strings.TrimSpace(curURI) != \"\" && !IsMaskedURI(curURI) {\n\t\t\t\tv = RestoreMaskedURI(v, curURI)\n\t\t\t}\n\t\t}\n\t\tmerged[k] = v\n\t}\n\treturn merged\n}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_credentials.go:171-218\nfunc extractCredentialsAsOptions(cfg map[string]string) []byte {\n\topts := make(map[string]string)\n\t// Postgres / Mysql / SQL Server\n\tif user, ok := cfg[\"database.user\"]; ok && !isKeepOrMaskedSecret(user) {\n\t\topts[\"username\"] = strings.TrimSpace(user)\n\t}\n\tif pass, ok := cfg[\"database.password\"]; ok && !isKeepOrMaskedSecret(pass) {\n\t\topts[\"password\"] = pass\n\t}\n\tif sslmode, ok := cfg[\"database.sslmode\"]; ok && strings.TrimSpace(sslmode) != \"\" {\n\t\topts[\"sslmode\"] = strings.TrimSpace(sslmode)\n\t}\n\t// MongoDB\n\tif user, ok := cfg[\"mongodb.user\"]; ok && !isKeepOrMaskedSecret(user) {\n\t\topts[\"username\"] = strings.TrimSpace(user)\n\t}\n\tif pass, ok := cfg[\"mongodb.password\"]; ok && !isKeepOrMaskedSecret(pass) {\n\t\topts[\"password\"] = pass\n\t}\n\tif mongoURI := strings.TrimSpace(cfg[\"mongodb.connection.string\"]); mongoURI != \"\" && !isKeepOrMaskedSecret(mongoURI) && !sourceCmd.IsMaskedURI(mongoURI) {\n\t\topts[\"uri\"] = mongoURI\n\t}\n\t// SFTP — kafka-connect-fs: credentials embedded in fs.uris = sftp://user:pass@host:port/path\n\tif fsURI, ok := cfg[\"fs.uris\"]; ok && strings.TrimSpace(fsURI) != \"\" {\n\t\tfirstURI := strings.TrimSpace(strings.Split(fsURI, \",\")[0])\n\t\tif u, err := url.Parse(firstURI); err == nil && u.User != nil {\n\t\t\tuname := u.User.Username()\n\t\t\tif !isKeepOrMaskedSecret(uname) {\n\t\t\t\topts[\"username\"] = uname\n\t\t\t}\n\t\t\tif pwd, hasPwd := u.User.Password(); hasPwd && !isKeepOrMaskedSecret(pwd) {\n\t\t\t\topts[\"password\"] = pwd\n\t\t\t}\n\t\t}\n\t}\n\t// SFTP — Confluent legacy format (sftp.username / sftp.password)\n\tif user, ok := cfg[\"sftp.username\"]; ok && opts[\"username\"] == \"\" && !isKeepOrMaskedSecret(user) {\n\t\topts[\"username\"] = strings.TrimSpace(user)\n\t}\n\tif pass, ok := cfg[\"sftp.password\"]; ok && opts[\"password\"] == \"\" && !isKeepOrMaskedSecret(pass) {\n\t\topts[\"password\"] = pass\n\t}\n\tif len(opts) == 0 {\n\t\treturn nil\n\t}\n\tb, _ := json.Marshal(opts)\n\treturn b\n}",
+          "claim": "debezium_connector_secrets.go handles comma-separated multi-URI fs.uris lists, restores username-only URIs (len(curParts) == 1) without appending :***, applies IsMaskedURI across all config keys in MergeConnectorConfigPreservingSecrets, and extractCredentialsAsOptions uses u.User.Username() and u.User.Password()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "G4-FRONTEND-CHECK-AND-MASK",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "SourceConnectors.tsx normalizes empty or masked (* / •) password inputs to KEEP_SECRET_SENTINEL in both edit and recover modes, and passes connector_name to checkHook.check and pgCheckHook.check when editorMode is edit or recover.",
+    "workflow": "SourceConnectors.tsx buildConnectorConfig / runCheckConnection / runCheckPostgresConnection",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/SourceConnectors.tsx:211-230\nfunction isMaskedSecretInput(val?: string): boolean {\n  const trimmed = (val || '').trim();\n  if (!trimmed) return false;\n  if (trimmed === KEEP_SECRET_SENTINEL || trimmed.toLowerCase() === '<redacted>') return true;\n  return /^[•*]+$/.test(trimmed);\n}\n\nfunction resolvePasswordForSubmit(rawPassword: string | undefined, mode: EditorMode): string {\n  const trimmed = (rawPassword || '').trim();\n  const isPreserveMode = mode === 'edit' || mode === 'recover';\n  if (!trimmed || isMaskedSecretInput(trimmed)) {\n    return isPreserveMode ? KEEP_SECRET_SENTINEL : '';\n  }\n  return trimmed;\n}\n\nfunction buildConnectorConfig(values: ConnectionFormValues, mode: EditorMode) {\n  const topicPrefix = values.topicPrefix.trim() || `cdc.${values.database}`;\n  let config: Record<string, string> = {};\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/SourceConnectors.tsx:594-633\n  const runCheckConnection = () => {\n    if (!connectionUrl || !databaseValue) {\n      message.warning('Cần nhập Connection URL và Database trước khi check');\n      return;\n    }\n    const targetConnectorName =\n      editorMode === 'edit' || editorMode === 'recover'\n        ? String(editingSource?.connector_name || connectorNameValue || '').trim()\n        : undefined;\n    checkHook.check({\n      uri: connectionUrl,\n      database: databaseValue,\n      connector_name: targetConnectorName || undefined,\n    });\n  };\n\n  const runCheckPostgresConnection = () => {\n    if (!hostValue || !portValue || !usernameValue || !databaseValue) {\n      message.warning('Cần nhập đủ Host, Port, Username và DB Name trước khi check');\n      return;\n    }\n    const cleanedPassword = isMaskedSecretInput(passwordValue) ? '' : (passwordValue || '');\n    if (editorMode === 'create' && !cleanedPassword) {\n      message.warning('Cần nhập Password trước khi check');\n      return;\n    }\n    const targetConnectorName =\n      editorMode === 'edit' || editorMode === 'recover'\n        ? String(editingSource?.connector_name || connectorNameValue || '').trim()\n        : undefined;\n    pgCheckHook.check({\n      host: String(hostValue).trim(),\n      port: portValue,\n      username: String(usernameValue).trim(),\n      password: cleanedPassword,\n      database: String(databaseValue).trim(),\n      schemas: String(schemaIncludeListValue || 'public').trim(),\n      connector_name: targetConnectorName || undefined,\n    });\n  };",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4082,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7781,
+                "INCORRECT": 0.1698,
+                "UNSUPPORTED": 0.052
+              },
+              "confidence": 0.4082,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1008,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "SourceConnectors.tsx normalizes empty or masked (* / •) password inputs to KEEP_SECRET_SENTINEL in both edit and recover modes, and passes connector_name to checkHook.check and pgCheckHook.check when editorMode is edit or recover.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/SourceConnectors.tsx:211-230\nfunction isMaskedSecretInput(val?: string): boolean {\n  const trimmed = (val || '').trim();\n  if (!trimmed) return false;\n  if (trimmed === KEEP_SECRET_SENTINEL || trimmed.toLowerCase() === '<redacted>') return true;\n  return /^[•*]+$/.test(trimmed);\n}\n\nfunction resolvePasswordForSubmit(rawPassword: string | undefined, mode: EditorMode): string {\n  const trimmed = (rawPassword || '').trim();\n  const isPreserveMode = mode === 'edit' || mode === 'recover';\n  if (!trimmed || isMaskedSecretInput(trimmed)) {\n    return isPreserveMode ? KEEP_SECRET_SENTINEL : '';\n  }\n  return trimmed;\n}\n\nfunction buildConnectorConfig(values: ConnectionFormValues, mode: EditorMode) {\n  const topicPrefix = values.topicPrefix.trim() || `cdc.${values.database}`;\n  let config: Record<string, string> = {};\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/SourceConnectors.tsx:594-633\n  const runCheckConnection = () => {\n    if (!connectionUrl || !databaseValue) {\n      message.warning('Cần nhập Connection URL và Database trước khi check');\n      return;\n    }\n    const targetConnectorName =\n      editorMode === 'edit' || editorMode === 'recover'\n        ? String(editingSource?.connector_name || connectorNameValue || '').trim()\n        : undefined;\n    checkHook.check({\n      uri: connectionUrl,\n      database: databaseValue,\n      connector_name: targetConnectorName || undefined,\n    });\n  };\n\n  const runCheckPostgresConnection = () => {\n    if (!hostValue || !portValue || !usernameValue || !databaseValue) {\n      message.warning('Cần nhập đủ Host, Port, Username và DB Name trước khi check');\n      return;\n    }\n    const cleanedPassword = isMaskedSecretInput(passwordValue) ? '' : (passwordValue || '');\n    if (editorMode === 'create' && !cleanedPassword) {\n      message.warning('Cần nhập Password trước khi check');\n      return;\n    }\n    const targetConnectorName =\n      editorMode === 'edit' || editorMode === 'recover'\n        ? String(editingSource?.connector_name || connectorNameValue || '').trim()\n        : undefined;\n    pgCheckHook.check({\n      host: String(hostValue).trim(),\n      port: portValue,\n      username: String(usernameValue).trim(),\n      password: cleanedPassword,\n      database: String(databaseValue).trim(),\n      schemas: String(schemaIncludeListValue || 'public').trim(),\n      connector_name: targetConnectorName || undefined,\n    });\n  };",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1896,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6147,
+                "INCORRECT": 0.2823,
+                "UNSUPPORTED": 0.103
+              },
+              "confidence": 0.1896,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1014,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/SourceConnectors.tsx:211-230\nfunction isMaskedSecretInput(val?: string): boolean {\n  const trimmed = (val || '').trim();\n  if (!trimmed) return false;\n  if (trimmed === KEEP_SECRET_SENTINEL || trimmed.toLowerCase() === '<redacted>') return true;\n  return /^[•*]+$/.test(trimmed);\n}\n\nfunction resolvePasswordForSubmit(rawPassword: string | undefined, mode: EditorMode): string {\n  const trimmed = (rawPassword || '').trim();\n  const isPreserveMode = mode === 'edit' || mode === 'recover';\n  if (!trimmed || isMaskedSecretInput(trimmed)) {\n    return isPreserveMode ? KEEP_SECRET_SENTINEL : '';\n  }\n  return trimmed;\n}\n\nfunction buildConnectorConfig(values: ConnectionFormValues, mode: EditorMode) {\n  const topicPrefix = values.topicPrefix.trim() || `cdc.${values.database}`;\n  let config: Record<string, string> = {};\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/SourceConnectors.tsx:594-633\n  const runCheckConnection = () => {\n    if (!connectionUrl || !databaseValue) {\n      message.warning('Cần nhập Connection URL và Database trước khi check');\n      return;\n    }\n    const targetConnectorName =\n      editorMode === 'edit' || editorMode === 'recover'\n        ? String(editingSource?.connector_name || connectorNameValue || '').trim()\n        : undefined;\n    checkHook.check({\n      uri: connectionUrl,\n      database: databaseValue,\n      connector_name: targetConnectorName || undefined,\n    });\n  };\n\n  const runCheckPostgresConnection = () => {\n    if (!hostValue || !portValue || !usernameValue || !databaseValue) {\n      message.warning('Cần nhập đủ Host, Port, Username và DB Name trước khi check');\n      return;\n    }\n    const cleanedPassword = isMaskedSecretInput(passwordValue) ? '' : (passwordValue || '');\n    if (editorMode === 'create' && !cleanedPassword) {\n      message.warning('Cần nhập Password trước khi check');\n      return;\n    }\n    const targetConnectorName =\n      editorMode === 'edit' || editorMode === 'recover'\n        ? String(editingSource?.connector_name || connectorNameValue || '').trim()\n        : undefined;\n    pgCheckHook.check({\n      host: String(hostValue).trim(),\n      port: portValue,\n      username: String(usernameValue).trim(),\n      password: cleanedPassword,\n      database: String(databaseValue).trim(),\n      schemas: String(schemaIncludeListValue || 'public').trim(),\n      connector_name: targetConnectorName || undefined,\n    });\n  };",
+          "claim": "SourceConnectors.tsx normalizes empty or masked (* / •) password inputs to KEEP_SECRET_SENTINEL in both edit and recover modes, and passes connector_name to checkHook.check and pgCheckHook.check when editorMode is edit or recover."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6594,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9367,
+                "NO": 0.0633
+              },
+              "confidence": 0.6594,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 947,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/SourceConnectors.tsx:211-230\nfunction isMaskedSecretInput(val?: string): boolean {\n  const trimmed = (val || '').trim();\n  if (!trimmed) return false;\n  if (trimmed === KEEP_SECRET_SENTINEL || trimmed.toLowerCase() === '<redacted>') return true;\n  return /^[•*]+$/.test(trimmed);\n}\n\nfunction resolvePasswordForSubmit(rawPassword: string | undefined, mode: EditorMode): string {\n  const trimmed = (rawPassword || '').trim();\n  const isPreserveMode = mode === 'edit' || mode === 'recover';\n  if (!trimmed || isMaskedSecretInput(trimmed)) {\n    return isPreserveMode ? KEEP_SECRET_SENTINEL : '';\n  }\n  return trimmed;\n}\n\nfunction buildConnectorConfig(values: ConnectionFormValues, mode: EditorMode) {\n  const topicPrefix = values.topicPrefix.trim() || `cdc.${values.database}`;\n  let config: Record<string, string> = {};\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/SourceConnectors.tsx:594-633\n  const runCheckConnection = () => {\n    if (!connectionUrl || !databaseValue) {\n      message.warning('Cần nhập Connection URL và Database trước khi check');\n      return;\n    }\n    const targetConnectorName =\n      editorMode === 'edit' || editorMode === 'recover'\n        ? String(editingSource?.connector_name || connectorNameValue || '').trim()\n        : undefined;\n    checkHook.check({\n      uri: connectionUrl,\n      database: databaseValue,\n      connector_name: targetConnectorName || undefined,\n    });\n  };\n\n  const runCheckPostgresConnection = () => {\n    if (!hostValue || !portValue || !usernameValue || !databaseValue) {\n      message.warning('Cần nhập đủ Host, Port, Username và DB Name trước khi check');\n      return;\n    }\n    const cleanedPassword = isMaskedSecretInput(passwordValue) ? '' : (passwordValue || '');\n    if (editorMode === 'create' && !cleanedPassword) {\n      message.warning('Cần nhập Password trước khi check');\n      return;\n    }\n    const targetConnectorName =\n      editorMode === 'edit' || editorMode === 'recover'\n        ? String(editingSource?.connector_name || connectorNameValue || '').trim()\n        : undefined;\n    pgCheckHook.check({\n      host: String(hostValue).trim(),\n      port: portValue,\n      username: String(usernameValue).trim(),\n      password: cleanedPassword,\n      database: String(databaseValue).trim(),\n      schemas: String(schemaIncludeListValue || 'public').trim(),\n      connector_name: targetConnectorName || undefined,\n    });\n  };",
+          "claim": "SourceConnectors.tsx normalizes empty or masked (* / •) password inputs to KEEP_SECRET_SENTINEL in both edit and recover modes, and passes connector_name to checkHook.check and pgCheckHook.check when editorMode is edit or recover."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "G5-SANITIZE-SERVER-ADDRESS",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "ListSourcesHandler.Handle and GetSourceHandler.Handle in list_sources.go and SourcesHandler.Create in sources_handler.go mask URI userinfo in ServerAddress before returning Source records to API callers.",
+    "workflow": "GET /api/v1/sources & POST /api/v1/sources -> maskURIUserInfo / MaskURIUserInfo",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/source/list_sources.go:10-118\n\nfunc maskURIUserInfo(raw string) string {\n\ttrimmed := strings.TrimSpace(raw)\n\tif trimmed == \"\" || !strings.Contains(trimmed, \"://\") {\n\t\treturn raw\n\t}\n\tparts := strings.Split(trimmed, \",\")\n\tchanged := false\n\tfor i, part := range parts {\n\t\tpartTrimmed := strings.TrimSpace(part)\n\t\tidx := strings.Index(partTrimmed, \"://\")\n\t\tif idx < 0 {\n\t\t\tcontinue\n\t\t}\n\t\tscheme := partTrimmed[:idx+3]\n\t\trest := partTrimmed[idx+3:]\n\t\tpathIdx := strings.IndexAny(rest, \"/?\")\n\t\tauthority := rest\n\t\tpathAndQuery := \"\"\n\t\tif pathIdx >= 0 {\n\t\t\tauthority = rest[:pathIdx]\n\t\t\tpathAndQuery = rest[pathIdx:]\n\t\t}\n\t\tatIdx := strings.LastIndex(authority, \"@\")\n\t\tif atIdx < 0 {\n\t\t\tcontinue\n\t\t}\n\t\thostPort := authority[atIdx+1:]\n\t\tparts[i] = scheme + \"***:***@\" + hostPort + pathAndQuery\n\t\tchanged = true\n\t}\n\tif !changed {\n\t\treturn raw\n\t}\n\treturn strings.Join(parts, \",\")\n}\n\n// SourceReader is the read-side port for the Connection Fingerprint\ntype SourceReader interface {\n\tList(ctx context.Context) ([]model.Source, error)\n\tGetByID(ctx context.Context, id int64) (*model.Source, error)\n}\n\n// ----- ListSources -------------------------------------------------\n\n// ListSourcesQuery is GET /api/v1/sources. Unfiltered.\ntype ListSourcesQuery struct{}\n\nfunc (q ListSourcesQuery) Type() string { return \"sources.list\" }\n\n// ListSourcesResult mirrors the legacy fiber.Map shape `{data, count}`.\ntype ListSourcesResult struct {\n\tData  []model.Source\n\tCount int\n}\n\ntype ListSourcesHandler struct {\n\treader SourceReader\n}\n\nfunc NewListSourcesHandler(r SourceReader) *ListSourcesHandler {\n\treturn &ListSourcesHandler{reader: r}\n}\n\nfunc (h *ListSourcesHandler) Handle(ctx context.Context, _ ListSourcesQuery) (ListSourcesResult, error) {\n\trows, err := h.reader.List(ctx)\n\tif err != nil {\n\t\treturn ListSourcesResult{}, err\n\t}\n\tfor i := range rows {\n\t\trows[i].ServerAddress = maskURIUserInfo(rows[i].ServerAddress)\n\t}\n\treturn ListSourcesResult{Data: rows, Count: len(rows)}, nil\n}\n\n// ----- GetSource ---------------------------------------------------\n\n// GetSourceQuery is GET /api/v1/sources/:id.\ntype GetSourceQuery struct {\n\tID int64\n}\n\nfunc (q GetSourceQuery) Type() string { return \"sources.get\" }\n\n// GetSourceResult is the projected single-source view. The handler\n// returns the model verbatim — no transformation needed for byte-\n// identical wire output.\ntype GetSourceResult struct {\n\tSource *model.Source\n}\n\ntype GetSourceHandler struct {\n\treader SourceReader\n}\n\nfunc NewGetSourceHandler(r SourceReader) *GetSourceHandler {\n\treturn &GetSourceHandler{reader: r}\n}\n\nfunc (h *GetSourceHandler) Handle(ctx context.Context, q GetSourceQuery) (GetSourceResult, error) {\n\ts, err := h.reader.GetByID(ctx, q.ID)\n\tif err != nil {\n\t\treturn GetSourceResult{}, err\n\t}\n\tif s != nil {\n\t\ts.ServerAddress = maskURIUserInfo(s.ServerAddress)\n\t}\n\treturn GetSourceResult{Source: s}, nil\n}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/sources_handler.go:85-92\n\t// Use repository which now handles both cdc_sources and connection_registry\n\tif err := h.repo.Upsert(c.UserContext(), &source); err != nil {\n\t\treturn c.Status(500).JSON(fiber.Map{\"error\": \"failed to create source: \" + err.Error()})\n\t}\n\n\tsource.ServerAddress = sourceCmd.MaskURIUserInfo(source.ServerAddress)\n\treturn c.Status(201).JSON(source)\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2201,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6119,
+                "INCORRECT": 0.3142,
+                "UNSUPPORTED": 0.0739
+              },
+              "confidence": 0.2201,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "ListSourcesHandler.Handle and GetSourceHandler.Handle in list_sources.go and SourcesHandler.Create in sources_handler.go mask URI userinfo in ServerAddress before returning Source records to API callers.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/source/list_sources.go:10-118\n\nfunc maskURIUserInfo(raw string) string {\n\ttrimmed := strings.TrimSpace(raw)\n\tif trimmed == \"\" || !strings.Contains(trimmed, \"://\") {\n\t\treturn raw\n\t}\n\tparts := strings.Split(trimmed, \",\")\n\tchanged := false\n\tfor i, part := range parts {\n\t\tpartTrimmed := strings.TrimSpace(part)\n\t\tidx := strings.Index(partTrimmed, \"://\")\n\t\tif idx < 0 {\n\t\t\tcontinue\n\t\t}\n\t\tscheme := partTrimmed[:idx+3]\n\t\trest := partTrimmed[idx+3:]\n\t\tpathIdx := strings.IndexAny(rest, \"/?\")\n\t\tauthority := rest\n\t\tpathAndQuery := \"\"\n\t\tif pathIdx >= 0 {\n\t\t\tauthority = rest[:pathIdx]\n\t\t\tpathAndQuery = rest[pathIdx:]\n\t\t}\n\t\tatIdx := strings.LastIndex(authority, \"@\")\n\t\tif atIdx < 0 {\n\t\t\tcontinue\n\t\t}\n\t\thostPort := authority[atIdx+1:]\n\t\tparts[i] = scheme + \"***:***@\" + hostPort + pathAndQuery\n\t\tchanged = true\n\t}\n\tif !changed {\n\t\treturn raw\n\t}\n\treturn strings.Join(parts, \",\")\n}\n\n// SourceReader is the read-side port for the Connection Fingerprint\ntype SourceReader interface {\n\tList(ctx context.Context) ([]model.Source, error)\n\tGetByID(ctx context.Context, id int64) (*model.Source, error)\n}\n\n// ----- ListSources -------------------------------------------------\n\n// ListSourcesQuery is GET /api/v1/sources. Unfiltered.\ntype ListSourcesQuery struct{}\n\nfunc (q ListSourcesQuery) Type() string { return \"sources.list\" }\n\n// ListSourcesResult mirrors the legacy fiber.Map shape `{data, count}`.\ntype ListSourcesResult struct {\n\tData  []model.Source\n\tCount int\n}\n\ntype ListSourcesHandler struct {\n\treader SourceReader\n}\n\nfunc NewListSourcesHandler(r SourceReader) *ListSourcesHandler {\n\treturn &ListSourcesHandler{reader: r}\n}\n\nfunc (h *ListSourcesHandler) Handle(ctx context.Context, _ ListSourcesQuery) (ListSourcesResult, error) {\n\trows, err := h.reader.List(ctx)\n\tif err != nil {\n\t\treturn ListSourcesResult{}, err\n\t}\n\tfor i := range rows {\n\t\trows[i].ServerAddress = maskURIUserInfo(rows[i].ServerAddress)\n\t}\n\treturn ListSourcesResult{Data: rows, Count: len(rows)}, nil\n}\n\n// ----- GetSource ---------------------------------------------------\n\n// GetSourceQuery is GET /api/v1/sources/:id.\ntype GetSourceQuery struct {\n\tID int64\n}\n\nfunc (q GetSourceQuery) Type() string { return \"sources.get\" }\n\n// GetSourceResult is the projected single-source view. The handler\n// returns the model verbatim — no transformation needed for byte-\n// identical wire output.\ntype GetSourceResult struct {\n\tSource *model.Source\n}\n\ntype GetSourceHandler struct {\n\treader SourceReader\n}\n\nfunc NewGetSourceHandler(r SourceReader) *GetSourceHandler {\n\treturn &GetSourceHandler{reader: r}\n}\n\nfunc (h *GetSourceHandler) Handle(ctx context.Context, q GetSourceQuery) (GetSourceResult, error) {\n\ts, err := h.reader.GetByID(ctx, q.ID)\n\tif err != nil {\n\t\treturn GetSourceResult{}, err\n\t}\n\tif s != nil {\n\t\ts.ServerAddress = maskURIUserInfo(s.ServerAddress)\n\t}\n\treturn GetSourceResult{Source: s}, nil\n}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/sources_handler.go:85-92\n\t// Use repository which now handles both cdc_sources and connection_registry\n\tif err := h.repo.Upsert(c.UserContext(), &source); err != nil {\n\t\treturn c.Status(500).JSON(fiber.Map{\"error\": \"failed to create source: \" + err.Error()})\n\t}\n\n\tsource.ServerAddress = sourceCmd.MaskURIUserInfo(source.ServerAddress)\n\treturn c.Status(201).JSON(source)\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.2338,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.4734,
+                "INCORRECT": 0.4832,
+                "UNSUPPORTED": 0.0435
+              },
+              "confidence": 0.2338,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/source/list_sources.go:10-118\n\nfunc maskURIUserInfo(raw string) string {\n\ttrimmed := strings.TrimSpace(raw)\n\tif trimmed == \"\" || !strings.Contains(trimmed, \"://\") {\n\t\treturn raw\n\t}\n\tparts := strings.Split(trimmed, \",\")\n\tchanged := false\n\tfor i, part := range parts {\n\t\tpartTrimmed := strings.TrimSpace(part)\n\t\tidx := strings.Index(partTrimmed, \"://\")\n\t\tif idx < 0 {\n\t\t\tcontinue\n\t\t}\n\t\tscheme := partTrimmed[:idx+3]\n\t\trest := partTrimmed[idx+3:]\n\t\tpathIdx := strings.IndexAny(rest, \"/?\")\n\t\tauthority := rest\n\t\tpathAndQuery := \"\"\n\t\tif pathIdx >= 0 {\n\t\t\tauthority = rest[:pathIdx]\n\t\t\tpathAndQuery = rest[pathIdx:]\n\t\t}\n\t\tatIdx := strings.LastIndex(authority, \"@\")\n\t\tif atIdx < 0 {\n\t\t\tcontinue\n\t\t}\n\t\thostPort := authority[atIdx+1:]\n\t\tparts[i] = scheme + \"***:***@\" + hostPort + pathAndQuery\n\t\tchanged = true\n\t}\n\tif !changed {\n\t\treturn raw\n\t}\n\treturn strings.Join(parts, \",\")\n}\n\n// SourceReader is the read-side port for the Connection Fingerprint\ntype SourceReader interface {\n\tList(ctx context.Context) ([]model.Source, error)\n\tGetByID(ctx context.Context, id int64) (*model.Source, error)\n}\n\n// ----- ListSources -------------------------------------------------\n\n// ListSourcesQuery is GET /api/v1/sources. Unfiltered.\ntype ListSourcesQuery struct{}\n\nfunc (q ListSourcesQuery) Type() string { return \"sources.list\" }\n\n// ListSourcesResult mirrors the legacy fiber.Map shape `{data, count}`.\ntype ListSourcesResult struct {\n\tData  []model.Source\n\tCount int\n}\n\ntype ListSourcesHandler struct {\n\treader SourceReader\n}\n\nfunc NewListSourcesHandler(r SourceReader) *ListSourcesHandler {\n\treturn &ListSourcesHandler{reader: r}\n}\n\nfunc (h *ListSourcesHandler) Handle(ctx context.Context, _ ListSourcesQuery) (ListSourcesResult, error) {\n\trows, err := h.reader.List(ctx)\n\tif err != nil {\n\t\treturn ListSourcesResult{}, err\n\t}\n\tfor i := range rows {\n\t\trows[i].ServerAddress = maskURIUserInfo(rows[i].ServerAddress)\n\t}\n\treturn ListSourcesResult{Data: rows, Count: len(rows)}, nil\n}\n\n// ----- GetSource ---------------------------------------------------\n\n// GetSourceQuery is GET /api/v1/sources/:id.\ntype GetSourceQuery struct {\n\tID int64\n}\n\nfunc (q GetSourceQuery) Type() string { return \"sources.get\" }\n\n// GetSourceResult is the projected single-source view. The handler\n// returns the model verbatim — no transformation needed for byte-\n// identical wire output.\ntype GetSourceResult struct {\n\tSource *model.Source\n}\n\ntype GetSourceHandler struct {\n\treader SourceReader\n}\n\nfunc NewGetSourceHandler(r SourceReader) *GetSourceHandler {\n\treturn &GetSourceHandler{reader: r}\n}\n\nfunc (h *GetSourceHandler) Handle(ctx context.Context, q GetSourceQuery) (GetSourceResult, error) {\n\ts, err := h.reader.GetByID(ctx, q.ID)\n\tif err != nil {\n\t\treturn GetSourceResult{}, err\n\t}\n\tif s != nil {\n\t\ts.ServerAddress = maskURIUserInfo(s.ServerAddress)\n\t}\n\treturn GetSourceResult{Source: s}, nil\n}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/sources_handler.go:85-92\n\t// Use repository which now handles both cdc_sources and connection_registry\n\tif err := h.repo.Upsert(c.UserContext(), &source); err != nil {\n\t\treturn c.Status(500).JSON(fiber.Map{\"error\": \"failed to create source: \" + err.Error()})\n\t}\n\n\tsource.ServerAddress = sourceCmd.MaskURIUserInfo(source.ServerAddress)\n\treturn c.Status(201).JSON(source)\n}",
+          "claim": "ListSourcesHandler.Handle and GetSourceHandler.Handle in list_sources.go and SourcesHandler.Create in sources_handler.go mask URI userinfo in ServerAddress before returning Source records to API callers."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.626,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9278,
+                "NO": 0.0722
+              },
+              "confidence": 0.626,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/source/list_sources.go:10-118\n\nfunc maskURIUserInfo(raw string) string {\n\ttrimmed := strings.TrimSpace(raw)\n\tif trimmed == \"\" || !strings.Contains(trimmed, \"://\") {\n\t\treturn raw\n\t}\n\tparts := strings.Split(trimmed, \",\")\n\tchanged := false\n\tfor i, part := range parts {\n\t\tpartTrimmed := strings.TrimSpace(part)\n\t\tidx := strings.Index(partTrimmed, \"://\")\n\t\tif idx < 0 {\n\t\t\tcontinue\n\t\t}\n\t\tscheme := partTrimmed[:idx+3]\n\t\trest := partTrimmed[idx+3:]\n\t\tpathIdx := strings.IndexAny(rest, \"/?\")\n\t\tauthority := rest\n\t\tpathAndQuery := \"\"\n\t\tif pathIdx >= 0 {\n\t\t\tauthority = rest[:pathIdx]\n\t\t\tpathAndQuery = rest[pathIdx:]\n\t\t}\n\t\tatIdx := strings.LastIndex(authority, \"@\")\n\t\tif atIdx < 0 {\n\t\t\tcontinue\n\t\t}\n\t\thostPort := authority[atIdx+1:]\n\t\tparts[i] = scheme + \"***:***@\" + hostPort + pathAndQuery\n\t\tchanged = true\n\t}\n\tif !changed {\n\t\treturn raw\n\t}\n\treturn strings.Join(parts, \",\")\n}\n\n// SourceReader is the read-side port for the Connection Fingerprint\ntype SourceReader interface {\n\tList(ctx context.Context) ([]model.Source, error)\n\tGetByID(ctx context.Context, id int64) (*model.Source, error)\n}\n\n// ----- ListSources -------------------------------------------------\n\n// ListSourcesQuery is GET /api/v1/sources. Unfiltered.\ntype ListSourcesQuery struct{}\n\nfunc (q ListSourcesQuery) Type() string { return \"sources.list\" }\n\n// ListSourcesResult mirrors the legacy fiber.Map shape `{data, count}`.\ntype ListSourcesResult struct {\n\tData  []model.Source\n\tCount int\n}\n\ntype ListSourcesHandler struct {\n\treader SourceReader\n}\n\nfunc NewListSourcesHandler(r SourceReader) *ListSourcesHandler {\n\treturn &ListSourcesHandler{reader: r}\n}\n\nfunc (h *ListSourcesHandler) Handle(ctx context.Context, _ ListSourcesQuery) (ListSourcesResult, error) {\n\trows, err := h.reader.List(ctx)\n\tif err != nil {\n\t\treturn ListSourcesResult{}, err\n\t}\n\tfor i := range rows {\n\t\trows[i].ServerAddress = maskURIUserInfo(rows[i].ServerAddress)\n\t}\n\treturn ListSourcesResult{Data: rows, Count: len(rows)}, nil\n}\n\n// ----- GetSource ---------------------------------------------------\n\n// GetSourceQuery is GET /api/v1/sources/:id.\ntype GetSourceQuery struct {\n\tID int64\n}\n\nfunc (q GetSourceQuery) Type() string { return \"sources.get\" }\n\n// GetSourceResult is the projected single-source view. The handler\n// returns the model verbatim — no transformation needed for byte-\n// identical wire output.\ntype GetSourceResult struct {\n\tSource *model.Source\n}\n\ntype GetSourceHandler struct {\n\treader SourceReader\n}\n\nfunc NewGetSourceHandler(r SourceReader) *GetSourceHandler {\n\treturn &GetSourceHandler{reader: r}\n}\n\nfunc (h *GetSourceHandler) Handle(ctx context.Context, q GetSourceQuery) (GetSourceResult, error) {\n\ts, err := h.reader.GetByID(ctx, q.ID)\n\tif err != nil {\n\t\treturn GetSourceResult{}, err\n\t}\n\tif s != nil {\n\t\ts.ServerAddress = maskURIUserInfo(s.ServerAddress)\n\t}\n\treturn GetSourceResult{Source: s}, nil\n}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/sources_handler.go:85-92\n\t// Use repository which now handles both cdc_sources and connection_registry\n\tif err := h.repo.Upsert(c.UserContext(), &source); err != nil {\n\t\treturn c.Status(500).JSON(fiber.Map{\"error\": \"failed to create source: \" + err.Error()})\n\t}\n\n\tsource.ServerAddress = sourceCmd.MaskURIUserInfo(source.ServerAddress)\n\treturn c.Status(201).JSON(source)\n}",
+          "claim": "ListSourcesHandler.Handle and GetSourceHandler.Handle in list_sources.go and SourcesHandler.Create in sources_handler.go mask URI userinfo in ServerAddress before returning Source records to API callers."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "CTRL-T1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "In debezium_connector.go, KeepSecretSentinel is defined as the string constant \"__KEEP__\".",
+    "workflow": "Constant definition in debezium_connector.go",
+    "evidence": "[{'file': '/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go', 'lines': '361-365'}]",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.039,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4212,
+                "INCORRECT": 0.3755,
+                "UNSUPPORTED": 0.2032
+              },
+              "confidence": 0.039,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 199,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In debezium_connector.go, KeepSecretSentinel is defined as the string constant \"__KEEP__\".",
+          "evidence": "[{'file': '/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go', 'lines': '361-365'}]",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.8952,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.001,
+                "INCORRECT": 0.0225,
+                "UNSUPPORTED": 0.9766
+              },
+              "confidence": 0.8952,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 204,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "[{'file': '/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go', 'lines': '361-365'}]",
+          "claim": "In debezium_connector.go, KeepSecretSentinel is defined as the string constant \"__KEEP__\"."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.9625,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.004,
+                "NO": 0.996
+              },
+              "confidence": 0.9625,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 137,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "[{'file': '/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go', 'lines': '361-365'}]",
+          "claim": "In debezium_connector.go, KeepSecretSentinel is defined as the string constant \"__KEEP__\"."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-F1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In debezium_connector.go, KeepSecretSentinel is defined as the integer 99999 instead of a string constant.",
+    "workflow": "Constant definition in debezium_connector.go",
+    "evidence": "[{'file': '/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go', 'lines': '361-365'}]",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.0407,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3832,
+                "INCORRECT": 0.4172,
+                "UNSUPPORTED": 0.1996
+              },
+              "confidence": 0.0407,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 203,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In debezium_connector.go, KeepSecretSentinel is defined as the integer 99999 instead of a string constant.",
+          "evidence": "[{'file': '/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go', 'lines': '361-365'}]",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.6706,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0073,
+                "INCORRECT": 0.0975,
+                "UNSUPPORTED": 0.8952
+              },
+              "confidence": 0.6706,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 209,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "[{'file': '/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go', 'lines': '361-365'}]",
+          "claim": "In debezium_connector.go, KeepSecretSentinel is defined as the integer 99999 instead of a string constant."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.8316,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0249,
+                "NO": 0.9751
+              },
+              "confidence": 0.8316,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 142,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "[{'file': '/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go', 'lines': '361-365'}]",
+          "claim": "In debezium_connector.go, KeepSecretSentinel is defined as the integer 99999 instead of a string constant."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-F2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In introspection_handler_postgres.go, default PostgreSQL port when body.Port is empty is set to 3306 instead of 5432.",
+    "workflow": "Port fallback in DiscoverPostgresTablesPost",
+    "evidence": "[{'file': '/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler_postgres.go', 'lines': '78-84'}]",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.4585,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0201,
+                "INCORRECT": 0.2005,
+                "UNSUPPORTED": 0.7794
+              },
+              "confidence": 0.4585,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 207,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In introspection_handler_postgres.go, default PostgreSQL port when body.Port is empty is set to 3306 instead of 5432.",
+          "evidence": "[{'file': '/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler_postgres.go', 'lines': '78-84'}]",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.9672,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0015,
+                "INCORRECT": 0.0037,
+                "UNSUPPORTED": 0.9947
+              },
+              "confidence": 0.9672,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 213,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "[{'file': '/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler_postgres.go', 'lines': '78-84'}]",
+          "claim": "In introspection_handler_postgres.go, default PostgreSQL port when body.Port is empty is set to 3306 instead of 5432."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.233,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.2238,
+                "NO": 0.7762
+              },
+              "confidence": 0.233,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 146,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "[{'file': '/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/introspection_handler_postgres.go', 'lines': '78-84'}]",
+          "claim": "In introspection_handler_postgres.go, default PostgreSQL port when body.Port is empty is set to 3306 instead of 5432."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

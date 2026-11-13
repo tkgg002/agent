@@ -1,0 +1,31 @@
+# 01. Requirements — Khắc Phục Tận Gốc Độ Trễ Phiên, Đốt Token & Lọt Lỗi Thiết Kế Trên Toàn Hệ Thống Agent (`agent_core_v2`)
+
+- **tier**: T2
+- **workspace**: `fix-agent-core-latency-and-quality-2026-11-09`
+- **suffix**: `agent_core_v2`
+- **date**: 2026-11-09
+
+## 1. Bối cảnh & Yêu cầu của User
+- User chỉ rõ: Nguyên nhân không chỉ nằm ở riêng 1 phiên bị phình ngữ cảnh (`e7fd58b2`), mà **ở các phiên khác mới tinh (`d21bae7a`, `963b9484`, `094a4735`) Agent vẫn lặp lại tình trạng chạy cực kỳ lâu (14–32 phút/lượt), đốt 50–150 tool calls & hàng trăm nghìn token, nhưng kết quả thiết kế/code vẫn sai bét**.
+- Yêu cầu tìm nguyên nhân cốt lõi cấp hệ thống (Agentic Core) và thiết kế giải pháp triệt để.
+
+## 2. Ràng buộc Thực thi (Technical Constraints từ `GEMINI.md` & `lessons/INDEX.md`)
+- **`L001` [2026-11-10] (Regex Alternation Integrity, Atomic Gate Resolution & Added-Only Demo Tripwire Scanning):**
+  1. **`F-01`:** Dùng toán tử `|` chuẩn (không escape `\|`) trong `hooks.json` bao phủ đủ 6 tool ghi (`write_to_file`, `replace_file_content`, `multi_replace_file_content`, `write_file`, `edit_file`, `multi_edit`).
+  2. **`F-02`:** Cổng `H2` chặn tuyệt đối `write_file` trên file memory đã tồn tại (kể cả không có cờ `Overwrite`), chặn `Target=""` rỗng trên file `APPEND_ONLY`, và đọc cờ boolean/mảng chunk trực tiếp từ `raw_args` (không biến `"False"` thành `True`).
+  3. **`F-03`:** Mọi điểm gọi `tgt(...)` trong `agy_guard.py` (`src_edits`, `lessons_edits_since`, `latest_solution_suffix`, `claim_issues`, `sol`, `aud`, `sol_touched`) bắt buộc lọc `nm in WRITE_TOOLS` để `read_file(Path=...)` không bị tính nhầm là thao tác sửa file.
+  4. **`F-04` & `F-06`:** `H4t-Demo` bóc tách riêng các dòng đề xuất mới (`+` trong block `diff` kèm đường dẫn `+++ b/<path>`, hoặc block code đề xuất gắn đuôi giả định `_demo.<ext>`, bỏ qua dòng `-` và block `Before` theo **L026**), hỗ trợ lọc đuôi file trong `code_tripwire_violations`, trích xuất `ReplacementChunks`/`Edits` trong `old_arg`/`new_arg`, và bỏ hoàn toàn fallback `or body` khi thuần xóa dòng.
+  5. **`F-05` & `F-07`:** Trong `laya_gate.py`, cấm `--id ALL` ở `cmd_resolve`, kiểm tra nguyên tử toàn bộ danh sách ID (chặn `BLOCK` trả mã `2`, chặn `PASS`/missing trả mã `3` trước khi ghi), chỉ đồng bộ đúng các ID đã resolve đang `FLAG` sang `dg2`; ở `cmd_run`, chuẩn hóa an toàn `"control": true/false` (kiểu `bool`) sang `"control_true"`/`"control_false"`, kiểm tra phần tử mảng là `dict`, và thêm tham số `--workers` (mặc định `3`).
+  6. **`F-08`:** Dùng hằng số `AGENT_TAG_RE = r"\[Agent:[^\s\]][^\r\n\]]*\]"` trong `verify_governance.py` để hỗ trợ tên model có dấu cách, ngoặc đơn và dấu `/` mà vẫn chặn thẻ rỗng.
+- **`L001` [2026-11-10] (Strict Control Calibration, Disjoint Forbid-Require Evaluation & Post-Merge Demo Extraction — `N-01`..`N-05`):**
+  1. **`N-01` (`laya_gate.py`):** Cấm tuyệt đối việc cho qua khi `f_cnt == 0 and t_cnt == 0` (luôn bắt buộc `>=2 control_false` và `>=1 control_true`); chuẩn hóa `kind` đọc cả `c.get("kind")`, `c.get("type")`, `c.get("control")`; khử trùng lặp `req_ids` bằng `dict.fromkeys` và đồng bộ file `dg2` mới nhất trong `cmd_resolve`.
+  2. **`N-02` (`agy_guard.py`):** Trong `code_tripwire_violations`, tách rời hoàn toàn `req = str(t.get("require") or t.get("Require") or t.get("require_regex") or "")` và `forbid_pat = str(t.get("forbid") or t.get("Forbid") or t.get("forbid_regex") or "")`; xóa nhánh `elif not req and not forbid_pat:` để không tạo bẫy Catch-22 deadlock và không chặn nhầm tripwire tài liệu.
+  3. **`N-03` & `N-05` (`agy_guard.py`):** Bổ sung `_parse_chunks(raw_args)` (hỗ trợ cả JSON string) và `_apply_edit_preview(cur_txt, raw_args, old_s, body)`; trong `H2`, chặn mọi thao tác trên file memory đã tồn tại nếu `tool_name in FULL_WRITE_TOOLS or is_overwrite_flag or not old_s`; trong `H4a` / `H4t-Demo`, tính `merged_sol = _apply_edit_preview(...)` trước để giữ nguyên rào ````diff` / `+++ b/...`, rồi trích xuất `_extract_demo_snippets(merged_sol)` trừ đi tập dòng tương ứng trong `_extract_demo_snippets(cur_txt)`.
+  4. **`N-04` (`agy_guard.py`):** Trong `load_tripwires`, chỉ tự suy đoán `t["ext"]` khi tripwire chưa khai báo bộ lọc file và biểu thức `trig` ràng buộc rõ ràng một ngôn ngữ duy nhất (`(?:\\\.|\.)go\b|\bfunc\s*\(|goroutine|errgroup|sqlDB\.Close|natsserver\.NewServer`), không quét `\bgo\b` hay `JetStream` trên văn xuôi `title`/`check`.
+- **`L001` [2026-11-10] (Strict Physical Reference Validation, Write-Only Touch Helper & Full-Snippet Require Checking — `R-01`..`R-03`):**
+  1. **`R-01` (`laya_gate.py`):** Tuyệt đối không nới lỏng `INLINE_REF_RE` trong `cmd_resolve` (xóa nhánh `elif not re.search(r"\b(dòng|line)\s+\d+", ...)`), bắt buộc khớp `refs = list(INLINE_REF_RE.finditer(reason_str))` và xác thực mọi `m.group(1)` qua `resolve_ref_path`; đồng bộ file `dg2` ưu tiên khớp đúng timestamp `latest_path.name.replace("_dg1_", "_dg2_", 1)` trước khi fallback `dg2_files[-1]`; sửa dữ liệu đầu vào của `test_f05` để trỏ tới `REF: {dec_file}:1` có thật trong sandbox.
+  2. **`R-02` (`agy_guard.py`):** Đồng bộ nguyên văn Hunk 1 theo đúng `agy_guard.py:80-105` trên đĩa (`READ_ARG_KEYS`); cập nhật hàm gốc `def touched(...)` chỉ khớp `nm in WRITE_TOOLS` (và ngoại lệ `nm == "run_command"` khi `pattern` kiểm tra `build_lessons_index`) để `read_file(Path=".../05_progress_*.md")` không bao giờ giả mạo thao tác ghi tiến độ; giữ nguyên điều kiện chuẩn `prg_ok = touched(st, r"05_progress", u_idx)` tại `H4a`.
+  3. **`R-03` (`agy_guard.py` & `laya_gate.py`):** Bổ sung tham số `full_code_body: Optional[str] = None` vào `code_tripwire_violations` để kiểm tra `trig`/`forbid` trên `new_code_body` nhưng kiểm tra `req` trên toàn khối `full_code_body` (tránh false-positive khi sửa 1 dòng); trong `H2`, thu hẹp `not old_s` về nhóm `is_partial_edit = tool_name in (WRITE_TOOLS - FULL_WRITE_TOOLS)`; trong `_normalize_evidence_str`, xử lý `List[str]` trước khi lọc `dict`.
+- **`L005` [2026-11-09] (Anti-Solution-File Bloat & Zero Tool Thrashing):** Chặn file giải pháp vượt trần `800` dòng (`MAX_SOLUTION_LINES = 800`).
+- **`L010` & `L027` (Strict 1-to-1 Parity & Verbatim Current-File Code Demo):** Code Demo trong `09_tasks_solution_agent_core_v2.md` khớp nguyên văn từng dòng với HEAD, không dùng `...`.
+- **Rule #13 (Propose-Only):** Giữ nguyên trạng thái không sửa mã nguồn thực thi cho tới khi User `APPROVE`.

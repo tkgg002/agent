@@ -1,0 +1,116 @@
+[
+  {
+    "id": "S-RC-10",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "dead control-plane pgx pool",
+    "claim": "server_setup creates the control-plane pgx pool and discards it without any consumer.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:236-237\n\tpgxPool, _ := registry.GetPgxPool(context.Background(), database.RoleControlPlane)\n\t_ = pgxPool",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:236-237",
+    "must_contain": [
+      "pgxPool, _ := registry.GetPgxPool(context.Background(), database.RoleControlPlane)",
+      "_ = pgxPool"
+    ]
+  },
+  {
+    "id": "S-RC-11",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "pgxpool MinConns startup",
+    "claim": "pgxpool creates max(minConns, minIdleConns) idle connections when the pool is created.",
+    "evidence": "REF: /Users/trainguyen/go/pkg/mod/github.com/jackc/pgx/v5@v5.9.1/pgxpool/pool.go:336-337\n\t\ttargetIdleResources := max(int(p.minConns), int(p.minIdleConns))\n\t\tp.createIdleResources(ctx, targetIdleResources)",
+    "evidence_ref": "REF: /Users/trainguyen/go/pkg/mod/github.com/jackc/pgx/v5@v5.9.1/pgxpool/pool.go:336-337",
+    "must_contain": [
+      "targetIdleResources := max(int(p.minConns), int(p.minIdleConns))",
+      "p.createIdleResources(ctx, targetIdleResources)"
+    ]
+  },
+  {
+    "id": "S-IMPACT-10",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "OpenGormWithEngine dialect fan-out",
+    "claim": "ResolveGormDialector returns MySQL or ClickHouse dialectors for non-postgres engines, so a postgres-only DSN parameter must be added only in the postgres branch.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi_dialector.go:19-27\n\tswitch {\n\tcase eng == \"mysql\" || eng == \"mariadb\" || strings.Contains(trimmedDSN, \"@tcp(\") || strings.HasPrefix(trimmedDSN, \"mysql://\"):\n\t\tcleanDSN := strings.TrimPrefix(trimmedDSN, \"mysql://\")\n\t\treturn mysql.Open(cleanDSN)\n\tcase eng == \"clickhouse\" || eng == \"ch\" || strings.HasPrefix(trimmedDSN, \"clickhouse://\") || strings.HasPrefix(trimmedDSN, \"tcp://\"):\n\t\treturn clickhouse.Open(trimmedDSN)\n\tdefault:\n\t\treturn postgres.Open(trimmedDSN)\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi_dialector.go:19-27",
+    "must_contain": [
+      "return mysql.Open(cleanDSN)",
+      "return postgres.Open(trimmedDSN)"
+    ]
+  },
+  {
+    "id": "S-FIX-10",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "fanout fail-open",
+    "claim": "resolvePostIngestSchedule returns a new fail-open entry with enabled true on query error without reusing or storing the cached entry.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:204-207\n\t\treturn postIngestCacheEntry{enabled: true, shadowSchema: shadowSchema}\n\t}\n\tentry := postIngestCacheEntry{\n\t\tenabled:       row.Count > 0,",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:204-207",
+    "must_contain": [
+      "return postIngestCacheEntry{enabled: true, shadowSchema: shadowSchema}"
+    ]
+  },
+  {
+    "id": "S-IMPACT-11",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "watermark barrier on failed status",
+    "claim": "The watermark tracker keeps failed offsets in uncommittedFailures and uses the minimum failed offset as a commit barrier.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/watermark_tracker.go:146-171\n\t\t\t\tif st.hasFailure {\n\t\t\t\t\tt.uncommittedFailures[tp][off] = struct{}{}\n\t\t\t\t\tdelete(t.completedPendingOffsets[tp], off)\n\t\t\t\t} else if st.allSuccess {\n\t\t\t\t\tdelete(t.uncommittedFailures[tp], off)\n\t\t\t\t\tt.completedPendingOffsets[tp][off] = struct{}{}\n\t\t\t\t}\n\t\t\t}\n\t\t\tif len(t.uncommittedFailures[tp]) == 0 {\n\t\t\t\tdelete(t.uncommittedFailures, tp)\n\t\t\t}\n\t\t}\n\n\t\t// BƯỚC 3: Xác định Rào Chắn (Barrier)\n\t\tvar minFail *int64\n\t\tif fails, hasFails := t.uncommittedFailures[tp]; hasFails && len(fails) > 0 {\n\t\t\tvar mf int64 = -1\n\t\t\tfor fOffset := range fails {\n\t\t\t\tif mf == -1 || fOffset < mf {\n\t\t\t\t\tmf = fOffset\n\t\t\t\t}\n\t\t\t}\n\t\t\tif mf >= 0 {\n\t\t\t\tminFail = &mf\n\t\t\t}\n\t\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/watermark_tracker.go:146-171",
+    "must_contain": [
+      "t.uncommittedFailures[tp][off] = struct{}{}",
+      "minFail = &mf"
+    ]
+  },
+  {
+    "id": "S-PATTERN-10",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "retry loop break bug",
+    "claim": "In batchUpsertWithRetry the break statement is inside a select so on ctx.Done it exits only the select, not the retry for loop.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_dlq.go:38-45\n\t\tif attempt < maxAttempts {\n\t\t\tselect {\n\t\t\tcase <-ctx.Done():\n\t\t\t\tlastErr = ctx.Err()\n\t\t\t\tbreak\n\t\t\tcase <-time.After(time.Duration(attempt*100) * time.Millisecond):\n\t\t\t}\n\t\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_dlq.go:38-45",
+    "must_contain": [
+      "case <-ctx.Done():",
+      "break"
+    ]
+  },
+  {
+    "id": "S-PATTERN-11",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "fallback already stops on retryable",
+    "claim": "The sequential fallback in batchUpsert returns immediately at the first row whose upsert error is retryable.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:723-734\n\t\t\t\t\t\tif isRetryableDBError(res.Error) {\n\t\t\t\t\t\t\tif len(successfulRecords) > 0 && bb.natsConn != nil {\n\t\t\t\t\t\t\t\tbb.publishTransmuteTrigger(ctx, schemaName, tableName, successfulRecords)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tresults = append(results, RecordExecutionResult{Record: r, Status: StatusFailed, Err: res.Error})\n\t\t\t\t\t\t\tfor _, rem := range chunk[idx+1:] {\n\t\t\t\t\t\t\t\tresults = append(results, RecordExecutionResult{Record: rem, Status: StatusFailed, Err: res.Error})\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tfor remIdx := i + chunkSize; remIdx < len(records); remIdx++ {\n\t\t\t\t\t\t\t\tresults = append(results, RecordExecutionResult{Record: records[remIdx], Status: StatusFailed, Err: res.Error})\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\treturn written + int(chunkWritten), results, res.Error",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:723-734",
+    "must_contain": [
+      "if isRetryableDBError(res.Error) {",
+      "return written + int(chunkWritten), results, res.Error"
+    ]
+  },
+  {
+    "id": "CTRL-TRUE-10",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "snapshot breaker threshold",
+    "claim": "snapshotV2MaxConsecutiveErrors is 100.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_utils.go:29-29\n\tsnapshotV2MaxConsecutiveErrors = 100"
+  },
+  {
+    "id": "CTRL-FALSE-10",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "dead control-plane pgx pool",
+    "claim": "server_setup passes the control-plane pgx pool into NewEventBridge.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:236-237\n\tpgxPool, _ := registry.GetPgxPool(context.Background(), database.RoleControlPlane)\n\t_ = pgxPool"
+  },
+  {
+    "id": "CTRL-FALSE-11",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "fanout fail-open",
+    "claim": "resolvePostIngestSchedule reuses the previous cached entry when the refresh query fails.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:204-207\n\t\treturn postIngestCacheEntry{enabled: true, shadowSchema: shadowSchema}\n\t}\n\tentry := postIngestCacheEntry{\n\t\tenabled:       row.Count > 0,"
+  }
+]

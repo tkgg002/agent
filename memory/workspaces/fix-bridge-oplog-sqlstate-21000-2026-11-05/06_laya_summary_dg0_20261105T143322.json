@@ -1,0 +1,83 @@
+{
+  "mode": "claim",
+  "stage": "dg0",
+  "workspace": "fix-bridge-oplog-sqlstate-21000-2026-11-05",
+  "ts": "20261105T143322",
+  "trusted_rounds": [
+    "r2",
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-bridge-oplog-sqlstate-21000-2026-11-05/06_laya_raw_dg0_20261105T143322.json",
+  "claims": [
+    {
+      "id": "C-REQ",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "BridgeHandler.batchUpsert calls BuildBatchUpsertSQLsInSchema directly on records without deduplicating by PrimaryKeyValue, and triggerTransmute sends cdc.cmd.transmute-shadow without _source_ids, events, or shadow_binding_code.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.1217
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6725
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7668
+        }
+      }
+    },
+    {
+      "id": "C-REALITY",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "TransmuteHandler.handleTransmuteShadowWithOutcome sets hookTrigger to kafka-consumer-hook unless req.TriggeredBy equals snapshot, and runDebouncedGroup calls execRun instead of execRunEvents when allEvents is empty.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:189-192,596-600 — verified verbatim in source code",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0273
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1177
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.0839
+        }
+      }
+    },
+    {
+      "id": "C-CONTRA",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "BatchBuffer.publishTransmuteTrigger includes shadow_binding_code, _source_ids, and events in the cdc.cmd.transmute-shadow payload.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:89-98 — verified verbatim in source code",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.8014
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.27
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4135
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

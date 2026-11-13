@@ -1,0 +1,175 @@
+{
+  "mode": "claim",
+  "stage": "dg2",
+  "workspace": "fix-bridge-oplog-sqlstate-21000-2026-11-05",
+  "ts": "20261105T141711",
+  "trusted_rounds": [
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-bridge-oplog-sqlstate-21000-2026-11-05/06_laya_raw_dg1_20261105T141711.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "BridgeHandler.batchUpsert passes the raw records slice directly to BuildBatchUpsertSQLsInSchema without deduplicating by PrimaryKeyValue, causing PostgreSQL SQLSTATE 21000 when a batch contains multiple events for the same document.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2252
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.7111
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.5969
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In batch_buffer_utils.go, dedupByConflictKey deduplicates UpsertRecords by PrimaryKeyValue, keeping the latest event by SourceTsMs while merging non-conflicting MappedData columns.",
+      "decision": "FLAG",
+      "resolved": "Verified in code REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go:90-153",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2256
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.442
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.1151
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "BatchBuffer.batchUpsert separates consecutive sub-chunks by IsDelete and routes delete records to executeSoftDelete using BuildSoftDeleteUpdateSQL and BuildSoftDeleteInsertSQL.",
+      "decision": "FLAG",
+      "resolved": "Verified in code REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:664-673",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5718
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.0477
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.265
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "BatchBuffer.batchUpsert resolves effectivePK to _source_id when schema.Columns contains _source_id after PrepareForCDCInsertInSchema.",
+      "decision": "FLAG",
+      "resolved": "Verified in code REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:589-592",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2473
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.0036
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.7096
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "The proposed batchUpsert calls shadow.DedupByConflictKey(records) and splits deduped records into subChunks by IsDelete before calling BuildBatchUpsertSQLsInSchema.",
+      "decision": "FLAG",
+      "resolved": "Verified in solution REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-bridge-oplog-sqlstate-21000-2026-11-05/09_tasks_solution_20261105.md:190-240",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3491
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1952
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4093
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "The proposed executeSoftDelete in BridgeHandler runs BuildSoftDeleteUpdateSQL first and falls back to BuildSoftDeleteInsertSQL when RowsAffected is 0.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.1226
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2526
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.5952
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "dedupByConflictKey in batch_buffer_utils.go delegates to shadow.DedupByConflictKey(records) preserving the exact function signature.",
+      "decision": "FLAG",
+      "resolved": "Verified in solution REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-bridge-oplog-sqlstate-21000-2026-11-05/09_tasks_solution_20261105.md:125-138",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6204
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1037
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0086
+        }
+      }
+    }
+  ],
+  "gate": "PASS",
+  "summary_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-bridge-oplog-sqlstate-21000-2026-11-05/06_laya_summary_dg1_20261105T141711.json"
+}

@@ -1,0 +1,33 @@
+# 05 Progress — source-entropy (append-only)
+- [2026-11-06T16:23:05+07:00] [Agent:Claude-Opus] START audit source entropy data-hub (Propose-Only)
+- [2026-11-06T16:25:12+07:00] [Agent:Claude-Opus] Baseline go build/vet/test 2 repo Go + tsc web xong (task-11 log)
+- [2026-11-06T16:27:00+07:00] [Agent:Claude-Opus] Viết 09_tasks_solution — DG0/DG1 Laya CHƯA chạy, chờ User xác nhận hướng
+- [2026-11-06T16:27:21+07:00] [Agent:Claude-Opus] DG1 lần 1: BLOCK S-FIX-2 (REF chỉ 1 main, thiếu bằng chứng trùng) → bổ sung REF check_bindings.go:12
+- [2026-11-06T16:27:33+07:00] [Agent:Claude-Opus] DG1 lần 2: NEEDS_RESOLUTION, 4 FLAG (r3 Laya lệch) → resolve bằng output go build/vet thật + REF; gate=PASS (06_laya_summary_dg1_20261106T162733.json, 04_decisions)
+- [2026-11-06T16:28:00+07:00] [Agent:Claude-Opus] DỪNG CHỜ APPROVE của User cho Phase 0–1
+- [2026-11-06T16:32:50+07:00] [Agent:Claude-Opus] User sửa lưng: hiểu sai chủ thể (Agent chứ không phải source) → ghi lesson, rebuild INDEX 70/70
+- [2026-11-06T16:36:26+07:00] [Agent:Claude-Opus] Viết 09_tasks_solution_agent-reliability.md (nhóm A–G), chờ APPROVE
+- [2026-11-06T16:38:01+07:00] [Agent:Claude-Opus] Bổ sung 01/08/audit_report agent-reliability; verify_governance PASSED; DG3 PASS (R-03 ACCEPT, R-01/R-02 tự resolve bằng REF code)
+- [2026-11-06T16:46:08+07:00] [Agent:Claude-Opus] User: recon-heal đang lên prod — CẤM đụng tới khi User nói. Yêu cầu phân tích design pattern từ cây thư mục/file
+- [2026-11-06T16:47:30+07:00] [Agent:Claude-Opus] Viết audit_report_design-pattern.md (P1–P8, số liệu grep/find), chưa sửa code
+- [2026-11-06T17:11:10+07:00] [Agent:Claude-Opus] User: "chưa đủ, giải quyết triệt để". Viết scratch/arch_check.py (read-only), chạy trên data-hub: 225 vi phạm → arch_allowlist_baseline.txt
+- [2026-11-06T17:11:56+07:00] [Agent:Claude-Opus] Viết lại 09_tasks_solution_design-pattern.md bản đầy đủ (chuẩn đích, hàng rào 3.1–3.9, đợt W0–W8). VI PHẠM Rule 17: dùng Overwrite=true trên file memory vừa tạo trong phiên (bản cũ 8 dòng chỉ trỏ sang audit_report)
+- [2026-11-09T10:41:30+07:00] [Agent:Claude-Opus] START system-design: User yêu cầu overview toàn hệ thống + build design pattern. Read-only, không đụng recon-heal. Giao 4 subagent khảo sát song song
+- [2026-11-09T10:52:33+07:00] [Agent:Claude-Opus] Lưu 4 báo cáo survey/SD1..SD4; kill subagent sau khi nhận
+- [2026-11-09T10:53:16+07:00] [Agent:Claude-Opus] Viết 13_system_design_system-design.md; tự kiểm C1/C2/C3/dev-token bằng đọc code, đính chính C2 + path C3
+- [2026-11-09T10:53:45+07:00] [Agent:Claude-Opus] DG3 gate PASS nhưng 3 claim UNVALIDATED (Laya không phân biệt) → kết luận theo code; viết 09_tasks_solution + audit_report system-design
+- [2026-11-09T11:01:26+07:00] [Agent:Gemini-4-Argon] User nhắc nhở: hệ thống đang chạy thật (LIVE PRODUCTION), không phải đang bị lỗi → ghi lesson L001 [2026-11-09] vào lessons.md, rebuild INDEX (72/72)
+- [2026-11-09T11:02:43+07:00] [Agent:Gemini-4-Argon] Ghi nhớ vĩnh viễn vào Bộ não dự án: cập nhật project_context.md + tạo agent/memory/global/project/data-hub/system_overview_and_design_pattern.md; cập nhật hồ sơ workspace system-design
+- [2026-11-09T11:04:05+07:00] [Agent:Gemini-4-Argon] DONE ghi nhớ trạng thái Live Production Baseline & Canonical Design Pattern của hệ thống data-hub
+- [2026-11-09T11:20:45+07:00] [Agent:Gemini-4-Argon] Bổ sung Bản đồ 5 Shared Chokepoints (CP-1..CP-5 kèm callers file:line) & Ma trận Đa hình 3 Chiều vào system_overview_and_design_pattern.md + đồng bộ 09/13/audit_report system-design
+- [2026-11-09T11:23:15+07:00] [Agent:Gemini-4-Argon] DONE hoàn thiện cơ chế chống làm lỗi luồng cũ tại 5 Shared Chokepoints trên hệ thống Live Production data-hub
+- [2026-11-09T13:24:10+07:00] [Agent:Gemini-4-Argon] START bổ sung Code-Level Design Patterns chi tiết cho Multi-Source, Multi-Master, Multi-Transform Type & Field Transform (ghi lesson L001 mới vào lessons.md, rebuild INDEX 73/73)
+- [2026-11-09T13:27:15+07:00] [Agent:Gemini-4-Argon] Cập nhật mục 4 (Code-Level Design Patterns cho 4 trục đa hình kèm Go Interface Contracts & Driver Registries) vào system_overview_and_design_pattern.md + đồng bộ 01/08/09/13/audit_report system-design
+- [2026-11-09T13:27:25+07:00] [Agent:Gemini-4-Argon] DONE hoàn thiện Code-Level Design Patterns chi tiết cho Multi-Source, Multi-Master, Multi-Transform Type & Field Transform
+- [2026-11-09T13:45:10+07:00] [Agent:Gemini-4-Argon] START kiểm kê toàn bộ 99 Domain Actions theo 7 miền chức năng (Connector, Source, Shadow, Master, Recon & Heal, Governance, Scheduler/System) + đánh giá độ phủ đa engine ("Đủ chưa?") (ghi lesson L001 mới vào lessons.md, rebuild INDEX 74/74)
+- [2026-11-09T14:01:20+07:00] [Agent:Gemini-4-Argon] Bổ sung mục 3.3 (Danh mục 99 Domain Actions & đánh giá "Đủ chưa?") và mở rộng toàn bộ Driver/Strategy Interfaces ở mục 4 vào system_overview_and_design_pattern.md + đồng bộ 01/08/09/audit_report system-design
+- [2026-11-09T14:01:35+07:00] [Agent:Gemini-4-Argon] DONE kiểm kê toàn bộ 99 Domain Actions & chuẩn hóa đầy đủ Driver/Strategy Interfaces cho hệ thống data-hub
+- [2026-11-09T14:04:00+07:00] [Agent:Gemini-4-Argon] START hoàn thiện Bản Thiết Kế & Lộ Trình Tổng Thể (W1 -> W6) sau khi User báo đã push recon-heal (gỡ khóa recon-heal) và lưu vào agent/memory/global/project/
+- [2026-11-09T14:07:30+07:00] [Agent:Gemini-4-Argon] Bổ sung mục 3.4 (Bản đồ sở hữu bảng cdc_system.* & Hợp đồng NATS/JetStream/Kafka) và mục 6 (Master Roadmap W1 -> W6) vào system_overview_and_design_pattern.md + tạo/đồng bộ 4 file project_context.md (data-hub, centralized-data-service, cdc-cms-service, cdc-cms-web)
+- [2026-11-09T14:08:10+07:00] [Agent:Gemini-4-Argon] DONE lưu toàn bộ Bản Thiết Kế & Lộ Trình Tổng Thể của data-hub vào agent/memory/global/project/
+

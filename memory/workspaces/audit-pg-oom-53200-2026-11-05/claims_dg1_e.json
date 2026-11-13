@@ -1,0 +1,78 @@
+[
+  {
+    "id": "S-RC-20",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "Registry.Init pgx pools",
+    "claim": "Registry.Init opens pgx pools for both the control-plane and destination roles.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go:51-58\n\t\tif _, err := r.GetPgxPool(ctx, RoleControlPlane); err != nil {\n\t\t\tr.initErr = fmt.Errorf(\"init pgx %s: %w\", RoleControlPlane, err)\n\t\t\treturn\n\t\t}\n\t\tif _, err := r.GetPgxPool(ctx, RoleDestination); err != nil {\n\t\t\tr.initErr = fmt.Errorf(\"init pgx %s: %w\", RoleDestination, err)\n\t\t\treturn\n\t\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go:51-58",
+    "must_contain": [
+      "r.GetPgxPool(ctx, RoleControlPlane)",
+      "r.GetPgxPool(ctx, RoleDestination)"
+    ]
+  },
+  {
+    "id": "S-RC-21",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "Registry.Init call site",
+    "claim": "The worker server calls registry.Init right after creating the registry.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:52-54\n\tregistry := database.NewRegistry(cfg)\n\tpgStart := time.Now()\n\tif err := registry.Init(context.Background()); err != nil {",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:52-54",
+    "must_contain": [
+      "registry := database.NewRegistry(cfg)",
+      "registry.Init(context.Background())"
+    ]
+  },
+  {
+    "id": "S-FIX-20",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "common DB flush path",
+    "claim": "Both table flush and full/background flush call executeFlushGroupsWithResultsMode to execute DB writes.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:307-389\n\tw, groupResults, gerr := bb.executeFlushGroupsWithResultsMode(dbCtx, byTable, false)\n\tif gerr == nil {\n\t\tgerr = priorAsyncErr\n\t}\n\n\t// VÁ BUG 1: Cứu hộ Kafka Offset cho các bản ghi CDC vô tình đi cùng mẻ xả của bảng đó\n\tif !bb.isSnapshotBuffer && bb.onCommitOffsets != nil && len(groupResults) > 0 {\n\t\t// Rào chắn chống Commit Vượt Mặt (Advance Commit Prevention):\n\t\t// Tìm offset nhỏ nhất còn kẹt lại trong bb.records (remaining) cho từng TopicPartition\n\t\tbb.mu.Lock()\n\t\tminPendingOffset := make(map[TopicPartition]int64)\n\t\tfor _, rem := range bb.records {\n\t\t\tif rem.KafkaTopic != \"\" && rem.KafkaOffset >= 0 {\n\t\t\t\ttp := TopicPartition{Topic: rem.KafkaTopic, Partition: rem.KafkaPartition}\n\t\t\t\tif min, exists := minPendingOffset[tp]; !exists || rem.KafkaOffset < min {\n\t\t\t\t\tminPendingOffset[tp] = rem.KafkaOffset\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tbb.mu.Unlock()\n\n\t\tsafeOffsets := bb.watermarkTracker.CalculateSafeCommitOffsetsWithPending(groupResults, minPendingOffset)\n\t\tif len(safeOffsets) > 0 {\n\t\t\tcommitCtx, commitCancel := context.WithTimeout(context.Background(), 5*time.Second)\n\t\t\tbb.onCommitOffsets(commitCtx, safeOffsets)\n\t\t\tcommitCancel()\n\t\t}\n\t}\n\n\treturn w, gerr\n}\n\n// FlushWithContext drains the buffer synchronously using parentCtx\nfunc (bb *BatchBuffer) FlushWithContext(parentCtx context.Context) (written int, err error) {\n\treturn bb.flushWithContextMode(parentCtx, false)\n}\n\nfunc (bb *BatchBuffer) flushWithContextMode(parentCtx context.Context, isBackground bool) (written int, err error) {\n\tif parentCtx == nil {\n\t\tparentCtx = context.Background()\n\t}\n\tbb.flushMu.Lock()\n\tdefer bb.flushMu.Unlock()\n\n\tdbCtx, dbCancel := context.WithTimeout(parentCtx, 15*time.Second)\n\tdefer dbCancel()\n\n\tbb.mu.Lock()\n\tvar priorAsyncErr error\n\tif !isBackground {\n\t\tpriorAsyncErr = bb.popAllAsyncFlushErrorsLocked()\n\t}\n\tif len(bb.records) == 0 {\n\t\tbb.mu.Unlock()\n\t\treturn 0, priorAsyncErr\n\t}\n\tbatch := bb.records\n\tbb.records = make([]*shadow.UpsertRecord, 0, bb.maxSize)\n\tbb.lastFlush = time.Now()\n\tbb.mu.Unlock()\n\n\t// 1. Phân loại Marker và Data records (Task 1)\n\tbyTable := make(map[string][]*shadow.UpsertRecord)\n\tvar allResults []RecordExecutionResult\n\n\tfor _, r := range batch {\n\t\tif r.IsMarker {\n\t\t\tstatus := StatusDLQ\n\t\t\tif r.IsNoOpMarker {\n\t\t\t\tstatus = StatusDropped\n\t\t\t}\n\t\t\tallResults = append(allResults, RecordExecutionResult{\n\t\t\t\tRecord: r,\n\t\t\t\tStatus: status,\n\t\t\t})\n\t\t\tcontinue\n\t\t}\n\t\tbyTable[bb.groupKey(r)] = append(byTable[bb.groupKey(r)], r)\n\t}\n\n\t// 2. Thực thi ghi DB\n\tif len(byTable) > 0 {\n\t\tw, groupResults, gerr := bb.executeFlushGroupsWithResultsMode(dbCtx, byTable, isBackground)",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:307-389",
+    "must_contain": [
+      "bb.executeFlushGroupsWithResultsMode(dbCtx, byTable, false)",
+      "bb.executeFlushGroupsWithResultsMode(dbCtx, byTable, isBackground)"
+    ]
+  },
+  {
+    "id": "S-IMPACT-20",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "Add triggers background flush",
+    "claim": "Add signals flushCh without blocking when the buffer reaches maxSize, so background flushes can run while the snapshot loop continues.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:180-188\n\tshouldFlush := len(bb.records) >= bb.maxSize\n\tbb.mu.Unlock()\n\n\tif shouldFlush {\n\t\tselect {\n\t\tcase bb.flushCh <- struct{}{}:\n\t\tdefault:\n\t\t}\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:180-188",
+    "must_contain": [
+      "shouldFlush := len(bb.records) >= bb.maxSize",
+      "case bb.flushCh <- struct{}{}:"
+    ]
+  },
+  {
+    "id": "CTRL-TRUE-20",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "snapshot flush call",
+    "claim": "The snapshot loop calls flushSnapshotTables after processing records and trips the breaker on flush error.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:845-848\n\t\t_, flushErr := r.flushSnapshotTables(ctx, targetTable, scopedBinding, routes)\n\t\tif flushErr != nil {\n\t\t\treturn tripBreaker(fmt.Sprintf(\"flush failed: %v\", flushErr))\n\t\t}"
+  },
+  {
+    "id": "CTRL-FALSE-20",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Registry.Init pgx pools",
+    "claim": "Registry.Init only opens gorm pools and never opens pgx pools.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go:51-58\n\t\tif _, err := r.GetPgxPool(ctx, RoleControlPlane); err != nil {\n\t\t\tr.initErr = fmt.Errorf(\"init pgx %s: %w\", RoleControlPlane, err)\n\t\t\treturn\n\t\t}\n\t\tif _, err := r.GetPgxPool(ctx, RoleDestination); err != nil {\n\t\t\tr.initErr = fmt.Errorf(\"init pgx %s: %w\", RoleDestination, err)\n\t\t\treturn\n\t\t}"
+  },
+  {
+    "id": "CTRL-FALSE-21",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Add triggers background flush",
+    "claim": "Add blocks until the background flush finishes before returning.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:180-188\n\tshouldFlush := len(bb.records) >= bb.maxSize\n\tbb.mu.Unlock()\n\n\tif shouldFlush {\n\t\tselect {\n\t\tcase bb.flushCh <- struct{}{}:\n\t\tdefault:\n\t\t}\n\t}"
+  }
+]

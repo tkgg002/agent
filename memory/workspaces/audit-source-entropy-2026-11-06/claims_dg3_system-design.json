@@ -1,0 +1,50 @@
+[
+ {
+  "id": "R-C1",
+  "kind": "claim",
+  "basis": "code",
+  "flow": "backfill orphan",
+  "claim": "The worker's subscription to cdc.cmd.backfill is commented out while the CMS command bus still maps mapping.backfill to cdc.cmd.backfill, so backfill commands have no consumer.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:282-282\n\t//natsClient.Conn.Subscribe(\"cdc.cmd.backfill\", scanHandler.HandleBackfill)\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/server/server.go:280-280\n\tcmdBus.RegisterSubject(\"mapping.backfill\", \"cdc.cmd.backfill\")"
+ },
+ {
+  "id": "R-C3",
+  "kind": "claim",
+  "basis": "code",
+  "flow": "cdc_jobs reaper",
+  "claim": "The CMS stuck job reaper only fails cdc_jobs rows whose status is running; it does not touch pending rows.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/messaging/stuck_job_reaper.go:118-122\n        UPDATE cdc_system.cdc_jobs\n           SET status = 'failed',\n               error_message = COALESCE(NULLIF(error_message, ''), 'reaper: timeout exceeded'),\n               finished_at = NOW()\n         WHERE status = 'running'"
+ },
+ {
+  "id": "R-SEC1",
+  "kind": "claim",
+  "basis": "code",
+  "flow": "jwt bypass",
+  "claim": "The CMS JWT middleware treats the literal token dev-token as an admin user without any environment guard.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/middleware/jwt.go:21-26\n\t\t// BYPASS for development\n\t\tif tokenString == \"dev-token\" {\n\t\t\tc.Locals(\"username\", \"admin\")\n\t\t\tc.Locals(\"role\", \"admin\")\n\t\t\treturn c.Next()\n\t\t}"
+ },
+ {
+  "id": "CTRL-TRUE-1",
+  "kind": "control_true",
+  "basis": "code",
+  "flow": "control",
+  "claim": "The CMS command bus registers the subject cdc.cmd.recon-backfill-source-ts for recon.backfill-source-ts.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/server/server.go:272-272\n\tcmdBus.RegisterSubject(\"recon.backfill-source-ts\", \"cdc.cmd.recon-backfill-source-ts\")"
+ },
+ {
+  "id": "CTRL-FALSE-1",
+  "kind": "control_false",
+  "basis": "code",
+  "flow": "control",
+  "claim": "The worker actively queue-subscribes to cdc.cmd.backfill with the scan handler.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:282-282\n\t//natsClient.Conn.Subscribe(\"cdc.cmd.backfill\", scanHandler.HandleBackfill)"
+ },
+ {
+  "id": "CTRL-FALSE-2",
+  "kind": "control_false",
+  "basis": "code",
+  "flow": "control",
+  "claim": "The CMS JWT middleware rejects the token dev-token with HTTP 401.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/middleware/jwt.go:21-26\n\t\t// BYPASS for development\n\t\tif tokenString == \"dev-token\" {\n\t\t\tc.Locals(\"username\", \"admin\")\n\t\t\tc.Locals(\"role\", \"admin\")\n\t\t\treturn c.Next()\n\t\t}"
+ }
+]

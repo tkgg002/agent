@@ -1,0 +1,81 @@
+{
+  "objective": "Audit /sources connector config update flow across SourceConnectors.tsx, system_connectors_handler.go, system_connectors_credentials.go, debezium_connector.go, and kafka_connect.go.",
+  "claims": [
+    {
+      "id": "C-REQ",
+      "kind": "claim",
+      "claim": "UpdateSystemConnectorConfigHandler.Handle merges current config with cmd.Config and only skips entries where v == KeepSecretSentinel (__KEEP__), overwriting merged[k] = v for any other value (including *** or masked URIs) before calling h.writer.UpdateConfig(ctx, cmd.Name, merged).",
+      "flow": "UpdateSystemConnectorConfigHandler.Handle -> GetConfig -> merge current + cmd.Config -> UpdateConfig",
+      "evidence": [
+        {
+          "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go",
+          "lines": "427-441"
+        }
+      ]
+    },
+    {
+      "id": "C-REALITY",
+      "kind": "claim",
+      "claim": "In kafka_connect.go, UpdateConfig calls FilterSafeConfig(out.Config), which masks sensitive keys containing password/secret/token/credentials/ssl.key to \"***\" and sanitizes mongodb.connection.string and fs.uris.",
+      "flow": "KafkaConnectClient.UpdateConfig -> FilterSafeConfig -> sanitizeMongoURI / sanitizeSFTPURI",
+      "evidence": [
+        {
+          "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/http/kafka_connect.go",
+          "lines": "154-179"
+        },
+        {
+          "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/http/kafka_connect.go",
+          "lines": "243-264"
+        }
+      ]
+    },
+    {
+      "id": "C-CONTRA",
+      "kind": "claim",
+      "claim": "In system_connectors_credentials.go, validatePostgresConnectorPrereqs checks if host == \"\" || user == \"\" || database == \"\" || pass == \"\" || pass == \"***\" and returns nil, but does not check pass == sourceCmd.KeepSecretSentinel (\"__KEEP__\"), so it builds a postgres DSN with pass and calls gorm.Open.",
+      "flow": "SystemConnectorsHandler.UpdateConfig -> validatePostgresConnectorPrereqs -> gorm.Open(postgres.Open(dsn))",
+      "evidence": [
+        {
+          "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_credentials.go",
+          "lines": "24-66"
+        }
+      ]
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "kind": "control_true",
+      "claim": "KeepSecretSentinel is defined as the constant string \"__KEEP__\" in debezium_connector.go.",
+      "flow": "KeepSecretSentinel constant definition",
+      "evidence": [
+        {
+          "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go",
+          "lines": "356-360"
+        }
+      ]
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "kind": "control_false",
+      "claim": "UpdateSystemConnectorConfigHandler.Handle drops all PostgreSQL database tables and deletes the Kafka topic instead of calling h.writer.UpdateConfig.",
+      "flow": "UpdateSystemConnectorConfigHandler.Handle",
+      "evidence": [
+        {
+          "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go",
+          "lines": "427-441"
+        }
+      ]
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "kind": "control_false",
+      "claim": "FilterSafeConfig in kafka_connect.go deletes the entire config map and returns nil without iterating over cfg.",
+      "flow": "FilterSafeConfig",
+      "evidence": [
+        {
+          "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/http/kafka_connect.go",
+          "lines": "243-264"
+        }
+      ]
+    }
+  ]
+}

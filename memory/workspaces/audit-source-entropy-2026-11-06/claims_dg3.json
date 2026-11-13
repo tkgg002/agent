@@ -1,0 +1,23 @@
+[
+ {"id":"R-01","kind":"claim","basis":"code","flow":"H7 runtime_check skipped without manifest",
+  "claim":"In the done gate, runtime_check is only required when a component manifest exists; when component_for returns no component, rc is None and no runtime requirement is added.",
+  "evidence":"REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:1305-1306\n            rc = c.get(\"runtime_check\") if c else None\n            if rc and c[\"name\"] not in seen_comps and not touched(st, re.escape(rc), last):",
+  "must_contain":["if c else None"]},
+ {"id":"R-02","kind":"claim","basis":"code","flow":"H6 checks timeout",
+  "claim":"H6 runs each manifest check command with a fixed 40 second subprocess timeout.",
+  "evidence":"REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:1187-1189\n        for cmd in c.get(\"checks\", []):\n            try:\n                r = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True, timeout=40)",
+  "must_contain":["timeout=40"]},
+ {"id":"R-03","kind":"claim","basis":"code","flow":"laya resolve accepts text",
+  "claim":"For a FLAG claim, laya_gate resolve marks the claim resolved by storing the agent-provided reason text; only BLOCK claims are rejected.",
+  "evidence":"REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:388-392\n    if target_claim[\"decision\"] == \"BLOCK\":\n        print(f\"INVALID_INPUT: claim {args.id} đang là BLOCK — không được resolve bằng lời, phải sửa và chạy lại\", file=sys.stderr)\n        return 2\n\n    target_claim[\"resolved\"] = args.reason",
+  "must_contain":["target_claim[\"resolved\"] = args.reason"]},
+ {"id":"CTRL-TRUE-1","kind":"control_true","basis":"code","flow":"control",
+  "claim":"laya_gate resolve refuses to resolve a claim whose decision is BLOCK.",
+  "evidence":"REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:388-390\n    if target_claim[\"decision\"] == \"BLOCK\":\n        print(f\"INVALID_INPUT: claim {args.id} đang là BLOCK — không được resolve bằng lời, phải sửa và chạy lại\", file=sys.stderr)\n        return 2"},
+ {"id":"CTRL-FALSE-1","kind":"control_false","basis":"code","flow":"control",
+  "claim":"H6 runs manifest check commands with no timeout so they can run indefinitely.",
+  "evidence":"REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:1189-1189\n                r = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True, timeout=40)"},
+ {"id":"CTRL-FALSE-2","kind":"control_false","basis":"code","flow":"control",
+  "claim":"laya_gate resolve re-runs the Laya model and only marks the claim resolved if the model now returns CORRECT.",
+  "evidence":"REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:392-392\n    target_claim[\"resolved\"] = args.reason"}
+]

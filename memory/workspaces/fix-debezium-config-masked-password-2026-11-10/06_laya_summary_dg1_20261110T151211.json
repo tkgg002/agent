@@ -1,0 +1,172 @@
+{
+  "mode": "claim",
+  "stage": "dg1",
+  "workspace": "fix-debezium-config-masked-password-2026-11-10",
+  "ts": "20261110T151211",
+  "trusted_rounds": [],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-debezium-config-masked-password-2026-11-10/06_laya_raw_dg1_20261110T151211.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "UpdateSystemConnectorConfigHandler.Handle in debezium_connector.go merges current and cmd.Config by only skipping v == KeepSecretSentinel (__KEEP__), so any other value in cmd.Config (such as *** or masked URIs) overwrites merged[k].",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5005
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4107
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7389
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In SystemConnectorsHandler.UpdateConfig, validatePostgresConnectorPrereqs(c.UserContext(), req.Config) is called at line 215 before h.updateH.Handle, while validatePostgresConnectorPrereqs at line 48 only skips pass == \"\" || pass == \"***\" and does not skip KeepSecretSentinel.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3203
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4342
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.853
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In extractCredentialsAsOptions (system_connectors_credentials.go), SFTP URI parsing assigns opts[\"username\"] = parts[0] when parts[0] != \"\" without checking !isKeepOrMaskedSecret(parts[0]), whereas parts[1] is checked with !isKeepOrMaskedSecret(parts[1]).",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "INCORRECT",
+          "confidence": 0.0094
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.6021
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6213
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In SourceConnectors.tsx buildConnectorConfig, database.password uses mode === 'edit' ? KEEP_SECRET_SENTINEL : '' so when mode is 'recover' and values.password is empty, database.password becomes empty string and is removed by compactConfig.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6043
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2094
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.3191
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "The proposed MergeConnectorConfigPreservingSecrets in 09_tasks_solution_debezium_config_masked_password.md skips entries where IsKeepOrMaskedSecret(v) is true, skips empty values for sensitive keys when current[k] is non-empty, and calls RestoreMaskedURI for mongodb.connection.string and fs.uris.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6087
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4879
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7951
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "The proposed IsKeepOrMaskedSecret in 09_tasks_solution_debezium_config_masked_password.md returns false for empty strings, true for KeepSecretSentinel, and true when all runes in the trimmed string are '*' or '•'.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.1943
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1313
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8009
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In 09_tasks_solution_debezium_config_masked_password.md, DiscoverPostgresTablesRequest adds ConnectorName (`json:\"connector_name\"`) and resolves pass from h.connectorCfgReader.GetConfig when pass is empty or masked.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.8282
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2833
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.888
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

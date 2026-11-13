@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ-1",
+    "kind": "claim",
+    "claim": "test_routing2.go is declared in package source and exports TestRoutingLogic() into production code.",
+    "flow": "Build package source -> TestRoutingLogic() compiled into non-test binary.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/test_routing2.go:1-17\npackage source\nfunc TestRoutingLogic() {"
+  },
+  {
+    "id": "C-REALITY-1",
+    "kind": "claim",
+    "claim": "Migration 023_add_last_trace_id_to_transmute_schedule.sql runs ALTER TABLE cdc_system.transmute_schedule before 036_v2_transmute_schedule.sql creates cdc_system.transmute_schedule.",
+    "flow": "listMigrationFiles sorts by base filename -> 023 runs before 036.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/migrations/schema/worker/023_add_last_trace_id_to_transmute_schedule.sql:1-3\n-- Migration 023 — Thêm last_trace_id cho transmute_schedule phục vụ truy vết SigNoz\nALTER TABLE cdc_system.transmute_schedule\n  ADD COLUMN IF NOT EXISTS last_trace_id VARCHAR(64) DEFAULT NULL;\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/migrations/schema/cdc_system_model/036_v2_transmute_schedule.sql:3-6\nBEGIN;\nCREATE TABLE IF NOT EXISTS cdc_system.transmute_schedule (\n  id                BIGSERIAL PRIMARY KEY,"
+  },
+  {
+    "id": "C-CONTRA-1",
+    "kind": "claim",
+    "claim": "In pruneSQLDialectMasterMissingFromSrc, when effectivePruneIDType == \"gpay\", the function deletes chunks directly via execDeleteByCol(\"`_gpay_id`\", chunk, len(chunk)) and returns pruned without checking h.shadowDB.",
+    "flow": "pruneSQLDialectMasterMissingFromSrc -> effectivePruneIDType == \"gpay\" -> execDeleteByCol -> return pruned.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb_sql_dialects.go:130-146\nif effectivePruneIDType == \"gpay\" {\n\tvar gpayIDs []int64\n\tfor _, s := range missingIDs {\n\t\tif val, err := strconv.ParseInt(s, 10, 64); err == nil {\n\t\t\tgpayIDs = append(gpayIDs, val)\n\t\t}\n\t}\n\tfor i := 0; i < len(gpayIDs); i += batch {\n\t\tend := i + batch\n\t\tif end > len(gpayIDs) {\n\t\t\tend = len(gpayIDs)\n\t\t}\n\t\tchunk := gpayIDs[i:end]\n\t\tpruned += execDeleteByCol(\"`_gpay_id`\", chunk, len(chunk))\n\t}\n\treturn pruned\n}"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "ReconReader interface defines GetActiveReconJobs accepting targetTables []string and returning ([]ActiveReconJob, error).",
+    "flow": "ReconReader.GetActiveReconJobs(ctx, targetTables).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/recon/recon_reader.go:133-137\n// GetActiveReconJobs returns PENDING/RUNNING jobs from cdc_system.recon_jobs,\n// optionally filtered by target tables. Used by the frontend \"Tiến trình đối soát thủ công\" tab.\n// Limit is bounded to 20 server-side.\nGetActiveReconJobs(ctx context.Context, targetTables []string) ([]ActiveReconJob, error)\n}"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "test_routing2.go is declared in package main and does not define TestRoutingLogic.",
+    "flow": "False control claim.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/test_routing2.go:1-17\npackage source\nfunc TestRoutingLogic() {"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "ReconReader interface does not define GetActiveReconJobs and instead returns a single bool.",
+    "flow": "False control claim.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/recon/recon_reader.go:133-137\nGetActiveReconJobs(ctx context.Context, targetTables []string) ([]ActiveReconJob, error)\n}"
+  }
+]

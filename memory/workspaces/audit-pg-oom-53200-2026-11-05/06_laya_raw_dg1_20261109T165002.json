@@ -1,0 +1,1519 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "claim",
+    "claim": "In TableDebouncer.workerLoop in debounce.go:185-214, when td.ctx.Done() fires, it only takes td.tasks and returns without draining batches remaining in td.flushCh, while in-flight goroutines in case batch := <-td.flushCh receive td.ctx directly without td.wg tracking.",
+    "flow": "1. workerLoop selects on td.ctx.Done() and td.flushCh. 2. On td.ctx.Done(), only td.tasks is run and workerLoop returns.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/debounce.go:185-214\n\t\tcase <-td.ctx.Done():\n\t\t\ttd.mu.Lock()\n\t\t\ttasks := td.tasks\n\t\t\ttd.tasks = nil\n\t\t\tif td.idleTimer != nil {\n\t\t\t\ttd.idleTimer.Stop()\n\t\t\t\ttd.idleTimer = nil\n\t\t\t}\n\t\t\tif td.maxTimer != nil {\n\t\t\t\ttd.maxTimer.Stop()\n\t\t\t\ttd.maxTimer = nil\n\t\t\t}\n\t\t\ttd.mu.Unlock()\n\n\t\t\tif len(tasks) > 0 {\n\t\t\t\ttd.runTransmute(context.Background(), tasks)\n\t\t\t}\n\t\t\treturn\n\t\tcase batch := <-td.flushCh:\n\t\t\tselect {\n\t\t\tcase td.sem <- struct{}{}:\n\t\t\t\tgo func() {\n\t\t\t\t\tdefer func() { <-td.sem }()\n\t\t\t\t\ttd.runTransmute(td.ctx, batch)\n\t\t\t\t}()\n\t\t\tcase <-td.ctx.Done():\n\t\t\t\ttd.runTransmute(context.Background(), batch)\n\t\t\t\treturn\n\t\t\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.2472,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.4582,
+                "INCORRECT": 0.5039,
+                "UNSUPPORTED": 0.0379
+              },
+              "confidence": 0.2472,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 669,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In TableDebouncer.workerLoop in debounce.go:185-214, when td.ctx.Done() fires, it only takes td.tasks and returns without draining batches remaining in td.flushCh, while in-flight goroutines in case batch := <-td.flushCh receive td.ctx directly without td.wg tracking.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/debounce.go:185-214\n\t\tcase <-td.ctx.Done():\n\t\t\ttd.mu.Lock()\n\t\t\ttasks := td.tasks\n\t\t\ttd.tasks = nil\n\t\t\tif td.idleTimer != nil {\n\t\t\t\ttd.idleTimer.Stop()\n\t\t\t\ttd.idleTimer = nil\n\t\t\t}\n\t\t\tif td.maxTimer != nil {\n\t\t\t\ttd.maxTimer.Stop()\n\t\t\t\ttd.maxTimer = nil\n\t\t\t}\n\t\t\ttd.mu.Unlock()\n\n\t\t\tif len(tasks) > 0 {\n\t\t\t\ttd.runTransmute(context.Background(), tasks)\n\t\t\t}\n\t\t\treturn\n\t\tcase batch := <-td.flushCh:\n\t\t\tselect {\n\t\t\tcase td.sem <- struct{}{}:\n\t\t\t\tgo func() {\n\t\t\t\t\tdefer func() { <-td.sem }()\n\t\t\t\t\ttd.runTransmute(td.ctx, batch)\n\t\t\t\t}()\n\t\t\tcase <-td.ctx.Done():\n\t\t\t\ttd.runTransmute(context.Background(), batch)\n\t\t\t\treturn\n\t\t\t}",
+          "flow": "1. workerLoop selects on td.ctx.Done() and td.flushCh. 2. On td.ctx.Done(), only td.tasks is run and workerLoop returns."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.291,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6932,
+                "INCORRECT": 0.2387,
+                "UNSUPPORTED": 0.0681
+              },
+              "confidence": 0.291,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 674,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "1. workerLoop selects on td.ctx.Done() and td.flushCh. 2. On td.ctx.Done(), only td.tasks is run and workerLoop returns.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/debounce.go:185-214\n\t\tcase <-td.ctx.Done():\n\t\t\ttd.mu.Lock()\n\t\t\ttasks := td.tasks\n\t\t\ttd.tasks = nil\n\t\t\tif td.idleTimer != nil {\n\t\t\t\ttd.idleTimer.Stop()\n\t\t\t\ttd.idleTimer = nil\n\t\t\t}\n\t\t\tif td.maxTimer != nil {\n\t\t\t\ttd.maxTimer.Stop()\n\t\t\t\ttd.maxTimer = nil\n\t\t\t}\n\t\t\ttd.mu.Unlock()\n\n\t\t\tif len(tasks) > 0 {\n\t\t\t\ttd.runTransmute(context.Background(), tasks)\n\t\t\t}\n\t\t\treturn\n\t\tcase batch := <-td.flushCh:\n\t\t\tselect {\n\t\t\tcase td.sem <- struct{}{}:\n\t\t\t\tgo func() {\n\t\t\t\t\tdefer func() { <-td.sem }()\n\t\t\t\t\ttd.runTransmute(td.ctx, batch)\n\t\t\t\t}()\n\t\t\tcase <-td.ctx.Done():\n\t\t\t\ttd.runTransmute(context.Background(), batch)\n\t\t\t\treturn\n\t\t\t}",
+          "claim": "In TableDebouncer.workerLoop in debounce.go:185-214, when td.ctx.Done() fires, it only takes td.tasks and returns without draining batches remaining in td.flushCh, while in-flight goroutines in case batch := <-td.flushCh receive td.ctx directly without td.wg tracking."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6346,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9301,
+                "NO": 0.0699
+              },
+              "confidence": 0.6346,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 568,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/debounce.go:185-214\n\t\tcase <-td.ctx.Done():\n\t\t\ttd.mu.Lock()\n\t\t\ttasks := td.tasks\n\t\t\ttd.tasks = nil\n\t\t\tif td.idleTimer != nil {\n\t\t\t\ttd.idleTimer.Stop()\n\t\t\t\ttd.idleTimer = nil\n\t\t\t}\n\t\t\tif td.maxTimer != nil {\n\t\t\t\ttd.maxTimer.Stop()\n\t\t\t\ttd.maxTimer = nil\n\t\t\t}\n\t\t\ttd.mu.Unlock()\n\n\t\t\tif len(tasks) > 0 {\n\t\t\t\ttd.runTransmute(context.Background(), tasks)\n\t\t\t}\n\t\t\treturn\n\t\tcase batch := <-td.flushCh:\n\t\t\tselect {\n\t\t\tcase td.sem <- struct{}{}:\n\t\t\t\tgo func() {\n\t\t\t\t\tdefer func() { <-td.sem }()\n\t\t\t\t\ttd.runTransmute(td.ctx, batch)\n\t\t\t\t}()\n\t\t\tcase <-td.ctx.Done():\n\t\t\t\ttd.runTransmute(context.Background(), batch)\n\t\t\t\treturn\n\t\t\t}",
+          "claim": "In TableDebouncer.workerLoop in debounce.go:185-214, when td.ctx.Done() fires, it only takes td.tasks and returns without draining batches remaining in td.flushCh, while in-flight goroutines in case batch := <-td.flushCh receive td.ctx directly without td.wg tracking."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "claim",
+    "claim": "In SnapshotRunner.Stop() in Demo P13-2 of 09_tasks_solution_pg_oom_53200.md:1821-1839, r.stopping.Store(true) is set so in-flight snapshots finish their current batch and pause at the batch boundary, only calling r.stopCancel() if r.wg.Wait() does not finish within 10 seconds.",
+    "flow": "1. Stop() sets r.stopping.Store(true). 2. Waits on r.wg.Wait() with a 10-second fallback before calling r.stopCancel().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1821-1839\n// Stop gracefully pauses all in-flight snapshots at the current batch boundary and waits for them to exit.\nfunc (r *SnapshotRunner) Stop() {\n\tr.stopping.Store(true)\n\tdone := make(chan struct{})\n\tgo func() {\n\t\tr.wg.Wait()\n\t\tclose(done)\n\t}()\n\tselect {\n\tcase <-done:\n\tcase <-time.After(10 * time.Second):\n\t\tr.stopMu.Lock()\n\t\tif r.stopCancel != nil {\n\t\t\tr.stopCancel()\n\t\t}\n\t\tr.stopMu.Unlock()\n\t\t<-done\n\t}\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7032,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9205,
+                "INCORRECT": 0.0555,
+                "UNSUPPORTED": 0.0239
+              },
+              "confidence": 0.7032,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 507,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In SnapshotRunner.Stop() in Demo P13-2 of 09_tasks_solution_pg_oom_53200.md:1821-1839, r.stopping.Store(true) is set so in-flight snapshots finish their current batch and pause at the batch boundary, only calling r.stopCancel() if r.wg.Wait() does not finish within 10 seconds.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1821-1839\n// Stop gracefully pauses all in-flight snapshots at the current batch boundary and waits for them to exit.\nfunc (r *SnapshotRunner) Stop() {\n\tr.stopping.Store(true)\n\tdone := make(chan struct{})\n\tgo func() {\n\t\tr.wg.Wait()\n\t\tclose(done)\n\t}()\n\tselect {\n\tcase <-done:\n\tcase <-time.After(10 * time.Second):\n\t\tr.stopMu.Lock()\n\t\tif r.stopCancel != nil {\n\t\t\tr.stopCancel()\n\t\t}\n\t\tr.stopMu.Unlock()\n\t\t<-done\n\t}\n}",
+          "flow": "1. Stop() sets r.stopping.Store(true). 2. Waits on r.wg.Wait() with a 10-second fallback before calling r.stopCancel()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.7067,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9176,
+                "INCORRECT": 0.0685,
+                "UNSUPPORTED": 0.014
+              },
+              "confidence": 0.7067,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 512,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "1. Stop() sets r.stopping.Store(true). 2. Waits on r.wg.Wait() with a 10-second fallback before calling r.stopCancel().",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1821-1839\n// Stop gracefully pauses all in-flight snapshots at the current batch boundary and waits for them to exit.\nfunc (r *SnapshotRunner) Stop() {\n\tr.stopping.Store(true)\n\tdone := make(chan struct{})\n\tgo func() {\n\t\tr.wg.Wait()\n\t\tclose(done)\n\t}()\n\tselect {\n\tcase <-done:\n\tcase <-time.After(10 * time.Second):\n\t\tr.stopMu.Lock()\n\t\tif r.stopCancel != nil {\n\t\t\tr.stopCancel()\n\t\t}\n\t\tr.stopMu.Unlock()\n\t\t<-done\n\t}\n}",
+          "claim": "In SnapshotRunner.Stop() in Demo P13-2 of 09_tasks_solution_pg_oom_53200.md:1821-1839, r.stopping.Store(true) is set so in-flight snapshots finish their current batch and pause at the batch boundary, only calling r.stopCancel() if r.wg.Wait() does not finish within 10 seconds."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.706,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9482,
+                "NO": 0.0518
+              },
+              "confidence": 0.706,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 405,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1821-1839\n// Stop gracefully pauses all in-flight snapshots at the current batch boundary and waits for them to exit.\nfunc (r *SnapshotRunner) Stop() {\n\tr.stopping.Store(true)\n\tdone := make(chan struct{})\n\tgo func() {\n\t\tr.wg.Wait()\n\t\tclose(done)\n\t}()\n\tselect {\n\tcase <-done:\n\tcase <-time.After(10 * time.Second):\n\t\tr.stopMu.Lock()\n\t\tif r.stopCancel != nil {\n\t\t\tr.stopCancel()\n\t\t}\n\t\tr.stopMu.Unlock()\n\t\t<-done\n\t}\n}",
+          "claim": "In SnapshotRunner.Stop() in Demo P13-2 of 09_tasks_solution_pg_oom_53200.md:1821-1839, r.stopping.Store(true) is set so in-flight snapshots finish their current batch and pause at the batch boundary, only calling r.stopCancel() if r.wg.Wait() does not finish within 10 seconds."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "claim",
+    "claim": "In RequestCancel in Demo P13-7 of 09_tasks_solution_pg_oom_53200.md:2233-2264, PENDING, PAUSED, or stale RUNNING jobs (>45s without heartbeat) are immediately transitioned to status = 'CANCELLED' with finished_at = NOW() and transmute_schedule.last_status = 'cancelled'.",
+    "flow": "1. RequestCancel updates cdc_system.transmute_jobs setting status='CANCELLED' when status IN ('PENDING', 'PAUSED') or updated_at < NOW() - 45s. 2. Updates cdc_system.transmute_schedule setting last_status='cancelled'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:2233-2264\nfunc (r *TransmuteJobRepo) RequestCancel(ctx context.Context, jobID string) error {\n\tif err := r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_jobs\n\t\t   SET cancel_requested = true,\n\t\t       status = CASE\n\t\t           WHEN status IN ('PENDING', 'PAUSED') OR updated_at < NOW() - INTERVAL '45 seconds' THEN 'CANCELLED'\n\t\t           ELSE status\n\t\t       END,\n\t\t       error_message = CASE\n\t\t           WHEN status IN ('PENDING', 'PAUSED') OR updated_at < NOW() - INTERVAL '45 seconds' THEN 'cancelled by user'\n\t\t           ELSE error_message\n\t\t       END,\n\t\t       finished_at = CASE\n\t\t           WHEN status IN ('PENDING', 'PAUSED') OR updated_at < NOW() - INTERVAL '45 seconds' THEN NOW()\n\t\t           ELSE finished_at\n\t\t       END\n\t\t WHERE job_id = ? AND status IN ('PENDING', 'RUNNING', 'PAUSED')\n\t`, jobID).Error; err != nil {\n\t\treturn err\n\t}\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_schedule ts\n\t\t   SET last_status = 'cancelled',\n\t\t       last_error  = 'cancelled by user',\n\t\t       updated_at  = NOW()\n\t\t  FROM cdc_system.transmute_jobs tj\n\t\t WHERE tj.job_id = ?\n\t\t   AND (ts.master_binding_id = tj.master_binding_id OR ts.last_trace_id = tj.trace_id)\n\t\t   AND ts.last_status = 'running'\n\t`, jobID).Error\n\treturn nil\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4433,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8108,
+                "INCORRECT": 0.1152,
+                "UNSUPPORTED": 0.074
+              },
+              "confidence": 0.4433,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 936,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In RequestCancel in Demo P13-7 of 09_tasks_solution_pg_oom_53200.md:2233-2264, PENDING, PAUSED, or stale RUNNING jobs (>45s without heartbeat) are immediately transitioned to status = 'CANCELLED' with finished_at = NOW() and transmute_schedule.last_status = 'cancelled'.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:2233-2264\nfunc (r *TransmuteJobRepo) RequestCancel(ctx context.Context, jobID string) error {\n\tif err := r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_jobs\n\t\t   SET cancel_requested = true,\n\t\t       status = CASE\n\t\t           WHEN status IN ('PENDING', 'PAUSED') OR updated_at < NOW() - INTERVAL '45 seconds' THEN 'CANCELLED'\n\t\t           ELSE status\n\t\t       END,\n\t\t       error_message = CASE\n\t\t           WHEN status IN ('PENDING', 'PAUSED') OR updated_at < NOW() - INTERVAL '45 seconds' THEN 'cancelled by user'\n\t\t           ELSE error_message\n\t\t       END,\n\t\t       finished_at = CASE\n\t\t           WHEN status IN ('PENDING', 'PAUSED') OR updated_at < NOW() - INTERVAL '45 seconds' THEN NOW()\n\t\t           ELSE finished_at\n\t\t       END\n\t\t WHERE job_id = ? AND status IN ('PENDING', 'RUNNING', 'PAUSED')\n\t`, jobID).Error; err != nil {\n\t\treturn err\n\t}\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_schedule ts\n\t\t   SET last_status = 'cancelled',\n\t\t       last_error  = 'cancelled by user',\n\t\t       updated_at  = NOW()\n\t\t  FROM cdc_system.transmute_jobs tj\n\t\t WHERE tj.job_id = ?\n\t\t   AND (ts.master_binding_id = tj.master_binding_id OR ts.last_trace_id = tj.trace_id)\n\t\t   AND ts.last_status = 'running'\n\t`, jobID).Error\n\treturn nil\n}",
+          "flow": "1. RequestCancel updates cdc_system.transmute_jobs setting status='CANCELLED' when status IN ('PENDING', 'PAUSED') or updated_at < NOW() - 45s. 2. Updates cdc_system.transmute_schedule setting last_status='cancelled'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4188,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7905,
+                "INCORRECT": 0.1498,
+                "UNSUPPORTED": 0.0597
+              },
+              "confidence": 0.4188,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 941,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "1. RequestCancel updates cdc_system.transmute_jobs setting status='CANCELLED' when status IN ('PENDING', 'PAUSED') or updated_at < NOW() - 45s. 2. Updates cdc_system.transmute_schedule setting last_status='cancelled'.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:2233-2264\nfunc (r *TransmuteJobRepo) RequestCancel(ctx context.Context, jobID string) error {\n\tif err := r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_jobs\n\t\t   SET cancel_requested = true,\n\t\t       status = CASE\n\t\t           WHEN status IN ('PENDING', 'PAUSED') OR updated_at < NOW() - INTERVAL '45 seconds' THEN 'CANCELLED'\n\t\t           ELSE status\n\t\t       END,\n\t\t       error_message = CASE\n\t\t           WHEN status IN ('PENDING', 'PAUSED') OR updated_at < NOW() - INTERVAL '45 seconds' THEN 'cancelled by user'\n\t\t           ELSE error_message\n\t\t       END,\n\t\t       finished_at = CASE\n\t\t           WHEN status IN ('PENDING', 'PAUSED') OR updated_at < NOW() - INTERVAL '45 seconds' THEN NOW()\n\t\t           ELSE finished_at\n\t\t       END\n\t\t WHERE job_id = ? AND status IN ('PENDING', 'RUNNING', 'PAUSED')\n\t`, jobID).Error; err != nil {\n\t\treturn err\n\t}\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_schedule ts\n\t\t   SET last_status = 'cancelled',\n\t\t       last_error  = 'cancelled by user',\n\t\t       updated_at  = NOW()\n\t\t  FROM cdc_system.transmute_jobs tj\n\t\t WHERE tj.job_id = ?\n\t\t   AND (ts.master_binding_id = tj.master_binding_id OR ts.last_trace_id = tj.trace_id)\n\t\t   AND ts.last_status = 'running'\n\t`, jobID).Error\n\treturn nil\n}",
+          "claim": "In RequestCancel in Demo P13-7 of 09_tasks_solution_pg_oom_53200.md:2233-2264, PENDING, PAUSED, or stale RUNNING jobs (>45s without heartbeat) are immediately transitioned to status = 'CANCELLED' with finished_at = NOW() and transmute_schedule.last_status = 'cancelled'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6208,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9264,
+                "NO": 0.0736
+              },
+              "confidence": 0.6208,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 810,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:2233-2264\nfunc (r *TransmuteJobRepo) RequestCancel(ctx context.Context, jobID string) error {\n\tif err := r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_jobs\n\t\t   SET cancel_requested = true,\n\t\t       status = CASE\n\t\t           WHEN status IN ('PENDING', 'PAUSED') OR updated_at < NOW() - INTERVAL '45 seconds' THEN 'CANCELLED'\n\t\t           ELSE status\n\t\t       END,\n\t\t       error_message = CASE\n\t\t           WHEN status IN ('PENDING', 'PAUSED') OR updated_at < NOW() - INTERVAL '45 seconds' THEN 'cancelled by user'\n\t\t           ELSE error_message\n\t\t       END,\n\t\t       finished_at = CASE\n\t\t           WHEN status IN ('PENDING', 'PAUSED') OR updated_at < NOW() - INTERVAL '45 seconds' THEN NOW()\n\t\t           ELSE finished_at\n\t\t       END\n\t\t WHERE job_id = ? AND status IN ('PENDING', 'RUNNING', 'PAUSED')\n\t`, jobID).Error; err != nil {\n\t\treturn err\n\t}\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_schedule ts\n\t\t   SET last_status = 'cancelled',\n\t\t       last_error  = 'cancelled by user',\n\t\t       updated_at  = NOW()\n\t\t  FROM cdc_system.transmute_jobs tj\n\t\t WHERE tj.job_id = ?\n\t\t   AND (ts.master_binding_id = tj.master_binding_id OR ts.last_trace_id = tj.trace_id)\n\t\t   AND ts.last_status = 'running'\n\t`, jobID).Error\n\treturn nil\n}",
+          "claim": "In RequestCancel in Demo P13-7 of 09_tasks_solution_pg_oom_53200.md:2233-2264, PENDING, PAUSED, or stale RUNNING jobs (>45s without heartbeat) are immediately transitioned to status = 'CANCELLED' with finished_at = NOW() and transmute_schedule.last_status = 'cancelled'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "claim",
+    "claim": "In TransmuteHandler.Stop() in Demo P13-5 of 09_tasks_solution_pg_oom_53200.md:2119-2155, Stop() first signals long-running TransmuterModule jobs via h.svc.SetStopping(true) and waits on h.wg.Wait(), then stops all TableDebouncers via td.Stop().",
+    "flow": "1. Stop() closes h.stopCh and calls h.svc.SetStopping(true). 2. Waits for h.wg.Wait() with a 10s timeout. 3. Iterates over debouncers and calls td.Stop().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:2119-2155\nfunc (h *TransmuteHandler) Stop() {\n\th.stopOnce.Do(func() {\n\t\tif h.stopCh != nil {\n\t\t\tclose(h.stopCh)\n\t\t}\n\t\tif h.svc != nil {\n\t\t\th.svc.SetStopping(true)\n\t\t}\n\t\tdone := make(chan struct{})\n\t\tgo func() {\n\t\t\th.wg.Wait()\n\t\t\tclose(done)\n\t\t}()\n\t\tselect {\n\t\tcase <-done:\n\t\tcase <-time.After(10 * time.Second):\n\t\t\th.activeJobsMu.Lock()\n\t\t\tfor _, cancelFn := range h.activeJobs {\n\t\t\t\tif cancelFn != nil {\n\t\t\t\t\tcancelFn()\n\t\t\t\t}\n\t\t\t}\n\t\t\th.activeJobsMu.Unlock()\n\t\t\t<-done\n\t\t}\n\n\t\th.debouncersMu.RLock()\n\t\tdebouncers := make([]*TableDebouncer, 0, len(h.debouncers))\n\t\tfor _, td := range h.debouncers {\n\t\t\tdebouncers = append(debouncers, td)\n\t\t}\n\t\th.debouncersMu.RUnlock()\n\t\tfor _, td := range debouncers {\n\t\t\ttd.Stop()\n\t\t}\n\t})\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.406,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7819,
+                "INCORRECT": 0.1582,
+                "UNSUPPORTED": 0.0599
+              },
+              "confidence": 0.406,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 755,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In TransmuteHandler.Stop() in Demo P13-5 of 09_tasks_solution_pg_oom_53200.md:2119-2155, Stop() first signals long-running TransmuterModule jobs via h.svc.SetStopping(true) and waits on h.wg.Wait(), then stops all TableDebouncers via td.Stop().",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:2119-2155\nfunc (h *TransmuteHandler) Stop() {\n\th.stopOnce.Do(func() {\n\t\tif h.stopCh != nil {\n\t\t\tclose(h.stopCh)\n\t\t}\n\t\tif h.svc != nil {\n\t\t\th.svc.SetStopping(true)\n\t\t}\n\t\tdone := make(chan struct{})\n\t\tgo func() {\n\t\t\th.wg.Wait()\n\t\t\tclose(done)\n\t\t}()\n\t\tselect {\n\t\tcase <-done:\n\t\tcase <-time.After(10 * time.Second):\n\t\t\th.activeJobsMu.Lock()\n\t\t\tfor _, cancelFn := range h.activeJobs {\n\t\t\t\tif cancelFn != nil {\n\t\t\t\t\tcancelFn()\n\t\t\t\t}\n\t\t\t}\n\t\t\th.activeJobsMu.Unlock()\n\t\t\t<-done\n\t\t}\n\n\t\th.debouncersMu.RLock()\n\t\tdebouncers := make([]*TableDebouncer, 0, len(h.debouncers))\n\t\tfor _, td := range h.debouncers {\n\t\t\tdebouncers = append(debouncers, td)\n\t\t}\n\t\th.debouncersMu.RUnlock()\n\t\tfor _, td := range debouncers {\n\t\t\ttd.Stop()\n\t\t}\n\t})\n}",
+          "flow": "1. Stop() closes h.stopCh and calls h.svc.SetStopping(true). 2. Waits for h.wg.Wait() with a 10s timeout. 3. Iterates over debouncers and calls td.Stop()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.6476,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8967,
+                "INCORRECT": 0.0801,
+                "UNSUPPORTED": 0.0231
+              },
+              "confidence": 0.6476,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 760,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "1. Stop() closes h.stopCh and calls h.svc.SetStopping(true). 2. Waits for h.wg.Wait() with a 10s timeout. 3. Iterates over debouncers and calls td.Stop().",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:2119-2155\nfunc (h *TransmuteHandler) Stop() {\n\th.stopOnce.Do(func() {\n\t\tif h.stopCh != nil {\n\t\t\tclose(h.stopCh)\n\t\t}\n\t\tif h.svc != nil {\n\t\t\th.svc.SetStopping(true)\n\t\t}\n\t\tdone := make(chan struct{})\n\t\tgo func() {\n\t\t\th.wg.Wait()\n\t\t\tclose(done)\n\t\t}()\n\t\tselect {\n\t\tcase <-done:\n\t\tcase <-time.After(10 * time.Second):\n\t\t\th.activeJobsMu.Lock()\n\t\t\tfor _, cancelFn := range h.activeJobs {\n\t\t\t\tif cancelFn != nil {\n\t\t\t\t\tcancelFn()\n\t\t\t\t}\n\t\t\t}\n\t\t\th.activeJobsMu.Unlock()\n\t\t\t<-done\n\t\t}\n\n\t\th.debouncersMu.RLock()\n\t\tdebouncers := make([]*TableDebouncer, 0, len(h.debouncers))\n\t\tfor _, td := range h.debouncers {\n\t\t\tdebouncers = append(debouncers, td)\n\t\t}\n\t\th.debouncersMu.RUnlock()\n\t\tfor _, td := range debouncers {\n\t\t\ttd.Stop()\n\t\t}\n\t})\n}",
+          "claim": "In TransmuteHandler.Stop() in Demo P13-5 of 09_tasks_solution_pg_oom_53200.md:2119-2155, Stop() first signals long-running TransmuterModule jobs via h.svc.SetStopping(true) and waits on h.wg.Wait(), then stops all TableDebouncers via td.Stop()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.763,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9611,
+                "NO": 0.0389
+              },
+              "confidence": 0.763,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 638,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:2119-2155\nfunc (h *TransmuteHandler) Stop() {\n\th.stopOnce.Do(func() {\n\t\tif h.stopCh != nil {\n\t\t\tclose(h.stopCh)\n\t\t}\n\t\tif h.svc != nil {\n\t\t\th.svc.SetStopping(true)\n\t\t}\n\t\tdone := make(chan struct{})\n\t\tgo func() {\n\t\t\th.wg.Wait()\n\t\t\tclose(done)\n\t\t}()\n\t\tselect {\n\t\tcase <-done:\n\t\tcase <-time.After(10 * time.Second):\n\t\t\th.activeJobsMu.Lock()\n\t\t\tfor _, cancelFn := range h.activeJobs {\n\t\t\t\tif cancelFn != nil {\n\t\t\t\t\tcancelFn()\n\t\t\t\t}\n\t\t\t}\n\t\t\th.activeJobsMu.Unlock()\n\t\t\t<-done\n\t\t}\n\n\t\th.debouncersMu.RLock()\n\t\tdebouncers := make([]*TableDebouncer, 0, len(h.debouncers))\n\t\tfor _, td := range h.debouncers {\n\t\t\tdebouncers = append(debouncers, td)\n\t\t}\n\t\th.debouncersMu.RUnlock()\n\t\tfor _, td := range debouncers {\n\t\t\ttd.Stop()\n\t\t}\n\t})\n}",
+          "claim": "In TransmuteHandler.Stop() in Demo P13-5 of 09_tasks_solution_pg_oom_53200.md:2119-2155, Stop() first signals long-running TransmuterModule jobs via h.svc.SetStopping(true) and waits on h.wg.Wait(), then stops all TableDebouncers via td.Stop()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "claim",
+    "claim": "In TransmuterModule.Run in Demo P13-4 of 09_tasks_solution_pg_oom_53200.md:1978-1994, each chunk iteration checks IsCancelRequested (finishing with CANCELLED) and t.IsStopping() (finishing with PAUSED at the chunk boundary).",
+    "flow": "1. Loop checks t.transmuteJobRepo.IsCancelRequested(ctx, jobID) -> finishTransmuteJob CANCELLED. 2. Loop checks t.IsStopping() -> finishTransmuteJob PAUSED.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1978-1994\n\t\tfor {\n\t\t\t// Cancel check when jobID is non-empty\n\t\t\tif jobID != \"\" && t.transmuteJobRepo != nil {\n\t\t\t\tif t.transmuteJobRepo.IsCancelRequested(ctx, jobID) {\n\t\t\t\t\tt.logger.Info(\"transmute: cancelled by user request\", zap.String(\"master\", masterName), zap.String(\"job_id\", jobID))\n\t\t\t\t\tt.finishTransmuteJob(ctx, jobID, \"CANCELLED\", res.Inserted+res.Updated+res.Deleted, totalShadowRows, \"cancelled by user\", masterRow.ID)\n\t\t\t\t\treturn res, nil\n\t\t\t\t}\n\t\t\t}\n\t\t\tif t.IsStopping() {\n\t\t\t\tt.logger.Info(\"transmute: pausing at chunk boundary for graceful shutdown\",\n\t\t\t\t\tzap.String(\"master\", masterName),\n\t\t\t\t\tzap.String(\"job_id\", jobID),\n\t\t\t\t\tzap.Int64(\"last_gpay_id\", lastGpayID))\n\t\t\t\tt.finishTransmuteJob(ctx, jobID, \"PAUSED\", res.Inserted+res.Updated+res.Deleted, totalShadowRows, \"paused by worker shutdown\", masterRow.ID)\n\t\t\t\treturn res, nil\n\t\t\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3438,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7063,
+                "INCORRECT": 0.2544,
+                "UNSUPPORTED": 0.0393
+              },
+              "confidence": 0.3438,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 701,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In TransmuterModule.Run in Demo P13-4 of 09_tasks_solution_pg_oom_53200.md:1978-1994, each chunk iteration checks IsCancelRequested (finishing with CANCELLED) and t.IsStopping() (finishing with PAUSED at the chunk boundary).",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1978-1994\n\t\tfor {\n\t\t\t// Cancel check when jobID is non-empty\n\t\t\tif jobID != \"\" && t.transmuteJobRepo != nil {\n\t\t\t\tif t.transmuteJobRepo.IsCancelRequested(ctx, jobID) {\n\t\t\t\t\tt.logger.Info(\"transmute: cancelled by user request\", zap.String(\"master\", masterName), zap.String(\"job_id\", jobID))\n\t\t\t\t\tt.finishTransmuteJob(ctx, jobID, \"CANCELLED\", res.Inserted+res.Updated+res.Deleted, totalShadowRows, \"cancelled by user\", masterRow.ID)\n\t\t\t\t\treturn res, nil\n\t\t\t\t}\n\t\t\t}\n\t\t\tif t.IsStopping() {\n\t\t\t\tt.logger.Info(\"transmute: pausing at chunk boundary for graceful shutdown\",\n\t\t\t\t\tzap.String(\"master\", masterName),\n\t\t\t\t\tzap.String(\"job_id\", jobID),\n\t\t\t\t\tzap.Int64(\"last_gpay_id\", lastGpayID))\n\t\t\t\tt.finishTransmuteJob(ctx, jobID, \"PAUSED\", res.Inserted+res.Updated+res.Deleted, totalShadowRows, \"paused by worker shutdown\", masterRow.ID)\n\t\t\t\treturn res, nil\n\t\t\t}",
+          "flow": "1. Loop checks t.transmuteJobRepo.IsCancelRequested(ctx, jobID) -> finishTransmuteJob CANCELLED. 2. Loop checks t.IsStopping() -> finishTransmuteJob PAUSED."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.6479,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9012,
+                "INCORRECT": 0.0635,
+                "UNSUPPORTED": 0.0353
+              },
+              "confidence": 0.6479,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 705,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "1. Loop checks t.transmuteJobRepo.IsCancelRequested(ctx, jobID) -> finishTransmuteJob CANCELLED. 2. Loop checks t.IsStopping() -> finishTransmuteJob PAUSED.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1978-1994\n\t\tfor {\n\t\t\t// Cancel check when jobID is non-empty\n\t\t\tif jobID != \"\" && t.transmuteJobRepo != nil {\n\t\t\t\tif t.transmuteJobRepo.IsCancelRequested(ctx, jobID) {\n\t\t\t\t\tt.logger.Info(\"transmute: cancelled by user request\", zap.String(\"master\", masterName), zap.String(\"job_id\", jobID))\n\t\t\t\t\tt.finishTransmuteJob(ctx, jobID, \"CANCELLED\", res.Inserted+res.Updated+res.Deleted, totalShadowRows, \"cancelled by user\", masterRow.ID)\n\t\t\t\t\treturn res, nil\n\t\t\t\t}\n\t\t\t}\n\t\t\tif t.IsStopping() {\n\t\t\t\tt.logger.Info(\"transmute: pausing at chunk boundary for graceful shutdown\",\n\t\t\t\t\tzap.String(\"master\", masterName),\n\t\t\t\t\tzap.String(\"job_id\", jobID),\n\t\t\t\t\tzap.Int64(\"last_gpay_id\", lastGpayID))\n\t\t\t\tt.finishTransmuteJob(ctx, jobID, \"PAUSED\", res.Inserted+res.Updated+res.Deleted, totalShadowRows, \"paused by worker shutdown\", masterRow.ID)\n\t\t\t\treturn res, nil\n\t\t\t}",
+          "claim": "In TransmuterModule.Run in Demo P13-4 of 09_tasks_solution_pg_oom_53200.md:1978-1994, each chunk iteration checks IsCancelRequested (finishing with CANCELLED) and t.IsStopping() (finishing with PAUSED at the chunk boundary)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8448,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9775,
+                "NO": 0.0225
+              },
+              "confidence": 0.8448,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 592,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1978-1994\n\t\tfor {\n\t\t\t// Cancel check when jobID is non-empty\n\t\t\tif jobID != \"\" && t.transmuteJobRepo != nil {\n\t\t\t\tif t.transmuteJobRepo.IsCancelRequested(ctx, jobID) {\n\t\t\t\t\tt.logger.Info(\"transmute: cancelled by user request\", zap.String(\"master\", masterName), zap.String(\"job_id\", jobID))\n\t\t\t\t\tt.finishTransmuteJob(ctx, jobID, \"CANCELLED\", res.Inserted+res.Updated+res.Deleted, totalShadowRows, \"cancelled by user\", masterRow.ID)\n\t\t\t\t\treturn res, nil\n\t\t\t\t}\n\t\t\t}\n\t\t\tif t.IsStopping() {\n\t\t\t\tt.logger.Info(\"transmute: pausing at chunk boundary for graceful shutdown\",\n\t\t\t\t\tzap.String(\"master\", masterName),\n\t\t\t\t\tzap.String(\"job_id\", jobID),\n\t\t\t\t\tzap.Int64(\"last_gpay_id\", lastGpayID))\n\t\t\t\tt.finishTransmuteJob(ctx, jobID, \"PAUSED\", res.Inserted+res.Updated+res.Deleted, totalShadowRows, \"paused by worker shutdown\", masterRow.ID)\n\t\t\t\treturn res, nil\n\t\t\t}",
+          "claim": "In TransmuterModule.Run in Demo P13-4 of 09_tasks_solution_pg_oom_53200.md:1978-1994, each chunk iteration checks IsCancelRequested (finishing with CANCELLED) and t.IsStopping() (finishing with PAUSED at the chunk boundary)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "claim",
+    "claim": "In TableDebouncer.drainRemainingOnStop() in Demo P13-1 of 09_tasks_solution_pg_oom_53200.md:1758-1785, all queued batches in td.flushCh and remaining events in td.tasks are flushed with context.Background() before workerLoop returns.",
+    "flow": "1. drainRemainingOnStop loops reading batch := <-td.flushCh and calling td.runTransmute(context.Background(), batch). 2. In default branch, takes td.tasks under lock and calls td.runTransmute(context.Background(), tasks).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1758-1785\nfunc (td *TableDebouncer) drainRemainingOnStop() {\n\tfor {\n\t\tselect {\n\t\tcase batch := <-td.flushCh:\n\t\t\tif len(batch) > 0 {\n\t\t\t\ttd.runTransmute(context.Background(), batch)\n\t\t\t}\n\t\tdefault:\n\t\t\ttd.mu.Lock()\n\t\t\ttasks := td.tasks\n\t\t\ttd.tasks = nil\n\t\t\ttd.pendingEvents = 0\n\t\t\tif td.idleTimer != nil {\n\t\t\t\ttd.idleTimer.Stop()\n\t\t\t\ttd.idleTimer = nil\n\t\t\t}\n\t\t\tif td.maxTimer != nil {\n\t\t\t\ttd.maxTimer.Stop()\n\t\t\t\ttd.maxTimer = nil\n\t\t\t}\n\t\t\ttd.mu.Unlock()\n\t\t\tif len(tasks) > 0 {\n\t\t\t\ttd.runTransmute(context.Background(), tasks)\n\t\t\t}\n\t\t\treturn\n\t\t}\n\t}\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3984,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7431,
+                "INCORRECT": 0.2277,
+                "UNSUPPORTED": 0.0292
+              },
+              "confidence": 0.3984,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 658,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In TableDebouncer.drainRemainingOnStop() in Demo P13-1 of 09_tasks_solution_pg_oom_53200.md:1758-1785, all queued batches in td.flushCh and remaining events in td.tasks are flushed with context.Background() before workerLoop returns.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1758-1785\nfunc (td *TableDebouncer) drainRemainingOnStop() {\n\tfor {\n\t\tselect {\n\t\tcase batch := <-td.flushCh:\n\t\t\tif len(batch) > 0 {\n\t\t\t\ttd.runTransmute(context.Background(), batch)\n\t\t\t}\n\t\tdefault:\n\t\t\ttd.mu.Lock()\n\t\t\ttasks := td.tasks\n\t\t\ttd.tasks = nil\n\t\t\ttd.pendingEvents = 0\n\t\t\tif td.idleTimer != nil {\n\t\t\t\ttd.idleTimer.Stop()\n\t\t\t\ttd.idleTimer = nil\n\t\t\t}\n\t\t\tif td.maxTimer != nil {\n\t\t\t\ttd.maxTimer.Stop()\n\t\t\t\ttd.maxTimer = nil\n\t\t\t}\n\t\t\ttd.mu.Unlock()\n\t\t\tif len(tasks) > 0 {\n\t\t\t\ttd.runTransmute(context.Background(), tasks)\n\t\t\t}\n\t\t\treturn\n\t\t}\n\t}\n}",
+          "flow": "1. drainRemainingOnStop loops reading batch := <-td.flushCh and calling td.runTransmute(context.Background(), batch). 2. In default branch, takes td.tasks under lock and calls td.runTransmute(context.Background(), tasks)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.6398,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8913,
+                "INCORRECT": 0.0888,
+                "UNSUPPORTED": 0.02
+              },
+              "confidence": 0.6398,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 664,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "1. drainRemainingOnStop loops reading batch := <-td.flushCh and calling td.runTransmute(context.Background(), batch). 2. In default branch, takes td.tasks under lock and calls td.runTransmute(context.Background(), tasks).",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1758-1785\nfunc (td *TableDebouncer) drainRemainingOnStop() {\n\tfor {\n\t\tselect {\n\t\tcase batch := <-td.flushCh:\n\t\t\tif len(batch) > 0 {\n\t\t\t\ttd.runTransmute(context.Background(), batch)\n\t\t\t}\n\t\tdefault:\n\t\t\ttd.mu.Lock()\n\t\t\ttasks := td.tasks\n\t\t\ttd.tasks = nil\n\t\t\ttd.pendingEvents = 0\n\t\t\tif td.idleTimer != nil {\n\t\t\t\ttd.idleTimer.Stop()\n\t\t\t\ttd.idleTimer = nil\n\t\t\t}\n\t\t\tif td.maxTimer != nil {\n\t\t\t\ttd.maxTimer.Stop()\n\t\t\t\ttd.maxTimer = nil\n\t\t\t}\n\t\t\ttd.mu.Unlock()\n\t\t\tif len(tasks) > 0 {\n\t\t\t\ttd.runTransmute(context.Background(), tasks)\n\t\t\t}\n\t\t\treturn\n\t\t}\n\t}\n}",
+          "claim": "In TableDebouncer.drainRemainingOnStop() in Demo P13-1 of 09_tasks_solution_pg_oom_53200.md:1758-1785, all queued batches in td.flushCh and remaining events in td.tasks are flushed with context.Background() before workerLoop returns."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7085,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9488,
+                "NO": 0.0512
+              },
+              "confidence": 0.7085,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 540,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1758-1785\nfunc (td *TableDebouncer) drainRemainingOnStop() {\n\tfor {\n\t\tselect {\n\t\tcase batch := <-td.flushCh:\n\t\t\tif len(batch) > 0 {\n\t\t\t\ttd.runTransmute(context.Background(), batch)\n\t\t\t}\n\t\tdefault:\n\t\t\ttd.mu.Lock()\n\t\t\ttasks := td.tasks\n\t\t\ttd.tasks = nil\n\t\t\ttd.pendingEvents = 0\n\t\t\tif td.idleTimer != nil {\n\t\t\t\ttd.idleTimer.Stop()\n\t\t\t\ttd.idleTimer = nil\n\t\t\t}\n\t\t\tif td.maxTimer != nil {\n\t\t\t\ttd.maxTimer.Stop()\n\t\t\t\ttd.maxTimer = nil\n\t\t\t}\n\t\t\ttd.mu.Unlock()\n\t\t\tif len(tasks) > 0 {\n\t\t\t\ttd.runTransmute(context.Background(), tasks)\n\t\t\t}\n\t\t\treturn\n\t\t}\n\t}\n}",
+          "claim": "In TableDebouncer.drainRemainingOnStop() in Demo P13-1 of 09_tasks_solution_pg_oom_53200.md:1758-1785, all queued batches in td.flushCh and remaining events in td.tasks are flushed with context.Background() before workerLoop returns."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "D-API",
+    "kind": "claim",
+    "claim": "In MasterTransmuteJobHandler.CancelTransmute in Demo P13-7 of 09_tasks_solution_pg_oom_53200.md:2301-2323, PENDING, RUNNING, and PAUSED jobs are accepted, RequestCancel is called, cdc.cmd.transmute-cancel is published via h.natsPublisher, and the updated job status is returned.",
+    "flow": "1. Checks job.Status != PENDING && RUNNING && PAUSED. 2. Calls RequestCancel. 3. Publishes cdc.cmd.transmute-cancel. 4. Returns JSON with finalStatus.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:2301-2323\n\tif job.Status != \"PENDING\" && job.Status != \"RUNNING\" && job.Status != \"PAUSED\" {\n\t\treturn c.Status(409).JSON(fiber.Map{\"error\": \"job_not_cancellable\", \"status\": job.Status})\n\t}\n\tif err := h.transmuteJobRepo.RequestCancel(c.UserContext(), job.JobID); err != nil {\n\t\treturn c.Status(500).JSON(fiber.Map{\"error\": \"cancel_request_failed\"})\n\t}\n\tif h.natsPublisher != nil {\n\t\t_ = h.natsPublisher.Publish(\"cdc.cmd.transmute-cancel\", map[string]any{\n\t\t\t\"job_id\":       job.JobID,\n\t\t\t\"master_table\": job.MasterTable,\n\t\t})\n\t}\n\th.activityLogger.LogAsync(ports.ActivityEntry{\n\t\tOperation: \"transmute-cancel\", TargetTable: job.MasterTable, Status: \"requested\",\n\t\tDetails: map[string]any{\"user\": middleware.GetUsername(c), \"job_id\": job.JobID},\n\t})\n\tupdatedJob, _ := h.transmuteJobRepo.GetByID(c.UserContext(), job.JobID)\n\tfinalStatus := \"CANCEL_REQUESTED\"\n\tif updatedJob != nil {\n\t\tfinalStatus = updatedJob.Status\n\t}\n\treturn c.JSON(fiber.Map{\"message\": \"cancel requested\", \"job_id\": job.JobID, \"status\": finalStatus})\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5774,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8718,
+                "INCORRECT": 0.0858,
+                "UNSUPPORTED": 0.0424
+              },
+              "confidence": 0.5774,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 728,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In MasterTransmuteJobHandler.CancelTransmute in Demo P13-7 of 09_tasks_solution_pg_oom_53200.md:2301-2323, PENDING, RUNNING, and PAUSED jobs are accepted, RequestCancel is called, cdc.cmd.transmute-cancel is published via h.natsPublisher, and the updated job status is returned.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:2301-2323\n\tif job.Status != \"PENDING\" && job.Status != \"RUNNING\" && job.Status != \"PAUSED\" {\n\t\treturn c.Status(409).JSON(fiber.Map{\"error\": \"job_not_cancellable\", \"status\": job.Status})\n\t}\n\tif err := h.transmuteJobRepo.RequestCancel(c.UserContext(), job.JobID); err != nil {\n\t\treturn c.Status(500).JSON(fiber.Map{\"error\": \"cancel_request_failed\"})\n\t}\n\tif h.natsPublisher != nil {\n\t\t_ = h.natsPublisher.Publish(\"cdc.cmd.transmute-cancel\", map[string]any{\n\t\t\t\"job_id\":       job.JobID,\n\t\t\t\"master_table\": job.MasterTable,\n\t\t})\n\t}\n\th.activityLogger.LogAsync(ports.ActivityEntry{\n\t\tOperation: \"transmute-cancel\", TargetTable: job.MasterTable, Status: \"requested\",\n\t\tDetails: map[string]any{\"user\": middleware.GetUsername(c), \"job_id\": job.JobID},\n\t})\n\tupdatedJob, _ := h.transmuteJobRepo.GetByID(c.UserContext(), job.JobID)\n\tfinalStatus := \"CANCEL_REQUESTED\"\n\tif updatedJob != nil {\n\t\tfinalStatus = updatedJob.Status\n\t}\n\treturn c.JSON(fiber.Map{\"message\": \"cancel requested\", \"job_id\": job.JobID, \"status\": finalStatus})\n}",
+          "flow": "1. Checks job.Status != PENDING && RUNNING && PAUSED. 2. Calls RequestCancel. 3. Publishes cdc.cmd.transmute-cancel. 4. Returns JSON with finalStatus."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.1932,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.4478,
+                "INCORRECT": 0.4879,
+                "UNSUPPORTED": 0.0643
+              },
+              "confidence": 0.1932,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 733,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "1. Checks job.Status != PENDING && RUNNING && PAUSED. 2. Calls RequestCancel. 3. Publishes cdc.cmd.transmute-cancel. 4. Returns JSON with finalStatus.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:2301-2323\n\tif job.Status != \"PENDING\" && job.Status != \"RUNNING\" && job.Status != \"PAUSED\" {\n\t\treturn c.Status(409).JSON(fiber.Map{\"error\": \"job_not_cancellable\", \"status\": job.Status})\n\t}\n\tif err := h.transmuteJobRepo.RequestCancel(c.UserContext(), job.JobID); err != nil {\n\t\treturn c.Status(500).JSON(fiber.Map{\"error\": \"cancel_request_failed\"})\n\t}\n\tif h.natsPublisher != nil {\n\t\t_ = h.natsPublisher.Publish(\"cdc.cmd.transmute-cancel\", map[string]any{\n\t\t\t\"job_id\":       job.JobID,\n\t\t\t\"master_table\": job.MasterTable,\n\t\t})\n\t}\n\th.activityLogger.LogAsync(ports.ActivityEntry{\n\t\tOperation: \"transmute-cancel\", TargetTable: job.MasterTable, Status: \"requested\",\n\t\tDetails: map[string]any{\"user\": middleware.GetUsername(c), \"job_id\": job.JobID},\n\t})\n\tupdatedJob, _ := h.transmuteJobRepo.GetByID(c.UserContext(), job.JobID)\n\tfinalStatus := \"CANCEL_REQUESTED\"\n\tif updatedJob != nil {\n\t\tfinalStatus = updatedJob.Status\n\t}\n\treturn c.JSON(fiber.Map{\"message\": \"cancel requested\", \"job_id\": job.JobID, \"status\": finalStatus})\n}",
+          "claim": "In MasterTransmuteJobHandler.CancelTransmute in Demo P13-7 of 09_tasks_solution_pg_oom_53200.md:2301-2323, PENDING, RUNNING, and PAUSED jobs are accepted, RequestCancel is called, cdc.cmd.transmute-cancel is published via h.natsPublisher, and the updated job status is returned."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7385,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9557,
+                "NO": 0.0443
+              },
+              "confidence": 0.7385,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 620,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:2301-2323\n\tif job.Status != \"PENDING\" && job.Status != \"RUNNING\" && job.Status != \"PAUSED\" {\n\t\treturn c.Status(409).JSON(fiber.Map{\"error\": \"job_not_cancellable\", \"status\": job.Status})\n\t}\n\tif err := h.transmuteJobRepo.RequestCancel(c.UserContext(), job.JobID); err != nil {\n\t\treturn c.Status(500).JSON(fiber.Map{\"error\": \"cancel_request_failed\"})\n\t}\n\tif h.natsPublisher != nil {\n\t\t_ = h.natsPublisher.Publish(\"cdc.cmd.transmute-cancel\", map[string]any{\n\t\t\t\"job_id\":       job.JobID,\n\t\t\t\"master_table\": job.MasterTable,\n\t\t})\n\t}\n\th.activityLogger.LogAsync(ports.ActivityEntry{\n\t\tOperation: \"transmute-cancel\", TargetTable: job.MasterTable, Status: \"requested\",\n\t\tDetails: map[string]any{\"user\": middleware.GetUsername(c), \"job_id\": job.JobID},\n\t})\n\tupdatedJob, _ := h.transmuteJobRepo.GetByID(c.UserContext(), job.JobID)\n\tfinalStatus := \"CANCEL_REQUESTED\"\n\tif updatedJob != nil {\n\t\tfinalStatus = updatedJob.Status\n\t}\n\treturn c.JSON(fiber.Map{\"message\": \"cancel requested\", \"job_id\": job.JobID, \"status\": finalStatus})\n}",
+          "claim": "In MasterTransmuteJobHandler.CancelTransmute in Demo P13-7 of 09_tasks_solution_pg_oom_53200.md:2301-2323, PENDING, RUNNING, and PAUSED jobs are accepted, RequestCancel is called, cdc.cmd.transmute-cancel is published via h.natsPublisher, and the updated job status is returned."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "CTRL-T1",
+    "kind": "control_true",
+    "claim": "In StuckJobReaper.reapOnce in stuck_job_reaper.go:135-151, PENDING and RUNNING rows in cdc_system.transmute_jobs with updated_at older than 10 minutes are updated to status = 'FAILED' with error_message 'reaper: timeout exceeded'.",
+    "flow": "1. reapOnce executes UPDATE on cdc_system.transmute_jobs. 2. Rows in PENDING or RUNNING with updated_at < NOW() - 10 minutes are marked FAILED.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/messaging/stuck_job_reaper.go:135-151\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_jobs\n\t\t   SET status = 'FAILED',\n\t\t       error_message = COALESCE(NULLIF(error_message, ''), 'reaper: timeout exceeded'),\n\t\t       finished_at = NOW()\n\t\t WHERE status IN ('PENDING', 'RUNNING')\n\t\t   AND updated_at < NOW() - INTERVAL '10 minutes'\n\t`).Error",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6037,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8784,
+                "INCORRECT": 0.0939,
+                "UNSUPPORTED": 0.0277
+              },
+              "confidence": 0.6037,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 421,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In StuckJobReaper.reapOnce in stuck_job_reaper.go:135-151, PENDING and RUNNING rows in cdc_system.transmute_jobs with updated_at older than 10 minutes are updated to status = 'FAILED' with error_message 'reaper: timeout exceeded'.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/messaging/stuck_job_reaper.go:135-151\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_jobs\n\t\t   SET status = 'FAILED',\n\t\t       error_message = COALESCE(NULLIF(error_message, ''), 'reaper: timeout exceeded'),\n\t\t       finished_at = NOW()\n\t\t WHERE status IN ('PENDING', 'RUNNING')\n\t\t   AND updated_at < NOW() - INTERVAL '10 minutes'\n\t`).Error",
+          "flow": "1. reapOnce executes UPDATE on cdc_system.transmute_jobs. 2. Rows in PENDING or RUNNING with updated_at < NOW() - 10 minutes are marked FAILED."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.2012,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3331,
+                "INCORRECT": 0.5886,
+                "UNSUPPORTED": 0.0783
+              },
+              "confidence": 0.2012,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 425,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "1. reapOnce executes UPDATE on cdc_system.transmute_jobs. 2. Rows in PENDING or RUNNING with updated_at < NOW() - 10 minutes are marked FAILED.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/messaging/stuck_job_reaper.go:135-151\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_jobs\n\t\t   SET status = 'FAILED',\n\t\t       error_message = COALESCE(NULLIF(error_message, ''), 'reaper: timeout exceeded'),\n\t\t       finished_at = NOW()\n\t\t WHERE status IN ('PENDING', 'RUNNING')\n\t\t   AND updated_at < NOW() - INTERVAL '10 minutes'\n\t`).Error",
+          "claim": "In StuckJobReaper.reapOnce in stuck_job_reaper.go:135-151, PENDING and RUNNING rows in cdc_system.transmute_jobs with updated_at older than 10 minutes are updated to status = 'FAILED' with error_message 'reaper: timeout exceeded'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8396,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9766,
+                "NO": 0.0234
+              },
+              "confidence": 0.8396,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 316,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/messaging/stuck_job_reaper.go:135-151\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_jobs\n\t\t   SET status = 'FAILED',\n\t\t       error_message = COALESCE(NULLIF(error_message, ''), 'reaper: timeout exceeded'),\n\t\t       finished_at = NOW()\n\t\t WHERE status IN ('PENDING', 'RUNNING')\n\t\t   AND updated_at < NOW() - INTERVAL '10 minutes'\n\t`).Error",
+          "claim": "In StuckJobReaper.reapOnce in stuck_job_reaper.go:135-151, PENDING and RUNNING rows in cdc_system.transmute_jobs with updated_at older than 10 minutes are updated to status = 'FAILED' with error_message 'reaper: timeout exceeded'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-F1",
+    "kind": "control_false",
+    "claim": "In MasterTransmuteJobHandler.CancelTransmute in master_transmute_job_handler.go:118-128, PENDING jobs are deleted from cdc_system.transmute_jobs using DELETE FROM.",
+    "flow": "False control claim.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_transmute_job_handler.go:118-128\n\tif job.Status != \"PENDING\" && job.Status != \"RUNNING\" {\n\t\treturn c.Status(409).JSON(fiber.Map{\"error\": \"job_not_cancellable\", \"status\": job.Status})\n\t}\n\tif err := h.transmuteJobRepo.RequestCancel(c.UserContext(), job.JobID); err != nil {\n\t\treturn c.Status(500).JSON(fiber.Map{\"error\": \"cancel_request_failed\"})\n\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.3937,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.1581,
+                "INCORRECT": 0.7766,
+                "UNSUPPORTED": 0.0653
+              },
+              "confidence": 0.3937,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 346,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In MasterTransmuteJobHandler.CancelTransmute in master_transmute_job_handler.go:118-128, PENDING jobs are deleted from cdc_system.transmute_jobs using DELETE FROM.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_transmute_job_handler.go:118-128\n\tif job.Status != \"PENDING\" && job.Status != \"RUNNING\" {\n\t\treturn c.Status(409).JSON(fiber.Map{\"error\": \"job_not_cancellable\", \"status\": job.Status})\n\t}\n\tif err := h.transmuteJobRepo.RequestCancel(c.UserContext(), job.JobID); err != nil {\n\t\treturn c.Status(500).JSON(fiber.Map{\"error\": \"cancel_request_failed\"})\n\t}",
+          "flow": "False control claim."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.1457,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.1068,
+                "INCORRECT": 0.3516,
+                "UNSUPPORTED": 0.5416
+              },
+              "confidence": 0.1457,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 351,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "False control claim.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_transmute_job_handler.go:118-128\n\tif job.Status != \"PENDING\" && job.Status != \"RUNNING\" {\n\t\treturn c.Status(409).JSON(fiber.Map{\"error\": \"job_not_cancellable\", \"status\": job.Status})\n\t}\n\tif err := h.transmuteJobRepo.RequestCancel(c.UserContext(), job.JobID); err != nil {\n\t\treturn c.Status(500).JSON(fiber.Map{\"error\": \"cancel_request_failed\"})\n\t}",
+          "claim": "In MasterTransmuteJobHandler.CancelTransmute in master_transmute_job_handler.go:118-128, PENDING jobs are deleted from cdc_system.transmute_jobs using DELETE FROM."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.4771,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.1178,
+                "NO": 0.8822
+              },
+              "confidence": 0.4771,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 280,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_transmute_job_handler.go:118-128\n\tif job.Status != \"PENDING\" && job.Status != \"RUNNING\" {\n\t\treturn c.Status(409).JSON(fiber.Map{\"error\": \"job_not_cancellable\", \"status\": job.Status})\n\t}\n\tif err := h.transmuteJobRepo.RequestCancel(c.UserContext(), job.JobID); err != nil {\n\t\treturn c.Status(500).JSON(fiber.Map{\"error\": \"cancel_request_failed\"})\n\t}",
+          "claim": "In MasterTransmuteJobHandler.CancelTransmute in master_transmute_job_handler.go:118-128, PENDING jobs are deleted from cdc_system.transmute_jobs using DELETE FROM."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-F2",
+    "kind": "control_false",
+    "claim": "In batch_transform_handler.go lines 97-101, HandleBatchTransform runs synchronously on the main thread without spawning a goroutine.",
+    "flow": "False control claim.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:97-101\n\tctx := observability.ExtractNATSHeader(context.Background(), msg.Header)\n\tctx = observability.WithDBTraceModule(ctx, \"batch_transform\")\n\t// Spawn goroutine — NATS ack happens immediately after this line\n\tgo h.runTransformJob(ctx, payload)",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2452,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5155,
+                "INCORRECT": 0.4451,
+                "UNSUPPORTED": 0.0394
+              },
+              "confidence": 0.2452,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 279,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In batch_transform_handler.go lines 97-101, HandleBatchTransform runs synchronously on the main thread without spawning a goroutine.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:97-101\n\tctx := observability.ExtractNATSHeader(context.Background(), msg.Header)\n\tctx = observability.WithDBTraceModule(ctx, \"batch_transform\")\n\t// Spawn goroutine — NATS ack happens immediately after this line\n\tgo h.runTransformJob(ctx, payload)",
+          "flow": "False control claim."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.099,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4597,
+                "INCORRECT": 0.4088,
+                "UNSUPPORTED": 0.1316
+              },
+              "confidence": 0.099,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 284,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "False control claim.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:97-101\n\tctx := observability.ExtractNATSHeader(context.Background(), msg.Header)\n\tctx = observability.WithDBTraceModule(ctx, \"batch_transform\")\n\t// Spawn goroutine — NATS ack happens immediately after this line\n\tgo h.runTransformJob(ctx, payload)",
+          "claim": "In batch_transform_handler.go lines 97-101, HandleBatchTransform runs synchronously on the main thread without spawning a goroutine."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.0962,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.6805,
+                "NO": 0.3195
+              },
+              "confidence": 0.0962,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 213,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:97-101\n\tctx := observability.ExtractNATSHeader(context.Background(), msg.Header)\n\tctx = observability.WithDBTraceModule(ctx, \"batch_transform\")\n\t// Spawn goroutine — NATS ack happens immediately after this line\n\tgo h.runTransformJob(ctx, payload)",
+          "claim": "In batch_transform_handler.go lines 97-101, HandleBatchTransform runs synchronously on the main thread without spawning a goroutine."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

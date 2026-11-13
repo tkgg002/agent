@@ -1,0 +1,905 @@
+[
+  {
+    "id": "A-F1-ARRAY",
+    "kind": "claim",
+    "claim": "In transmuter_utils.go, coerceForColumn checks isPostgresArrayColumnType(dataType) and calls formatPostgresArrayLiteral(v) to return a PostgreSQL array literal string when ok is true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:352-375\n\tif isTimestampColumnType(dataType) {\n\t\tswitch n := v.(type) {\n\t\tcase int64:\n\t\t\treturn epochToTime(n)\n\t\tcase float64:\n\t\t\treturn epochToTime(int64(n))\n\t\t}\n\t\treturn v\n\t}\n\tif isPostgresArrayColumnType(dataType) {\n\t\tif arrLit, ok := formatPostgresArrayLiteral(v); ok {\n\t\t\treturn arrLit\n\t\t}\n\t\treturn v\n\t}\n\t_, isMap := v.(map[string]any)\n\t_, isSlice := v.([]any)\n\tcomposite := isMap || isSlice\n\tif isJSONColumnType(dataType) || composite {\n\t\tif isJSONColumnType(dataType) {\n\t\t\tif s, ok := v.(string); ok {\n\t\t\t\tif trimmed := strings.TrimSpace(s); (strings.HasPrefix(trimmed, \"{\") || strings.HasPrefix(trimmed, \"[\") || (strings.HasPrefix(trimmed, \"\\\"\") && strings.HasSuffix(trimmed, \"\\\"\"))) && json.Valid([]byte(trimmed)) {\n\t\t\t\t\treturn trimmed\n\t\t\t\t}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_subset_array_utils.go:22-75\n// (e.g. \"TEXT[]\", \"BIGINT[]\", \"INTEGER[]\", \"UUID[]\", \"_text\", \"_int8\", \"varchar[]\").\nfunc isPostgresArrayColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(stripColTypeFlags(dataType)))\n\tif strings.Contains(dt, \"[]\") {\n\t\treturn true\n\t}\n\tswitch dt {\n\tcase \"_text\", \"_varchar\", \"_bpchar\", \"_int2\", \"_int4\", \"_int8\", \"_uuid\", \"_numeric\", \"_float4\", \"_float8\", \"_bool\":\n\t\treturn true\n\t}\n\treturn false\n}\n\n// formatPostgresArrayLiteral converts a Go slice or JSON array string (`[\"a\",\"b\"]`)\n// into a valid PostgreSQL array literal (`{\"a\",\"b\"}` or `{1,2}`) to prevent SQLSTATE 22P02.\nfunc formatPostgresArrayLiteral(v any) (string, bool) {\n\tswitch arr := v.(type) {\n\tcase []any:\n\t\treturn formatPostgresArraySlice(arr), true\n\tcase []string:\n\t\telems := make([]any, len(arr))\n\t\tfor i, s := range arr {\n\t\t\telems[i] = s\n\t\t}\n\t\treturn formatPostgresArraySlice(elems), true\n\tcase []int64:\n\t\telems := make([]any, len(arr))\n\t\tfor i, n := range arr {\n\t\t\telems[i] = n\n\t\t}\n\t\treturn formatPostgresArraySlice(elems), true\n\tcase []int:\n\t\telems := make([]any, len(arr))\n\t\tfor i, n := range arr {\n\t\t\telems[i] = n\n\t\t}\n\t\treturn formatPostgresArraySlice(elems), true\n\tcase string:\n\t\ttrimmed := strings.TrimSpace(arr)\n\t\tif strings.HasPrefix(trimmed, \"{\") && strings.HasSuffix(trimmed, \"}\") {\n\t\t\treturn trimmed, true\n\t\t}\n\t\tif strings.HasPrefix(trimmed, \"[\") && strings.HasSuffix(trimmed, \"]\") {\n\t\t\tvar parsed []any\n\t\t\tdec := json.NewDecoder(strings.NewReader(trimmed))\n\t\t\tdec.UseNumber()\n\t\t\tif err := dec.Decode(&parsed); err == nil {\n\t\t\t\treturn formatPostgresArraySlice(parsed), true\n\t\t\t}\n\t\t}\n\t}\n\treturn \"\", false\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2261,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5307,
+                "INCORRECT": 0.4194,
+                "UNSUPPORTED": 0.0499
+              },
+              "confidence": 0.2261,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmuter_utils.go, coerceForColumn checks isPostgresArrayColumnType(dataType) and calls formatPostgresArrayLiteral(v) to return a PostgreSQL array literal string when ok is true.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:352-375\n\tif isTimestampColumnType(dataType) {\n\t\tswitch n := v.(type) {\n\t\tcase int64:\n\t\t\treturn epochToTime(n)\n\t\tcase float64:\n\t\t\treturn epochToTime(int64(n))\n\t\t}\n\t\treturn v\n\t}\n\tif isPostgresArrayColumnType(dataType) {\n\t\tif arrLit, ok := formatPostgresArrayLiteral(v); ok {\n\t\t\treturn arrLit\n\t\t}\n\t\treturn v\n\t}\n\t_, isMap := v.(map[string]any)\n\t_, isSlice := v.([]any)\n\tcomposite := isMap || isSlice\n\tif isJSONColumnType(dataType) || composite {\n\t\tif isJSONColumnType(dataType) {\n\t\t\tif s, ok := v.(string); ok {\n\t\t\t\tif trimmed := strings.TrimSpace(s); (strings.HasPrefix(trimmed, \"{\") || strings.HasPrefix(trimmed, \"[\") || (strings.HasPrefix(trimmed, \"\\\"\") && strings.HasSuffix(trimmed, \"\\\"\"))) && json.Valid([]byte(trimmed)) {\n\t\t\t\t\treturn trimmed\n\t\t\t\t}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_subset_array_utils.go:22-75\n// (e.g. \"TEXT[]\", \"BIGINT[]\", \"INTEGER[]\", \"UUID[]\", \"_text\", \"_int8\", \"varchar[]\").\nfunc isPostgresArrayColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(stripColTypeFlags(dataType)))\n\tif strings.Contains(dt, \"[]\") {\n\t\treturn true\n\t}\n\tswitch dt {\n\tcase \"_text\", \"_varchar\", \"_bpchar\", \"_int2\", \"_int4\", \"_int8\", \"_uuid\", \"_numeric\", \"_float4\", \"_float8\", \"_bool\":\n\t\treturn true\n\t}\n\treturn false\n}\n\n// formatPostgresArrayLiteral converts a Go slice or JSON array string (`[\"a\",\"b\"]`)\n// into a valid PostgreSQL array literal (`{\"a\",\"b\"}` or `{1,2}`) to prevent SQLSTATE 22P02.\nfunc formatPostgresArrayLiteral(v any) (string, bool) {\n\tswitch arr := v.(type) {\n\tcase []any:\n\t\treturn formatPostgresArraySlice(arr), true\n\tcase []string:\n\t\telems := make([]any, len(arr))\n\t\tfor i, s := range arr {\n\t\t\telems[i] = s\n\t\t}\n\t\treturn formatPostgresArraySlice(elems), true\n\tcase []int64:\n\t\telems := make([]any, len(arr))\n\t\tfor i, n := range arr {\n\t\t\telems[i] = n\n\t\t}\n\t\treturn formatPostgresArraySlice(elems), true\n\tcase []int:\n\t\telems := make([]any, len(arr))\n\t\tfor i, n := range arr {\n\t\t\telems[i] = n\n\t\t}\n\t\treturn formatPostgresArraySlice(elems), true\n\tcase string:\n\t\ttrimmed := strings.TrimSpace(arr)\n\t\tif strings.HasPrefix(trimmed, \"{\") && strings.HasSuffix(trimmed, \"}\") {\n\t\t\treturn trimmed, true\n\t\t}\n\t\tif strings.HasPrefix(trimmed, \"[\") && strings.HasSuffix(trimmed, \"]\") {\n\t\t\tvar parsed []any\n\t\t\tdec := json.NewDecoder(strings.NewReader(trimmed))\n\t\t\tdec.UseNumber()\n\t\t\tif err := dec.Decode(&parsed); err == nil {\n\t\t\t\treturn formatPostgresArraySlice(parsed), true\n\t\t\t}\n\t\t}\n\t}\n\treturn \"\", false\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2614,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6655,
+                "INCORRECT": 0.2625,
+                "UNSUPPORTED": 0.072
+              },
+              "confidence": 0.2614,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:352-375\n\tif isTimestampColumnType(dataType) {\n\t\tswitch n := v.(type) {\n\t\tcase int64:\n\t\t\treturn epochToTime(n)\n\t\tcase float64:\n\t\t\treturn epochToTime(int64(n))\n\t\t}\n\t\treturn v\n\t}\n\tif isPostgresArrayColumnType(dataType) {\n\t\tif arrLit, ok := formatPostgresArrayLiteral(v); ok {\n\t\t\treturn arrLit\n\t\t}\n\t\treturn v\n\t}\n\t_, isMap := v.(map[string]any)\n\t_, isSlice := v.([]any)\n\tcomposite := isMap || isSlice\n\tif isJSONColumnType(dataType) || composite {\n\t\tif isJSONColumnType(dataType) {\n\t\t\tif s, ok := v.(string); ok {\n\t\t\t\tif trimmed := strings.TrimSpace(s); (strings.HasPrefix(trimmed, \"{\") || strings.HasPrefix(trimmed, \"[\") || (strings.HasPrefix(trimmed, \"\\\"\") && strings.HasSuffix(trimmed, \"\\\"\"))) && json.Valid([]byte(trimmed)) {\n\t\t\t\t\treturn trimmed\n\t\t\t\t}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_subset_array_utils.go:22-75\n// (e.g. \"TEXT[]\", \"BIGINT[]\", \"INTEGER[]\", \"UUID[]\", \"_text\", \"_int8\", \"varchar[]\").\nfunc isPostgresArrayColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(stripColTypeFlags(dataType)))\n\tif strings.Contains(dt, \"[]\") {\n\t\treturn true\n\t}\n\tswitch dt {\n\tcase \"_text\", \"_varchar\", \"_bpchar\", \"_int2\", \"_int4\", \"_int8\", \"_uuid\", \"_numeric\", \"_float4\", \"_float8\", \"_bool\":\n\t\treturn true\n\t}\n\treturn false\n}\n\n// formatPostgresArrayLiteral converts a Go slice or JSON array string (`[\"a\",\"b\"]`)\n// into a valid PostgreSQL array literal (`{\"a\",\"b\"}` or `{1,2}`) to prevent SQLSTATE 22P02.\nfunc formatPostgresArrayLiteral(v any) (string, bool) {\n\tswitch arr := v.(type) {\n\tcase []any:\n\t\treturn formatPostgresArraySlice(arr), true\n\tcase []string:\n\t\telems := make([]any, len(arr))\n\t\tfor i, s := range arr {\n\t\t\telems[i] = s\n\t\t}\n\t\treturn formatPostgresArraySlice(elems), true\n\tcase []int64:\n\t\telems := make([]any, len(arr))\n\t\tfor i, n := range arr {\n\t\t\telems[i] = n\n\t\t}\n\t\treturn formatPostgresArraySlice(elems), true\n\tcase []int:\n\t\telems := make([]any, len(arr))\n\t\tfor i, n := range arr {\n\t\t\telems[i] = n\n\t\t}\n\t\treturn formatPostgresArraySlice(elems), true\n\tcase string:\n\t\ttrimmed := strings.TrimSpace(arr)\n\t\tif strings.HasPrefix(trimmed, \"{\") && strings.HasSuffix(trimmed, \"}\") {\n\t\t\treturn trimmed, true\n\t\t}\n\t\tif strings.HasPrefix(trimmed, \"[\") && strings.HasSuffix(trimmed, \"]\") {\n\t\t\tvar parsed []any\n\t\t\tdec := json.NewDecoder(strings.NewReader(trimmed))\n\t\t\tdec.UseNumber()\n\t\t\tif err := dec.Decode(&parsed); err == nil {\n\t\t\t\treturn formatPostgresArraySlice(parsed), true\n\t\t\t}\n\t\t}\n\t}\n\treturn \"\", false\n}",
+          "claim": "In transmuter_utils.go, coerceForColumn checks isPostgresArrayColumnType(dataType) and calls formatPostgresArrayLiteral(v) to return a PostgreSQL array literal string when ok is true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6294,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9288,
+                "NO": 0.0712
+              },
+              "confidence": 0.6294,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:352-375\n\tif isTimestampColumnType(dataType) {\n\t\tswitch n := v.(type) {\n\t\tcase int64:\n\t\t\treturn epochToTime(n)\n\t\tcase float64:\n\t\t\treturn epochToTime(int64(n))\n\t\t}\n\t\treturn v\n\t}\n\tif isPostgresArrayColumnType(dataType) {\n\t\tif arrLit, ok := formatPostgresArrayLiteral(v); ok {\n\t\t\treturn arrLit\n\t\t}\n\t\treturn v\n\t}\n\t_, isMap := v.(map[string]any)\n\t_, isSlice := v.([]any)\n\tcomposite := isMap || isSlice\n\tif isJSONColumnType(dataType) || composite {\n\t\tif isJSONColumnType(dataType) {\n\t\t\tif s, ok := v.(string); ok {\n\t\t\t\tif trimmed := strings.TrimSpace(s); (strings.HasPrefix(trimmed, \"{\") || strings.HasPrefix(trimmed, \"[\") || (strings.HasPrefix(trimmed, \"\\\"\") && strings.HasSuffix(trimmed, \"\\\"\"))) && json.Valid([]byte(trimmed)) {\n\t\t\t\t\treturn trimmed\n\t\t\t\t}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_subset_array_utils.go:22-75\n// (e.g. \"TEXT[]\", \"BIGINT[]\", \"INTEGER[]\", \"UUID[]\", \"_text\", \"_int8\", \"varchar[]\").\nfunc isPostgresArrayColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(stripColTypeFlags(dataType)))\n\tif strings.Contains(dt, \"[]\") {\n\t\treturn true\n\t}\n\tswitch dt {\n\tcase \"_text\", \"_varchar\", \"_bpchar\", \"_int2\", \"_int4\", \"_int8\", \"_uuid\", \"_numeric\", \"_float4\", \"_float8\", \"_bool\":\n\t\treturn true\n\t}\n\treturn false\n}\n\n// formatPostgresArrayLiteral converts a Go slice or JSON array string (`[\"a\",\"b\"]`)\n// into a valid PostgreSQL array literal (`{\"a\",\"b\"}` or `{1,2}`) to prevent SQLSTATE 22P02.\nfunc formatPostgresArrayLiteral(v any) (string, bool) {\n\tswitch arr := v.(type) {\n\tcase []any:\n\t\treturn formatPostgresArraySlice(arr), true\n\tcase []string:\n\t\telems := make([]any, len(arr))\n\t\tfor i, s := range arr {\n\t\t\telems[i] = s\n\t\t}\n\t\treturn formatPostgresArraySlice(elems), true\n\tcase []int64:\n\t\telems := make([]any, len(arr))\n\t\tfor i, n := range arr {\n\t\t\telems[i] = n\n\t\t}\n\t\treturn formatPostgresArraySlice(elems), true\n\tcase []int:\n\t\telems := make([]any, len(arr))\n\t\tfor i, n := range arr {\n\t\t\telems[i] = n\n\t\t}\n\t\treturn formatPostgresArraySlice(elems), true\n\tcase string:\n\t\ttrimmed := strings.TrimSpace(arr)\n\t\tif strings.HasPrefix(trimmed, \"{\") && strings.HasSuffix(trimmed, \"}\") {\n\t\t\treturn trimmed, true\n\t\t}\n\t\tif strings.HasPrefix(trimmed, \"[\") && strings.HasSuffix(trimmed, \"]\") {\n\t\t\tvar parsed []any\n\t\t\tdec := json.NewDecoder(strings.NewReader(trimmed))\n\t\t\tdec.UseNumber()\n\t\t\tif err := dec.Decode(&parsed); err == nil {\n\t\t\t\treturn formatPostgresArraySlice(parsed), true\n\t\t\t}\n\t\t}\n\t}\n\treturn \"\", false\n}",
+          "claim": "In transmuter_utils.go, coerceForColumn checks isPostgresArrayColumnType(dataType) and calls formatPostgresArrayLiteral(v) to return a PostgreSQL array literal string when ok is true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-F2-RULE-FLAG",
+    "kind": "claim",
+    "claim": "In transmuter_subset_array_utils.go, IsTypePresenceRule checks the @type_presence: prefix, IsJSONValueSubsetRule checks { and } braces, and buildColTypesFromRules appends @type_presence or @value_subset flags to colTypes[r.TargetColumn].",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_subset_array_utils.go:122-204\n// IsTypePresenceRule returns true if the rule's SourceField uses the JSON Subset Type/Presence mode (`@type_presence:{...}`).\nfunc IsTypePresenceRule(sourceField string) bool {\n\treturn strings.HasPrefix(strings.TrimSpace(sourceField), typePresencePrefix)\n}\n\nfunc isTypePresenceRule(sourceField string) bool {\n\treturn IsTypePresenceRule(sourceField)\n}\n\n// IsJSONValueSubsetRule returns true if the rule's SourceField uses the JSON Subset Value mode (`{fieldA,fieldB,...}`).\nfunc IsJSONValueSubsetRule(sourceField string) bool {\n\tsf := strings.TrimSpace(sourceField)\n\treturn strings.HasPrefix(sf, \"{\") && strings.HasSuffix(sf, \"}\") && len(sf) > 2\n}\n\n// IsJSONSubsetRule returns true when a mapping rule is configured in JSON Subset mode (either Type/Presence or Value).\nfunc IsJSONSubsetRule(sourceField string) bool {\n\treturn IsTypePresenceRule(sourceField) || IsJSONValueSubsetRule(sourceField)\n}\n\n// ParseTypePresenceFields strips the prefix and extracts the field list from `@type_presence:{...}`.\nfunc ParseTypePresenceFields(sourceField string) []string {\n\tinner := strings.TrimPrefix(strings.TrimSpace(sourceField), typePresencePrefix)\n\tinner = strings.TrimSpace(inner)\n\tinner = strings.TrimPrefix(inner, \"{\")\n\tinner = strings.TrimSuffix(inner, \"}\")\n\tif inner == \"\" {\n\t\treturn nil\n\t}\n\tparts := strings.Split(inner, \",\")\n\tresult := make([]string, 0, len(parts))\n\tfor _, p := range parts {\n\t\tp = strings.TrimSpace(p)\n\t\tif p != \"\" {\n\t\t\tresult = append(result, p)\n\t\t}\n\t}\n\treturn result\n}\n\nfunc parseTypePresenceFields(sourceField string) []string {\n\treturn ParseTypePresenceFields(sourceField)\n}\n\n// BuildTypePresenceSubset produces a flat map of {field -> bsonTypeString} for a given raw JSON document and list of fields.\nfunc BuildTypePresenceSubset(rawStr string, fields []string) map[string]any {\n\tresult := make(map[string]any, len(fields))\n\tfor _, field := range fields {\n\t\tgres := gjson.Get(rawStr, field)\n\t\tif !gres.Exists() {\n\t\t\tgres = gjson.Get(rawStr, \"after.\"+field)\n\t\t}\n\t\tif !gres.Exists() {\n\t\t\tcontinue\n\t\t}\n\t\tif gres.Type == gjson.Null {\n\t\t\tresult[field] = \"null\"\n\t\t\tcontinue\n\t\t}\n\t\tval := gjsonValueToGo(gres)\n\t\tresult[field] = detectBsonType(val)\n\t}\n\treturn result\n}\n\nfunc buildTypePresenceSubset(rawStr string, fields []string) map[string]any {\n\treturn BuildTypePresenceSubset(rawStr, fields)\n}\n\nfunc buildColTypesFromRules(rules []mappingRuleRow) map[string]string {\n\tcolTypes := make(map[string]string, len(rules))\n\tfor _, r := range rules {\n\t\tdt := strings.TrimSpace(r.DataType)\n\t\tif IsTypePresenceRule(r.SourceField) {\n\t\t\tcolTypes[r.TargetColumn] = dt + \" \" + colTypeFlagTypePresence\n\t\t} else if IsJSONValueSubsetRule(r.SourceField) {\n\t\t\tcolTypes[r.TargetColumn] = dt + \" \" + colTypeFlagValueSubset\n\t\t} else {\n\t\t\tcolTypes[r.TargetColumn] = dt\n\t\t}\n\t}\n\treturn colTypes\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3324,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7096,
+                "INCORRECT": 0.2419,
+                "UNSUPPORTED": 0.0485
+              },
+              "confidence": 0.3324,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmuter_subset_array_utils.go, IsTypePresenceRule checks the @type_presence: prefix, IsJSONValueSubsetRule checks { and } braces, and buildColTypesFromRules appends @type_presence or @value_subset flags to colTypes[r.TargetColumn].",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_subset_array_utils.go:122-204\n// IsTypePresenceRule returns true if the rule's SourceField uses the JSON Subset Type/Presence mode (`@type_presence:{...}`).\nfunc IsTypePresenceRule(sourceField string) bool {\n\treturn strings.HasPrefix(strings.TrimSpace(sourceField), typePresencePrefix)\n}\n\nfunc isTypePresenceRule(sourceField string) bool {\n\treturn IsTypePresenceRule(sourceField)\n}\n\n// IsJSONValueSubsetRule returns true if the rule's SourceField uses the JSON Subset Value mode (`{fieldA,fieldB,...}`).\nfunc IsJSONValueSubsetRule(sourceField string) bool {\n\tsf := strings.TrimSpace(sourceField)\n\treturn strings.HasPrefix(sf, \"{\") && strings.HasSuffix(sf, \"}\") && len(sf) > 2\n}\n\n// IsJSONSubsetRule returns true when a mapping rule is configured in JSON Subset mode (either Type/Presence or Value).\nfunc IsJSONSubsetRule(sourceField string) bool {\n\treturn IsTypePresenceRule(sourceField) || IsJSONValueSubsetRule(sourceField)\n}\n\n// ParseTypePresenceFields strips the prefix and extracts the field list from `@type_presence:{...}`.\nfunc ParseTypePresenceFields(sourceField string) []string {\n\tinner := strings.TrimPrefix(strings.TrimSpace(sourceField), typePresencePrefix)\n\tinner = strings.TrimSpace(inner)\n\tinner = strings.TrimPrefix(inner, \"{\")\n\tinner = strings.TrimSuffix(inner, \"}\")\n\tif inner == \"\" {\n\t\treturn nil\n\t}\n\tparts := strings.Split(inner, \",\")\n\tresult := make([]string, 0, len(parts))\n\tfor _, p := range parts {\n\t\tp = strings.TrimSpace(p)\n\t\tif p != \"\" {\n\t\t\tresult = append(result, p)\n\t\t}\n\t}\n\treturn result\n}\n\nfunc parseTypePresenceFields(sourceField string) []string {\n\treturn ParseTypePresenceFields(sourceField)\n}\n\n// BuildTypePresenceSubset produces a flat map of {field -> bsonTypeString} for a given raw JSON document and list of fields.\nfunc BuildTypePresenceSubset(rawStr string, fields []string) map[string]any {\n\tresult := make(map[string]any, len(fields))\n\tfor _, field := range fields {\n\t\tgres := gjson.Get(rawStr, field)\n\t\tif !gres.Exists() {\n\t\t\tgres = gjson.Get(rawStr, \"after.\"+field)\n\t\t}\n\t\tif !gres.Exists() {\n\t\t\tcontinue\n\t\t}\n\t\tif gres.Type == gjson.Null {\n\t\t\tresult[field] = \"null\"\n\t\t\tcontinue\n\t\t}\n\t\tval := gjsonValueToGo(gres)\n\t\tresult[field] = detectBsonType(val)\n\t}\n\treturn result\n}\n\nfunc buildTypePresenceSubset(rawStr string, fields []string) map[string]any {\n\treturn BuildTypePresenceSubset(rawStr, fields)\n}\n\nfunc buildColTypesFromRules(rules []mappingRuleRow) map[string]string {\n\tcolTypes := make(map[string]string, len(rules))\n\tfor _, r := range rules {\n\t\tdt := strings.TrimSpace(r.DataType)\n\t\tif IsTypePresenceRule(r.SourceField) {\n\t\t\tcolTypes[r.TargetColumn] = dt + \" \" + colTypeFlagTypePresence\n\t\t} else if IsJSONValueSubsetRule(r.SourceField) {\n\t\t\tcolTypes[r.TargetColumn] = dt + \" \" + colTypeFlagValueSubset\n\t\t} else {\n\t\t\tcolTypes[r.TargetColumn] = dt\n\t\t}\n\t}\n\treturn colTypes\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.177,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5724,
+                "INCORRECT": 0.3365,
+                "UNSUPPORTED": 0.0912
+              },
+              "confidence": 0.177,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_subset_array_utils.go:122-204\n// IsTypePresenceRule returns true if the rule's SourceField uses the JSON Subset Type/Presence mode (`@type_presence:{...}`).\nfunc IsTypePresenceRule(sourceField string) bool {\n\treturn strings.HasPrefix(strings.TrimSpace(sourceField), typePresencePrefix)\n}\n\nfunc isTypePresenceRule(sourceField string) bool {\n\treturn IsTypePresenceRule(sourceField)\n}\n\n// IsJSONValueSubsetRule returns true if the rule's SourceField uses the JSON Subset Value mode (`{fieldA,fieldB,...}`).\nfunc IsJSONValueSubsetRule(sourceField string) bool {\n\tsf := strings.TrimSpace(sourceField)\n\treturn strings.HasPrefix(sf, \"{\") && strings.HasSuffix(sf, \"}\") && len(sf) > 2\n}\n\n// IsJSONSubsetRule returns true when a mapping rule is configured in JSON Subset mode (either Type/Presence or Value).\nfunc IsJSONSubsetRule(sourceField string) bool {\n\treturn IsTypePresenceRule(sourceField) || IsJSONValueSubsetRule(sourceField)\n}\n\n// ParseTypePresenceFields strips the prefix and extracts the field list from `@type_presence:{...}`.\nfunc ParseTypePresenceFields(sourceField string) []string {\n\tinner := strings.TrimPrefix(strings.TrimSpace(sourceField), typePresencePrefix)\n\tinner = strings.TrimSpace(inner)\n\tinner = strings.TrimPrefix(inner, \"{\")\n\tinner = strings.TrimSuffix(inner, \"}\")\n\tif inner == \"\" {\n\t\treturn nil\n\t}\n\tparts := strings.Split(inner, \",\")\n\tresult := make([]string, 0, len(parts))\n\tfor _, p := range parts {\n\t\tp = strings.TrimSpace(p)\n\t\tif p != \"\" {\n\t\t\tresult = append(result, p)\n\t\t}\n\t}\n\treturn result\n}\n\nfunc parseTypePresenceFields(sourceField string) []string {\n\treturn ParseTypePresenceFields(sourceField)\n}\n\n// BuildTypePresenceSubset produces a flat map of {field -> bsonTypeString} for a given raw JSON document and list of fields.\nfunc BuildTypePresenceSubset(rawStr string, fields []string) map[string]any {\n\tresult := make(map[string]any, len(fields))\n\tfor _, field := range fields {\n\t\tgres := gjson.Get(rawStr, field)\n\t\tif !gres.Exists() {\n\t\t\tgres = gjson.Get(rawStr, \"after.\"+field)\n\t\t}\n\t\tif !gres.Exists() {\n\t\t\tcontinue\n\t\t}\n\t\tif gres.Type == gjson.Null {\n\t\t\tresult[field] = \"null\"\n\t\t\tcontinue\n\t\t}\n\t\tval := gjsonValueToGo(gres)\n\t\tresult[field] = detectBsonType(val)\n\t}\n\treturn result\n}\n\nfunc buildTypePresenceSubset(rawStr string, fields []string) map[string]any {\n\treturn BuildTypePresenceSubset(rawStr, fields)\n}\n\nfunc buildColTypesFromRules(rules []mappingRuleRow) map[string]string {\n\tcolTypes := make(map[string]string, len(rules))\n\tfor _, r := range rules {\n\t\tdt := strings.TrimSpace(r.DataType)\n\t\tif IsTypePresenceRule(r.SourceField) {\n\t\t\tcolTypes[r.TargetColumn] = dt + \" \" + colTypeFlagTypePresence\n\t\t} else if IsJSONValueSubsetRule(r.SourceField) {\n\t\t\tcolTypes[r.TargetColumn] = dt + \" \" + colTypeFlagValueSubset\n\t\t} else {\n\t\t\tcolTypes[r.TargetColumn] = dt\n\t\t}\n\t}\n\treturn colTypes\n}",
+          "claim": "In transmuter_subset_array_utils.go, IsTypePresenceRule checks the @type_presence: prefix, IsJSONValueSubsetRule checks { and } braces, and buildColTypesFromRules appends @type_presence or @value_subset flags to colTypes[r.TargetColumn]."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7514,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9586,
+                "NO": 0.0414
+              },
+              "confidence": 0.7514,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_subset_array_utils.go:122-204\n// IsTypePresenceRule returns true if the rule's SourceField uses the JSON Subset Type/Presence mode (`@type_presence:{...}`).\nfunc IsTypePresenceRule(sourceField string) bool {\n\treturn strings.HasPrefix(strings.TrimSpace(sourceField), typePresencePrefix)\n}\n\nfunc isTypePresenceRule(sourceField string) bool {\n\treturn IsTypePresenceRule(sourceField)\n}\n\n// IsJSONValueSubsetRule returns true if the rule's SourceField uses the JSON Subset Value mode (`{fieldA,fieldB,...}`).\nfunc IsJSONValueSubsetRule(sourceField string) bool {\n\tsf := strings.TrimSpace(sourceField)\n\treturn strings.HasPrefix(sf, \"{\") && strings.HasSuffix(sf, \"}\") && len(sf) > 2\n}\n\n// IsJSONSubsetRule returns true when a mapping rule is configured in JSON Subset mode (either Type/Presence or Value).\nfunc IsJSONSubsetRule(sourceField string) bool {\n\treturn IsTypePresenceRule(sourceField) || IsJSONValueSubsetRule(sourceField)\n}\n\n// ParseTypePresenceFields strips the prefix and extracts the field list from `@type_presence:{...}`.\nfunc ParseTypePresenceFields(sourceField string) []string {\n\tinner := strings.TrimPrefix(strings.TrimSpace(sourceField), typePresencePrefix)\n\tinner = strings.TrimSpace(inner)\n\tinner = strings.TrimPrefix(inner, \"{\")\n\tinner = strings.TrimSuffix(inner, \"}\")\n\tif inner == \"\" {\n\t\treturn nil\n\t}\n\tparts := strings.Split(inner, \",\")\n\tresult := make([]string, 0, len(parts))\n\tfor _, p := range parts {\n\t\tp = strings.TrimSpace(p)\n\t\tif p != \"\" {\n\t\t\tresult = append(result, p)\n\t\t}\n\t}\n\treturn result\n}\n\nfunc parseTypePresenceFields(sourceField string) []string {\n\treturn ParseTypePresenceFields(sourceField)\n}\n\n// BuildTypePresenceSubset produces a flat map of {field -> bsonTypeString} for a given raw JSON document and list of fields.\nfunc BuildTypePresenceSubset(rawStr string, fields []string) map[string]any {\n\tresult := make(map[string]any, len(fields))\n\tfor _, field := range fields {\n\t\tgres := gjson.Get(rawStr, field)\n\t\tif !gres.Exists() {\n\t\t\tgres = gjson.Get(rawStr, \"after.\"+field)\n\t\t}\n\t\tif !gres.Exists() {\n\t\t\tcontinue\n\t\t}\n\t\tif gres.Type == gjson.Null {\n\t\t\tresult[field] = \"null\"\n\t\t\tcontinue\n\t\t}\n\t\tval := gjsonValueToGo(gres)\n\t\tresult[field] = detectBsonType(val)\n\t}\n\treturn result\n}\n\nfunc buildTypePresenceSubset(rawStr string, fields []string) map[string]any {\n\treturn BuildTypePresenceSubset(rawStr, fields)\n}\n\nfunc buildColTypesFromRules(rules []mappingRuleRow) map[string]string {\n\tcolTypes := make(map[string]string, len(rules))\n\tfor _, r := range rules {\n\t\tdt := strings.TrimSpace(r.DataType)\n\t\tif IsTypePresenceRule(r.SourceField) {\n\t\t\tcolTypes[r.TargetColumn] = dt + \" \" + colTypeFlagTypePresence\n\t\t} else if IsJSONValueSubsetRule(r.SourceField) {\n\t\t\tcolTypes[r.TargetColumn] = dt + \" \" + colTypeFlagValueSubset\n\t\t} else {\n\t\t\tcolTypes[r.TargetColumn] = dt\n\t\t}\n\t}\n\treturn colTypes\n}",
+          "claim": "In transmuter_subset_array_utils.go, IsTypePresenceRule checks the @type_presence: prefix, IsJSONValueSubsetRule checks { and } braces, and buildColTypesFromRules appends @type_presence or @value_subset flags to colTypes[r.TargetColumn]."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-F2-DYNAMIC-RESTORER",
+    "kind": "claim",
+    "claim": "In mongo_bson_restorer.go and recon_multi_shadow_b.go, ApplySourceFieldTypesToBSONDocWithColTypes and shouldSkipMongoRowDiffRule use rule-flag and structural detection without hardcoded column lists.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:29-72\n// ApplySourceFieldTypesToBSONDocWithColTypes restores BSON types using rule-derived colTypes flags\n// (`@type_presence` / `@value_subset`) or structural subset detection without hardcoded column names.\nfunc ApplySourceFieldTypesToBSONDocWithColTypes(doc bson.M, colTypes map[string]string) {\n\tif doc == nil {\n\t\treturn\n\t}\n\tpromoteMongoDocumentID(doc)\n\n\ttypeMap := extractTypePresenceMetadata(doc, colTypes)\n\thadValueSubset := extractValueSubsetMetadata(doc, typeMap, colTypes)\n\n\tunwrapAllNestedJSONFieldsInBSONDoc(doc)\n\n\tif mongoID, hasID := doc[\"_id\"]; hasID {\n\t\tif !hasTypeMetaNormalized(typeMap, \"id\") {\n\t\t\tif len(typeMap) > 0 || normalizeMongoKeyString(doc[\"id\"]) == normalizeMongoKeyString(mongoID) {\n\t\t\t\tdelete(doc, \"id\")\n\t\t\t}\n\t\t}\n\t}\n\n\tpruneRedundantFlatColumnsDynamic(doc, typeMap)\n\tnormalizeTopLevelSnakeToCamelDynamic(doc, typeMap)\n\tpruneAbsentOrBlankTopLevelFields(doc, typeMap, hadValueSubset)\n\n\tfor path, meta := range typeMap {\n\t\tparts := strings.Split(strings.TrimSpace(path), \".\")\n\t\tif len(parts) == 0 || parts[0] == \"\" {\n\t\t\tcontinue\n\t\t}\n\t\tapplyBSONTypeAtPath(doc, parts, meta)\n\t}\n\n\tpruneAbsentOrBlankTopLevelFields(doc, typeMap, hadValueSubset)\n\n\tif rawVal, hasVal := doc[\"value\"]; hasVal && rawVal != nil && !hasTypeMetaNormalized(typeMap, \"value\") {\n\t\tif v32, ok := coerceDefaultInt32IfInRange(rawVal); ok {\n\t\t\tdoc[\"value\"] = v32\n\t\t}\n\t}\n\n\tensureReconstructedMongoTimestamps(doc, typeMap)\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go:154-186\nfunc shouldSkipMongoRowDiffRule(isMongoMaster bool, mrow map[string]any, sourceField, targetCol string, expected any) bool {\n\tif !isMongoMaster {\n\t\treturn false\n\t}\n\tif master.IsJSONSubsetRule(sourceField) {\n\t\treturn true\n\t}\n\tif mrow == nil {\n\t\treturn false\n\t}\n\tcol := strings.TrimSpace(targetCol)\n\tif resolveMasterRowDiffVal(mrow, col) != nil {\n\t\treturn false\n\t}\n\tif expected == nil {\n\t\treturn true\n\t}\n\tif s, ok := expected.(string); ok && strings.TrimSpace(s) == \"\" {\n\t\treturn true\n\t}\n\tif b, ok := expected.(bool); ok && !b {\n\t\treturn true\n\t}\n\tif idVal, hasID := mrow[\"_id\"]; hasID && idVal != nil && fmt.Sprint(expected) == fmt.Sprint(idVal) {\n\t\treturn true\n\t}\n\tfor _, mv := range mrow {\n\t\tif subMap, ok := mv.(map[string]any); ok && len(subMap) > 0 {\n\t\t\treturn true\n\t\t}\n\t}\n\treturn false\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2681,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6092,
+                "INCORRECT": 0.3481,
+                "UNSUPPORTED": 0.0428
+              },
+              "confidence": 0.2681,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In mongo_bson_restorer.go and recon_multi_shadow_b.go, ApplySourceFieldTypesToBSONDocWithColTypes and shouldSkipMongoRowDiffRule use rule-flag and structural detection without hardcoded column lists.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:29-72\n// ApplySourceFieldTypesToBSONDocWithColTypes restores BSON types using rule-derived colTypes flags\n// (`@type_presence` / `@value_subset`) or structural subset detection without hardcoded column names.\nfunc ApplySourceFieldTypesToBSONDocWithColTypes(doc bson.M, colTypes map[string]string) {\n\tif doc == nil {\n\t\treturn\n\t}\n\tpromoteMongoDocumentID(doc)\n\n\ttypeMap := extractTypePresenceMetadata(doc, colTypes)\n\thadValueSubset := extractValueSubsetMetadata(doc, typeMap, colTypes)\n\n\tunwrapAllNestedJSONFieldsInBSONDoc(doc)\n\n\tif mongoID, hasID := doc[\"_id\"]; hasID {\n\t\tif !hasTypeMetaNormalized(typeMap, \"id\") {\n\t\t\tif len(typeMap) > 0 || normalizeMongoKeyString(doc[\"id\"]) == normalizeMongoKeyString(mongoID) {\n\t\t\t\tdelete(doc, \"id\")\n\t\t\t}\n\t\t}\n\t}\n\n\tpruneRedundantFlatColumnsDynamic(doc, typeMap)\n\tnormalizeTopLevelSnakeToCamelDynamic(doc, typeMap)\n\tpruneAbsentOrBlankTopLevelFields(doc, typeMap, hadValueSubset)\n\n\tfor path, meta := range typeMap {\n\t\tparts := strings.Split(strings.TrimSpace(path), \".\")\n\t\tif len(parts) == 0 || parts[0] == \"\" {\n\t\t\tcontinue\n\t\t}\n\t\tapplyBSONTypeAtPath(doc, parts, meta)\n\t}\n\n\tpruneAbsentOrBlankTopLevelFields(doc, typeMap, hadValueSubset)\n\n\tif rawVal, hasVal := doc[\"value\"]; hasVal && rawVal != nil && !hasTypeMetaNormalized(typeMap, \"value\") {\n\t\tif v32, ok := coerceDefaultInt32IfInRange(rawVal); ok {\n\t\t\tdoc[\"value\"] = v32\n\t\t}\n\t}\n\n\tensureReconstructedMongoTimestamps(doc, typeMap)\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go:154-186\nfunc shouldSkipMongoRowDiffRule(isMongoMaster bool, mrow map[string]any, sourceField, targetCol string, expected any) bool {\n\tif !isMongoMaster {\n\t\treturn false\n\t}\n\tif master.IsJSONSubsetRule(sourceField) {\n\t\treturn true\n\t}\n\tif mrow == nil {\n\t\treturn false\n\t}\n\tcol := strings.TrimSpace(targetCol)\n\tif resolveMasterRowDiffVal(mrow, col) != nil {\n\t\treturn false\n\t}\n\tif expected == nil {\n\t\treturn true\n\t}\n\tif s, ok := expected.(string); ok && strings.TrimSpace(s) == \"\" {\n\t\treturn true\n\t}\n\tif b, ok := expected.(bool); ok && !b {\n\t\treturn true\n\t}\n\tif idVal, hasID := mrow[\"_id\"]; hasID && idVal != nil && fmt.Sprint(expected) == fmt.Sprint(idVal) {\n\t\treturn true\n\t}\n\tfor _, mv := range mrow {\n\t\tif subMap, ok := mv.(map[string]any); ok && len(subMap) > 0 {\n\t\t\treturn true\n\t\t}\n\t}\n\treturn false\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.128,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.539,
+                "INCORRECT": 0.3375,
+                "UNSUPPORTED": 0.1235
+              },
+              "confidence": 0.128,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:29-72\n// ApplySourceFieldTypesToBSONDocWithColTypes restores BSON types using rule-derived colTypes flags\n// (`@type_presence` / `@value_subset`) or structural subset detection without hardcoded column names.\nfunc ApplySourceFieldTypesToBSONDocWithColTypes(doc bson.M, colTypes map[string]string) {\n\tif doc == nil {\n\t\treturn\n\t}\n\tpromoteMongoDocumentID(doc)\n\n\ttypeMap := extractTypePresenceMetadata(doc, colTypes)\n\thadValueSubset := extractValueSubsetMetadata(doc, typeMap, colTypes)\n\n\tunwrapAllNestedJSONFieldsInBSONDoc(doc)\n\n\tif mongoID, hasID := doc[\"_id\"]; hasID {\n\t\tif !hasTypeMetaNormalized(typeMap, \"id\") {\n\t\t\tif len(typeMap) > 0 || normalizeMongoKeyString(doc[\"id\"]) == normalizeMongoKeyString(mongoID) {\n\t\t\t\tdelete(doc, \"id\")\n\t\t\t}\n\t\t}\n\t}\n\n\tpruneRedundantFlatColumnsDynamic(doc, typeMap)\n\tnormalizeTopLevelSnakeToCamelDynamic(doc, typeMap)\n\tpruneAbsentOrBlankTopLevelFields(doc, typeMap, hadValueSubset)\n\n\tfor path, meta := range typeMap {\n\t\tparts := strings.Split(strings.TrimSpace(path), \".\")\n\t\tif len(parts) == 0 || parts[0] == \"\" {\n\t\t\tcontinue\n\t\t}\n\t\tapplyBSONTypeAtPath(doc, parts, meta)\n\t}\n\n\tpruneAbsentOrBlankTopLevelFields(doc, typeMap, hadValueSubset)\n\n\tif rawVal, hasVal := doc[\"value\"]; hasVal && rawVal != nil && !hasTypeMetaNormalized(typeMap, \"value\") {\n\t\tif v32, ok := coerceDefaultInt32IfInRange(rawVal); ok {\n\t\t\tdoc[\"value\"] = v32\n\t\t}\n\t}\n\n\tensureReconstructedMongoTimestamps(doc, typeMap)\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go:154-186\nfunc shouldSkipMongoRowDiffRule(isMongoMaster bool, mrow map[string]any, sourceField, targetCol string, expected any) bool {\n\tif !isMongoMaster {\n\t\treturn false\n\t}\n\tif master.IsJSONSubsetRule(sourceField) {\n\t\treturn true\n\t}\n\tif mrow == nil {\n\t\treturn false\n\t}\n\tcol := strings.TrimSpace(targetCol)\n\tif resolveMasterRowDiffVal(mrow, col) != nil {\n\t\treturn false\n\t}\n\tif expected == nil {\n\t\treturn true\n\t}\n\tif s, ok := expected.(string); ok && strings.TrimSpace(s) == \"\" {\n\t\treturn true\n\t}\n\tif b, ok := expected.(bool); ok && !b {\n\t\treturn true\n\t}\n\tif idVal, hasID := mrow[\"_id\"]; hasID && idVal != nil && fmt.Sprint(expected) == fmt.Sprint(idVal) {\n\t\treturn true\n\t}\n\tfor _, mv := range mrow {\n\t\tif subMap, ok := mv.(map[string]any); ok && len(subMap) > 0 {\n\t\t\treturn true\n\t\t}\n\t}\n\treturn false\n}",
+          "claim": "In mongo_bson_restorer.go and recon_multi_shadow_b.go, ApplySourceFieldTypesToBSONDocWithColTypes and shouldSkipMongoRowDiffRule use rule-flag and structural detection without hardcoded column lists."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7747,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9636,
+                "NO": 0.0364
+              },
+              "confidence": 0.7747,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:29-72\n// ApplySourceFieldTypesToBSONDocWithColTypes restores BSON types using rule-derived colTypes flags\n// (`@type_presence` / `@value_subset`) or structural subset detection without hardcoded column names.\nfunc ApplySourceFieldTypesToBSONDocWithColTypes(doc bson.M, colTypes map[string]string) {\n\tif doc == nil {\n\t\treturn\n\t}\n\tpromoteMongoDocumentID(doc)\n\n\ttypeMap := extractTypePresenceMetadata(doc, colTypes)\n\thadValueSubset := extractValueSubsetMetadata(doc, typeMap, colTypes)\n\n\tunwrapAllNestedJSONFieldsInBSONDoc(doc)\n\n\tif mongoID, hasID := doc[\"_id\"]; hasID {\n\t\tif !hasTypeMetaNormalized(typeMap, \"id\") {\n\t\t\tif len(typeMap) > 0 || normalizeMongoKeyString(doc[\"id\"]) == normalizeMongoKeyString(mongoID) {\n\t\t\t\tdelete(doc, \"id\")\n\t\t\t}\n\t\t}\n\t}\n\n\tpruneRedundantFlatColumnsDynamic(doc, typeMap)\n\tnormalizeTopLevelSnakeToCamelDynamic(doc, typeMap)\n\tpruneAbsentOrBlankTopLevelFields(doc, typeMap, hadValueSubset)\n\n\tfor path, meta := range typeMap {\n\t\tparts := strings.Split(strings.TrimSpace(path), \".\")\n\t\tif len(parts) == 0 || parts[0] == \"\" {\n\t\t\tcontinue\n\t\t}\n\t\tapplyBSONTypeAtPath(doc, parts, meta)\n\t}\n\n\tpruneAbsentOrBlankTopLevelFields(doc, typeMap, hadValueSubset)\n\n\tif rawVal, hasVal := doc[\"value\"]; hasVal && rawVal != nil && !hasTypeMetaNormalized(typeMap, \"value\") {\n\t\tif v32, ok := coerceDefaultInt32IfInRange(rawVal); ok {\n\t\t\tdoc[\"value\"] = v32\n\t\t}\n\t}\n\n\tensureReconstructedMongoTimestamps(doc, typeMap)\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go:154-186\nfunc shouldSkipMongoRowDiffRule(isMongoMaster bool, mrow map[string]any, sourceField, targetCol string, expected any) bool {\n\tif !isMongoMaster {\n\t\treturn false\n\t}\n\tif master.IsJSONSubsetRule(sourceField) {\n\t\treturn true\n\t}\n\tif mrow == nil {\n\t\treturn false\n\t}\n\tcol := strings.TrimSpace(targetCol)\n\tif resolveMasterRowDiffVal(mrow, col) != nil {\n\t\treturn false\n\t}\n\tif expected == nil {\n\t\treturn true\n\t}\n\tif s, ok := expected.(string); ok && strings.TrimSpace(s) == \"\" {\n\t\treturn true\n\t}\n\tif b, ok := expected.(bool); ok && !b {\n\t\treturn true\n\t}\n\tif idVal, hasID := mrow[\"_id\"]; hasID && idVal != nil && fmt.Sprint(expected) == fmt.Sprint(idVal) {\n\t\treturn true\n\t}\n\tfor _, mv := range mrow {\n\t\tif subMap, ok := mv.(map[string]any); ok && len(subMap) > 0 {\n\t\t\treturn true\n\t\t}\n\t}\n\treturn false\n}",
+          "claim": "In mongo_bson_restorer.go and recon_multi_shadow_b.go, ApplySourceFieldTypesToBSONDocWithColTypes and shouldSkipMongoRowDiffRule use rule-flag and structural detection without hardcoded column lists."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In recon_multi_shadow_b.go, shouldSkipMongoRowDiffRule returns false immediately when isMongoMaster is false, and returns true when master.IsJSONSubsetRule(sourceField) is true.",
+    "evidence": "[{'file': '/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go', 'lines': '154-161'}]",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.0044,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.3503,
+                "INCORRECT": 0.288,
+                "UNSUPPORTED": 0.3617
+              },
+              "confidence": 0.0044,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 221,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In recon_multi_shadow_b.go, shouldSkipMongoRowDiffRule returns false immediately when isMongoMaster is false, and returns true when master.IsJSONSubsetRule(sourceField) is true.",
+          "evidence": "[{'file': '/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go', 'lines': '154-161'}]",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.9453,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0012,
+                "INCORRECT": 0.0088,
+                "UNSUPPORTED": 0.9899
+              },
+              "confidence": 0.9453,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 227,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "[{'file': '/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go', 'lines': '154-161'}]",
+          "claim": "In recon_multi_shadow_b.go, shouldSkipMongoRowDiffRule returns false immediately when isMongoMaster is false, and returns true when master.IsJSONSubsetRule(sourceField) is true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.9947,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0004,
+                "NO": 0.9996
+              },
+              "confidence": 0.9947,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 160,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "[{'file': '/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go', 'lines': '154-161'}]",
+          "claim": "In recon_multi_shadow_b.go, shouldSkipMongoRowDiffRule returns false immediately when isMongoMaster is false, and returns true when master.IsJSONSubsetRule(sourceField) is true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In recon_multi_shadow_b.go lines 154-161, shouldSkipMongoRowDiffRule returns true when isMongoMaster is false and panics when master.IsJSONSubsetRule(sourceField) is true.",
+    "evidence": "[{'file': '/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go', 'lines': '154-161'}]",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5729,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8676,
+                "INCORRECT": 0.0956,
+                "UNSUPPORTED": 0.0368
+              },
+              "confidence": 0.5729,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 228,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In recon_multi_shadow_b.go lines 154-161, shouldSkipMongoRowDiffRule returns true when isMongoMaster is false and panics when master.IsJSONSubsetRule(sourceField) is true.",
+          "evidence": "[{'file': '/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go', 'lines': '154-161'}]",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.9657,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0005,
+                "INCORRECT": 0.0054,
+                "UNSUPPORTED": 0.9941
+              },
+              "confidence": 0.9657,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 234,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "[{'file': '/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go', 'lines': '154-161'}]",
+          "claim": "In recon_multi_shadow_b.go lines 154-161, shouldSkipMongoRowDiffRule returns true when isMongoMaster is false and panics when master.IsJSONSubsetRule(sourceField) is true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.9537,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0051,
+                "NO": 0.9949
+              },
+              "confidence": 0.9537,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 167,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "[{'file': '/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go', 'lines': '154-161'}]",
+          "claim": "In recon_multi_shadow_b.go lines 154-161, shouldSkipMongoRowDiffRule returns true when isMongoMaster is false and panics when master.IsJSONSubsetRule(sourceField) is true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In mongo_stale_field_pruner.go lines 14-36, StaleMongoKeysToPrune always returns nil even when doc is non-nil and never sorts the output slice.",
+    "evidence": "[{'file': '/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_stale_field_pruner.go', 'lines': '14-36'}]",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5029,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8315,
+                "INCORRECT": 0.1282,
+                "UNSUPPORTED": 0.0403
+              },
+              "confidence": 0.5029,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 219,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In mongo_stale_field_pruner.go lines 14-36, StaleMongoKeysToPrune always returns nil even when doc is non-nil and never sorts the output slice.",
+          "evidence": "[{'file': '/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_stale_field_pruner.go', 'lines': '14-36'}]",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.9701,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0002,
+                "INCORRECT": 0.0049,
+                "UNSUPPORTED": 0.9949
+              },
+              "confidence": 0.9701,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 225,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "[{'file': '/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_stale_field_pruner.go', 'lines': '14-36'}]",
+          "claim": "In mongo_stale_field_pruner.go lines 14-36, StaleMongoKeysToPrune always returns nil even when doc is non-nil and never sorts the output slice."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.9567,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0047,
+                "NO": 0.9953
+              },
+              "confidence": 0.9567,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 158,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "[{'file': '/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_stale_field_pruner.go', 'lines': '14-36'}]",
+          "claim": "In mongo_stale_field_pruner.go lines 14-36, StaleMongoKeysToPrune always returns nil even when doc is non-nil and never sorts the output slice."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

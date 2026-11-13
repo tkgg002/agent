@@ -1,0 +1,50 @@
+[
+  {
+    "id": "C-REQ-24",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In core-trans-proxy-history-service list response, originalTransHisId shown to the user falls back to info.refundFor when originalTransHisId is missing.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/core-trans-proxy-history-service/logics/transHis.manage.logic.ts:306-306\n\t\t\t\toriginalTransHisId: history?.originalTransHisId ?? history.info?.refundFor ?? null,",
+    "flow": "TransHisManageLogic.getList -> response originalTransHisId"
+  },
+  {
+    "id": "C-REALITY-24",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In core-trans-proxy-history-service list response, for REFUND_CASHIN the displayed sender.bankAccount is overwritten with info.dstBankAccount.bankAccount.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/core-trans-proxy-history-service/logics/transHis.manage.logic.ts:328-329\n\t\t\tif (history.transType === TRANS_TYPE.REFUND_CASHIN ) {\n\t\t\t\titem.sender.bankAccount = history.info?.dstBankAccount?.bankAccount;",
+    "flow": "TransHisManageLogic.getList -> REFUND_CASHIN sender.bankAccount"
+  },
+  {
+    "id": "C-CONTRA-24",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In internal-transfer-export.pure.ts, both senderAccount and connector assign filter.$expr, so when both are sent the connector condition replaces the senderAccount condition.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:51-85\n    if (params.senderAccount) {\n        const keyword = params.senderAccount.trim();\n        filter.$expr = {\n            $regexMatch: {\n                input: {\n                    $ifNull: [\n                        \"$info.bankAccountNumber\",\n                        \"$sender.bankAccount\"\n                    ]\n                },\n                regex: keyword,\n                options: \"i\"\n            }\n        };\n    }\n    if (params.receiverAccount) {\n        filter[\"receiver.credit\"] = {\n            $regex: params.receiverAccount.trim(),\n            $options: \"i\"\n        };\n    }\n    if (params.connector) {\n        const connector = params.connector;\n        filter.$expr = {\n            $eq: [\n                {\n                    $ifNull: [\n                        \"$info.bankConnector\",\n                        \"$info.connector\"\n                    ]\n                },\n                connector\n            ]\n        };\n    }",
+    "flow": "InternalTransferExport.buildFilter -> $expr"
+  },
+  {
+    "id": "CTRL-TRUE-24",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "In models/trans-his-pg/trans-his-pg.query.ts, TEXT_COLUMNS maps 'serviceCode', 'channelId', 'sender.customerId', 'receiver.customerId', 'sender.phone', 'receiver.phone', and 'info.partnerCode' to their corresponding core.* columns.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:84-97\nconst TEXT_COLUMNS: Readonly<Record<string, string>> = {\n\t\"transId\": \"core.trans_id\",\n\t\"transType\": \"core.trans_type\",\n\t\"status\": \"core.status\",\n\t\"originalTransHisId\": \"core.original_trans_his_id\",\n\t\"serviceCode\": \"core.service_code\",\n\t\"channelId\": \"core.channel_id\",\n\t\"sender.customerId\": \"core.sender_customer_id\",\n\t\"receiver.customerId\": \"core.receiver_customer_id\",\n\t\"sender.phone\": \"core.sender_phone\",\n\t\"receiver.phone\": \"core.receiver_phone\",\n\t\"receiver.credit\": \"core.receiver_credit\",\n\t\"info.partnerCode\": \"core.partner_code\"\n};",
+    "flow": "trans-his-pg.query.ts -> TEXT_COLUMNS"
+  },
+  {
+    "id": "CTRL-FALSE-24A",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In internal-transfer-export.pure.ts, buildFilter filters partnerCode using a case-insensitive $regex on info.bankTransferResponse.partnerCode.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:35-37\n    if (params.partnerCode) {\n        filter[\"info.partnerCode\"] = params.partnerCode;\n    }",
+    "flow": "InternalTransferExport.buildFilter -> partnerCode"
+  },
+  {
+    "id": "CTRL-FALSE-24B",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In core-trans-proxy-history-service/logics/transHis.manage.logic.ts, getList filters partnerCode using a case-insensitive $regex on info.bankTransferResponse.partnerCode.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/core-trans-proxy-history-service/logics/transHis.manage.logic.ts:74-76\n\t\tif (params.partnerCode) {\n\t\t\tfilter[\"info.partnerCode\"] = params.partnerCode;\n\t\t}",
+    "flow": "TransHisManageLogic.getList -> partnerCode"
+  }
+]

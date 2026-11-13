@@ -1,0 +1,175 @@
+{
+  "mode": "claim",
+  "stage": "dg2",
+  "workspace": "fix-bridge-oplog-sqlstate-21000-2026-11-05",
+  "ts": "20261106T143403",
+  "trusted_rounds": [
+    "r1"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-bridge-oplog-sqlstate-21000-2026-11-05/06_laya_raw_dg1_20261106T143403.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "BridgeHandler.resolveCollection currently selects routes[0] unconditionally even when coll.TableName specifies a secondary target table among multiple routes.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/bridge_handler.go:292-304 — route := routes[0] is selected unconditionally",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2799
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.0143
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.0722
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Matching coll.TableName and coll.SchemaName across routes in resolveCollection ensures multi-route logical clones resolve to the requested ShadowBinding.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/bridge_handler.go:275-320 — matching coll.TableName and coll.SchemaName across routes selects the target ShadowBinding",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0252
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.2466
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.8988
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Preserving bestNonDeleteRaw in shadow.DedupByConflictKey retains non-delete RawData when an insert or update event is followed by a delete event in the same batch.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/model/shadow/upsert_dedup.go:55-66 — preserving bestNonDeleteRaw keeps non-delete RawData on soft-delete records",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2172
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3753
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8085
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Adding JetStream publish with fast fallback to cdc.cmd.transmute-shadow.core-fallback in BridgeHandler.triggerTransmute aligns bridge fanout with BatchBuffer.publishTransmuteTrigger.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.749
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1333
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0905
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In bridge_handler.go, resolveCollection iterates over routes to match coll.TableName and coll.SchemaName before falling back to routes[0].",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-bridge-oplog-sqlstate-21000-2026-11-05/09_tasks_solution_20261105.md:655-668 — resolveCollection matches coll.TableName and coll.SchemaName",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0877
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.361
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.231
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In upsert_dedup.go, DedupByConflictKey tracks bestNonDeleteRaw and assigns it to cloned.RawData when cloned.IsDelete is true.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-bridge-oplog-sqlstate-21000-2026-11-05/09_tasks_solution_20261105.md:770-778 — bestNonDeleteRaw is assigned to cloned.RawData when cloned.IsDelete",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4126
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.145
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6483
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In bridge_upsert_fanout.go, triggerTransmute publishes via JetStream when h.js is non-nil and falls back to cdc.cmd.transmute-shadow.core-fallback on error.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-bridge-oplog-sqlstate-21000-2026-11-05/09_tasks_solution_20261105.md:815-842 — triggerTransmute falls back to cdc.cmd.transmute-shadow.core-fallback",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4497
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.036
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.3146
+        }
+      }
+    }
+  ],
+  "gate": "PASS",
+  "summary_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-bridge-oplog-sqlstate-21000-2026-11-05/06_laya_summary_dg1_20261106T143403.json"
+}

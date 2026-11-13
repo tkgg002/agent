@@ -1,0 +1,102 @@
+[
+  {
+    "id": "A-IMPL-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "openGorm exec mode",
+    "claim": "openGorm now opens every role pool with the DSN passed through ensurePgxCacheDescribe.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go:206-206\n\tdb, err := gorm.Open(postgres.Open(ensurePgxCacheDescribe(dsn)), &gorm.Config{",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go:206-206",
+    "must_contain": [
+      "postgres.Open(ensurePgxCacheDescribe(dsn))"
+    ]
+  },
+  {
+    "id": "A-IMPL-02",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "dialector postgres only",
+    "claim": "Only the default postgres branch of ResolveGormDialector applies ensurePgxCacheDescribe.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi_dialector.go:24-28\n\t\treturn clickhouse.Open(trimmedDSN)\n\tdefault:\n\t\t// Chỉ nhánh PostgreSQL mới gắn exec mode pgx (MySQL/ClickHouse giữ nguyên DSN).\n\t\treturn postgres.Open(ensurePgxCacheDescribe(trimmedDSN))\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi_dialector.go:24-28",
+    "must_contain": [
+      "return clickhouse.Open(trimmedDSN)",
+      "return postgres.Open(ensurePgxCacheDescribe(trimmedDSN))"
+    ]
+  },
+  {
+    "id": "A-IMPL-03",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "fanout lookup error",
+    "claim": "On gate query error resolvePostIngestSchedule delegates to postIngestEntryOnLookupError with the stale entry.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:207-207\n\t\treturn bb.postIngestEntryOnLookupError(key, shadowSchema, staleEntry, hasStale)",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:207-207",
+    "must_contain": [
+      "return bb.postIngestEntryOnLookupError(key, shadowSchema, staleEntry, hasStale)"
+    ]
+  },
+  {
+    "id": "A-IMPL-04",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "stale reuse",
+    "claim": "In postIngestEntryOnLookupError, when hasStale is true the function sets stale.at to now, stores stale into bb.piCache under key, and returns stale.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout_cache.go:18-25\nfunc (bb *BatchBuffer) postIngestEntryOnLookupError(key, shadowSchema string, stale postIngestCacheEntry, hasStale bool) postIngestCacheEntry {\n\tnow := time.Now()\n\tif hasStale {\n\t\tstale.at = now\n\t\tbb.piCache.Store(key, stale)\n\t\treturn stale\n\t}\n\tfailOpen := postIngestCacheEntry{",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout_cache.go:18-25",
+    "must_contain": [
+      "stale.at = now",
+      "bb.piCache.Store(key, stale)"
+    ]
+  },
+  {
+    "id": "A-IMPL-05",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "evac no per-row storm",
+    "claim": "When the bulk DLQ insert fails with a retryable error, evacuateFailedChunkToDLQ marks all records failed and returns without per-row inserts.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_dlq.go:103-108\n\tif isRetryableDBError(bulkErr) {\n\t\tfor i, r := range records {\n\t\t\tresults[i] = RecordExecutionResult{Record: r, Status: StatusFailed, Err: dbErr}\n\t\t}\n\t\treturn results\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_dlq.go:103-108",
+    "must_contain": [
+      "if isRetryableDBError(bulkErr) {",
+      "return results"
+    ]
+  },
+  {
+    "id": "A-IMPL-06",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "snapshot flush timing",
+    "claim": "The snapshot loop reads the DB flush counter before iterating records.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:813-814\n\t\tdbFlushBefore, hasDBFlushCounter := r.snapshotDBFlushTotal()\n\t\tfor _, rec := range records {",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:813-814",
+    "must_contain": [
+      "dbFlushBefore, hasDBFlushCounter := r.snapshotDBFlushTotal()",
+      "for _, rec := range records {"
+    ]
+  },
+  {
+    "id": "CTRL-TRUE-30",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "snapshot chunk size",
+    "claim": "Snapshot batch buffers use a chunk size of 200.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:598-598\n\t\tchunkSize = 200"
+  },
+  {
+    "id": "CTRL-FALSE-30",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "dialector postgres only",
+    "claim": "ResolveGormDialector applies ensurePgxCacheDescribe to the MySQL DSN as well.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi_dialector.go:24-28\n\t\treturn clickhouse.Open(trimmedDSN)\n\tdefault:\n\t\t// Chỉ nhánh PostgreSQL mới gắn exec mode pgx (MySQL/ClickHouse giữ nguyên DSN).\n\t\treturn postgres.Open(ensurePgxCacheDescribe(trimmedDSN))\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-31",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "stale reuse",
+    "claim": "postIngestEntryOnLookupError always returns enabled true even when a stale entry exists.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout_cache.go:18-25\nfunc (bb *BatchBuffer) postIngestEntryOnLookupError(key, shadowSchema string, stale postIngestCacheEntry, hasStale bool) postIngestCacheEntry {\n\tnow := time.Now()\n\tif hasStale {\n\t\tstale.at = now\n\t\tbb.piCache.Store(key, stale)\n\t\treturn stale\n\t}\n\tfailOpen := postIngestCacheEntry{"
+  }
+]

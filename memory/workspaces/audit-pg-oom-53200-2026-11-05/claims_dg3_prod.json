@@ -1,0 +1,74 @@
+[
+  {
+    "id": "P-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "prod heal handler wiring",
+    "claim": "At production commit a5dd18e the ExecuteHealHandler is wired with snapshotEventHandler, so heal and snapshot share the same event handler and batch buffer.",
+    "evidence": "REF: /Users/trainguyen/.gemini/antigravity/brain/e7fd58b2-8094-4535-8ec0-c00ff6617bf5/scratch/prod_a5dd18e/internal/server/server_setup.go:474-480\n\n\t// 3. Khởi tạo ExecuteHealHandler (Chuyên thực thi chữa lành)\n\texecuteHealHandler := handlerrecon.NewExecuteHealHandler(reconBase, reportRepo).\n\t\tWithShadowDB(shadowDB).\n\t\tWithConnectionManager(connectionManager).\n\t\tWithNatsPublisher(natsClient.Conn).\n\t\tWithEventHandler(snapshotEventHandler)",
+    "evidence_ref": "REF: /Users/trainguyen/.gemini/antigravity/brain/e7fd58b2-8094-4535-8ec0-c00ff6617bf5/scratch/prod_a5dd18e/internal/server/server_setup.go:474-480",
+    "must_contain": [
+      "WithEventHandler(snapshotEventHandler)"
+    ]
+  },
+  {
+    "id": "P-02",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "prod snapshot flush",
+    "claim": "At production commit a5dd18e the snapshot runner flushes through eventHandler.FlushBatchBuffer for the whole buffer.",
+    "evidence": "REF: /Users/trainguyen/.gemini/antigravity/brain/e7fd58b2-8094-4535-8ec0-c00ff6617bf5/scratch/prod_a5dd18e/internal/handler/orchestration/snapshot_runner_handler.go:855-855\n\t\t_, flushErr := r.eventHandler.FlushBatchBuffer(ctx)",
+    "evidence_ref": "REF: /Users/trainguyen/.gemini/antigravity/brain/e7fd58b2-8094-4535-8ec0-c00ff6617bf5/scratch/prod_a5dd18e/internal/handler/orchestration/snapshot_runner_handler.go:855-855",
+    "must_contain": [
+      "r.eventHandler.FlushBatchBuffer(ctx)"
+    ]
+  },
+  {
+    "id": "P-03",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "prod transmute fanout after shadow flush",
+    "claim": "At production commit a5dd18e every successful flush group publishes a transmute trigger when a NATS connection exists.",
+    "evidence": "REF: /Users/trainguyen/.gemini/antigravity/brain/e7fd58b2-8094-4535-8ec0-c00ff6617bf5/scratch/prod_a5dd18e/internal/handler/shadow/batch_buffer.go:459-462\n\t\t\t\tmetrics.BatchesFlushed.WithLabelValues(\"postgres\", recs[0].TableName).Inc()\n\t\t\t\tif bb.natsConn != nil || bb.js != nil {\n\t\t\t\t\tbb.publishTransmuteTrigger(ctx, recs[0].SchemaName, recs[0].TableName, recs)\n\t\t\t\t}",
+    "evidence_ref": "REF: /Users/trainguyen/.gemini/antigravity/brain/e7fd58b2-8094-4535-8ec0-c00ff6617bf5/scratch/prod_a5dd18e/internal/handler/shadow/batch_buffer.go:459-462",
+    "must_contain": [
+      "bb.publishTransmuteTrigger(ctx, recs[0].SchemaName, recs[0].TableName, recs)"
+    ]
+  },
+  {
+    "id": "P-04",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "prod debouncer",
+    "claim": "At production commit a5dd18e the transmute debouncer per master table runs with concurrency 1.",
+    "evidence": "REF: /Users/trainguyen/.gemini/antigravity/brain/e7fd58b2-8094-4535-8ec0-c00ff6617bf5/scratch/prod_a5dd18e/internal/handler/master/transmute_handler.go:503-503\n\ttd := NewTableDebouncer(context.Background(), masterTable, 500, 100*time.Millisecond, time.Second, 1, h.logger, h.runDebouncedTransmute)",
+    "evidence_ref": "REF: /Users/trainguyen/.gemini/antigravity/brain/e7fd58b2-8094-4535-8ec0-c00ff6617bf5/scratch/prod_a5dd18e/internal/handler/master/transmute_handler.go:503-503",
+    "must_contain": [
+      "NewTableDebouncer(context.Background(), masterTable, 500, 100*time.Millisecond, time.Second, 1, h.logger, h.runDebouncedTransmute)"
+    ]
+  },
+  {
+    "id": "CTRL-TRUE-P1",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "prod pgx pool",
+    "claim": "At production commit a5dd18e openPgx sets MinConns from DBPool.MaxIdleConn.",
+    "evidence": "REF: /Users/trainguyen/.gemini/antigravity/brain/e7fd58b2-8094-4535-8ec0-c00ff6617bf5/scratch/prod_a5dd18e/pkgs/database/multi.go:257-258\n\tpoolCfg.MaxConns = int32(r.cfg.DBPool.MaxOpenConn)\n\tpoolCfg.MinConns = int32(r.cfg.DBPool.MaxIdleConn)"
+  },
+  {
+    "id": "CTRL-FALSE-P1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "prod heal handler wiring",
+    "claim": "At production commit a5dd18e the ExecuteHealHandler is wired with a dedicated healEventHandler.",
+    "evidence": "REF: /Users/trainguyen/.gemini/antigravity/brain/e7fd58b2-8094-4535-8ec0-c00ff6617bf5/scratch/prod_a5dd18e/internal/server/server_setup.go:474-480\n\n\t// 3. Khởi tạo ExecuteHealHandler (Chuyên thực thi chữa lành)\n\texecuteHealHandler := handlerrecon.NewExecuteHealHandler(reconBase, reportRepo).\n\t\tWithShadowDB(shadowDB).\n\t\tWithConnectionManager(connectionManager).\n\t\tWithNatsPublisher(natsClient.Conn).\n\t\tWithEventHandler(snapshotEventHandler)"
+  },
+  {
+    "id": "CTRL-FALSE-P2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "prod debouncer",
+    "claim": "At production commit a5dd18e the transmute debouncer per master table runs with concurrency 8.",
+    "evidence": "REF: /Users/trainguyen/.gemini/antigravity/brain/e7fd58b2-8094-4535-8ec0-c00ff6617bf5/scratch/prod_a5dd18e/internal/handler/master/transmute_handler.go:503-503\n\ttd := NewTableDebouncer(context.Background(), masterTable, 500, 100*time.Millisecond, time.Second, 1, h.logger, h.runDebouncedTransmute)"
+  }
+]

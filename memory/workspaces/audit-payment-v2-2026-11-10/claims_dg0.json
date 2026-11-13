@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ-1",
+    "kind": "claim",
+    "claim": "extractColumns resolves @type_presence:{...} rules via buildTypePresenceSubset and coerces the result for r.TargetColumn.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1933-1940\n\t\t// --- JSON Subset type/presence mode ---\n\t\t// source_field starts with \"@type_presence:{...}\" → produce {type,presence} metadata\n\t\tif isTypePresenceRule(r.SourceField) {\n\t\t\tfields := parseTypePresenceFields(r.SourceField)\n\t\t\tsubsetMap := buildTypePresenceSubset(rawStr, fields)\n\t\t\trec[r.TargetColumn] = coerceForColumn(subsetMap, r.DataType)\n\t\t\tcontinue\n\t\t}",
+    "flow": "TransmuterModule.extractColumns checks isTypePresenceRule(r.SourceField) and builds source_field_types JSON subset."
+  },
+  {
+    "id": "C-REALITY-1",
+    "kind": "claim",
+    "claim": "In coerceForColumn, any []any slice is treated as composite and marshaled via json.Marshal into a JSON string even when dataType is not a JSON column type.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:361-375\n\t_, isMap := v.(map[string]any)\n\t_, isSlice := v.([]any)\n\tcomposite := isMap || isSlice\n\tif isJSONColumnType(dataType) || composite {\n\t\tif isJSONColumnType(dataType) {\n\t\t\tif s, ok := v.(string); ok {\n\t\t\t\tif trimmed := strings.TrimSpace(s); (strings.HasPrefix(trimmed, \"{\") || strings.HasPrefix(trimmed, \"[\") || (strings.HasPrefix(trimmed, \"\\\"\") && strings.HasSuffix(trimmed, \"\\\"\"))) && json.Valid([]byte(trimmed)) {\n\t\t\t\t\treturn trimmed\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif b, err := json.Marshal(v); err == nil {\n\t\t\treturn string(b)\n\t\t}\n\t}",
+    "flow": "coerceForColumn checks composite := isMap || isSlice and runs json.Marshal(v)."
+  },
+  {
+    "id": "C-CONTRA-1",
+    "kind": "claim",
+    "claim": "ApplySourceFieldTypesToBSONDoc only iterates over the four nested keys info, sender, receiver, and error and only deletes transaction_history_id and transactionHistoryId.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:111-131\n\tfor _, nestedKey := range []string{\"info\", \"sender\", \"receiver\", \"error\"} {\n\t\tif nv, exists := doc[nestedKey]; exists && nv != nil {\n\t\t\tif s, isStr := nv.(string); isStr && (strings.HasPrefix(strings.TrimSpace(s), \"{\") || strings.HasPrefix(strings.TrimSpace(s), \"[\")) {\n\t\t\t\tif coerced, err := coerceNestedBSON(s); err == nil {\n\t\t\t\t\tdoc[nestedKey] = coerced\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t}\n\t\t\tdoc[nestedKey] = convertNestedElement(nv)\n\t\t}\n\t}\n\n\tif mongoID, hasID := doc[\"_id\"]; hasID {\n\t\tif !hasTypeMeta(typeMap, \"id\") {\n\t\t\tif len(typeMap) > 0 || normalizeMongoKeyString(doc[\"id\"]) == normalizeMongoKeyString(mongoID) {\n\t\t\t\tdelete(doc, \"id\")\n\t\t\t}\n\t\t}\n\t}\n\tdelete(doc, \"transaction_history_id\")\n\tdelete(doc, \"transactionHistoryId\")",
+    "flow": "ApplySourceFieldTypesToBSONDoc restores nested BSON objects and strips foreign key columns."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "ApplySourceFieldTypesToBSONDoc deletes both source_field_types and sourceFieldTypes keys from doc.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:89-91\n\tdelete(doc, \"source_field_types\")\n\tdelete(doc, \"sourceFieldTypes\")",
+    "flow": "ApplySourceFieldTypesToBSONDoc removes metadata keys from restored MongoDB doc."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "ApplySourceFieldTypesToBSONDoc never deletes source_field_types or sourceFieldTypes from doc.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:89-91\n\tdelete(doc, \"source_field_types\")\n\tdelete(doc, \"sourceFieldTypes\")",
+    "flow": "ApplySourceFieldTypesToBSONDoc removes metadata keys from restored MongoDB doc."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "When isTypePresenceRule(r.SourceField) is true, extractColumns panics immediately without calling buildTypePresenceSubset.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter.go:1935-1940\n\t\tif isTypePresenceRule(r.SourceField) {\n\t\t\tfields := parseTypePresenceFields(r.SourceField)\n\t\t\tsubsetMap := buildTypePresenceSubset(rawStr, fields)\n\t\t\trec[r.TargetColumn] = coerceForColumn(subsetMap, r.DataType)\n\t\t\tcontinue\n\t\t}",
+    "flow": "TransmuterModule.extractColumns handles @type_presence:{...} rules."
+  }
+]

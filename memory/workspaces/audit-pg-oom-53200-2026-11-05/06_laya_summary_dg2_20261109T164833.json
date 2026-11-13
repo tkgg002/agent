@@ -1,0 +1,173 @@
+{
+  "mode": "claim",
+  "stage": "dg2",
+  "workspace": "audit-pg-oom-53200-2026-11-05",
+  "ts": "20261109T164833",
+  "trusted_rounds": [],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/06_laya_raw_dg1_20261109T164833.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Root Cause F42-F45 verified: (1) TableDebouncer.workerLoop in debounce.go:185-214 only drained td.tasks on td.ctx.Done() while abandoning batches in td.flushCh and not waiting on in-flight runTransmute goroutines; (2) Multi-hour jobs across Snapshot, Transmute, and Transform lacked soft-stop chunk-boundary pause (PAUSED) and startup/watchdog auto-resume; (3) CancelTransmute in master_transmute_job_handler.go:121 and RequestCancel in transmute_job_repo.go:200-208 only set cancel_requested=true and updated_at=NOW() without transitioning PENDING/PAUSED/stale jobs to CANCELLED, without closing transmute_schedule, and without publishing cdc.cmd.transmute-cancel.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "REF rỗng (không có dòng trích dẫn) tại /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1726-1732",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0937
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.2209
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.0006
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Solution P13 implements Two-Tier Graceful Shutdown: Tier 1 drains 100% of in-flight micro-batches in BatchBuffer and TableDebouncer before DB close; Tier 2 uses a soft-stop atomic.Bool flag across SnapshotRunner, TransmuterModule/TransmuteHandler, and BatchTransformHandler so the current 1000-row chunk (~300ms) finishes cleanly, saves its checkpoint (last_seen_id / last_gpay_id) with status=PAUSED, and automatically resumes on worker startup or 30s watchdog tick.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "REF rỗng (không có dòng trích dẫn) tại /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1737-2225",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0888
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2999
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7589
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Solution P13 fixes transmute-cancel end-to-end by immediately transitioning PENDING, PAUSED, or stale RUNNING (>45s without heartbeat) jobs to CANCELLED in RequestCancel, closing transmute_schedule.last_status='cancelled', publishing cdc.cmd.transmute-cancel to the worker, and registering HandleTransmuteCancel to cancel active job contexts immediately.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "REF rỗng (không có dòng trích dẫn) tại /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:2227-2352",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2223
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2952
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0189
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "The solution strictly follows existing WorkerServer RegisterOnStart and LIFO RegisterOnStop lifecycle hooks in server.go and server_setup.go without introducing runtime DDL or mock closures.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "REF rỗng (không có dòng trích dẫn) tại /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1710-1732",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.1076
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1977
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4262
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Demo P13-1 through Demo P13-7 provide 1:1 complete Go implementations for TableDebouncer drain, SnapshotRunner soft-stop, TransmuteJobRepo heartbeat & recovery queries, TransmuterModule chunk-boundary pause & heartbeat, TransmuteHandler cancel & auto-resume, BatchTransformHandler chunk-boundary pause, and CMS CancelTransmute + StuckJobReaper.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "REF rỗng (không có dòng trích dẫn) tại /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1737-2352",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0118
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.0557
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.4548
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "If a chunk is hung on network I/O during worker shutdown for more than 10 seconds, SnapshotRunner.Stop() and TransmuteHandler.Stop() fall back to cancelling the active context so shutdown never deadlocks.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "REF rỗng (không có dòng trích dẫn) tại /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1820-1839",
+      "rounds": {
+        "r1": {
+          "choice": "INCORRECT",
+          "confidence": 0.0012
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1282
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0128
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "POST /api/v1/masters/:name/transmute-cancel in MasterTransmuteJobHandler returns the updated job status (CANCELLED for PENDING/PAUSED/stale jobs or CANCEL_REQUESTED for live RUNNING jobs) and publishes cdc.cmd.transmute-cancel.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "REF rỗng (không có dòng trích dẫn) tại /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:2279-2323",
+      "rounds": {
+        "r1": {
+          "choice": "INCORRECT",
+          "confidence": 0.075
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.6969
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.6852
+        }
+      }
+    }
+  ],
+  "gate": "BLOCK",
+  "summary_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/06_laya_summary_dg1_20261109T164833.json"
+}

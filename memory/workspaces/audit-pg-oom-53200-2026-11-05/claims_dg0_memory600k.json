@@ -1,0 +1,63 @@
+[
+  {
+    "id": "C-REALITY-24",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "publishTransmuteTrigger raw data payload",
+    "claim": "publishTransmuteTrigger appends each non-marker record into events with RawData: r.RawData.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:45-54\n\t\t\tsourceIDs = append(sourceIDs, r.PrimaryKeyValue)\n\t\t\tevents = append(events, shadow.TransmuteEventItem{\n\t\t\t\tSourceID:  r.PrimaryKeyValue,\n\t\t\t\tOp:        r.Op,\n\t\t\t\tSourceTs:  r.SourceTsMs,\n\t\t\t\tEventDate: evDate,\n\t\t\t\tRawData:   r.RawData,\n\t\t\t\tIsDelete:  r.IsDelete,\n\t\t\t})",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:45-54",
+    "must_contain": [
+      "RawData:   r.RawData"
+    ]
+  },
+  {
+    "id": "C-CONTRA-25",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "TableDebouncer triggerFlushLocked default branch",
+    "claim": "triggerFlushLocked resets td.tasks to a new empty slice and spawns go td.runTransmute(context.Background(), tasks) in the default branch when td.flushCh is full.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/debounce.go:144-155\n\ttasks := td.tasks\n\ttd.tasks = make([]NatsMsgTask, 0, td.maxSize)\n\n\tselect {\n\tcase td.flushCh <- tasks:\n\tcase <-td.ctx.Done():\n\t\t// K8s shutdown: xả đồng bộ với context nền để tránh deadlock\n\t\tgo td.runTransmute(context.Background(), tasks)\n\tdefault:\n\t\tgo td.runTransmute(context.Background(), tasks)\n\t}\n}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/debounce.go:144-155",
+    "must_contain": [
+      "td.tasks = make([]NatsMsgTask, 0, td.maxSize)",
+      "default:"
+    ]
+  },
+  {
+    "id": "C-REALITY-26",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "flushTableGroupByEventDate transmute trigger on unchanged rows",
+    "claim": "flushTableGroupByEventDate calls bb.publishTransmuteTrigger whenever gerr is nil and bb.natsConn or bb.js is non-nil, regardless of whether groupWritten is 0.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_event_date.go:65-71\n\t\tallResults = append(allResults, groupResults...)\n\t\tmetrics.BatchesFlushed.WithLabelValues(\"postgres\", recs[0].TableName).Inc()\n\t\tif bb.natsConn != nil || bb.js != nil {\n\t\t\tbb.publishTransmuteTrigger(ctx, recs[0].SchemaName, recs[0].TableName, recs)\n\t\t}\n\t\twritten += groupWritten",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_event_date.go:65-71",
+    "must_contain": [
+      "bb.publishTransmuteTrigger(ctx, recs[0].SchemaName, recs[0].TableName, recs)"
+    ]
+  },
+  {
+    "id": "CTRL-TRUE-DG0-21",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "TableDebouncer channel initialization",
+    "claim": "NewTableDebouncer initializes flushCh as a buffered channel of capacity 100.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/debounce.go:60-66\n\ttd := &TableDebouncer{\n\t\ttableName:    tableName,\n\t\tmaxSize:      maxSize,\n\t\tidleTimeout:  idleTimeout,\n\t\tmaxTimeout:   maxTimeout,\n\t\tflushCh:      make(chan []NatsMsgTask, 100),"
+  },
+  {
+    "id": "CTRL-FALSE-DG0-21",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "TableDebouncer channel initialization",
+    "claim": "NewTableDebouncer drops the PostgreSQL database schema during initialization.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/debounce.go:60-66\n\ttd := &TableDebouncer{\n\t\ttableName:    tableName,\n\t\tmaxSize:      maxSize,\n\t\tidleTimeout:  idleTimeout,\n\t\tmaxTimeout:   maxTimeout,\n\t\tflushCh:      make(chan []NatsMsgTask, 100),"
+  },
+  {
+    "id": "CTRL-FALSE-DG0-22",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "flushTableGroupByEventDate transmute trigger on unchanged rows",
+    "claim": "flushTableGroupByEventDate only calls publishTransmuteTrigger when groupWritten is negative.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_event_date.go:65-71\n\t\tallResults = append(allResults, groupResults...)\n\t\tmetrics.BatchesFlushed.WithLabelValues(\"postgres\", recs[0].TableName).Inc()\n\t\tif bb.natsConn != nil || bb.js != nil {\n\t\t\tbb.publishTransmuteTrigger(ctx, recs[0].SchemaName, recs[0].TableName, recs)\n\t\t}\n\t\twritten += groupWritten"
+  }
+]

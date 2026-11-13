@@ -1,0 +1,905 @@
+[
+  {
+    "id": "S-RC-1",
+    "kind": "claim",
+    "claim": "In cdc_system.transmute_jobs (101_create_transmute_jobs.sql) and cdc_system.transform_jobs (100_create_transform_jobs.sql), the status column is VARCHAR(32) NOT NULL DEFAULT 'PENDING' with no CHECK constraint, and StuckJobReaper.reapOnce preserves 'PAUSED' while also healing rows where cancel_requested = true AND status = 'FAILED' AND error_message LIKE 'reaper:%' to 'CANCELLED'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/messaging/stuck_job_reaper.go:135-155\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_jobs\n\t\t   SET status = CASE\n\t\t           WHEN cancel_requested = true THEN 'CANCELLED'\n\t\t           WHEN COALESCE(error_message, '') LIKE '%[auto-resume #3]%' THEN 'FAILED'\n\t\t           ELSE 'PAUSED'\n\t\t       END,\n\t\t       error_message = CASE\n\t\t           WHEN cancel_requested = true THEN 'cancelled by user'\n\t\t           WHEN COALESCE(error_message, '') LIKE '%[auto-resume #3]%' THEN COALESCE(error_message, '') || ' | reaper: max auto-resume attempts (3) exceeded'\n\t\t           WHEN COALESCE(error_message, '') = '' THEN 'reaper: heartbeat timeout (paused for worker auto-resume)'\n\t\t           ELSE error_message\n\t\t       END,\n\t\t       finished_at = CASE\n\t\t           WHEN cancel_requested = true OR COALESCE(error_message, '') LIKE '%[auto-resume #3]%' THEN NOW()\n\t\t           ELSE NULL\n\t\t       END,\n\t\t       updated_at = NOW()\n\t\t WHERE (status IN ('PENDING', 'RUNNING') AND updated_at < NOW() - INTERVAL '10 minutes')\n\t\t    OR (cancel_requested = true AND status = 'FAILED' AND error_message LIKE 'reaper:%')\n\t`).Error",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4206,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7942,
+                "INCORRECT": 0.141,
+                "UNSUPPORTED": 0.0648
+              },
+              "confidence": 0.4206,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 778,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In cdc_system.transmute_jobs (101_create_transmute_jobs.sql) and cdc_system.transform_jobs (100_create_transform_jobs.sql), the status column is VARCHAR(32) NOT NULL DEFAULT 'PENDING' with no CHECK constraint, and StuckJobReaper.reapOnce preserves 'PAUSED' while also healing rows where cancel_requested = true AND status = 'FAILED' AND error_message LIKE 'reaper:%' to 'CANCELLED'.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/messaging/stuck_job_reaper.go:135-155\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_jobs\n\t\t   SET status = CASE\n\t\t           WHEN cancel_requested = true THEN 'CANCELLED'\n\t\t           WHEN COALESCE(error_message, '') LIKE '%[auto-resume #3]%' THEN 'FAILED'\n\t\t           ELSE 'PAUSED'\n\t\t       END,\n\t\t       error_message = CASE\n\t\t           WHEN cancel_requested = true THEN 'cancelled by user'\n\t\t           WHEN COALESCE(error_message, '') LIKE '%[auto-resume #3]%' THEN COALESCE(error_message, '') || ' | reaper: max auto-resume attempts (3) exceeded'\n\t\t           WHEN COALESCE(error_message, '') = '' THEN 'reaper: heartbeat timeout (paused for worker auto-resume)'\n\t\t           ELSE error_message\n\t\t       END,\n\t\t       finished_at = CASE\n\t\t           WHEN cancel_requested = true OR COALESCE(error_message, '') LIKE '%[auto-resume #3]%' THEN NOW()\n\t\t           ELSE NULL\n\t\t       END,\n\t\t       updated_at = NOW()\n\t\t WHERE (status IN ('PENDING', 'RUNNING') AND updated_at < NOW() - INTERVAL '10 minutes')\n\t\t    OR (cancel_requested = true AND status = 'FAILED' AND error_message LIKE 'reaper:%')\n\t`).Error",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1111,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5456,
+                "INCORRECT": 0.3052,
+                "UNSUPPORTED": 0.1492
+              },
+              "confidence": 0.1111,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 783,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/messaging/stuck_job_reaper.go:135-155\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_jobs\n\t\t   SET status = CASE\n\t\t           WHEN cancel_requested = true THEN 'CANCELLED'\n\t\t           WHEN COALESCE(error_message, '') LIKE '%[auto-resume #3]%' THEN 'FAILED'\n\t\t           ELSE 'PAUSED'\n\t\t       END,\n\t\t       error_message = CASE\n\t\t           WHEN cancel_requested = true THEN 'cancelled by user'\n\t\t           WHEN COALESCE(error_message, '') LIKE '%[auto-resume #3]%' THEN COALESCE(error_message, '') || ' | reaper: max auto-resume attempts (3) exceeded'\n\t\t           WHEN COALESCE(error_message, '') = '' THEN 'reaper: heartbeat timeout (paused for worker auto-resume)'\n\t\t           ELSE error_message\n\t\t       END,\n\t\t       finished_at = CASE\n\t\t           WHEN cancel_requested = true OR COALESCE(error_message, '') LIKE '%[auto-resume #3]%' THEN NOW()\n\t\t           ELSE NULL\n\t\t       END,\n\t\t       updated_at = NOW()\n\t\t WHERE (status IN ('PENDING', 'RUNNING') AND updated_at < NOW() - INTERVAL '10 minutes')\n\t\t    OR (cancel_requested = true AND status = 'FAILED' AND error_message LIKE 'reaper:%')\n\t`).Error",
+          "claim": "In cdc_system.transmute_jobs (101_create_transmute_jobs.sql) and cdc_system.transform_jobs (100_create_transform_jobs.sql), the status column is VARCHAR(32) NOT NULL DEFAULT 'PENDING' with no CHECK constraint, and StuckJobReaper.reapOnce preserves 'PAUSED' while also healing rows where cancel_requested = true AND status = 'FAILED' AND error_message LIKE 'reaper:%' to 'CANCELLED'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4121,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8586,
+                "NO": 0.1414
+              },
+              "confidence": 0.4121,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 716,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/messaging/stuck_job_reaper.go:135-155\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_jobs\n\t\t   SET status = CASE\n\t\t           WHEN cancel_requested = true THEN 'CANCELLED'\n\t\t           WHEN COALESCE(error_message, '') LIKE '%[auto-resume #3]%' THEN 'FAILED'\n\t\t           ELSE 'PAUSED'\n\t\t       END,\n\t\t       error_message = CASE\n\t\t           WHEN cancel_requested = true THEN 'cancelled by user'\n\t\t           WHEN COALESCE(error_message, '') LIKE '%[auto-resume #3]%' THEN COALESCE(error_message, '') || ' | reaper: max auto-resume attempts (3) exceeded'\n\t\t           WHEN COALESCE(error_message, '') = '' THEN 'reaper: heartbeat timeout (paused for worker auto-resume)'\n\t\t           ELSE error_message\n\t\t       END,\n\t\t       finished_at = CASE\n\t\t           WHEN cancel_requested = true OR COALESCE(error_message, '') LIKE '%[auto-resume #3]%' THEN NOW()\n\t\t           ELSE NULL\n\t\t       END,\n\t\t       updated_at = NOW()\n\t\t WHERE (status IN ('PENDING', 'RUNNING') AND updated_at < NOW() - INTERVAL '10 minutes')\n\t\t    OR (cancel_requested = true AND status = 'FAILED' AND error_message LIKE 'reaper:%')\n\t`).Error",
+          "claim": "In cdc_system.transmute_jobs (101_create_transmute_jobs.sql) and cdc_system.transform_jobs (100_create_transform_jobs.sql), the status column is VARCHAR(32) NOT NULL DEFAULT 'PENDING' with no CHECK constraint, and StuckJobReaper.reapOnce preserves 'PAUSED' while also healing rows where cancel_requested = true AND status = 'FAILED' AND error_message LIKE 'reaper:%' to 'CANCELLED'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "S-FIX-1",
+    "kind": "claim",
+    "claim": "Demo P14-1 updates TestRequestCancel_RealLocalPostgres_ResolvesStuckJob in transmute_job_repo_test.go to use t.Skip / t.Skipf when config-local.yml, local PostgreSQL, or the target job record is unavailable.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/transmute_job_repo_test.go:44-61\n\tif cfgFile == \"\" {\n\t\tt.Fatalf(\"config-local.yml not found from working directory\")\n\t}\n\t_ = os.Setenv(\"CFG_PATH\", cfgFile)\n\n\tcfg, err := config.NewConfig()\n\tif err != nil {\n\t\tt.Fatalf(\"cannot load config: %v\", err)\n\t}\n\n\tdsn := fmt.Sprintf(\n\t\t\"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s\",\n\t\tcfg.DB.Host, cfg.DB.Port, cfg.DB.UserName, cfg.DB.Password, cfg.DB.Database, cfg.DB.SSLMode,\n\t)\n\tdb, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})\n\tif err != nil {\n\t\tt.Fatalf(\"failed to connect to local Postgres: %v\", err)\n\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3424,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7004,
+                "INCORRECT": 0.2626,
+                "UNSUPPORTED": 0.037
+              },
+              "confidence": 0.3424,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 457,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Demo P14-1 updates TestRequestCancel_RealLocalPostgres_ResolvesStuckJob in transmute_job_repo_test.go to use t.Skip / t.Skipf when config-local.yml, local PostgreSQL, or the target job record is unavailable.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/transmute_job_repo_test.go:44-61\n\tif cfgFile == \"\" {\n\t\tt.Fatalf(\"config-local.yml not found from working directory\")\n\t}\n\t_ = os.Setenv(\"CFG_PATH\", cfgFile)\n\n\tcfg, err := config.NewConfig()\n\tif err != nil {\n\t\tt.Fatalf(\"cannot load config: %v\", err)\n\t}\n\n\tdsn := fmt.Sprintf(\n\t\t\"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s\",\n\t\tcfg.DB.Host, cfg.DB.Port, cfg.DB.UserName, cfg.DB.Password, cfg.DB.Database, cfg.DB.SSLMode,\n\t)\n\tdb, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})\n\tif err != nil {\n\t\tt.Fatalf(\"failed to connect to local Postgres: %v\", err)\n\t}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.1998,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.0621,
+                "INCORRECT": 0.5101,
+                "UNSUPPORTED": 0.4279
+              },
+              "confidence": 0.1998,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 463,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/transmute_job_repo_test.go:44-61\n\tif cfgFile == \"\" {\n\t\tt.Fatalf(\"config-local.yml not found from working directory\")\n\t}\n\t_ = os.Setenv(\"CFG_PATH\", cfgFile)\n\n\tcfg, err := config.NewConfig()\n\tif err != nil {\n\t\tt.Fatalf(\"cannot load config: %v\", err)\n\t}\n\n\tdsn := fmt.Sprintf(\n\t\t\"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s\",\n\t\tcfg.DB.Host, cfg.DB.Port, cfg.DB.UserName, cfg.DB.Password, cfg.DB.Database, cfg.DB.SSLMode,\n\t)\n\tdb, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})\n\tif err != nil {\n\t\tt.Fatalf(\"failed to connect to local Postgres: %v\", err)\n\t}",
+          "claim": "Demo P14-1 updates TestRequestCancel_RealLocalPostgres_ResolvesStuckJob in transmute_job_repo_test.go to use t.Skip / t.Skipf when config-local.yml, local PostgreSQL, or the target job record is unavailable."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.0039,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.4632,
+                "NO": 0.5368
+              },
+              "confidence": 0.0039,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 396,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/transmute_job_repo_test.go:44-61\n\tif cfgFile == \"\" {\n\t\tt.Fatalf(\"config-local.yml not found from working directory\")\n\t}\n\t_ = os.Setenv(\"CFG_PATH\", cfgFile)\n\n\tcfg, err := config.NewConfig()\n\tif err != nil {\n\t\tt.Fatalf(\"cannot load config: %v\", err)\n\t}\n\n\tdsn := fmt.Sprintf(\n\t\t\"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s\",\n\t\tcfg.DB.Host, cfg.DB.Port, cfg.DB.UserName, cfg.DB.Password, cfg.DB.Database, cfg.DB.SSLMode,\n\t)\n\tdb, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})\n\tif err != nil {\n\t\tt.Fatalf(\"failed to connect to local Postgres: %v\", err)\n\t}",
+          "claim": "Demo P14-1 updates TestRequestCancel_RealLocalPostgres_ResolvesStuckJob in transmute_job_repo_test.go to use t.Skip / t.Skipf when config-local.yml, local PostgreSQL, or the target job record is unavailable."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "D-BEHAV-1",
+    "kind": "claim",
+    "claim": "Demo P14-2 and Demo P14-3 split the lifecycle and helper methods of TransmuteHandler (HandleTransmuteCancel, Start, recoverOrphanedTransmuteJobs, Stop, shadowMsgTracker) into transmute_handler_lifecycle.go and of BatchTransformHandler (HandleTransformCancel, Start, recoverOrphanedTransformJobs, Stop, finishJob, detectPrimaryKey) into batch_transform_lifecycle.go in the same packages without changing any method signatures.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:351-379\n// HandleTransmuteCancel immediately cancels an in-flight transmute job by job_id.\nfunc (h *TransmuteHandler) HandleTransmuteCancel(msg *nats.Msg) {\n\tvar payload struct {\n\t\tJobID       string `json:\"job_id\"`\n\t\tMasterTable string `json:\"master_table\"`\n\t}\n\tif err := json.Unmarshal(msg.Data, &payload); err != nil || payload.JobID == \"\" {\n\t\treturn\n\t}\n\th.activeJobsMu.Lock()\n\tcancelFn, ok := h.activeJobs[payload.JobID]\n\th.activeJobsMu.Unlock()\n\tif ok && cancelFn != nil {\n\t\tcancelFn()\n\t}\n}\n\n// Start launches the background recovery loop to auto-resume PAUSED or orphaned transmute jobs.\nfunc (h *TransmuteHandler) Start(ctx context.Context) {\n\th.activeJobsMu.Lock()\n\tif h.stopping.Load() {\n\t\th.activeJobsMu.Unlock()\n\t\treturn\n\t}\n\trecCtx, recCancel := context.WithCancel(ctx)\n\th.recoverCancel = recCancel\n\th.wg.Add(1)\n\th.activeJobsMu.Unlock()",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6449,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8974,
+                "INCORRECT": 0.0754,
+                "UNSUPPORTED": 0.0272
+              },
+              "confidence": 0.6449,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 586,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Demo P14-2 and Demo P14-3 split the lifecycle and helper methods of TransmuteHandler (HandleTransmuteCancel, Start, recoverOrphanedTransmuteJobs, Stop, shadowMsgTracker) into transmute_handler_lifecycle.go and of BatchTransformHandler (HandleTransformCancel, Start, recoverOrphanedTransformJobs, Stop, finishJob, detectPrimaryKey) into batch_transform_lifecycle.go in the same packages without changing any method signatures.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:351-379\n// HandleTransmuteCancel immediately cancels an in-flight transmute job by job_id.\nfunc (h *TransmuteHandler) HandleTransmuteCancel(msg *nats.Msg) {\n\tvar payload struct {\n\t\tJobID       string `json:\"job_id\"`\n\t\tMasterTable string `json:\"master_table\"`\n\t}\n\tif err := json.Unmarshal(msg.Data, &payload); err != nil || payload.JobID == \"\" {\n\t\treturn\n\t}\n\th.activeJobsMu.Lock()\n\tcancelFn, ok := h.activeJobs[payload.JobID]\n\th.activeJobsMu.Unlock()\n\tif ok && cancelFn != nil {\n\t\tcancelFn()\n\t}\n}\n\n// Start launches the background recovery loop to auto-resume PAUSED or orphaned transmute jobs.\nfunc (h *TransmuteHandler) Start(ctx context.Context) {\n\th.activeJobsMu.Lock()\n\tif h.stopping.Load() {\n\t\th.activeJobsMu.Unlock()\n\t\treturn\n\t}\n\trecCtx, recCancel := context.WithCancel(ctx)\n\th.recoverCancel = recCancel\n\th.wg.Add(1)\n\th.activeJobsMu.Unlock()",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0982,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5395,
+                "INCORRECT": 0.2951,
+                "UNSUPPORTED": 0.1654
+              },
+              "confidence": 0.0982,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 592,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:351-379\n// HandleTransmuteCancel immediately cancels an in-flight transmute job by job_id.\nfunc (h *TransmuteHandler) HandleTransmuteCancel(msg *nats.Msg) {\n\tvar payload struct {\n\t\tJobID       string `json:\"job_id\"`\n\t\tMasterTable string `json:\"master_table\"`\n\t}\n\tif err := json.Unmarshal(msg.Data, &payload); err != nil || payload.JobID == \"\" {\n\t\treturn\n\t}\n\th.activeJobsMu.Lock()\n\tcancelFn, ok := h.activeJobs[payload.JobID]\n\th.activeJobsMu.Unlock()\n\tif ok && cancelFn != nil {\n\t\tcancelFn()\n\t}\n}\n\n// Start launches the background recovery loop to auto-resume PAUSED or orphaned transmute jobs.\nfunc (h *TransmuteHandler) Start(ctx context.Context) {\n\th.activeJobsMu.Lock()\n\tif h.stopping.Load() {\n\t\th.activeJobsMu.Unlock()\n\t\treturn\n\t}\n\trecCtx, recCancel := context.WithCancel(ctx)\n\th.recoverCancel = recCancel\n\th.wg.Add(1)\n\th.activeJobsMu.Unlock()",
+          "claim": "Demo P14-2 and Demo P14-3 split the lifecycle and helper methods of TransmuteHandler (HandleTransmuteCancel, Start, recoverOrphanedTransmuteJobs, Stop, shadowMsgTracker) into transmute_handler_lifecycle.go and of BatchTransformHandler (HandleTransformCancel, Start, recoverOrphanedTransformJobs, Stop, finishJob, detectPrimaryKey) into batch_transform_lifecycle.go in the same packages without changing any method signatures."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.89,
+                "NO": 0.11
+              },
+              "confidence": 0.5,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 525,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:351-379\n// HandleTransmuteCancel immediately cancels an in-flight transmute job by job_id.\nfunc (h *TransmuteHandler) HandleTransmuteCancel(msg *nats.Msg) {\n\tvar payload struct {\n\t\tJobID       string `json:\"job_id\"`\n\t\tMasterTable string `json:\"master_table\"`\n\t}\n\tif err := json.Unmarshal(msg.Data, &payload); err != nil || payload.JobID == \"\" {\n\t\treturn\n\t}\n\th.activeJobsMu.Lock()\n\tcancelFn, ok := h.activeJobs[payload.JobID]\n\th.activeJobsMu.Unlock()\n\tif ok && cancelFn != nil {\n\t\tcancelFn()\n\t}\n}\n\n// Start launches the background recovery loop to auto-resume PAUSED or orphaned transmute jobs.\nfunc (h *TransmuteHandler) Start(ctx context.Context) {\n\th.activeJobsMu.Lock()\n\tif h.stopping.Load() {\n\t\th.activeJobsMu.Unlock()\n\t\treturn\n\t}\n\trecCtx, recCancel := context.WithCancel(ctx)\n\th.recoverCancel = recCancel\n\th.wg.Add(1)\n\th.activeJobsMu.Unlock()",
+          "claim": "Demo P14-2 and Demo P14-3 split the lifecycle and helper methods of TransmuteHandler (HandleTransmuteCancel, Start, recoverOrphanedTransmuteJobs, Stop, shadowMsgTracker) into transmute_handler_lifecycle.go and of BatchTransformHandler (HandleTransformCancel, Start, recoverOrphanedTransformJobs, Stop, finishJob, detectPrimaryKey) into batch_transform_lifecycle.go in the same packages without changing any method signatures."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "BatchTransformHandler.HandleTransformCancel unmarshals job_id and calls cancelFn() if present in h.activeJobs.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:106-121\n// HandleTransformCancel immediately cancels an in-flight batch transform job by job_id.\nfunc (h *BatchTransformHandler) HandleTransformCancel(msg *nats.Msg) {\n\tvar payload struct {\n\t\tJobID       string `json:\"job_id\"`\n\t\tTargetTable string `json:\"target_table\"`\n\t}\n\tif err := json.Unmarshal(msg.Data, &payload); err != nil || payload.JobID == \"\" {\n\t\treturn\n\t}\n\th.activeJobsMu.Lock()\n\tcancelFn, ok := h.activeJobs[payload.JobID]\n\th.activeJobsMu.Unlock()\n\tif ok && cancelFn != nil {\n\t\tcancelFn()\n\t}\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6358,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8913,
+                "INCORRECT": 0.0856,
+                "UNSUPPORTED": 0.0232
+              },
+              "confidence": 0.6358,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 386,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "BatchTransformHandler.HandleTransformCancel unmarshals job_id and calls cancelFn() if present in h.activeJobs.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:106-121\n// HandleTransformCancel immediately cancels an in-flight batch transform job by job_id.\nfunc (h *BatchTransformHandler) HandleTransformCancel(msg *nats.Msg) {\n\tvar payload struct {\n\t\tJobID       string `json:\"job_id\"`\n\t\tTargetTable string `json:\"target_table\"`\n\t}\n\tif err := json.Unmarshal(msg.Data, &payload); err != nil || payload.JobID == \"\" {\n\t\treturn\n\t}\n\th.activeJobsMu.Lock()\n\tcancelFn, ok := h.activeJobs[payload.JobID]\n\th.activeJobsMu.Unlock()\n\tif ok && cancelFn != nil {\n\t\tcancelFn()\n\t}\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2548,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6454,
+                "INCORRECT": 0.2899,
+                "UNSUPPORTED": 0.0647
+              },
+              "confidence": 0.2548,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 392,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:106-121\n// HandleTransformCancel immediately cancels an in-flight batch transform job by job_id.\nfunc (h *BatchTransformHandler) HandleTransformCancel(msg *nats.Msg) {\n\tvar payload struct {\n\t\tJobID       string `json:\"job_id\"`\n\t\tTargetTable string `json:\"target_table\"`\n\t}\n\tif err := json.Unmarshal(msg.Data, &payload); err != nil || payload.JobID == \"\" {\n\t\treturn\n\t}\n\th.activeJobsMu.Lock()\n\tcancelFn, ok := h.activeJobs[payload.JobID]\n\th.activeJobsMu.Unlock()\n\tif ok && cancelFn != nil {\n\t\tcancelFn()\n\t}\n}",
+          "claim": "BatchTransformHandler.HandleTransformCancel unmarshals job_id and calls cancelFn() if present in h.activeJobs."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8736,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9826,
+                "NO": 0.0174
+              },
+              "confidence": 0.8736,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 325,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:106-121\n// HandleTransformCancel immediately cancels an in-flight batch transform job by job_id.\nfunc (h *BatchTransformHandler) HandleTransformCancel(msg *nats.Msg) {\n\tvar payload struct {\n\t\tJobID       string `json:\"job_id\"`\n\t\tTargetTable string `json:\"target_table\"`\n\t}\n\tif err := json.Unmarshal(msg.Data, &payload); err != nil || payload.JobID == \"\" {\n\t\treturn\n\t}\n\th.activeJobsMu.Lock()\n\tcancelFn, ok := h.activeJobs[payload.JobID]\n\th.activeJobsMu.Unlock()\n\tif ok && cancelFn != nil {\n\t\tcancelFn()\n\t}\n}",
+          "claim": "BatchTransformHandler.HandleTransformCancel unmarshals job_id and calls cancelFn() if present in h.activeJobs."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "StuckJobReaper.reapOnce never sets status to 'PAUSED' and always deletes all rows from cdc_system.transmute_jobs.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/messaging/stuck_job_reaper.go:135-145\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_jobs\n\t\t   SET status = CASE\n\t\t           WHEN cancel_requested = true THEN 'CANCELLED'\n\t\t           WHEN COALESCE(error_message, '') LIKE '%[auto-resume #3]%' THEN 'FAILED'\n\t\t           ELSE 'PAUSED'\n\t\t       END,\n\t\t       error_message = CASE\n\t\t           WHEN cancel_requested = true THEN 'cancelled by user'",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3969,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7711,
+                "INCORRECT": 0.1754,
+                "UNSUPPORTED": 0.0536
+              },
+              "confidence": 0.3969,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 385,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "StuckJobReaper.reapOnce never sets status to 'PAUSED' and always deletes all rows from cdc_system.transmute_jobs.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/messaging/stuck_job_reaper.go:135-145\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_jobs\n\t\t   SET status = CASE\n\t\t           WHEN cancel_requested = true THEN 'CANCELLED'\n\t\t           WHEN COALESCE(error_message, '') LIKE '%[auto-resume #3]%' THEN 'FAILED'\n\t\t           ELSE 'PAUSED'\n\t\t       END,\n\t\t       error_message = CASE\n\t\t           WHEN cancel_requested = true THEN 'cancelled by user'",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.3957,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.1147,
+                "INCORRECT": 0.7875,
+                "UNSUPPORTED": 0.0978
+              },
+              "confidence": 0.3957,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 391,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/messaging/stuck_job_reaper.go:135-145\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_jobs\n\t\t   SET status = CASE\n\t\t           WHEN cancel_requested = true THEN 'CANCELLED'\n\t\t           WHEN COALESCE(error_message, '') LIKE '%[auto-resume #3]%' THEN 'FAILED'\n\t\t           ELSE 'PAUSED'\n\t\t       END,\n\t\t       error_message = CASE\n\t\t           WHEN cancel_requested = true THEN 'cancelled by user'",
+          "claim": "StuckJobReaper.reapOnce never sets status to 'PAUSED' and always deletes all rows from cdc_system.transmute_jobs."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.9827,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0016,
+                "NO": 0.9984
+              },
+              "confidence": 0.9827,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 324,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/messaging/stuck_job_reaper.go:135-145\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.transmute_jobs\n\t\t   SET status = CASE\n\t\t           WHEN cancel_requested = true THEN 'CANCELLED'\n\t\t           WHEN COALESCE(error_message, '') LIKE '%[auto-resume #3]%' THEN 'FAILED'\n\t\t           ELSE 'PAUSED'\n\t\t       END,\n\t\t       error_message = CASE\n\t\t           WHEN cancel_requested = true THEN 'cancelled by user'",
+          "claim": "StuckJobReaper.reapOnce never sets status to 'PAUSED' and always deletes all rows from cdc_system.transmute_jobs."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "BatchTransformHandler.HandleTransformCancel ignores payload.JobID and cancels all jobs in h.activeJobs unconditionally.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:106-121\n// HandleTransformCancel immediately cancels an in-flight batch transform job by job_id.\nfunc (h *BatchTransformHandler) HandleTransformCancel(msg *nats.Msg) {\n\tvar payload struct {\n\t\tJobID       string `json:\"job_id\"`\n\t\tTargetTable string `json:\"target_table\"`\n\t}\n\tif err := json.Unmarshal(msg.Data, &payload); err != nil || payload.JobID == \"\" {\n\t\treturn\n\t}\n\th.activeJobsMu.Lock()\n\tcancelFn, ok := h.activeJobs[payload.JobID]\n\th.activeJobsMu.Unlock()\n\tif ok && cancelFn != nil {\n\t\tcancelFn()\n\t}\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6583,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8987,
+                "INCORRECT": 0.0833,
+                "UNSUPPORTED": 0.018
+              },
+              "confidence": 0.6583,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 383,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "BatchTransformHandler.HandleTransformCancel ignores payload.JobID and cancels all jobs in h.activeJobs unconditionally.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:106-121\n// HandleTransformCancel immediately cancels an in-flight batch transform job by job_id.\nfunc (h *BatchTransformHandler) HandleTransformCancel(msg *nats.Msg) {\n\tvar payload struct {\n\t\tJobID       string `json:\"job_id\"`\n\t\tTargetTable string `json:\"target_table\"`\n\t}\n\tif err := json.Unmarshal(msg.Data, &payload); err != nil || payload.JobID == \"\" {\n\t\treturn\n\t}\n\th.activeJobsMu.Lock()\n\tcancelFn, ok := h.activeJobs[payload.JobID]\n\th.activeJobsMu.Unlock()\n\tif ok && cancelFn != nil {\n\t\tcancelFn()\n\t}\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3199,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6822,
+                "INCORRECT": 0.2769,
+                "UNSUPPORTED": 0.0409
+              },
+              "confidence": 0.3199,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 389,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:106-121\n// HandleTransformCancel immediately cancels an in-flight batch transform job by job_id.\nfunc (h *BatchTransformHandler) HandleTransformCancel(msg *nats.Msg) {\n\tvar payload struct {\n\t\tJobID       string `json:\"job_id\"`\n\t\tTargetTable string `json:\"target_table\"`\n\t}\n\tif err := json.Unmarshal(msg.Data, &payload); err != nil || payload.JobID == \"\" {\n\t\treturn\n\t}\n\th.activeJobsMu.Lock()\n\tcancelFn, ok := h.activeJobs[payload.JobID]\n\th.activeJobsMu.Unlock()\n\tif ok && cancelFn != nil {\n\t\tcancelFn()\n\t}\n}",
+          "claim": "BatchTransformHandler.HandleTransformCancel ignores payload.JobID and cancels all jobs in h.activeJobs unconditionally."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7088,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9489,
+                "NO": 0.0511
+              },
+              "confidence": 0.7088,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 322,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:106-121\n// HandleTransformCancel immediately cancels an in-flight batch transform job by job_id.\nfunc (h *BatchTransformHandler) HandleTransformCancel(msg *nats.Msg) {\n\tvar payload struct {\n\t\tJobID       string `json:\"job_id\"`\n\t\tTargetTable string `json:\"target_table\"`\n\t}\n\tif err := json.Unmarshal(msg.Data, &payload); err != nil || payload.JobID == \"\" {\n\t\treturn\n\t}\n\th.activeJobsMu.Lock()\n\tcancelFn, ok := h.activeJobs[payload.JobID]\n\th.activeJobsMu.Unlock()\n\tif ok && cancelFn != nil {\n\t\tcancelFn()\n\t}\n}",
+          "claim": "BatchTransformHandler.HandleTransformCancel ignores payload.JobID and cancels all jobs in h.activeJobs unconditionally."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

@@ -1,0 +1,172 @@
+{
+  "mode": "claim",
+  "stage": "dg1",
+  "workspace": "fix-bridge-oplog-sqlstate-21000-2026-11-05",
+  "ts": "20261106T135108",
+  "trusted_rounds": [],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-bridge-oplog-sqlstate-21000-2026-11-05/06_laya_raw_dg1_20261106T135108.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "BatchBuffer.batchUpsert groups deduplicated records by schema signature before calling BuildBatchUpsertSQLInSchema so heterogeneous records do not overwrite missing columns with NULL.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3252
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2083
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0962
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Extracting batchUpsert, executeSoftDelete, and triggerTransmute into bridge_upsert_fanout.go separates batch persistence and NATS fanout from BridgeHandler collection resolution.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "trích dẫn không khớp /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:23-60: func (bb *BatchBuffer) publishTransmuteTrigger(ctx context.C",
+      "rounds": {
+        "r1": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.0181
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3366
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.3257
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Tracking persisted records per succeeded SQL statement ensures failed records are not sent in triggerTransmute events to TransmuterModule.RunEvents.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "trích dẫn không khớp /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:539-550: if len(allEvents) > 0 {",
+      "rounds": {
+        "r1": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.1025
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1252
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4847
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "shadow.DedupByConflictKey deduplicates UpsertRecords by PrimaryKeyValue and merges non-conflicting MappedData columns.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "trích dẫn không khớp /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/model/shadow/upsert_dedup.go:19-40: func DedupByConflictKey(records []*UpsertRecord) []*UpsertRe",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0776
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.0301
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.2366
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In bridge_upsert_fanout.go, batchUpsert deduplicates via shadow.DedupByConflictKey, groups by recordSignature, and appends only succeeded records to persisted.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "vượt quá tổng số dòng (631) của /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-bridge-oplog-sqlstate-21000-2026-11-05/09_tasks_solution_20261105.md:620-642",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2637
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.0288
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.0005
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "Grouping by recordSignature prevents heterogeneous MappedData columns from overwriting existing columns with NULL during multi-row ON CONFLICT DO UPDATE.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "vượt quá tổng số dòng (631) của /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-bridge-oplog-sqlstate-21000-2026-11-05/09_tasks_solution_20261105.md:628-634",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4476
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.0391
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7939
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "TransmuteHandler preserves hookTrigger = bridge-oplog when req.TriggeredBy == bridge-oplog.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.2582
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2641
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7792
+        }
+      }
+    }
+  ],
+  "gate": "BLOCK"
+}

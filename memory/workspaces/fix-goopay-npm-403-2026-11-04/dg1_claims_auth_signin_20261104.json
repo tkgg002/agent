@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "claim",
+    "claim": "SVC_ENV.getRequiredKey in auth-service/svc-env.js includes MERCHANT_API_KEY_JWT_SECRET as a mandatory environment variable.",
+    "function_workflow": "getRequiredKey returns the array of required environment variable names for auth-service.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/auth-service/svc-env.js:38-45\n\t\t\t\"VAULT_ENDPOINT\",\n\t\t\t\"VAULT_KV_PATH\",\n\t\t\t\"VAULT_ROLE_ID\",\n\t\t\t\"VAULT_SECRET_ID\",\n\t\t\t\"VAULT_VERSION\",\n\t\t\t\"MERCHANT_API_KEY_JWT_SECRET\",\n\t\t];\n\t},"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "claim",
+    "claim": "When VaultSecurity.checkMissingEnvVariable() returns true in auth-service/start.js, loadEnvAndInitService calls this.broker.destroyService(this) and throws Error('MIS_ENV_KEY').",
+    "function_workflow": "loadEnvAndInitService checks required environment variables and destroys the service on missing keys.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/auth-service/start.js:413-419\n\t\t\t.then(() => {\n\t\t\t\tconst isMissing = VaultSecurity.checkMissingEnvVariable();\n\t\t\t\tif (isMissing) {\n\t\t\t\t\tthis.broker.destroyService(this);\n\t\t\t\t\tthrow Error(\"MIS_ENV_KEY\");\n\t\t\t\t}\n\t\t\t})"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "claim",
+    "claim": "StartIamAuthService in auth-service/start.js registers the signin action under ServiceName 'auth-service' delegating to this.actionPublish.authPublish.signin(ctx).",
+    "function_workflow": "StartIamAuthService schema defines the signin action handler.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/auth-service/start.js:258-261\n\t\t\t\t/** AUTH */\n\t\t\t\tsignin: (ctx) => this.actionPublish.authPublish.signin(ctx),\n\t\t\t\tauthenticate: (ctx) => this.actionPublish.authPublish.authenticate(ctx),"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "claim",
+    "claim": "checkMissingEnvVariable in auth-service/security/vault.security.js iterates over SVC_ENV.getRequiredKey() and logs MIS_ENV_KEY when any key is missing from SVC_ENV.get().",
+    "function_workflow": "checkMissingEnvVariable checks all required keys against SVC_ENV.get().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/auth-service/security/vault.security.js:21-30\n\tcheckMissingEnvVariable: function() {\n\t\tconst envVariable = SVC_ENV.get();\n\t\tconst REQUIRED_KEY = SVC_ENV.getRequiredKey();\n\t\tlet isMissing = false;\n\t\tREQUIRED_KEY.forEach(keyMustHave => {\n\t\t\tif (!envVariable[keyMustHave]) {\n\t\t\t\tconsole.log(\"MIS_ENV_KEY: \" + keyMustHave);\n\t\t\t\tisMissing = true;\n\t\t\t}\n\t\t});"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "claim",
+    "claim": "In auth-service/start.js, if any step in loadEnvAndInitService rejects, the catch block logs a fatal error and calls this.broker.destroyService(this).",
+    "function_workflow": "loadEnvAndInitService catch handler destroys the service on initialization failure.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/auth-service/start.js:420-425\n\t\t\t.then(() => this.initService())\n\t\t\t.catch((error) => {\n\t\t\t\tthis.broker.logger.fatal(\"Error when init service: \" + error);\n\t\t\t\tthis.broker.destroyService(this);\n\t\t\t});"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "claim",
+    "claim": "SVC_ENV.setEnvironments maps each key in envServices to SVC_ENV.set(key, envServices[key] || '').",
+    "function_workflow": "setEnvironments populates SVC_ENV from broker or process.env.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/auth-service/svc-env.js:57-61\n\t\t// Map to env defined\n\t\tObject.keys(envServices).forEach(key => {\n\t\t\tSVC_ENV.set(key, envServices[key] || \"\");\n\t\t});\n\t\treturn Promise.resolve();"
+  },
+  {
+    "id": "D-API",
+    "kind": "claim",
+    "claim": "MoleculerConfig in auth-service/configs/moleculer.config.js uses process.env.NAMESPACE || 'GOOPAY-CORE' and transporter: process.env.NATS.",
+    "function_workflow": "MoleculerConfig configures namespace and NATS transporter for auth-service.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/auth-service/configs/moleculer.config.js:2-5\nconst MoleculerConfig = {\n\tnamespace: process.env.NAMESPACE || \"GOOPAY-CORE\",\n\tnodeID:`${process.env.SERVICE_NAME}-${(process.env.NODEID ? process.env.NODEID : \"\") + os.hostname().toLowerCase()}`,\n\tmetadata: {},"
+  },
+  {
+    "id": "CTRL-TRUE-01",
+    "kind": "control_true",
+    "claim": "ServiceName in auth-service/start.js is set to 'auth-service'.",
+    "function_workflow": "start.js defines ServiceName constant.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/auth-service/start.js:21-24\nconst SVC_ENV = require(\"./svc-env\");\nconst ServiceName = \"auth-service\";\nconst VaultSecurity = require(\"./security/vault.security\");"
+  },
+  {
+    "id": "CTRL-FALSE-01",
+    "kind": "control_false",
+    "claim": "ServiceName in auth-service/start.js is set to 'payment-service'.",
+    "function_workflow": "start.js defines ServiceName constant.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/auth-service/start.js:21-24\nconst SVC_ENV = require(\"./svc-env\");\nconst ServiceName = \"auth-service\";\nconst VaultSecurity = require(\"./security/vault.security\");"
+  },
+  {
+    "id": "CTRL-FALSE-02",
+    "kind": "control_false",
+    "claim": "SVC_ENV.getRequiredKey in auth-service/svc-env.js returns an empty array.",
+    "function_workflow": "getRequiredKey returns required environment variable keys.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/auth-service/svc-env.js:38-45\n\t\t\t\"VAULT_ENDPOINT\",\n\t\t\t\"VAULT_KV_PATH\",\n\t\t\t\"VAULT_ROLE_ID\",\n\t\t\t\"VAULT_SECRET_ID\",\n\t\t\t\"VAULT_VERSION\",\n\t\t\t\"MERCHANT_API_KEY_JWT_SECRET\",\n\t\t];\n\t},"
+  }
+]

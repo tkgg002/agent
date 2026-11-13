@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ",
+    "kind": "claim",
+    "claim": "In MasterRegistry.tsx lines 1163-1171, groupedMasters only groups filteredData into a single flat dictionary keyed by item.master_schema || '(no schema)' without grouping by master_connection_code first.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1163-1171\n  const groupedMasters = useMemo(() => {\n    const groups: Record<string, MasterRow[]> = {};\n    (filteredData || []).forEach((item) => {\n      const key = item.master_schema || '(no schema)';\n      if (!groups[key]) groups[key] = [];\n      groups[key].push(item);\n    });\n    return groups;\n  }, [filteredData]);",
+    "flow": "MasterRegistry groups rows by master_schema only and renders a single-level Collapse."
+  },
+  {
+    "id": "C-REALITY",
+    "kind": "claim",
+    "claim": "In MasterRegistry.tsx lines 1301-1308, the Collapse panel header renders a static DatabaseOutlined icon and labels every non-mongodb engine as 'Schema Master:'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1301-1308\n                <Space wrap>\n                  <DatabaseOutlined style={{ color: '#1890ff' }} />\n                  <span style={{ fontWeight: 600 }}>\n                    {rows.length > 0 && rows.every((r) => (r.master_engine_type || '').toLowerCase() === 'mongodb')\n                      ? 'Database Master (MongoDB):'\n                      : 'Schema Master:'}\n                  </span>\n                  <Tag color=\"geekblue\">{schema}</Tag>",
+    "flow": "MasterRegistry Collapse panel header rendering."
+  },
+  {
+    "id": "C-CONTRA",
+    "kind": "claim",
+    "claim": "In master_read_repo_gorm.go lines 30-45, ListEnriched already returns master_name, master_schema, master_database, master_connection_code, and master_engine_type for every MasterListItem.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_read_repo_gorm.go:30-45\n\t\tSELECT\n\t\t\tmb.id,\n\t\t\tmb.binding_code,\n\t\t\tmb.master_table AS master_name,\n\t\t\tCASE\n\t\t\t\tWHEN lower(COALESCE(mc.engine_type, '')) IN ('mongodb', 'mysql', 'mariadb', 'clickhouse') AND COALESCE(mc.default_database, '') <> ''\n\t\t\t\tTHEN mc.default_database\n\t\t\t\tELSE mb.master_schema\n\t\t\tEND AS master_schema,\n\t\t\tCASE\n\t\t\t\tWHEN lower(COALESCE(mc.engine_type, '')) IN ('mongodb', 'mysql', 'mariadb', 'clickhouse') AND COALESCE(mc.default_database, '') <> ''\n\t\t\t\tTHEN mc.default_database\n\t\t\t\tELSE COALESCE(mb.master_database, mc.default_database)\n\t\t\tEND AS master_database,\n\t\t\tmc.connection_code AS master_connection_code,\n\t\t\tmc.engine_type AS master_engine_type,",
+    "flow": "GET /api/v1/masters returns MasterListItem with connection, engine, database, schema, and table fields."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In masterEngineConfig.ts lines 47-65, mysql and clickhouse both set isDatabaseScoped to true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/master/masterEngineConfig.ts:47-65\n    defaultDatabase: 'mysql',\n    defaultUserPlaceholder: 'ví dụ: root',\n    codePlaceholder: 'ví dụ: mysql_master_01',\n    displayNamePlaceholder: 'ví dụ: MySQL Master Cluster',\n    isDatabaseScoped: true,\n  },\n  clickhouse: {\n    value: 'clickhouse',\n    label: 'ClickHouse (port 9000)',\n    shortLabel: 'CLICKHOUSE',\n    tagColor: 'purple',\n    defaultPort: 9000,\n    defaultDatabase: 'default',\n    defaultUserPlaceholder: 'ví dụ: default',\n    codePlaceholder: 'ví dụ: ch_analytics_01',\n    displayNamePlaceholder: 'ví dụ: ClickHouse Analytics Cluster',\n    isDatabaseScoped: true,\n  },",
+    "flow": "MASTER_ENGINE_CONFIGS defines engine metadata."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In MasterRegistry.tsx lines 1163-1171, groupedMasters groups items into a 3-level nested tree by master_connection_code and master_engine_type.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1163-1171\n  const groupedMasters = useMemo(() => {\n    const groups: Record<string, MasterRow[]> = {};\n    (filteredData || []).forEach((item) => {\n      const key = item.master_schema || '(no schema)';\n      if (!groups[key]) groups[key] = [];\n      groups[key].push(item);\n    });\n    return groups;\n  }, [filteredData]);",
+    "flow": "groupedMasters memo computation."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In masterEngineConfig.ts lines 47-65, clickhouse sets defaultPort to 3306 and isDatabaseScoped to false.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/master/masterEngineConfig.ts:47-65\n    defaultDatabase: 'mysql',\n    defaultUserPlaceholder: 'ví dụ: root',\n    codePlaceholder: 'ví dụ: mysql_master_01',\n    displayNamePlaceholder: 'ví dụ: MySQL Master Cluster',\n    isDatabaseScoped: true,\n  },\n  clickhouse: {\n    value: 'clickhouse',\n    label: 'ClickHouse (port 9000)',\n    shortLabel: 'CLICKHOUSE',\n    tagColor: 'purple',\n    defaultPort: 9000,\n    defaultDatabase: 'default',\n    defaultUserPlaceholder: 'ví dụ: default',\n    codePlaceholder: 'ví dụ: ch_analytics_01',\n    displayNamePlaceholder: 'ví dụ: ClickHouse Analytics Cluster',\n    isDatabaseScoped: true,\n  },",
+    "flow": "MASTER_ENGINE_CONFIGS defines clickhouse metadata."
+  }
+]

@@ -1,0 +1,103 @@
+{
+  "mode": "claim",
+  "stage": "dg3",
+  "workspace": "fix-bridge-oplog-sqlstate-21000-2026-11-05",
+  "ts": "20261106T155616",
+  "trusted_rounds": [],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-bridge-oplog-sqlstate-21000-2026-11-05/06_laya_raw_dg3_20261106T155616.json",
+  "claims": [
+    {
+      "id": "DG3-OPEN4-NILSAFE-JS",
+      "kind": "audit_finding",
+      "basis": "code",
+      "claim": "Tại internal/server/server_setup.go:298 và internal/server/server_setup_buffers.go:67-86, hàm newConfiguredBridgeHandler kiểm tra if natsClient != nil trước khi lấy nc = natsClient.Conn và chỉ gọi bh.SetJetStream(natsClient.JS) khi natsClient != nil && natsClient.JS != nil, vừa nối dây JetStream cho BridgeHandler vừa chống triệt để lỗi nil-pointer dereference.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "REF rỗng (không có dòng trích dẫn) tại /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup_buffers.go:67-86",
+      "rounds": {
+        "r1": {
+          "choice": "INCORRECT",
+          "confidence": 0.2092
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2276
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7696
+        }
+      }
+    },
+    {
+      "id": "DG3-OPEN6-FANOUT-1PASS",
+      "kind": "audit_finding",
+      "basis": "code",
+      "claim": "Tại internal/handler/source/bridge_handler.go:206-219 và internal/handler/source/bridge_upsert_fanout.go:38-166, selectSourceRoutes khử trùng danh sách route theo khóa chuẩn hóa strings.ToLower(schemaName + \".\" + targetTable) khi coll.TableName rỗng, và processCollectionTargets chỉ gọi strategy.ReadChanges đúng 1 lần cho mỗi collection nguồn rồi fanout từng sự kiện sang các buffer bảng đích tại flushAll.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "REF rỗng (không có dòng trích dẫn) tại /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/bridge_upsert_fanout.go:38-166",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5598
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.229
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0586
+        }
+      }
+    },
+    {
+      "id": "DG3-OPEN7-BEFORE-IMAGE",
+      "kind": "audit_finding",
+      "basis": "code",
+      "claim": "Tại internal/model/shadow/upsert_dedup.go:75-111, applyNonDeleteRawFallback sử dụng hàm isMissingBeforeImage(item.RawData) thay vì so sánh độ dài chuỗi JSON, chỉ áp dụng fallback bestRaw từ sự kiện non-delete có SourceTsMs lớn nhất khi bản ghi DELETE thực sự thiếu before-image (rỗng, {}, null, hoặc chỉ chứa các khóa định danh/cờ xóa _id, id, _source_id, _deleted).",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "REF rỗng (không có dòng trích dẫn) tại /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/model/shadow/upsert_dedup.go:75-111",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6358
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1737
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.9014
+        }
+      }
+    },
+    {
+      "id": "DG3-F1-F5-CORE",
+      "kind": "audit_finding",
+      "basis": "code",
+      "claim": "Tại internal/handler/source/bridge_upsert_fanout.go:196-415 và internal/handler/master/transmute_handler.go:189-197, BridgeHandler.batchUpsert khử trùng theo PrimaryKeyValue, gom nhóm theo recordSignature, tách riêng bản ghi xóa mềm sang executeSoftDelete, và triggerTransmute gửi đầy đủ _source_ids, events, shadow_binding_code với triggered_by = bridge-oplog qua JetStream kèm fast-fallback sang cdc.cmd.transmute-shadow.core-fallback.",
+      "decision": "BLOCK",
+      "resolved": null,
+      "evidence_error": "REF rỗng (không có dòng trích dẫn) tại /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/bridge_upsert_fanout.go:196-415",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2438
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.2552
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0
+        }
+      }
+    }
+  ],
+  "gate": "BLOCK"
+}

@@ -1,0 +1,65 @@
+[
+  {
+    "id": "S-RC-60",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "TableDebouncer backpressure and default goroutine spawn",
+    "claim": "TableDebouncer.AddTask calls triggerFlushLocked as soon as len(td.tasks) >= td.maxSize, and triggerFlushLocked resets td.tasks to length 0 and spawns go td.runTransmute in the default branch when flushCh is full.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/debounce.go:99-105\n\t\ttd.tasks = append(td.tasks, task)\n\n\t\tif len(td.tasks) >= td.maxSize {\n\t\t\ttd.triggerFlushLocked()\n\t\t\ttd.mu.Unlock()\n\t\t\tbreak\n\t\t}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/debounce.go:144-155\n\ttasks := td.tasks\n\ttd.tasks = make([]NatsMsgTask, 0, td.maxSize)\n\n\tselect {\n\tcase td.flushCh <- tasks:\n\tcase <-td.ctx.Done():\n\t\t// K8s shutdown: xả đồng bộ với context nền để tránh deadlock\n\t\tgo td.runTransmute(context.Background(), tasks)\n\tdefault:\n\t\tgo td.runTransmute(context.Background(), tasks)\n\t}\n}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/debounce.go:99-105",
+    "must_contain": [
+      "td.triggerFlushLocked()",
+      "td.tasks = make([]NatsMsgTask, 0, td.maxSize)"
+    ]
+  },
+  {
+    "id": "S-FIX-61",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "TransmuteConsumerPool ConsumerConfig MaxAckPending",
+    "claim": "ensureSubscribedLocked constructs nats.ConsumerConfig with Durable, DeliverPolicy, AckPolicy, AckWait, MaxDeliver, FilterSubject, DeliverSubject, and DeliverGroup without setting MaxAckPending.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_consumer_pool.go:164-173\n\tconsumerCfg := &nats.ConsumerConfig{\n\t\tDurable:        p.cfg.ConsumerName,\n\t\tDeliverPolicy:  nats.DeliverAllPolicy,\n\t\tAckPolicy:      nats.AckExplicitPolicy,\n\t\tAckWait:        p.cfg.AckWait,\n\t\tMaxDeliver:     p.cfg.MaxDeliver,\n\t\tFilterSubject:  p.cfg.FilterSubject,\n\t\tDeliverSubject: nats.NewInbox(),\n\t\tDeliverGroup:   queueGroup,\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_consumer_pool.go:164-173",
+    "must_contain": [
+      "consumerCfg := &nats.ConsumerConfig{",
+      "DeliverGroup:   queueGroup,"
+    ]
+  },
+  {
+    "id": "D-BEHAV-60",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "ConnectionManager PostgreSQL pools use ensurePgxCacheDescribe via Registry",
+    "claim": "GetSystemDB and GetShadowDB delegate to m.reg.GetDB, and GetMasterDB delegates to m.reg.GetDB or m.reg.OpenGormWithEngine.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:57-65\nfunc (m *ConnectionManager) GetSystemDB(ctx context.Context) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleControlPlane)\n}\n\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:404-408\n\t// 4. Open GORM connection with engine-specific dialector and standard pool configuration\n\tdb, err := m.reg.OpenGormWithEngine(dsn, \"master:\"+key, resolvedEng)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"open master db connection for %q (engine=%s): %w\", key, resolvedEng, err)\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:57-65",
+    "must_contain": [
+      "return m.reg.GetDB(database.RoleShadow)",
+      "db, err := m.reg.OpenGormWithEngine(dsn, \"master:\"+key, resolvedEng)"
+    ]
+  },
+  {
+    "id": "CTRL-TRUE-DG1-60",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "GetShadowDB delegates to RoleShadow",
+    "claim": "GetShadowDB calls m.reg.GetDB(database.RoleShadow).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:62-65\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}"
+  },
+  {
+    "id": "CTRL-FALSE-DG1-60",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "GetShadowDB delegates to RoleShadow",
+    "claim": "GetShadowDB deletes the shadow schema when key is empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go:62-65\nfunc (m *ConnectionManager) GetShadowDB(ctx context.Context, key string) (*gorm.DB, error) {\n\t_ = ctx\n\treturn m.reg.GetDB(database.RoleShadow)\n}"
+  },
+  {
+    "id": "CTRL-FALSE-DG1-61",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "TransmuteConsumerPool ConsumerConfig MaxAckPending",
+    "claim": "ensureSubscribedLocked sets DeliverPolicy to DeliverNewPolicy.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_consumer_pool.go:164-173\n\tconsumerCfg := &nats.ConsumerConfig{\n\t\tDurable:        p.cfg.ConsumerName,\n\t\tDeliverPolicy:  nats.DeliverAllPolicy,\n\t\tAckPolicy:      nats.AckExplicitPolicy,\n\t\tAckWait:        p.cfg.AckWait,\n\t\tMaxDeliver:     p.cfg.MaxDeliver,\n\t\tFilterSubject:  p.cfg.FilterSubject,\n\t\tDeliverSubject: nats.NewInbox(),\n\t\tDeliverGroup:   queueGroup,\n\t}"
+  }
+]

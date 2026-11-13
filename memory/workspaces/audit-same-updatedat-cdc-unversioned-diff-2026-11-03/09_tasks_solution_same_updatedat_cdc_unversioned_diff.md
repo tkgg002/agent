@@ -12,7 +12,7 @@ mode: propose-only
 | ID | Mức độ | Component & `file:line` | Vấn đề & Căn nguyên Vật lý (Root Cause) | Tác động Runtime (Case `261029KHHDUH`) | Giải pháp Tối ưu Nhất (1-1) |
 | :--- | :---: | :--- | :--- | :--- | :--- |
 | **`F1`** | **CRITICAL (P0)** | `centralized-data-service`<br>- `internal/service/shadow/schema_adapter.go:771-783`<br>- `internal/handler/shadow/utils.go:72-105`<br>- `internal/handler/shadow/batch_buffer.go:674-750` | **(1) Mất thứ tự trong cùng giây Oplog:** Debezium MongoDB gán `source.ts_ms = seconds * 1000` (từ BSON Oplog `Timestamp(seconds, ord)`), còn thứ tự trong cùng 1 giây nằm ở `source.ord`. Hàm `extractSourceTsMs` (`utils.go:72-105`) chỉ đọc `ts_ms` mà bỏ qua `ord`, làm 2 sự kiện cách nhau `23 ms` trong cùng giây `05:17:04Z` có cùng `_source_ts = 1761715024000`.<br>**(2) Cổng OCC dùng dấu `<` ngặt:** `buildOCCWhereClause` (`schema_adapter.go:774,781`) ép `_source_ts < EXCLUDED._source_ts` (trừ khi `_source = 'snapshot:v2'`). Khi 2 sự kiện cùng giây rơi vào 2 đợt flush/SQL khác nhau, sự kiện thứ 2 (`PENDING`) bị chặn (`0 rows affected`) và bị nuốt mất vĩnh viễn. | Postgres Shadow & Master giữ kẹt bản ghi đầu tiên (`PROCESSING`) suốt gần 5 giờ (`05:17:04Z` $\rightarrow$ `10:59:26Z`), gây 34 lần `unversioned_diff` khi Admin xem danh sách `MERCHANT_PAYMENT`. Chỉ tự hết lệch nhờ có lệnh `SUCCESS` lúc `10:59:26Z` mang `_source_ts` lớn hơn; nếu không có lệnh ghi sau đó, Postgres sẽ **sai mãi mãi**. | **(1A)** Tại `utils.go:72-105`: Kết hợp `source.ord` (giới hạn `1..999`) vào `ts_ms` khi `ts_ms % 1000 == 0` để bảo toàn thứ tự nhân quả sub-second của MongoDB Oplog.<br>**(1B)** Tại `schema_adapter.go:771-783`: Cho phép `_source_ts = EXCLUDED._source_ts AND EXCLUDED._source <> 'snapshot:v2'` (cổng `_hash IS DISTINCT FROM EXCLUDED._hash` đã chặn replay trùng nội dung), đồng bộ với `dedupByConflictKey` (`>=`) và `transmuter.go:1698` (`>=`). |
-| **`F2`** | **HIGH (P1)** | `core-trans-proxy-service`<br>- `publish/cashin.publish.ts:34-44, 514-564`<br>`core-trans-proxy-history-service`<br>- `start.ts:50-55`<br>- `models/transHis.model.ts:28-32, 92-114` | **(1) Fire-and-Forget không `await` & Mutate chung object:** `CashInPublish.createTransHis` và `updateTransHis` gọi `handlePromise(ctx.call(...))` không `await` và gán đè trực tiếp lên cùng biến tham chiếu `transHisParam`.<br>**(2) Độ trễ bất đối xứng tạo log ngược `23 ms`:** `createTransHis` trong `start.ts:50-53` chạy thêm `createIpAddress(ctx)` + `$save` (validate full schema + ghi mọi index + trả full document), nặng hơn `$updateOne` của `updateTransHisStatus`. Trên MongoDB, `insertOne(PROCESSING)` thực thi trước vài ms nên `updateOne(PENDING)` tìm thấy bản ghi (`n:1, nModified:1`), nhưng `updateTransHisStatus` trả response về trước `createTransHis` `23 ms`. | - Giải thích trọn vẹn vì sao log `updateTransHisStatus` xuất hiện trước `createTransHis` `23 ms` mà `n:1, nModified:1` và `insertOne` không bị lỗi trùng khóa `unique: true` (`transHis.model.ts:31`).<br>- Rủi ro tiềm ẩn: nếu gói mạng `updateOne` tới MongoDB trước `insertOne`, `updateOne` sẽ trả `n:0` (mất lệnh cập nhật trạng thái) làm cả Mongo v1 lẫn Postgres v2 kẹt ở `PROCESSING`. | Tại `cashin.publish.ts:34-44`: Clone nông payload `{ ...transHisParam, status, error: generateTransHisError(error) }` để tránh race condition mutate chung tham chiếu, và trả về Promise để các luồng có thể `await` hoặc chuỗi hóa thứ tự `createTransHis` $\rightarrow$ `updateTransHis`. |
+| **`F2`** | **INFO (Root-Cause Context Only — Không sửa service ngoài)** | `core-trans-proxy-service`<br>- `publish/cashin.publish.ts:34-44, 514-564`<br>`core-trans-proxy-history-service`<br>- `start.ts:50-55`<br>- `models/transHis.model.ts:28-32, 92-114` | **(1) Fire-and-Forget không `await`:** `CashInPublish.createTransHis` và `updateTransHis` gọi `handlePromise(ctx.call(...))` không `await`.<br>**(2) Độ trễ bất đối xứng tạo log ngược `23 ms`:** `createTransHis` trong `start.ts:50-53` chạy thêm `createIpAddress(ctx)` + `$save` (validate full schema + ghi mọi index + trả full document), nặng hơn `$updateOne` của `updateTransHisStatus`. Trên MongoDB, `insertOne(PROCESSING)` thực thi trước vài ms nên `updateOne(PENDING)` tìm thấy bản ghi (`n:1, nModified:1`), nhưng `updateTransHisStatus` trả response về trước `createTransHis` `23 ms`. | Giải thích trọn vẹn vì sao log `updateTransHisStatus` xuất hiện trước `createTransHis` `23 ms` mà `n:1, nModified:1`, `insertOne` không bị lỗi trùng khóa `unique: true` (`transHis.model.ts:31`), và trên MongoDB Oplog thứ tự nhân quả vẫn đúng 100% (`insertOne(PROCESSING)` tại `ord = k` $\rightarrow$ `updateOne(PENDING)` tại `ord = k + 1`). | **Không đụng vào `core-trans-proxy-service`**. Vì trên MongoDB Oplog thứ tự sự kiện đã đúng (`PROCESSING` trước, `PENDING` sau), chỉ cần làm **Code Demo 1 (`1A` + `1B`)** tại `centralized-data-service` là giải quyết triệt để 100% lỗi lệch `unversioned_diff`. |
 
 ---
 
@@ -248,43 +248,20 @@ func extractSourceTsMs(source interface{}) int64 {
 
 ---
 
-### 4.2. Giải pháp cho `F2` (`core-trans-proxy-service/publish/cashin.publish.ts:34-44`)
-- Tránh mutate trực tiếp lên biến tham chiếu dùng chung `transHisParam` và trả về Promise từ `createTransHis` / `updateTransHis` để đảm bảo thứ tự nhân quả `createTransHis` hoàn tất trước khi `updateTransHisStatus` được gọi.
+### 4.2. Vì Sao Chỉ Cần Làm Code Demo 1 (`1A` + `1B`) Tại `centralized-data-service` Là Giải Quyết Triệt Để 100% (Không Đụng Vào Service Khác)?
+- Dù `core-trans-proxy-service` ghi log hoàn tất `updateTransHisStatus` sớm hơn `createTransHis` `23 ms`, nhưng trên **MongoDB Oplog** (nguồn phát sự kiện của Debezium), thứ tự vật lý đã chuẩn xác 100%:
+  1. Sự kiện #1 (`op: "c"`, `status: "PROCESSING"`): `ts_ms = 1761715024000`, `ord = k`.
+  2. Sự kiện #2 (`op: "u"`, `status: "PENDING", error: 1172`): `ts_ms = 1761715024000`, `ord = k + 1`.
+- Khi áp dụng **Code Demo 1A** (`utils.go:72-105`), sự kiện #2 sẽ có `_source_ts = 1761715024000 + (k + 1)` lớn hơn nghiêm ngặt sự kiện #1 (`1761715024000 + k`).
+- Khi áp dụng **Code Demo 1B** (`schema_adapter.go:768-789`), ngay cả khi 2 sự kiện có cùng `_source_ts`, cổng OCC `<=` (kết hợp `_hash IS DISTINCT FROM EXCLUDED._hash`) vẫn cho phép sự kiện #2 cập nhật vào bảng Shadow, đồng bộ hoàn toàn với toàn bộ phần còn lại của `centralized-data-service` (`dedupByConflictKey` ở `batch_buffer_utils.go:100`, `BuildSoftDeleteUpdateSQL` ở `schema_adapter.go:443`, `transmuter_events_batch.go:244` và `transmuter.go:1698`).
 
-#### Code Demo 2 — `/Users/trainguyen/Documents/work/core-trans-proxy-service/publish/cashin.publish.ts:34-44`
+---
 
-**Before (nguyên văn từ `HEAD`):**
-```ts
-	private static createTransHis(ctx: Context, transHisParam, status, error: any = null) {
-		transHisParam.error = generateTransHisError(error);
-		transHisParam.status = status;
-		handlePromise(ctx.call(`${SVC_ENV.get().CORE_TRANS_PROXY_HISTORY_SERVICE}.createTransHis`, transHisParam, { meta: ctx.meta }))
-	}
+### 4.3. Self-Healing Update (`TASK-BUG-01` — Phát hiện từ S5 Adversarial Audit & `/laya_router` Mode B)
+1. **Khử lặp logic `unwrapAvroUnion` tại `internal/handler/shadow/utils.go:72-95`:**
+   - Trong vòng kiểm định `/laya_router` Mode B (`06_laya_summary_dg3review_20261103T135231.json`), Laya đánh dấu `REJECT_REDUNDANT` đối với vòng lặp `if mm, ok := raw.(map[string]interface{}); ok && len(mm) == 1` trong `parseAnyInt64` vì cùng package `shadow` (`internal/handler/shadow/avro_helper.go:67-82`) đã có sẵn hàm `unwrapAvroUnion(raw)`.
+   - Khắc phục: Gọi trực tiếp `raw = unwrapAvroUnion(raw)` ở đầu `parseAnyInt64` (giảm từ `117` dòng xuống `112` dòng).
+2. **Đồng bộ `source.ord` sub-second tie-breaker sang peer `internal/sinkworker/utils.go:88-102`:**
+   - Qua truy vết đầu-cuối (`L029`), `internal/sinkworker/utils.go:88-96` cũng có hàm `extractSourceTsMs(envelope map[string]any) int64` đọc `src["ts_ms"]`. Bổ sung cộng `min(ord, 999)` khi `ts > 0 && ts%1000 == 0` để đồng nhất 100% giữa `handler/shadow` và `sinkworker`.
 
-	private static updateTransHis(ctx: Context, transHisParam, status, error: any = null) {
-		transHisParam.error = generateTransHisError(error);
-		transHisParam.status = status;
-		handlePromise(ctx.call(`${SVC_ENV.get().CORE_TRANS_PROXY_HISTORY_SERVICE}.updateTransHisStatus`, transHisParam, { meta: ctx.meta }))
-	}
-```
 
-**After (đề xuất):**
-```ts
-	private static createTransHis(ctx: Context, transHisParam, status, error: any = null) {
-		const payload = {
-			...transHisParam,
-			error: generateTransHisError(error),
-			status,
-		};
-		return handlePromise(ctx.call(`${SVC_ENV.get().CORE_TRANS_PROXY_HISTORY_SERVICE}.createTransHis`, payload, { meta: ctx.meta }));
-	}
-
-	private static updateTransHis(ctx: Context, transHisParam, status, error: any = null) {
-		const payload = {
-			...transHisParam,
-			error: generateTransHisError(error),
-			status,
-		};
-		return handlePromise(ctx.call(`${SVC_ENV.get().CORE_TRANS_PROXY_HISTORY_SERVICE}.updateTransHisStatus`, payload, { meta: ctx.meta }));
-	}
-```

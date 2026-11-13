@@ -1,0 +1,58 @@
+[
+    {
+      "id": "DG3-23-1",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In utils/internal-transfer.constants.ts, INTERNAL_TRANSFER_DEFAULT_TRANS_TYPES defines 6 transaction types including BATCH_DISBURSEMENT_SETTLE.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/utils/internal-transfer.constants.ts:12-19\nexport const INTERNAL_TRANSFER_DEFAULT_TRANS_TYPES: string[] = [\n\tINTERNAL_TRANSFER_TRANS_TYPE.INTERNAL_BANK_TRANSFER,\n\tINTERNAL_TRANSFER_TRANS_TYPE.REFUND_CASHIN,\n\tINTERNAL_TRANSFER_TRANS_TYPE.WALLET_UNMATCH_CASHIN,\n\tINTERNAL_TRANSFER_TRANS_TYPE.WALLET_UNMATCH_REFUND,\n\tINTERNAL_TRANSFER_TRANS_TYPE.CASHOUT_MERCHANT,\n\tINTERNAL_TRANSFER_TRANS_TYPE.BATCH_DISBURSEMENT_SETTLE\n];",
+      "flow": "utils/internal-transfer.constants.ts -> INTERNAL_TRANSFER_DEFAULT_TRANS_TYPES"
+    },
+    {
+      "id": "DG3-23-2",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In data-transfers/params/trans-his/internal-transfer-export.params.ts, InternalTransferExportParams extends TransHisExportParams and declares senderAccount, receiverAccount, connector, and originalTransHisId.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/trans-his/internal-transfer-export.params.ts:1-9\nimport { IsOptional, IsString } from \"class-validator\";\nimport { TransHisExportParams } from \"./trans-his-export.params\";\n\nexport class InternalTransferExportParams extends TransHisExportParams {\n\t@IsOptional() @IsString() public senderAccount?: string;\n\t@IsOptional() @IsString() public receiverAccount?: string;\n\t@IsOptional() @IsString() public connector?: string;\n\t@IsOptional() @IsString() public originalTransHisId?: string;\n}",
+      "flow": "data-transfers/params/trans-his/internal-transfer-export.params.ts -> InternalTransferExportParams"
+    },
+    {
+      "id": "DG3-23-3",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In logics/export/trans-his/internal-transfer-export.pure.ts, buildSort checks sortType === 'asc' || sortType === 1 || sortType === '1' on line 150.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:144-156\nconst buildSort = (params: any): object => {\n    let sort: any = {};\n    const sortBy = params.sortBy;\n    const sortType = params.sortType;\n\n    if (sortBy && sortType) {\n        const order = sortType === \"asc\" || sortType === 1 || sortType === \"1\" ? 1 : -1;\n        sort[sortBy] = order;\n    } else {\n        sort = { createdAt: -1 };\n    }\n    return sort;\n};",
+      "flow": "internal-transfer-export.pure.ts -> buildSort"
+    },
+    {
+      "id": "DG3-23-4",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In logics/export/trans-his/internal-transfer-export.pure.ts, transformRow assigns receiverBankAccount: history.receiver?.credit || history.info?.bankTransferData?.credit || '' on line 275.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:271-277\n        senderBankName,\n        senderBankAccount,\n        senderBankAccountName,\n        receiverBankName: history.receiver?.bankCode || \"\",\n        receiverBankAccount: history.receiver?.credit || history.info?.bankTransferData?.credit || \"\",\n        receiverBankAccountName: history.receiver?.creditName || \"\"\n    };",
+      "flow": "internal-transfer-export.pure.ts -> transformRow"
+    },
+    {
+      "id": "CTRL-TRUE-DG3-23-1",
+      "kind": "control_true",
+      "basis": "code",
+      "claim": "In models/trans-his-pg/trans-his-pg.query.ts, TEXT_COLUMNS maps 'serviceCode', 'channelId', 'sender.customerId', 'receiver.customerId', 'sender.phone', 'receiver.phone', and 'info.partnerCode' to their corresponding core.* columns.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:84-97\nconst TEXT_COLUMNS: Readonly<Record<string, string>> = {\n\t\"transId\": \"core.trans_id\",\n\t\"transType\": \"core.trans_type\",\n\t\"status\": \"core.status\",\n\t\"originalTransHisId\": \"core.original_trans_his_id\",\n\t\"serviceCode\": \"core.service_code\",\n\t\"channelId\": \"core.channel_id\",\n\t\"sender.customerId\": \"core.sender_customer_id\",\n\t\"receiver.customerId\": \"core.receiver_customer_id\",\n\t\"sender.phone\": \"core.sender_phone\",\n\t\"receiver.phone\": \"core.receiver_phone\",\n\t\"receiver.credit\": \"core.receiver_credit\",\n\t\"info.partnerCode\": \"core.partner_code\"\n};",
+      "flow": "trans-his-pg.query.ts -> TEXT_COLUMNS"
+    },
+    {
+      "id": "CTRL-FALSE-DG3-23-1",
+      "kind": "control_false",
+      "basis": "code",
+      "claim": "In internal-transfer-export.pure.ts, buildFilter filters partnerCode using a case-insensitive $regex on info.bankTransferResponse.partnerCode.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:35-37\n    if (params.partnerCode) {\n        filter[\"info.partnerCode\"] = params.partnerCode;\n    }",
+      "flow": "InternalTransferExport.buildFilter -> partnerCode"
+    },
+    {
+      "id": "CTRL-FALSE-DG3-23-2",
+      "kind": "control_false",
+      "basis": "code",
+      "claim": "In core-trans-proxy-history-service/logics/transHis.manage.logic.ts, getList filters partnerCode using a case-insensitive $regex on info.bankTransferResponse.partnerCode.",
+      "evidence": "REF: /Users/trainguyen/Documents/work/core-trans-proxy-history-service/logics/transHis.manage.logic.ts:74-76\n\t\tif (params.partnerCode) {\n\t\t\tfilter[\"info.partnerCode\"] = params.partnerCode;\n\t\t}",
+      "flow": "TransHisManageLogic.getList -> partnerCode"
+    }
+]

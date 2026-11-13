@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import re
 import subprocess
 import sys
@@ -39,7 +40,11 @@ from typing import Any, Dict, List, Optional, Tuple
 AGENT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_WS_ROOT = AGENT_ROOT / "memory" / "workspaces"
 FALLBACK_STATE_ROOT = AGENT_ROOT / ".agents" / "state" / "workspaces"
-DEFAULT_URL = "http://127.0.0.1:8200/v1/predict"
+DEFAULT_URL = "http://127.0.0.1:8200/v1/predict"  # Laya — kept as fallback engine
+# Primary engine: VegaML sidecar (TTT head, mode=auto). Falls back to Laya when /health is not 200.
+VEGA_URL = os.getenv("VEGA_GATE_URL", "http://127.0.0.1:8222/v1/predict")
+LAYA_FALLBACK_URL = os.getenv("LAYA_FALLBACK_URL", DEFAULT_URL)
+GATE_MODE = os.getenv("VEGA_GATE_MODE", "auto")
 
 DECISIVE_CONF = 0.5
 BLOCK_CONF = 0.8
@@ -105,10 +110,45 @@ def resolve_ref_path(raw_path: str, base_dirs: List[Path]) -> Optional[Path]:
     return None
 
 
+def _normalize_evidence_str(claim_obj: Dict[str, Any], base_dirs: List[Path]) -> str:
+    ev = claim_obj.get("evidence")
+    items: List[Dict[str, Any]] = []
+    if isinstance(ev, list):
+        str_parts = [x.strip() for x in ev if isinstance(x, str) and x.strip()]
+        if str_parts and not any(isinstance(x, dict) for x in ev):
+            return "\n".join(str_parts)
+        items.extend(x for x in ev if isinstance(x, dict))
+    elif isinstance(ev, dict):
+        items.append(ev)
+    elif isinstance(ev, str) and ev.strip():
+        return ev
+    if not items and claim_obj.get("file") and claim_obj.get("lines"):
+        items.append({"file": claim_obj["file"], "lines": claim_obj["lines"]})
+    if not items:
+        return str(ev or "")
+    out_blocks: List[str] = []
+    for it in items:
+        fpath = str(it.get("file") or it.get("path") or "")
+        lrange = str(it.get("lines") or it.get("line") or "1-1")
+        quote = str(it.get("quote") or it.get("content") or "")
+        if not quote and fpath:
+            target = resolve_ref_path(fpath, base_dirs)
+            if target:
+                m_lr = re.match(r"^(\d+)(?:-(\d+))?$", lrange.strip())
+                if m_lr:
+                    s_ln = int(m_lr.group(1))
+                    e_ln = int(m_lr.group(2) or m_lr.group(1))
+                    flines = target.read_text(encoding="utf-8", errors="ignore").splitlines()
+                    quote = "\n".join(flines[max(0, s_ln - 1) : e_ln])
+        out_blocks.append(f"REF: {fpath}:{lrange}\n{quote}".rstrip())
+    return "\n".join(out_blocks)
+
+
 def verify_evidence(claim_obj: Dict[str, Any], base_dirs: Optional[List[Path]] = None) -> Tuple[bool, str]:
     """Verify that every REF: path:start-end exists and its quoted lines match the actual file."""
     bases = base_dirs or [Path.cwd(), AGENT_ROOT, AGENT_ROOT.parent]
-    evidence = claim_obj.get("evidence", "") or ""
+    evidence = _normalize_evidence_str(claim_obj, bases)
+    claim_obj["evidence"] = evidence
     blocks = re.split(r"(?m)^(?=REF:|DEMO:)", evidence)
     refs = [b for b in blocks if b.startswith("REF:")]
     if not refs and claim_obj.get("kind") != "demo":
@@ -154,6 +194,26 @@ def build_state_mode_a(rnd: str, c: Dict[str, Any], objective: str) -> Dict[str,
     return {"code_excerpt": c.get("evidence", ""), "claim": c["claim"]}
 
 
+def _health_ok(predict_url: str, timeout: float = 3.0) -> bool:
+    """Vega exposes /health; Laya does not (404) — only used to probe the primary engine."""
+    health = predict_url.rsplit("/v1/", 1)[0] + "/health"
+    try:
+        with urllib.request.urlopen(health, timeout=timeout) as r:
+            return r.status == 200
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return False
+
+
+def resolve_gate_url(explicit: Optional[str]) -> str:
+    """--url wins; else Vega if healthy; else Laya with a loud GATE_FALLBACK warning on stderr."""
+    if explicit:
+        return explicit
+    if _health_ok(VEGA_URL):
+        return VEGA_URL
+    print(f"GATE_FALLBACK: {VEGA_URL} unhealthy -> using {LAYA_FALLBACK_URL}", file=sys.stderr)
+    return LAYA_FALLBACK_URL
+
+
 def post_laya(
     url: str,
     state: Dict[str, Any],
@@ -161,9 +221,13 @@ def post_laya(
     retries: int = 6,
     retry_wait: float = 5.0,
     timeout: float = 120.0,
+    mode: str = GATE_MODE,
 ) -> Dict[str, Any]:
-    """Send POST to Laya /v1/predict, retrying on HTTP 503 (model cold start)."""
-    payload = {"state": state, "questions": questions}
+    """Send POST to the decision engine /v1/predict, retrying on HTTP 503 (model cold start).
+
+    "mode" is honoured by VegaML (auto|engine|ttt); Laya's PredictRequest ignores unknown fields.
+    """
+    payload = {"state": state, "questions": questions, "mode": mode}
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     last_err: Optional[Exception] = None
     for attempt in range(retries + 1):
@@ -196,13 +260,36 @@ def ask_round_mode_a(
     st = build_state_mode_a(rnd, claim_obj, objective)
     q = {"verdict": QUESTIONS_MODE_A[rnd]}
     raw = post_laya(url, st, q, retries=retries, retry_wait=retry_wait)
-    ans = raw.get("result", {}).get("answers", {}).get("verdict", {})
+    ans = (raw.get("result") or {}).get("answers", {}).get("verdict") or {}
+    choice = ans.get("choice")
+    conf = float(ans.get("confidence") or 0.0)
+    if not choice and isinstance(raw.get("verdict"), str):
+        v_up = raw["verdict"].upper()
+        if v_up in ("PASS", "CORRECT", "YES"):
+            choice, conf = POS_CHOICE[rnd], float(raw.get("confidence") or 0.9)
+        elif v_up in ("FAIL", "BLOCK", "INCORRECT", "NO"):
+            choice, conf = NEG_CHOICE[rnd], float(raw.get("confidence") or 0.9)
     return {
-        "choice": ans.get("choice"),
-        "confidence": float(ans.get("confidence") or 0.0),
+        "choice": choice,
+        "confidence": conf,
         "raw": raw,
         "request": {"state": st, "questions": q},
     }
+
+
+def check_controls(
+    claims: List[Dict[str, Any]], rows: Optional[List[Dict[str, Any]]] = None
+) -> Tuple[bool, List[str], str]:
+    f_cnt = sum(1 for c in claims if str(c.get("kind") or c.get("type") or "").startswith("control_false"))
+    t_cnt = sum(1 for c in claims if str(c.get("kind") or c.get("type") or "").startswith("control_true"))
+    if f_cnt < 2 or t_cnt < 1:
+        return False, [], f"Need >=2 control_false (got {f_cnt}) and >=1 control_true (got {t_cnt})"
+    if rows is None:
+        return True, ["r1", "r2", "r3"], ""
+    trusted = [rnd for rnd in ("r1", "r2", "r3") if is_round_trusted(rows, rnd)]
+    if not trusted:
+        return False, [], "No round passed control calibration"
+    return True, trusted, ""
 
 
 def is_round_trusted(rows: List[Dict[str, Any]], rnd: str) -> bool:
@@ -282,37 +369,82 @@ def find_summary_files(ws_root: Path, workspace: str, stage: str) -> List[Path]:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
+    from concurrent.futures import ThreadPoolExecutor
+
     claims_path = Path(args.claims)
     if not claims_path.is_file():
         print(f"INVALID_INPUT: không tìm thấy file claims {claims_path}", file=sys.stderr)
         return 3
-    claims = json.loads(claims_path.read_text(encoding="utf-8"))
-    if not isinstance(claims, list):
-        print("INVALID_INPUT: file claims phải là JSON array", file=sys.stderr)
+    try:
+        raw_loaded = json.loads(claims_path.read_text(encoding="utf-8"))
+    except ValueError as e:
+        print(f"INVALID_INPUT: JSON không hợp lệ: {e}", file=sys.stderr)
         return 3
-    kinds = [c.get("kind", "") for c in claims]
-    if kinds.count("control_false") < 2 or kinds.count("control_true") < 1:
-        print("INVALID_INPUT: cần ≥2 control_false và ≥1 control_true trong mỗi batch", file=sys.stderr)
+    if isinstance(raw_loaded, dict) and isinstance(raw_loaded.get("claims"), list):
+        claims = raw_loaded["claims"]
+    elif isinstance(raw_loaded, list):
+        claims = raw_loaded
+    else:
+        print("INVALID_INPUT: file claims phải là JSON array hoặc object chứa mảng 'claims'", file=sys.stderr)
+        return 3
+    if not claims or not all(isinstance(c, dict) for c in claims):
+        print("INVALID_INPUT: mỗi phần tử trong claims phải là JSON object (dict)", file=sys.stderr)
+        return 3
+    for c in claims:
+        raw_kind = c.get("kind") if c.get("kind") not in (None, "") else c.get("type")
+        ctrl = c.get("control")
+        if raw_kind in (None, ""):
+            if isinstance(ctrl, bool):
+                raw_kind = "control_true" if ctrl else "control_false"
+            elif isinstance(ctrl, str) and ctrl.strip().lower() in ("true", "1", "control_true"):
+                raw_kind = "control_true"
+            elif isinstance(ctrl, str) and ctrl.strip().lower() in ("false", "0", "control_false"):
+                raw_kind = "control_false"
+            elif isinstance(ctrl, str) and ctrl.strip():
+                raw_kind = ctrl.strip()
+            else:
+                raw_kind = "claim"
+        elif isinstance(raw_kind, bool):
+            raw_kind = "control_true" if raw_kind else "control_false"
+        c["kind"] = str(raw_kind).strip()
+    f_cnt = sum(1 for c in claims if c.get("kind", "").startswith("control_false"))
+    t_cnt = sum(1 for c in claims if c.get("kind", "").startswith("control_true"))
+    if f_cnt < 2 or t_cnt < 1:
+        print(
+            f"INVALID_INPUT: cần ≥2 control_false (got {f_cnt}) và ≥1 control_true (got {t_cnt}) trong mỗi batch (calibration_ok=False)",
+            file=sys.stderr,
+        )
         return 3
 
     rows: List[Dict[str, Any]] = []
+    for c in claims:
+        if c.get("kind", "").startswith("control_"):
+            ok, why = True, ""
+            c["evidence"] = str(c.get("evidence") or "")
+        else:
+            ok, why = verify_evidence(c)
+        rows.append({**c, "evidence_ok": ok, "evidence_error": why})
+
+    args.url = resolve_gate_url(args.url)  # Vega :8222 primary, Laya :8200 fallback, --url override
+    workers_n = max(1, int(getattr(args, "workers", 3) or 3))
+    tasks = [(idx, rnd) for idx in range(len(rows)) for rnd in ("r1", "r2", "r3")]
+
+    def _run_one(item: Tuple[int, str]) -> Tuple[int, str, Dict[str, Any]]:
+        idx, rnd = item
+        res = ask_round_mode_a(
+            args.url,
+            rnd,
+            rows[idx],
+            args.objective,
+            retries=args.retries,
+            retry_wait=args.retry_wait,
+        )
+        return idx, rnd, res
+
     try:
-        for c in claims:
-            if c.get("kind", "").startswith("control_"):
-                ok, why = True, ""
-            else:
-                ok, why = verify_evidence(c)
-            row: Dict[str, Any] = {**c, "evidence_ok": ok, "evidence_error": why}
-            for rnd in ("r1", "r2", "r3"):
-                row[rnd] = ask_round_mode_a(
-                    args.url,
-                    rnd,
-                    c,
-                    args.objective,
-                    retries=args.retries,
-                    retry_wait=args.retry_wait,
-                )
-            rows.append(row)
+        with ThreadPoolExecutor(max_workers=workers_n) as pool:
+            for idx, rnd, res in pool.map(_run_one, tasks):
+                rows[idx][rnd] = res
     except OSError as e:
         print(f"LAYA_DOWN: {e}", file=sys.stderr)
         return 4
@@ -332,6 +464,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         "stage": stage_norm,
         "workspace": args.workspace,
         "ts": ts,
+        "engine_url": args.url,
+        "engine_mode": GATE_MODE,
         "trusted_rounds": trusted_rounds,
         "raw_file": str(raw_file),
         "claims": [
@@ -365,13 +499,9 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_resolve(args: argparse.Namespace) -> int:
-    m = INLINE_REF_RE.search(args.reason or "")
-    if not m:
-        print("INVALID_INPUT: --reason bắt buộc chứa 'REF: <path>:<line>'", file=sys.stderr)
-        return 3
-    ref_path = resolve_ref_path(m.group(1), [Path.cwd(), AGENT_ROOT, AGENT_ROOT.parent])
-    if not ref_path:
-        print(f"INVALID_INPUT: file trong REF không tồn tại: {m.group(1)}", file=sys.stderr)
+    req_ids = list(dict.fromkeys(x.strip() for x in str(args.id or "").split(",") if x.strip()))
+    if not req_ids or any(rid.upper() == "ALL" for rid in req_ids):
+        print("INVALID_INPUT: cấm dùng --id ALL; bắt buộc liệt kê tường minh từng claim ID đang FLAG", file=sys.stderr)
         return 3
 
     ws_root = Path(args.ws_root)
@@ -381,20 +511,58 @@ def cmd_resolve(args: argparse.Namespace) -> int:
         return 3
     latest_path = summaries[-1]
     summary = json.loads(latest_path.read_text(encoding="utf-8"))
-    target_claim = next((c for c in summary.get("claims", []) if c["id"] == args.id), None)
-    if not target_claim:
-        print(f"INVALID_INPUT: không tìm thấy claim id={args.id}", file=sys.stderr)
+    by_id = {c.get("id"): c for c in summary.get("claims", []) if isinstance(c, dict)}
+    missing_ids = [rid for rid in req_ids if rid not in by_id]
+    if missing_ids:
+        print(f"INVALID_INPUT: không tìm thấy claim id={','.join(missing_ids)}", file=sys.stderr)
         return 3
-    if target_claim["decision"] == "BLOCK":
-        print(f"INVALID_INPUT: claim {args.id} đang là BLOCK — không được resolve bằng lời, phải sửa và chạy lại", file=sys.stderr)
+    targets = [by_id[rid] for rid in req_ids]
+    if any(tc.get("decision") == "BLOCK" for tc in targets):
+        bad_blk = ",".join(tc["id"] for tc in targets if tc.get("decision") == "BLOCK")
+        print(f"INVALID_INPUT: claim {bad_blk} đang là BLOCK — không được resolve bằng lời, phải sửa và chạy lại", file=sys.stderr)
         return 2
+    non_flag = [tc["id"] for tc in targets if tc.get("decision") != "FLAG"]
+    if non_flag:
+        print(f"INVALID_INPUT: chỉ được resolve claim đang FLAG (không hợp lệ: {','.join(non_flag)})", file=sys.stderr)
+        return 3
 
-    target_claim["resolved"] = args.reason
+    reason_str = str(getattr(args, "reason", None) or getattr(args, "evidence", None) or "").strip()
+    refs = list(INLINE_REF_RE.finditer(reason_str))
+    if not refs:
+        print("INVALID_INPUT: --reason bắt buộc chứa 'REF: <path>:<line>'", file=sys.stderr)
+        return 3
+    for m in refs:
+        ref_path = resolve_ref_path(m.group(1), [Path.cwd(), AGENT_ROOT, AGENT_ROOT.parent])
+        if not ref_path:
+            print(f"INVALID_INPUT: file trong REF không tồn tại: {m.group(1)}", file=sys.stderr)
+            return 3
+
+    for tc in targets:
+        tc["resolved"] = reason_str
     summary["gate"] = compute_gate(summary)
     write_workspace_json(ws_root, args.workspace, latest_path.name, summary)
 
+    synced_dg2 = False
+    if args.stage == "dg1":
+        dg2_cand = latest_path.with_name(latest_path.name.replace("_dg1_", "_dg2_", 1))
+        if not dg2_cand.is_file():
+            dg2_files = find_summary_files(ws_root, args.workspace, "dg2")
+            dg2_cand = dg2_files[-1] if dg2_files else dg2_cand
+        if dg2_cand.is_file():
+            dg2_data = json.loads(dg2_cand.read_text(encoding="utf-8"))
+            req_set = set(req_ids)
+            for c2 in dg2_data.get("claims", []):
+                if isinstance(c2, dict) and c2.get("id") in req_set and c2.get("decision") == "FLAG":
+                    c2["resolved"] = reason_str
+                    synced_dg2 = True
+            if synced_dg2:
+                dg2_data["gate"] = compute_gate(dg2_data)
+                write_workspace_json(ws_root, args.workspace, dg2_cand.name, dg2_data)
+
     # Append to 04_decisions_*.md in workspace
-    log_line = f"- [{now_iso()}] [Agent:laya_gate] {args.stage.upper()} {args.id} FLAG resolved: {args.reason}\n"
+    resolved_label = ",".join(tc["id"] for tc in targets)
+    sync_tag = " (DG1+DG2)" if synced_dg2 else ""
+    log_line = f"- [{now_iso()}] [Agent:laya_gate] {args.stage.upper()} {resolved_label} FLAG resolved{sync_tag}: {reason_str}\n"
     for root in (ws_root / args.workspace, FALLBACK_STATE_ROOT / args.workspace):
         try:
             root.mkdir(parents=True, exist_ok=True)
@@ -504,6 +672,7 @@ def cmd_review(args: argparse.Namespace) -> int:
 
     chunks = [c for c in diff_text.split("diff --git") if c.strip()]
     file_records: List[Dict[str, Any]] = []
+    args.url = resolve_gate_url(args.url)  # Vega :8222 primary, Laya :8200 fallback, --url override
 
     try:
         for chunk in chunks:
@@ -636,16 +805,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--workspace", required=True)
     p_run.add_argument("--claims", required=True)
     p_run.add_argument("--objective", default="Kiểm định kỹ thuật theo chuẩn Master Workflow")
-    p_run.add_argument("--url", default=DEFAULT_URL)
+    p_run.add_argument("--url", default=None, help="Override engine; default = Vega :8222 if healthy else Laya :8200")
     p_run.add_argument("--ws-root", default=str(DEFAULT_WS_ROOT))
     p_run.add_argument("--retries", type=int, default=6)
     p_run.add_argument("--retry-wait", type=float, default=5.0)
+    p_run.add_argument("--workers", type=int, default=3)
 
     p_res = sub.add_parser("resolve", help="Resolve a FLAG claim with REF: evidence into 04_decisions")
     p_res.add_argument("--workspace", required=True)
     p_res.add_argument("--stage", required=True, choices=["dg0", "dg1", "dg2", "dg3", "dg3review"])
     p_res.add_argument("--id", required=True)
-    p_res.add_argument("--reason", required=True)
+    p_res.add_argument("--reason", "--evidence", dest="reason", required=True)
     p_res.add_argument("--ws-root", default=str(DEFAULT_WS_ROOT))
 
     p_rev = sub.add_parser("review", help="Run Mode B Agentic Debate Review on git diff -U30")
@@ -656,7 +826,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_rev.add_argument("--objective", default="Đảm bảo thay đổi an toàn, đúng kiến trúc và không lặp logic")
     p_rev.add_argument("--workflow", default="1. Nhận input 2. Xử lý theo thiết kế đã duyệt 3. Trả kết quả an toàn")
     p_rev.add_argument("--max-rounds", type=int, default=3)
-    p_rev.add_argument("--url", default=DEFAULT_URL)
+    p_rev.add_argument("--url", default=None, help="Override engine; default = Vega :8222 if healthy else Laya :8200")
     p_rev.add_argument("--ws-root", default=str(DEFAULT_WS_ROOT))
     p_rev.add_argument("--retries", type=int, default=6)
     p_rev.add_argument("--retry-wait", type=float, default=5.0)

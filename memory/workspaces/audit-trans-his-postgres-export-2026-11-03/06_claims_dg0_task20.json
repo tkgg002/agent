@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ-20",
+    "kind": "claim",
+    "claim": "In internal-transfer-export.pure.ts, buildFilter initializes filter with transType default [INTERNAL_BANK_TRANSFER, REFUND_CASHIN] without setting sysTrans: { $ne: true }, and only sets filter.sysTrans = params.sysTrans when 'sysTrans' in params.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:14-27\nconst buildFilter = (params: any) => {\n    let filter: any = {\n        transType: {\n            $in: [\n                TRANS_TYPE.INTERNAL_BANK_TRANSFER,\n                TRANS_TYPE.REFUND_CASHIN\n            ]\n        }\n    };\n\n    if (params.transType) {\n        const arrayTransType = params.transType.split(\",\");\n        filter.transType = { $in: arrayTransType };\n    }",
+    "flow": "InternalTransferExport.getConfig -> buildFilter -> GetAllTransHisExportQuery"
+  },
+  {
+    "id": "C-REALITY-20",
+    "kind": "claim",
+    "claim": "In transaction-history.repository.ts, managerWhere adds 'core.sys_trans IS DISTINCT FROM TRUE' whenever filters.sysTrans === undefined, and in transHis.manage.logic.ts getList initializes filter with sysTrans: { $ne: true }.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/core-trans-proxy-history-service-v2/dbHandler/postgres/transaction-history.repository.ts:1196-1198\n\tif (filters.sysTrans === undefined) {\n\t\twhere.push(\"core.sys_trans IS DISTINCT FROM TRUE\");\n\t} else if (!isSysTransRefundException(filters)) {",
+    "flow": "getListTransHisForManager -> listForManager -> managerWhere"
+  },
+  {
+    "id": "C-CONTRA-20",
+    "kind": "claim",
+    "claim": "In internal-transfer-export.pure.ts, buildFilter filters partnerCode with a case-insensitive $regex $or across info.partnerCode and info.bankTransferResponse.partnerCode, and only exempts REFUND_CASHIN when sysTrans === 'true', whereas transHis.manage.logic.ts uses exact match on info.partnerCode and exempts REFUND_CASHIN, WALLET_UNMATCH_CASHIN, and WALLET_UNMATCH_REFUND.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:36-42\n    if (params.partnerCode) {\n        const keyword = params.partnerCode.trim();\n        filter.$or = [\n            { \"info.partnerCode\": { $regex: keyword, $options: \"i\" } },\n            { \"info.bankTransferResponse.partnerCode\": { $regex: keyword, $options: \"i\" } }\n        ];\n    }",
+    "flow": "InternalTransferExport.buildFilter vs TransHisManageLogic.getList"
+  },
+  {
+    "id": "CTRL-TRUE-20",
+    "kind": "control_true",
+    "claim": "In trans-his-export.params.ts, TransHisExportParams declares dateFr and dateTo as required date strings and transId, transType, status, partnerCode, customerId, phone, sysTrans, transIdRef, info, walletPayOnly, sortBy, sortType as optional strings.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/trans-his/trans-his-export.params.ts:32-54\nexport class TransHisExportParams {\n    @IsNotEmpty({ message: \"ERR_DATE_FR_REQUIRED\" })\n    @IsDateString({}, { message: \"ERR_INVALID_DATE\" })\n    public dateFr: string;\n\n    @IsNotEmpty({ message: \"ERR_DATE_TO_REQUIRED\" })\n    @IsDateString({}, { message: \"ERR_INVALID_DATE\" })\n    public dateTo: string;\n\n    @IsOptional() @IsString() public transId?: string;\n    @IsOptional() @IsString() public transType?: string; // Ví dụ: \"PAY,CASHOUT\"\n    @IsOptional() @IsString() public status?: string; // Ví dụ: \"SUCCESS,FAILED\"\n    @IsOptional() @IsString() public partnerCode?: string;\n    @IsOptional() @IsString() public customerId?: string;\n    @IsOptional() @IsString() public phone?: string;\n    @IsOptional() @IsString() public sysTrans?: string;\n    @IsOptional() @IsString() public transIdRef?: string;\n    @IsOptional() @IsString() public info?: string; // JSON string for complex filtering\n    @IsOptional() @IsString() public walletPayOnly?: string;\n\n    @IsOptional() @IsString() public sortBy?: string;\n    @IsOptional() @IsString() public sortType?: string;",
+    "flow": "InternalTransferExport.validate -> validateParams(TransHisExportParams)"
+  },
+  {
+    "id": "CTRL-FALSE-20A",
+    "kind": "control_false",
+    "claim": "In internal-transfer-export.pure.ts, buildFilter initializes filter with sysTrans: { $ne: true } on line 15 and exempts WALLET_UNMATCH_CASHIN and WALLET_UNMATCH_REFUND on line 100.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:14-23\nconst buildFilter = (params: any) => {\n    let filter: any = {\n        transType: {\n            $in: [\n                TRANS_TYPE.INTERNAL_BANK_TRANSFER,\n                TRANS_TYPE.REFUND_CASHIN\n            ]\n        }\n    };",
+    "flow": "InternalTransferExport.buildFilter"
+  },
+  {
+    "id": "CTRL-FALSE-20B",
+    "kind": "control_false",
+    "claim": "In core-trans-proxy-history-service/logics/transHis.manage.logic.ts, getList filters partnerCode using a case-insensitive $regex on info.bankTransferResponse.partnerCode.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/core-trans-proxy-history-service/logics/transHis.manage.logic.ts:74-76\n\t\tif (params.partnerCode) {\n\t\t\tfilter[\"info.partnerCode\"] = params.partnerCode;\n\t\t}",
+    "flow": "TransHisManageLogic.getList partnerCode filter"
+  }
+]

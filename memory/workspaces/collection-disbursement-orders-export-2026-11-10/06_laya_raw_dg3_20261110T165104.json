@@ -1,0 +1,1063 @@
+[
+  {
+    "id": "A-FILTER",
+    "kind": "claim",
+    "claim": "buildCollectionDisbursementOrdersFilter in collection-disbursement-orders-export.pure.ts enforces bizDomain TRANSFER_BIZ and filter.isDelete = false while supporting payerType, payeeType, payerMerchantCode, and payeeMerchantCode.",
+    "flow": "CollectionDisbursementOrdersExportPure.getConfig -> buildCollectionDisbursementOrdersFilter",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/payment-bill/collection-disbursement-orders-export.pure.ts:74-142\nexport const buildCollectionDisbursementOrdersFilter = (params: any) => {\n    const filter: { [k: string]: any } = {};\n    const andConditions: object[] = [{ bizDomain: BIZ_DOMAIN_TRANSFER }];\n\n    if (\"merchantId\" in params && !isEmptyValue(params.merchantId)) {\n        filter[\"merchantInfo.id\"] = params.merchantId;\n    }\n    if (\"channelID\" in params && !isEmptyValue(params.channelID)) {\n        filter.$or = [{ channelID: params.channelID }, { \"payments.channelID\": params.channelID }];\n    }\n    if (\"merchantEmail\" in params && params.merchantEmail) {\n        filter[\"merchantInfo.email\"] = buildRegexSearch(params.merchantEmail);\n    }\n    if (\"merchantCode\" in params && params.merchantCode) {\n        filter[\"merchantInfo.merchantCode\"] = buildRegexSearch(params.merchantCode);\n    }\n\n    [\"apiType\", \"state\", \"partnerCode\", \"serviceCode\", \"trackingId\"].forEach(field => {\n        if (field in params && !isEmptyValue(params[field])) {\n            filter[field] = params[field];\n        }\n    });\n\n    [\"orderId\", \"merchantTransId\"].forEach(field => {\n        if (field in params && params[field]) {\n            filter[field] = buildRegexSearch(params[field]);\n        }\n    });\n\n    if (params.isCapturedPayment === \"true\") {\n        filter.holdingStep = { $nin: [undefined, null, \"\"] };\n    }\n    if (\"holdingStep\" in params && !isEmptyValue(params.holdingStep)) {\n        filter.holdingStep = params.holdingStep;\n    }\n    if (\"payerMerchantCode\" in params && params.payerMerchantCode) {\n        const regex = buildRegexSearch(params.payerMerchantCode);\n        andConditions.push({\n            $or: [{ \"transactionParties.payer.merchantCode\": regex }, { \"transactionParties.payer.userId\": regex }]\n        });\n    }\n    if (\"payeeMerchantCode\" in params && params.payeeMerchantCode) {\n        const regex = buildRegexSearch(params.payeeMerchantCode);\n        andConditions.push({\n            $or: [{ \"transactionParties.payee.merchantCode\": regex }, { \"transactionParties.payee.userId\": regex }]\n        });\n    }\n\n    for (const [paramKey, party] of [[\"payerType\", \"payer\"], [\"payeeType\", \"payee\"]] as const) {\n        if (!params[paramKey]) { continue; }\n        const condition = buildPartyTypeCondition(party, params[paramKey]);\n        if (condition) { andConditions.push(condition); }\n    }\n\n    if (\"dateFr\" in params || \"dateTo\" in params) {\n        filter.createdAt = {};\n        if (\"dateFr\" in params && params.dateFr) { filter.createdAt.$gte = new Date(params.dateFr); }\n        if (\"dateTo\" in params && params.dateTo) { filter.createdAt.$lte = new Date(params.dateTo); }\n    }\n    if (\"updatedFr\" in params || \"updatedTo\" in params) {\n        filter.lastUpdatedAt = {};\n        if (\"updatedFr\" in params && params.updatedFr) { filter.lastUpdatedAt.$gte = new Date(params.updatedFr); }\n        if (\"updatedTo\" in params && params.updatedTo) { filter.lastUpdatedAt.$lte = new Date(params.updatedTo); }\n    }\n\n    filter.isDelete = false;\n    filter.$and = [...(filter.$and || []), ...andConditions];\n    return filter;\n};",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.238,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.4625,
+                "INCORRECT": 0.4957,
+                "UNSUPPORTED": 0.0418
+              },
+              "confidence": 0.238,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "buildCollectionDisbursementOrdersFilter in collection-disbursement-orders-export.pure.ts enforces bizDomain TRANSFER_BIZ and filter.isDelete = false while supporting payerType, payeeType, payerMerchantCode, and payeeMerchantCode.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/payment-bill/collection-disbursement-orders-export.pure.ts:74-142\nexport const buildCollectionDisbursementOrdersFilter = (params: any) => {\n    const filter: { [k: string]: any } = {};\n    const andConditions: object[] = [{ bizDomain: BIZ_DOMAIN_TRANSFER }];\n\n    if (\"merchantId\" in params && !isEmptyValue(params.merchantId)) {\n        filter[\"merchantInfo.id\"] = params.merchantId;\n    }\n    if (\"channelID\" in params && !isEmptyValue(params.channelID)) {\n        filter.$or = [{ channelID: params.channelID }, { \"payments.channelID\": params.channelID }];\n    }\n    if (\"merchantEmail\" in params && params.merchantEmail) {\n        filter[\"merchantInfo.email\"] = buildRegexSearch(params.merchantEmail);\n    }\n    if (\"merchantCode\" in params && params.merchantCode) {\n        filter[\"merchantInfo.merchantCode\"] = buildRegexSearch(params.merchantCode);\n    }\n\n    [\"apiType\", \"state\", \"partnerCode\", \"serviceCode\", \"trackingId\"].forEach(field => {\n        if (field in params && !isEmptyValue(params[field])) {\n            filter[field] = params[field];\n        }\n    });\n\n    [\"orderId\", \"merchantTransId\"].forEach(field => {\n        if (field in params && params[field]) {\n            filter[field] = buildRegexSearch(params[field]);\n        }\n    });\n\n    if (params.isCapturedPayment === \"true\") {\n        filter.holdingStep = { $nin: [undefined, null, \"\"] };\n    }\n    if (\"holdingStep\" in params && !isEmptyValue(params.holdingStep)) {\n        filter.holdingStep = params.holdingStep;\n    }\n    if (\"payerMerchantCode\" in params && params.payerMerchantCode) {\n        const regex = buildRegexSearch(params.payerMerchantCode);\n        andConditions.push({\n            $or: [{ \"transactionParties.payer.merchantCode\": regex }, { \"transactionParties.payer.userId\": regex }]\n        });\n    }\n    if (\"payeeMerchantCode\" in params && params.payeeMerchantCode) {\n        const regex = buildRegexSearch(params.payeeMerchantCode);\n        andConditions.push({\n            $or: [{ \"transactionParties.payee.merchantCode\": regex }, { \"transactionParties.payee.userId\": regex }]\n        });\n    }\n\n    for (const [paramKey, party] of [[\"payerType\", \"payer\"], [\"payeeType\", \"payee\"]] as const) {\n        if (!params[paramKey]) { continue; }\n        const condition = buildPartyTypeCondition(party, params[paramKey]);\n        if (condition) { andConditions.push(condition); }\n    }\n\n    if (\"dateFr\" in params || \"dateTo\" in params) {\n        filter.createdAt = {};\n        if (\"dateFr\" in params && params.dateFr) { filter.createdAt.$gte = new Date(params.dateFr); }\n        if (\"dateTo\" in params && params.dateTo) { filter.createdAt.$lte = new Date(params.dateTo); }\n    }\n    if (\"updatedFr\" in params || \"updatedTo\" in params) {\n        filter.lastUpdatedAt = {};\n        if (\"updatedFr\" in params && params.updatedFr) { filter.lastUpdatedAt.$gte = new Date(params.updatedFr); }\n        if (\"updatedTo\" in params && params.updatedTo) { filter.lastUpdatedAt.$lte = new Date(params.updatedTo); }\n    }\n\n    filter.isDelete = false;\n    filter.$and = [...(filter.$and || []), ...andConditions];\n    return filter;\n};",
+          "flow": "CollectionDisbursementOrdersExportPure.getConfig -> buildCollectionDisbursementOrdersFilter"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2321,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5825,
+                "INCORRECT": 0.3617,
+                "UNSUPPORTED": 0.0558
+              },
+              "confidence": 0.2321,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "CollectionDisbursementOrdersExportPure.getConfig -> buildCollectionDisbursementOrdersFilter",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/payment-bill/collection-disbursement-orders-export.pure.ts:74-142\nexport const buildCollectionDisbursementOrdersFilter = (params: any) => {\n    const filter: { [k: string]: any } = {};\n    const andConditions: object[] = [{ bizDomain: BIZ_DOMAIN_TRANSFER }];\n\n    if (\"merchantId\" in params && !isEmptyValue(params.merchantId)) {\n        filter[\"merchantInfo.id\"] = params.merchantId;\n    }\n    if (\"channelID\" in params && !isEmptyValue(params.channelID)) {\n        filter.$or = [{ channelID: params.channelID }, { \"payments.channelID\": params.channelID }];\n    }\n    if (\"merchantEmail\" in params && params.merchantEmail) {\n        filter[\"merchantInfo.email\"] = buildRegexSearch(params.merchantEmail);\n    }\n    if (\"merchantCode\" in params && params.merchantCode) {\n        filter[\"merchantInfo.merchantCode\"] = buildRegexSearch(params.merchantCode);\n    }\n\n    [\"apiType\", \"state\", \"partnerCode\", \"serviceCode\", \"trackingId\"].forEach(field => {\n        if (field in params && !isEmptyValue(params[field])) {\n            filter[field] = params[field];\n        }\n    });\n\n    [\"orderId\", \"merchantTransId\"].forEach(field => {\n        if (field in params && params[field]) {\n            filter[field] = buildRegexSearch(params[field]);\n        }\n    });\n\n    if (params.isCapturedPayment === \"true\") {\n        filter.holdingStep = { $nin: [undefined, null, \"\"] };\n    }\n    if (\"holdingStep\" in params && !isEmptyValue(params.holdingStep)) {\n        filter.holdingStep = params.holdingStep;\n    }\n    if (\"payerMerchantCode\" in params && params.payerMerchantCode) {\n        const regex = buildRegexSearch(params.payerMerchantCode);\n        andConditions.push({\n            $or: [{ \"transactionParties.payer.merchantCode\": regex }, { \"transactionParties.payer.userId\": regex }]\n        });\n    }\n    if (\"payeeMerchantCode\" in params && params.payeeMerchantCode) {\n        const regex = buildRegexSearch(params.payeeMerchantCode);\n        andConditions.push({\n            $or: [{ \"transactionParties.payee.merchantCode\": regex }, { \"transactionParties.payee.userId\": regex }]\n        });\n    }\n\n    for (const [paramKey, party] of [[\"payerType\", \"payer\"], [\"payeeType\", \"payee\"]] as const) {\n        if (!params[paramKey]) { continue; }\n        const condition = buildPartyTypeCondition(party, params[paramKey]);\n        if (condition) { andConditions.push(condition); }\n    }\n\n    if (\"dateFr\" in params || \"dateTo\" in params) {\n        filter.createdAt = {};\n        if (\"dateFr\" in params && params.dateFr) { filter.createdAt.$gte = new Date(params.dateFr); }\n        if (\"dateTo\" in params && params.dateTo) { filter.createdAt.$lte = new Date(params.dateTo); }\n    }\n    if (\"updatedFr\" in params || \"updatedTo\" in params) {\n        filter.lastUpdatedAt = {};\n        if (\"updatedFr\" in params && params.updatedFr) { filter.lastUpdatedAt.$gte = new Date(params.updatedFr); }\n        if (\"updatedTo\" in params && params.updatedTo) { filter.lastUpdatedAt.$lte = new Date(params.updatedTo); }\n    }\n\n    filter.isDelete = false;\n    filter.$and = [...(filter.$and || []), ...andConditions];\n    return filter;\n};",
+          "claim": "buildCollectionDisbursementOrdersFilter in collection-disbursement-orders-export.pure.ts enforces bizDomain TRANSFER_BIZ and filter.isDelete = false while supporting payerType, payeeType, payerMerchantCode, and payeeMerchantCode."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8502,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9785,
+                "NO": 0.0215
+              },
+              "confidence": 0.8502,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/payment-bill/collection-disbursement-orders-export.pure.ts:74-142\nexport const buildCollectionDisbursementOrdersFilter = (params: any) => {\n    const filter: { [k: string]: any } = {};\n    const andConditions: object[] = [{ bizDomain: BIZ_DOMAIN_TRANSFER }];\n\n    if (\"merchantId\" in params && !isEmptyValue(params.merchantId)) {\n        filter[\"merchantInfo.id\"] = params.merchantId;\n    }\n    if (\"channelID\" in params && !isEmptyValue(params.channelID)) {\n        filter.$or = [{ channelID: params.channelID }, { \"payments.channelID\": params.channelID }];\n    }\n    if (\"merchantEmail\" in params && params.merchantEmail) {\n        filter[\"merchantInfo.email\"] = buildRegexSearch(params.merchantEmail);\n    }\n    if (\"merchantCode\" in params && params.merchantCode) {\n        filter[\"merchantInfo.merchantCode\"] = buildRegexSearch(params.merchantCode);\n    }\n\n    [\"apiType\", \"state\", \"partnerCode\", \"serviceCode\", \"trackingId\"].forEach(field => {\n        if (field in params && !isEmptyValue(params[field])) {\n            filter[field] = params[field];\n        }\n    });\n\n    [\"orderId\", \"merchantTransId\"].forEach(field => {\n        if (field in params && params[field]) {\n            filter[field] = buildRegexSearch(params[field]);\n        }\n    });\n\n    if (params.isCapturedPayment === \"true\") {\n        filter.holdingStep = { $nin: [undefined, null, \"\"] };\n    }\n    if (\"holdingStep\" in params && !isEmptyValue(params.holdingStep)) {\n        filter.holdingStep = params.holdingStep;\n    }\n    if (\"payerMerchantCode\" in params && params.payerMerchantCode) {\n        const regex = buildRegexSearch(params.payerMerchantCode);\n        andConditions.push({\n            $or: [{ \"transactionParties.payer.merchantCode\": regex }, { \"transactionParties.payer.userId\": regex }]\n        });\n    }\n    if (\"payeeMerchantCode\" in params && params.payeeMerchantCode) {\n        const regex = buildRegexSearch(params.payeeMerchantCode);\n        andConditions.push({\n            $or: [{ \"transactionParties.payee.merchantCode\": regex }, { \"transactionParties.payee.userId\": regex }]\n        });\n    }\n\n    for (const [paramKey, party] of [[\"payerType\", \"payer\"], [\"payeeType\", \"payee\"]] as const) {\n        if (!params[paramKey]) { continue; }\n        const condition = buildPartyTypeCondition(party, params[paramKey]);\n        if (condition) { andConditions.push(condition); }\n    }\n\n    if (\"dateFr\" in params || \"dateTo\" in params) {\n        filter.createdAt = {};\n        if (\"dateFr\" in params && params.dateFr) { filter.createdAt.$gte = new Date(params.dateFr); }\n        if (\"dateTo\" in params && params.dateTo) { filter.createdAt.$lte = new Date(params.dateTo); }\n    }\n    if (\"updatedFr\" in params || \"updatedTo\" in params) {\n        filter.lastUpdatedAt = {};\n        if (\"updatedFr\" in params && params.updatedFr) { filter.lastUpdatedAt.$gte = new Date(params.updatedFr); }\n        if (\"updatedTo\" in params && params.updatedTo) { filter.lastUpdatedAt.$lte = new Date(params.updatedTo); }\n    }\n\n    filter.isDelete = false;\n    filter.$and = [...(filter.$and || []), ...andConditions];\n    return filter;\n};",
+          "claim": "buildCollectionDisbursementOrdersFilter in collection-disbursement-orders-export.pure.ts enforces bizDomain TRANSFER_BIZ and filter.isDelete = false while supporting payerType, payeeType, payerMerchantCode, and payeeMerchantCode."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "A-PROCESSOR",
+    "kind": "claim",
+    "claim": "CollectionDisbursementOrdersExport extends BaseExportProcessor and overrides getRequiredModelName to return ['PaymentBillModel', 'PaymentBillDocumentModel'].",
+    "flow": "CollectionDisbursementOrdersExport.getRequiredModelName",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/payment-bill/collection-disbursement-orders.export.ts:1-28\n// Thin adapter - delegates to pure functions in export/payment-bill\nimport { RequestHelper } from \"@goopay/goopay-library/helpers\";\nimport { BaseExportProcessor, ExportConfig } from \"../../processors/BaseExportProcessor\";\nimport { CollectionDisbursementOrdersExportPure } from \"../index\";\n\nexport class CollectionDisbursementOrdersExport extends BaseExportProcessor {\n  private rowIndex: number = 0;\n\n  public validate(): void {\n    const langCode = RequestHelper.getLangCode(this.context);\n    CollectionDisbursementOrdersExportPure.validate(this.context.params, langCode);\n  }\n\n  protected getConfig(): ExportConfig {\n    const langCode = RequestHelper.getLangCode(this.context);\n    return CollectionDisbursementOrdersExportPure.getConfig(this.context.params, langCode);\n  }\n\n  protected transformRow(item: any, langCode: string): any[] {\n    return CollectionDisbursementOrdersExportPure.transformRow(item, ++this.rowIndex, langCode as \"vi\" | \"en\");\n  }\n\n  protected getRequiredModelName(): string[] {\n    return [\"PaymentBillModel\", \"PaymentBillDocumentModel\"];\n  }\n}\n\nexport default CollectionDisbursementOrdersExport;",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4643,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8012,
+                "INCORRECT": 0.1656,
+                "UNSUPPORTED": 0.0333
+              },
+              "confidence": 0.4643,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 529,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "CollectionDisbursementOrdersExport extends BaseExportProcessor and overrides getRequiredModelName to return ['PaymentBillModel', 'PaymentBillDocumentModel'].",
+          "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/payment-bill/collection-disbursement-orders.export.ts:1-28\n// Thin adapter - delegates to pure functions in export/payment-bill\nimport { RequestHelper } from \"@goopay/goopay-library/helpers\";\nimport { BaseExportProcessor, ExportConfig } from \"../../processors/BaseExportProcessor\";\nimport { CollectionDisbursementOrdersExportPure } from \"../index\";\n\nexport class CollectionDisbursementOrdersExport extends BaseExportProcessor {\n  private rowIndex: number = 0;\n\n  public validate(): void {\n    const langCode = RequestHelper.getLangCode(this.context);\n    CollectionDisbursementOrdersExportPure.validate(this.context.params, langCode);\n  }\n\n  protected getConfig(): ExportConfig {\n    const langCode = RequestHelper.getLangCode(this.context);\n    return CollectionDisbursementOrdersExportPure.getConfig(this.context.params, langCode);\n  }\n\n  protected transformRow(item: any, langCode: string): any[] {\n    return CollectionDisbursementOrdersExportPure.transformRow(item, ++this.rowIndex, langCode as \"vi\" | \"en\");\n  }\n\n  protected getRequiredModelName(): string[] {\n    return [\"PaymentBillModel\", \"PaymentBillDocumentModel\"];\n  }\n}\n\nexport default CollectionDisbursementOrdersExport;",
+          "flow": "CollectionDisbursementOrdersExport.getRequiredModelName"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0695,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5071,
+                "INCORRECT": 0.3015,
+                "UNSUPPORTED": 0.1914
+              },
+              "confidence": 0.0695,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 534,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "CollectionDisbursementOrdersExport.getRequiredModelName",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/payment-bill/collection-disbursement-orders.export.ts:1-28\n// Thin adapter - delegates to pure functions in export/payment-bill\nimport { RequestHelper } from \"@goopay/goopay-library/helpers\";\nimport { BaseExportProcessor, ExportConfig } from \"../../processors/BaseExportProcessor\";\nimport { CollectionDisbursementOrdersExportPure } from \"../index\";\n\nexport class CollectionDisbursementOrdersExport extends BaseExportProcessor {\n  private rowIndex: number = 0;\n\n  public validate(): void {\n    const langCode = RequestHelper.getLangCode(this.context);\n    CollectionDisbursementOrdersExportPure.validate(this.context.params, langCode);\n  }\n\n  protected getConfig(): ExportConfig {\n    const langCode = RequestHelper.getLangCode(this.context);\n    return CollectionDisbursementOrdersExportPure.getConfig(this.context.params, langCode);\n  }\n\n  protected transformRow(item: any, langCode: string): any[] {\n    return CollectionDisbursementOrdersExportPure.transformRow(item, ++this.rowIndex, langCode as \"vi\" | \"en\");\n  }\n\n  protected getRequiredModelName(): string[] {\n    return [\"PaymentBillModel\", \"PaymentBillDocumentModel\"];\n  }\n}\n\nexport default CollectionDisbursementOrdersExport;",
+          "claim": "CollectionDisbursementOrdersExport extends BaseExportProcessor and overrides getRequiredModelName to return ['PaymentBillModel', 'PaymentBillDocumentModel']."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7432,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9568,
+                "NO": 0.0432
+              },
+              "confidence": 0.7432,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 455,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/payment-bill/collection-disbursement-orders.export.ts:1-28\n// Thin adapter - delegates to pure functions in export/payment-bill\nimport { RequestHelper } from \"@goopay/goopay-library/helpers\";\nimport { BaseExportProcessor, ExportConfig } from \"../../processors/BaseExportProcessor\";\nimport { CollectionDisbursementOrdersExportPure } from \"../index\";\n\nexport class CollectionDisbursementOrdersExport extends BaseExportProcessor {\n  private rowIndex: number = 0;\n\n  public validate(): void {\n    const langCode = RequestHelper.getLangCode(this.context);\n    CollectionDisbursementOrdersExportPure.validate(this.context.params, langCode);\n  }\n\n  protected getConfig(): ExportConfig {\n    const langCode = RequestHelper.getLangCode(this.context);\n    return CollectionDisbursementOrdersExportPure.getConfig(this.context.params, langCode);\n  }\n\n  protected transformRow(item: any, langCode: string): any[] {\n    return CollectionDisbursementOrdersExportPure.transformRow(item, ++this.rowIndex, langCode as \"vi\" | \"en\");\n  }\n\n  protected getRequiredModelName(): string[] {\n    return [\"PaymentBillModel\", \"PaymentBillDocumentModel\"];\n  }\n}\n\nexport default CollectionDisbursementOrdersExport;",
+          "claim": "CollectionDisbursementOrdersExport extends BaseExportProcessor and overrides getRequiredModelName to return ['PaymentBillModel', 'PaymentBillDocumentModel']."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "A-HANDLER",
+    "kind": "claim",
+    "claim": "GetAllCollectionDisbursementOrdersExportHandler queries PaymentBillModel with cursor/limit pagination and enriches hasDocument using PaymentBillDocumentModel.aggregateInvoiceFlagsByBillIds and embedData.uploaded.",
+    "flow": "GetAllCollectionDisbursementOrdersExportHandler.execute",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/domain/handlers/payment-bill/GetAllCollectionDisbursementOrdersExportHandler.ts:14-106\n  public async execute(query: GetAllCollectionDisbursementOrdersExportQuery, context: any, options: any): Promise<any> {\n    const { filter, sort } = query;\n    const { cursor, limit = 5000 } = options?.params || {};\n\n    const Model = this.mainProcess.models.PaymentBillModel;\n    const DocumentModel = this.mainProcess.models.PaymentBillDocumentModel;\n\n    const selectFields = {\n      \"_id\": 1,\n      \"merchantInfo.email\": 1,\n      \"merchantTransId\": 1,\n      \"orderId\": 1,\n      \"amount\": 1,\n      \"paidAmount\": 1,\n      \"currency\": 1,\n      \"state\": 1,\n      \"createdAt\": 1,\n      \"lastUpdatedAt\": 1,\n      \"transactionParties\": 1,\n      \"serviceCode\": 1,\n      \"extraInfo\": 1,\n      \"embedData\": 1\n    };\n\n    let findQuery = Model.find(filter)\n      .sort(sort)\n      .select(selectFields)\n      .limit(limit);\n\n    if (cursor && cursor > 0) {\n      findQuery = findQuery.skip(cursor);\n    }\n\n    const [rawData, total] = await Promise.all([\n      findQuery.lean().exec(),\n      cursor ? Promise.resolve(0) : Model.countDocuments(filter)\n    ]);\n\n    const billIds = (rawData || [])\n      .map((doc: any) => (doc?._id !== undefined && doc?._id !== null ? String(doc._id) : null))\n      .filter((id: string | null): id is string => Boolean(id));\n\n    const docFlagSet = new Set<string>();\n    if (billIds.length > 0 && DocumentModel && typeof DocumentModel.aggregateInvoiceFlagsByBillIds === \"function\") {\n      try {\n        const grouped = await DocumentModel.aggregateInvoiceFlagsByBillIds(billIds);\n        for (const group of grouped || []) {\n          const sources: string[] = group?.sources || [];\n          if (sources.includes(\"SYNC\") || sources.includes(\"UPLOAD\")) {\n            docFlagSet.add(String(group._id));\n          }\n        }\n      } catch (err) {\n        if (this.mainProcess.logger) {\n          this.mainProcess.logger.warn(\n            `[GetAllCollectionDisbursementOrdersExportHandler] aggregateInvoiceFlagsByBillIds failed: ${JSON.stringify(err)}`\n          );\n        }\n      }\n    }\n\n    const data = (rawData || []).map((doc: any) => {\n      const embedded = ((doc?.embedData as any)?.uploaded?.length ?? 0) > 0;\n      const hasDocInCollection = doc?._id !== undefined && doc?._id !== null\n        ? docFlagSet.has(String(doc._id))\n        : false;\n      const hasDocument = hasDocInCollection || embedded;\n\n      return {\n        _id: doc._id,\n        merchantInfoEmail: _.get(doc, \"merchantInfo.email\") || \"\",\n        merchantTransId: doc.merchantTransId,\n        orderId: doc.merchantTransId ? doc.merchantTransId : doc.orderId,\n        amount: doc.amount,\n        paidAmount: doc.paidAmount,\n        currency: doc.currency,\n        state: doc.state,\n        createdAt: doc.createdAt,\n        lastUpdatedAt: doc.lastUpdatedAt,\n        transactionParties: doc.transactionParties,\n        serviceCode: doc.serviceCode,\n        extraInfo: doc.extraInfo,\n        hasDocument,\n        invoiceDocument: { hasDocument }\n      };\n    });\n\n    return {\n      data,\n      nextCursor: Array.isArray(data) && data.length === limit ? (cursor || 0) + limit : null,\n      total\n    };\n  }",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.0263,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.2595,
+                "INCORRECT": 0.2934,
+                "UNSUPPORTED": 0.4471
+              },
+              "confidence": 0.0263,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "GetAllCollectionDisbursementOrdersExportHandler queries PaymentBillModel with cursor/limit pagination and enriches hasDocument using PaymentBillDocumentModel.aggregateInvoiceFlagsByBillIds and embedData.uploaded.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/domain/handlers/payment-bill/GetAllCollectionDisbursementOrdersExportHandler.ts:14-106\n  public async execute(query: GetAllCollectionDisbursementOrdersExportQuery, context: any, options: any): Promise<any> {\n    const { filter, sort } = query;\n    const { cursor, limit = 5000 } = options?.params || {};\n\n    const Model = this.mainProcess.models.PaymentBillModel;\n    const DocumentModel = this.mainProcess.models.PaymentBillDocumentModel;\n\n    const selectFields = {\n      \"_id\": 1,\n      \"merchantInfo.email\": 1,\n      \"merchantTransId\": 1,\n      \"orderId\": 1,\n      \"amount\": 1,\n      \"paidAmount\": 1,\n      \"currency\": 1,\n      \"state\": 1,\n      \"createdAt\": 1,\n      \"lastUpdatedAt\": 1,\n      \"transactionParties\": 1,\n      \"serviceCode\": 1,\n      \"extraInfo\": 1,\n      \"embedData\": 1\n    };\n\n    let findQuery = Model.find(filter)\n      .sort(sort)\n      .select(selectFields)\n      .limit(limit);\n\n    if (cursor && cursor > 0) {\n      findQuery = findQuery.skip(cursor);\n    }\n\n    const [rawData, total] = await Promise.all([\n      findQuery.lean().exec(),\n      cursor ? Promise.resolve(0) : Model.countDocuments(filter)\n    ]);\n\n    const billIds = (rawData || [])\n      .map((doc: any) => (doc?._id !== undefined && doc?._id !== null ? String(doc._id) : null))\n      .filter((id: string | null): id is string => Boolean(id));\n\n    const docFlagSet = new Set<string>();\n    if (billIds.length > 0 && DocumentModel && typeof DocumentModel.aggregateInvoiceFlagsByBillIds === \"function\") {\n      try {\n        const grouped = await DocumentModel.aggregateInvoiceFlagsByBillIds(billIds);\n        for (const group of grouped || []) {\n          const sources: string[] = group?.sources || [];\n          if (sources.includes(\"SYNC\") || sources.includes(\"UPLOAD\")) {\n            docFlagSet.add(String(group._id));\n          }\n        }\n      } catch (err) {\n        if (this.mainProcess.logger) {\n          this.mainProcess.logger.warn(\n            `[GetAllCollectionDisbursementOrdersExportHandler] aggregateInvoiceFlagsByBillIds failed: ${JSON.stringify(err)}`\n          );\n        }\n      }\n    }\n\n    const data = (rawData || []).map((doc: any) => {\n      const embedded = ((doc?.embedData as any)?.uploaded?.length ?? 0) > 0;\n      const hasDocInCollection = doc?._id !== undefined && doc?._id !== null\n        ? docFlagSet.has(String(doc._id))\n        : false;\n      const hasDocument = hasDocInCollection || embedded;\n\n      return {\n        _id: doc._id,\n        merchantInfoEmail: _.get(doc, \"merchantInfo.email\") || \"\",\n        merchantTransId: doc.merchantTransId,\n        orderId: doc.merchantTransId ? doc.merchantTransId : doc.orderId,\n        amount: doc.amount,\n        paidAmount: doc.paidAmount,\n        currency: doc.currency,\n        state: doc.state,\n        createdAt: doc.createdAt,\n        lastUpdatedAt: doc.lastUpdatedAt,\n        transactionParties: doc.transactionParties,\n        serviceCode: doc.serviceCode,\n        extraInfo: doc.extraInfo,\n        hasDocument,\n        invoiceDocument: { hasDocument }\n      };\n    });\n\n    return {\n      data,\n      nextCursor: Array.isArray(data) && data.length === limit ? (cursor || 0) + limit : null,\n      total\n    };\n  }",
+          "flow": "GetAllCollectionDisbursementOrdersExportHandler.execute"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.0174,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3749,
+                "INCORRECT": 0.3814,
+                "UNSUPPORTED": 0.2437
+              },
+              "confidence": 0.0174,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "GetAllCollectionDisbursementOrdersExportHandler.execute",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/centralized-export-service/domain/handlers/payment-bill/GetAllCollectionDisbursementOrdersExportHandler.ts:14-106\n  public async execute(query: GetAllCollectionDisbursementOrdersExportQuery, context: any, options: any): Promise<any> {\n    const { filter, sort } = query;\n    const { cursor, limit = 5000 } = options?.params || {};\n\n    const Model = this.mainProcess.models.PaymentBillModel;\n    const DocumentModel = this.mainProcess.models.PaymentBillDocumentModel;\n\n    const selectFields = {\n      \"_id\": 1,\n      \"merchantInfo.email\": 1,\n      \"merchantTransId\": 1,\n      \"orderId\": 1,\n      \"amount\": 1,\n      \"paidAmount\": 1,\n      \"currency\": 1,\n      \"state\": 1,\n      \"createdAt\": 1,\n      \"lastUpdatedAt\": 1,\n      \"transactionParties\": 1,\n      \"serviceCode\": 1,\n      \"extraInfo\": 1,\n      \"embedData\": 1\n    };\n\n    let findQuery = Model.find(filter)\n      .sort(sort)\n      .select(selectFields)\n      .limit(limit);\n\n    if (cursor && cursor > 0) {\n      findQuery = findQuery.skip(cursor);\n    }\n\n    const [rawData, total] = await Promise.all([\n      findQuery.lean().exec(),\n      cursor ? Promise.resolve(0) : Model.countDocuments(filter)\n    ]);\n\n    const billIds = (rawData || [])\n      .map((doc: any) => (doc?._id !== undefined && doc?._id !== null ? String(doc._id) : null))\n      .filter((id: string | null): id is string => Boolean(id));\n\n    const docFlagSet = new Set<string>();\n    if (billIds.length > 0 && DocumentModel && typeof DocumentModel.aggregateInvoiceFlagsByBillIds === \"function\") {\n      try {\n        const grouped = await DocumentModel.aggregateInvoiceFlagsByBillIds(billIds);\n        for (const group of grouped || []) {\n          const sources: string[] = group?.sources || [];\n          if (sources.includes(\"SYNC\") || sources.includes(\"UPLOAD\")) {\n            docFlagSet.add(String(group._id));\n          }\n        }\n      } catch (err) {\n        if (this.mainProcess.logger) {\n          this.mainProcess.logger.warn(\n            `[GetAllCollectionDisbursementOrdersExportHandler] aggregateInvoiceFlagsByBillIds failed: ${JSON.stringify(err)}`\n          );\n        }\n      }\n    }\n\n    const data = (rawData || []).map((doc: any) => {\n      const embedded = ((doc?.embedData as any)?.uploaded?.length ?? 0) > 0;\n      const hasDocInCollection = doc?._id !== undefined && doc?._id !== null\n        ? docFlagSet.has(String(doc._id))\n        : false;\n      const hasDocument = hasDocInCollection || embedded;\n\n      return {\n        _id: doc._id,\n        merchantInfoEmail: _.get(doc, \"merchantInfo.email\") || \"\",\n        merchantTransId: doc.merchantTransId,\n        orderId: doc.merchantTransId ? doc.merchantTransId : doc.orderId,\n        amount: doc.amount,\n        paidAmount: doc.paidAmount,\n        currency: doc.currency,\n        state: doc.state,\n        createdAt: doc.createdAt,\n        lastUpdatedAt: doc.lastUpdatedAt,\n        transactionParties: doc.transactionParties,\n        serviceCode: doc.serviceCode,\n        extraInfo: doc.extraInfo,\n        hasDocument,\n        invoiceDocument: { hasDocument }\n      };\n    });\n\n    return {\n      data,\n      nextCursor: Array.isArray(data) && data.length === limit ? (cursor || 0) + limit : null,\n      total\n    };\n  }",
+          "claim": "GetAllCollectionDisbursementOrdersExportHandler queries PaymentBillModel with cursor/limit pagination and enriches hasDocument using PaymentBillDocumentModel.aggregateInvoiceFlagsByBillIds and embedData.uploaded."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7621,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.961,
+                "NO": 0.039
+              },
+              "confidence": 0.7621,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/centralized-export-service/domain/handlers/payment-bill/GetAllCollectionDisbursementOrdersExportHandler.ts:14-106\n  public async execute(query: GetAllCollectionDisbursementOrdersExportQuery, context: any, options: any): Promise<any> {\n    const { filter, sort } = query;\n    const { cursor, limit = 5000 } = options?.params || {};\n\n    const Model = this.mainProcess.models.PaymentBillModel;\n    const DocumentModel = this.mainProcess.models.PaymentBillDocumentModel;\n\n    const selectFields = {\n      \"_id\": 1,\n      \"merchantInfo.email\": 1,\n      \"merchantTransId\": 1,\n      \"orderId\": 1,\n      \"amount\": 1,\n      \"paidAmount\": 1,\n      \"currency\": 1,\n      \"state\": 1,\n      \"createdAt\": 1,\n      \"lastUpdatedAt\": 1,\n      \"transactionParties\": 1,\n      \"serviceCode\": 1,\n      \"extraInfo\": 1,\n      \"embedData\": 1\n    };\n\n    let findQuery = Model.find(filter)\n      .sort(sort)\n      .select(selectFields)\n      .limit(limit);\n\n    if (cursor && cursor > 0) {\n      findQuery = findQuery.skip(cursor);\n    }\n\n    const [rawData, total] = await Promise.all([\n      findQuery.lean().exec(),\n      cursor ? Promise.resolve(0) : Model.countDocuments(filter)\n    ]);\n\n    const billIds = (rawData || [])\n      .map((doc: any) => (doc?._id !== undefined && doc?._id !== null ? String(doc._id) : null))\n      .filter((id: string | null): id is string => Boolean(id));\n\n    const docFlagSet = new Set<string>();\n    if (billIds.length > 0 && DocumentModel && typeof DocumentModel.aggregateInvoiceFlagsByBillIds === \"function\") {\n      try {\n        const grouped = await DocumentModel.aggregateInvoiceFlagsByBillIds(billIds);\n        for (const group of grouped || []) {\n          const sources: string[] = group?.sources || [];\n          if (sources.includes(\"SYNC\") || sources.includes(\"UPLOAD\")) {\n            docFlagSet.add(String(group._id));\n          }\n        }\n      } catch (err) {\n        if (this.mainProcess.logger) {\n          this.mainProcess.logger.warn(\n            `[GetAllCollectionDisbursementOrdersExportHandler] aggregateInvoiceFlagsByBillIds failed: ${JSON.stringify(err)}`\n          );\n        }\n      }\n    }\n\n    const data = (rawData || []).map((doc: any) => {\n      const embedded = ((doc?.embedData as any)?.uploaded?.length ?? 0) > 0;\n      const hasDocInCollection = doc?._id !== undefined && doc?._id !== null\n        ? docFlagSet.has(String(doc._id))\n        : false;\n      const hasDocument = hasDocInCollection || embedded;\n\n      return {\n        _id: doc._id,\n        merchantInfoEmail: _.get(doc, \"merchantInfo.email\") || \"\",\n        merchantTransId: doc.merchantTransId,\n        orderId: doc.merchantTransId ? doc.merchantTransId : doc.orderId,\n        amount: doc.amount,\n        paidAmount: doc.paidAmount,\n        currency: doc.currency,\n        state: doc.state,\n        createdAt: doc.createdAt,\n        lastUpdatedAt: doc.lastUpdatedAt,\n        transactionParties: doc.transactionParties,\n        serviceCode: doc.serviceCode,\n        extraInfo: doc.extraInfo,\n        hasDocument,\n        invoiceDocument: { hasDocument }\n      };\n    });\n\n    return {\n      data,\n      nextCursor: Array.isArray(data) && data.length === limit ? (cursor || 0) + limit : null,\n      total\n    };\n  }",
+          "claim": "GetAllCollectionDisbursementOrdersExportHandler queries PaymentBillModel with cursor/limit pagination and enriches hasDocument using PaymentBillDocumentModel.aggregateInvoiceFlagsByBillIds and embedData.uploaded."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "A-REGISTRY",
+    "kind": "claim",
+    "claim": "QueryHandlerFactory.registerHandlers registers GetAllCollectionDisbursementOrdersExportQuery mapped to GetAllCollectionDisbursementOrdersExportHandler.",
+    "flow": "QueryHandlerFactory.registerHandlers",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/domain/QueryHandlerFactory.ts:48-55\n// PAYMENT-BILL\nimport { GetAllCollectionDisbursementOrdersExportHandler } from \"./handlers/payment-bill/GetAllCollectionDisbursementOrdersExportHandler\";\nimport { GetAllPaymentBillExportHandler } from \"./handlers/payment-bill/GetAllPaymentBillExportHandler\";\nimport { GetAllPaymentBillForCurrentMerchantExportHandler } from \"./handlers/payment-bill/GetAllPaymentBillForCurrentMerchantExportHandler\";\nimport { GetAllRefundRequestExportHandler } from \"./handlers/payment-bill/GetAllRefundRequestExportHandler\";\nimport { GetAllRefundRequestForCurrentMerchantExportHandler } from \"./handlers/payment-bill/GetAllRefundRequestForCurrentMerchantExportHandler\";\n\n// PROFILE\nREF: /Users/trainguyen/Documents/work/centralized-export-service/domain/QueryHandlerFactory.ts:128-135\n\n    // payment-bill\n    this.handlers.set(\"GetAllCollectionDisbursementOrdersExportQuery\", new GetAllCollectionDisbursementOrdersExportHandler(mainProcess));\n    this.handlers.set(\"GetAllPaymentBillExportQuery\", new GetAllPaymentBillExportHandler(mainProcess));\n    this.handlers.set(\"GetAllPaymentBillForCurrentMerchantExportQuery\", new GetAllPaymentBillForCurrentMerchantExportHandler(mainProcess));\n    this.handlers.set(\"GetAllRefundRequestExportQuery\", new GetAllRefundRequestExportHandler(mainProcess));\n    this.handlers.set(\"GetAllRefundRequestForCurrentMerchantExportQuery\", new GetAllRefundRequestForCurrentMerchantExportHandler(mainProcess));",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4297,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.806,
+                "INCORRECT": 0.0963,
+                "UNSUPPORTED": 0.0977
+              },
+              "confidence": 0.4297,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 550,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "QueryHandlerFactory.registerHandlers registers GetAllCollectionDisbursementOrdersExportQuery mapped to GetAllCollectionDisbursementOrdersExportHandler.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/domain/QueryHandlerFactory.ts:48-55\n// PAYMENT-BILL\nimport { GetAllCollectionDisbursementOrdersExportHandler } from \"./handlers/payment-bill/GetAllCollectionDisbursementOrdersExportHandler\";\nimport { GetAllPaymentBillExportHandler } from \"./handlers/payment-bill/GetAllPaymentBillExportHandler\";\nimport { GetAllPaymentBillForCurrentMerchantExportHandler } from \"./handlers/payment-bill/GetAllPaymentBillForCurrentMerchantExportHandler\";\nimport { GetAllRefundRequestExportHandler } from \"./handlers/payment-bill/GetAllRefundRequestExportHandler\";\nimport { GetAllRefundRequestForCurrentMerchantExportHandler } from \"./handlers/payment-bill/GetAllRefundRequestForCurrentMerchantExportHandler\";\n\n// PROFILE\nREF: /Users/trainguyen/Documents/work/centralized-export-service/domain/QueryHandlerFactory.ts:128-135\n\n    // payment-bill\n    this.handlers.set(\"GetAllCollectionDisbursementOrdersExportQuery\", new GetAllCollectionDisbursementOrdersExportHandler(mainProcess));\n    this.handlers.set(\"GetAllPaymentBillExportQuery\", new GetAllPaymentBillExportHandler(mainProcess));\n    this.handlers.set(\"GetAllPaymentBillForCurrentMerchantExportQuery\", new GetAllPaymentBillForCurrentMerchantExportHandler(mainProcess));\n    this.handlers.set(\"GetAllRefundRequestExportQuery\", new GetAllRefundRequestExportHandler(mainProcess));\n    this.handlers.set(\"GetAllRefundRequestForCurrentMerchantExportQuery\", new GetAllRefundRequestForCurrentMerchantExportHandler(mainProcess));",
+          "flow": "QueryHandlerFactory.registerHandlers"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3208,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7377,
+                "INCORRECT": 0.169,
+                "UNSUPPORTED": 0.0933
+              },
+              "confidence": 0.3208,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 556,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "QueryHandlerFactory.registerHandlers",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/centralized-export-service/domain/QueryHandlerFactory.ts:48-55\n// PAYMENT-BILL\nimport { GetAllCollectionDisbursementOrdersExportHandler } from \"./handlers/payment-bill/GetAllCollectionDisbursementOrdersExportHandler\";\nimport { GetAllPaymentBillExportHandler } from \"./handlers/payment-bill/GetAllPaymentBillExportHandler\";\nimport { GetAllPaymentBillForCurrentMerchantExportHandler } from \"./handlers/payment-bill/GetAllPaymentBillForCurrentMerchantExportHandler\";\nimport { GetAllRefundRequestExportHandler } from \"./handlers/payment-bill/GetAllRefundRequestExportHandler\";\nimport { GetAllRefundRequestForCurrentMerchantExportHandler } from \"./handlers/payment-bill/GetAllRefundRequestForCurrentMerchantExportHandler\";\n\n// PROFILE\nREF: /Users/trainguyen/Documents/work/centralized-export-service/domain/QueryHandlerFactory.ts:128-135\n\n    // payment-bill\n    this.handlers.set(\"GetAllCollectionDisbursementOrdersExportQuery\", new GetAllCollectionDisbursementOrdersExportHandler(mainProcess));\n    this.handlers.set(\"GetAllPaymentBillExportQuery\", new GetAllPaymentBillExportHandler(mainProcess));\n    this.handlers.set(\"GetAllPaymentBillForCurrentMerchantExportQuery\", new GetAllPaymentBillForCurrentMerchantExportHandler(mainProcess));\n    this.handlers.set(\"GetAllRefundRequestExportQuery\", new GetAllRefundRequestExportHandler(mainProcess));\n    this.handlers.set(\"GetAllRefundRequestForCurrentMerchantExportQuery\", new GetAllRefundRequestForCurrentMerchantExportHandler(mainProcess));",
+          "claim": "QueryHandlerFactory.registerHandlers registers GetAllCollectionDisbursementOrdersExportQuery mapped to GetAllCollectionDisbursementOrdersExportHandler."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.9016,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9873,
+                "NO": 0.0127
+              },
+              "confidence": 0.9016,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 482,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/centralized-export-service/domain/QueryHandlerFactory.ts:48-55\n// PAYMENT-BILL\nimport { GetAllCollectionDisbursementOrdersExportHandler } from \"./handlers/payment-bill/GetAllCollectionDisbursementOrdersExportHandler\";\nimport { GetAllPaymentBillExportHandler } from \"./handlers/payment-bill/GetAllPaymentBillExportHandler\";\nimport { GetAllPaymentBillForCurrentMerchantExportHandler } from \"./handlers/payment-bill/GetAllPaymentBillForCurrentMerchantExportHandler\";\nimport { GetAllRefundRequestExportHandler } from \"./handlers/payment-bill/GetAllRefundRequestExportHandler\";\nimport { GetAllRefundRequestForCurrentMerchantExportHandler } from \"./handlers/payment-bill/GetAllRefundRequestForCurrentMerchantExportHandler\";\n\n// PROFILE\nREF: /Users/trainguyen/Documents/work/centralized-export-service/domain/QueryHandlerFactory.ts:128-135\n\n    // payment-bill\n    this.handlers.set(\"GetAllCollectionDisbursementOrdersExportQuery\", new GetAllCollectionDisbursementOrdersExportHandler(mainProcess));\n    this.handlers.set(\"GetAllPaymentBillExportQuery\", new GetAllPaymentBillExportHandler(mainProcess));\n    this.handlers.set(\"GetAllPaymentBillForCurrentMerchantExportQuery\", new GetAllPaymentBillForCurrentMerchantExportHandler(mainProcess));\n    this.handlers.set(\"GetAllRefundRequestExportQuery\", new GetAllRefundRequestExportHandler(mainProcess));\n    this.handlers.set(\"GetAllRefundRequestForCurrentMerchantExportQuery\", new GetAllRefundRequestForCurrentMerchantExportHandler(mainProcess));",
+          "claim": "QueryHandlerFactory.registerHandlers registers GetAllCollectionDisbursementOrdersExportQuery mapped to GetAllCollectionDisbursementOrdersExportHandler."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "CTRL-T1",
+    "kind": "control_true",
+    "claim": "CollectionDisbursementOrdersExportParams validates dateFr and dateTo with IsNotEmpty and IsDateString and validates payerType and payeeType with IsIn(['WALLET_USER', 'MERCHANT', 'USER']).",
+    "flow": "CollectionDisbursementOrdersExportParams",
+    "evidence": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/payment-bill/collection-disbursement-orders-export.params.ts', 'lines': '44-149'}]",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7219,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9251,
+                "INCORRECT": 0.0584,
+                "UNSUPPORTED": 0.0165
+              },
+              "confidence": 0.7219,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 231,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "CollectionDisbursementOrdersExportParams validates dateFr and dateTo with IsNotEmpty and IsDateString and validates payerType and payeeType with IsIn(['WALLET_USER', 'MERCHANT', 'USER']).",
+          "evidence": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/payment-bill/collection-disbursement-orders-export.params.ts', 'lines': '44-149'}]",
+          "flow": "CollectionDisbursementOrdersExportParams"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0826,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5288,
+                "INCORRECT": 0.1866,
+                "UNSUPPORTED": 0.2847
+              },
+              "confidence": 0.0826,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 236,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "CollectionDisbursementOrdersExportParams",
+          "diff_lines": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/payment-bill/collection-disbursement-orders-export.params.ts', 'lines': '44-149'}]",
+          "claim": "CollectionDisbursementOrdersExportParams validates dateFr and dateTo with IsNotEmpty and IsDateString and validates payerType and payeeType with IsIn(['WALLET_USER', 'MERCHANT', 'USER'])."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.0115,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.4369,
+                "NO": 0.5631
+              },
+              "confidence": 0.0115,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 161,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/payment-bill/collection-disbursement-orders-export.params.ts', 'lines': '44-149'}]",
+          "claim": "CollectionDisbursementOrdersExportParams validates dateFr and dateTo with IsNotEmpty and IsDateString and validates payerType and payeeType with IsIn(['WALLET_USER', 'MERCHANT', 'USER'])."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-F1",
+    "kind": "control_false",
+    "claim": "buildCollectionDisbursementOrdersFilter sets filter.isDelete = true so only deleted records are exported.",
+    "flow": "buildCollectionDisbursementOrdersFilter",
+    "evidence": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/logics/export/payment-bill/collection-disbursement-orders-export.pure.ts', 'lines': '135-142'}]",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.8009,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9536,
+                "INCORRECT": 0.0286,
+                "UNSUPPORTED": 0.0178
+              },
+              "confidence": 0.8009,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 209,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "buildCollectionDisbursementOrdersFilter sets filter.isDelete = true so only deleted records are exported.",
+          "evidence": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/logics/export/payment-bill/collection-disbursement-orders-export.pure.ts', 'lines': '135-142'}]",
+          "flow": "buildCollectionDisbursementOrdersFilter"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.4173,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0443,
+                "INCORRECT": 0.1775,
+                "UNSUPPORTED": 0.7782
+              },
+              "confidence": 0.4173,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 215,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "buildCollectionDisbursementOrdersFilter",
+          "diff_lines": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/logics/export/payment-bill/collection-disbursement-orders-export.pure.ts', 'lines': '135-142'}]",
+          "claim": "buildCollectionDisbursementOrdersFilter sets filter.isDelete = true so only deleted records are exported."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.9574,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0046,
+                "NO": 0.9954
+              },
+              "confidence": 0.9574,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 140,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/logics/export/payment-bill/collection-disbursement-orders-export.pure.ts', 'lines': '135-142'}]",
+          "claim": "buildCollectionDisbursementOrdersFilter sets filter.isDelete = true so only deleted records are exported."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-F2",
+    "kind": "control_false",
+    "claim": "CollectionDisbursementOrdersExport.getRequiredModelName returns an empty array and does not require PaymentBillModel.",
+    "flow": "CollectionDisbursementOrdersExport.getRequiredModelName",
+    "evidence": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/logics/export/payment-bill/collection-disbursement-orders.export.ts', 'lines': '20-26'}]",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.8193,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9562,
+                "INCORRECT": 0.037,
+                "UNSUPPORTED": 0.0067
+              },
+              "confidence": 0.8193,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 211,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "CollectionDisbursementOrdersExport.getRequiredModelName returns an empty array and does not require PaymentBillModel.",
+          "evidence": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/logics/export/payment-bill/collection-disbursement-orders.export.ts', 'lines': '20-26'}]",
+          "flow": "CollectionDisbursementOrdersExport.getRequiredModelName"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.2817,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.4635,
+                "INCORRECT": 0.5123,
+                "UNSUPPORTED": 0.0242
+              },
+              "confidence": 0.2817,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 217,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "CollectionDisbursementOrdersExport.getRequiredModelName",
+          "diff_lines": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/logics/export/payment-bill/collection-disbursement-orders.export.ts', 'lines': '20-26'}]",
+          "claim": "CollectionDisbursementOrdersExport.getRequiredModelName returns an empty array and does not require PaymentBillModel."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.3174,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8188,
+                "NO": 0.1812
+              },
+              "confidence": 0.3174,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 138,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/logics/export/payment-bill/collection-disbursement-orders.export.ts', 'lines': '20-26'}]",
+          "claim": "CollectionDisbursementOrdersExport.getRequiredModelName returns an empty array and does not require PaymentBillModel."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

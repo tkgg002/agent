@@ -1,0 +1,75 @@
+[
+  {
+    "id": "S-RC-27",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "MasterDDLGenerator _gpay_id primary key definition",
+    "claim": "In master_ddl_generator.go, Master tables are defined with _gpay_id BIGINT PRIMARY KEY and an index on _source_ts.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator.go:148-153\n\tcols := []string{\n\t\t`\"_gpay_id\" BIGINT PRIMARY KEY`,\n\t\t`\"_source_ts\" BIGINT`,\n\t\t`\"_deleted\" BOOLEAN NOT NULL DEFAULT FALSE`,\n\t\t`\"_updated_at\" TIMESTAMPTZ NOT NULL DEFAULT NOW()`,\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator.go:148-153",
+    "must_contain": [
+      "\"_gpay_id\" BIGINT PRIMARY KEY"
+    ]
+  },
+  {
+    "id": "S-FIX-28",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "Demo P10-1 readOnlyDB single round-trip",
+    "claim": "In 09_tasks_solution_pg_oom_53200.md, Demo P10-1 updates readOnlyDB to call Begin(&sql.TxOptions{ReadOnly: true}).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:550-557\n// Sau:\nfunc (da *ReconDestAgent) readOnlyDB(ctx context.Context) *gorm.DB {\n\tif da.IsNonPostgresSQL() {\n\t\treturn da.replica.WithContext(ctx)\n\t}\n\treturn da.replica.WithContext(ctx).Begin(&sql.TxOptions{ReadOnly: true})\n}\n```",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:550-557",
+    "must_contain": [
+      "Begin(&sql.TxOptions{ReadOnly: true})"
+    ]
+  },
+  {
+    "id": "D-BEHAV-29",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "Demo P10-2 CountRows and CountRowsBeforeCutoff direct COUNT(*)",
+    "claim": "In 09_tasks_solution_pg_oom_53200.md, Demo P10-2 removes the pkColumn branch in CountRows and CountRowsBeforeCutoff to execute COUNT(*) directly in a single read-only transaction.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:586-597\n// Sau:\n\tresult, err := da.breaker.Execute(func() (interface{}, error) {\n\t\tvar count int64\n\t\ttx := da.readOnlyDB(ctx)\n\t\tdefer tx.Rollback()\n\t\tsql := fmt.Sprintf(`SELECT COUNT(*) FROM %s`, quoteRelation(tableName))\n\t\tif err := tx.Raw(sql).Scan(&count).Error; err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\treturn count, nil\n\t})\n```",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:586-597",
+    "must_contain": [
+      "SELECT COUNT(*) FROM %s"
+    ]
+  },
+  {
+    "id": "D-API-30",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "Demo P10-2 IsNonPostgresSQL dispatch in CountRowsBeforeCutoff",
+    "claim": "In 09_tasks_solution_pg_oom_53200.md, Demo P10-2 adds an IsNonPostgresSQL branch calling sqlDialectCountRows and sqlDialectCountInWindow before the PostgreSQL query.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:628-640\n// Sau (recon_window_index_probe.go:198-265 — bổ sung IsNonPostgresSQL + dùng thẳng SELECT COUNT(*) ở InitPlan 1):\n\tif da.IsNonPostgresSQL() {\n\t\ttotal, err := da.sqlDialectCountRows(ctx, tableName, pkColumn)\n\t\tif err != nil {\n\t\t\treturn 0, err\n\t\t}\n\t\tpost, errW := da.sqlDialectCountInWindow(ctx, tableName, \"_source_ts\", cutoffHi, time.Now().UTC().Add(time.Minute))\n\t\tif errW == nil && total >= post {\n\t\t\ttotal -= post\n\t\t}\n\t\treturn total, nil\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:628-640",
+    "must_contain": [
+      "if da.IsNonPostgresSQL()",
+      "da.sqlDialectCountRows(ctx, tableName, pkColumn)"
+    ]
+  },
+  {
+    "id": "CTRL-TRUE-DG1-27",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "CheckAllUnified adds master scan target",
+    "claim": "In recon_smoke.go, CheckAllUnified adds r.MasterRel() with kind master into scanTargets when agent is non-nil.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:833-836\n\t\tif agent != nil {\n\t\t\taddTarget(r.MasterRel(), agent, \"master\", r.ShadowTable)\n\t\t}\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-DG1-27",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "CheckAllUnified adds master scan target",
+    "claim": "In recon_smoke.go, CheckAllUnified deletes the master table when agent is non-nil.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:833-836\n\t\tif agent != nil {\n\t\t\taddTarget(r.MasterRel(), agent, \"master\", r.ShadowTable)\n\t\t}\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-DG1-28",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "Demo P10-1 readOnlyDB single round-trip",
+    "claim": "In 09_tasks_solution_pg_oom_53200.md, Demo P10-1 changes readOnlyDB to return nil unconditionally.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:550-557\n// Sau:\nfunc (da *ReconDestAgent) readOnlyDB(ctx context.Context) *gorm.DB {\n\tif da.IsNonPostgresSQL() {\n\t\treturn da.replica.WithContext(ctx)\n\t}\n\treturn da.replica.WithContext(ctx).Begin(&sql.TxOptions{ReadOnly: true})\n}\n```"
+  }
+]

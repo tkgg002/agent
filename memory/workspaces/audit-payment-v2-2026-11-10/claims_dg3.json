@@ -1,0 +1,44 @@
+[
+  {
+    "id": "A-VALIDATE-ARRAY",
+    "kind": "claim",
+    "claim": "In validate.go, IsValidDataType returns true when strings.HasSuffix(base, \"[]\") and allowed[elem] is true, or when strings.HasPrefix(base, \"_\") matches known array catalog types.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/pkgs/utils/dbutil/validate.go:46-59\n\tif strings.HasSuffix(base, \"[]\") {\n\t\telem := strings.TrimSpace(strings.TrimSuffix(base, \"[]\"))\n\t\treturn allowed[elem]\n\t}\n\tif strings.HasPrefix(base, \"_\") {\n\t\telem := strings.TrimSpace(strings.TrimPrefix(base, \"_\"))\n\t\tif allowed[elem] {\n\t\t\treturn true\n\t\t}\n\t\tswitch elem {\n\t\tcase \"TEXT\", \"VARCHAR\", \"INT8\", \"INT4\", \"INT2\", \"UUID\", \"BOOL\", \"NUMERIC\", \"TIMESTAMPTZ\", \"TIMESTAMP\", \"DATE\", \"JSONB\", \"JSON\", \"BYTEA\", \"BPCHAR\", \"FLOAT4\", \"FLOAT8\":\n\t\t\treturn true\n\t\t}\n\t}",
+    "flow": "IsValidDataType recognizes array brackets and underscore notation."
+  },
+  {
+    "id": "A-NORMALIZER-ARRAY",
+    "kind": "claim",
+    "claim": "In shadow_schema_reader_gorm.go, normalizePostgresType maps dataType ARRAY to ANSI SQL array types like TEXT[] and BIGINT[] based on udtName.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/shadow/shadow_schema_reader_gorm.go:45-54\n\tcase \"ARRAY\":\n\t\tswitch strings.ToLower(udtName) {\n\t\tcase \"_text\":\n\t\t\treturn \"TEXT[]\"\n\t\tcase \"_varchar\":\n\t\t\treturn \"VARCHAR[]\"\n\t\tcase \"_int8\":\n\t\t\treturn \"BIGINT[]\"\n\t\tcase \"_int4\":\n\t\t\treturn \"INTEGER[]\"",
+    "flow": "normalizePostgresType converts PostgreSQL array udt_name to standard ANSI array notation."
+  },
+  {
+    "id": "A-RESOLVER-WHITELIST",
+    "kind": "claim",
+    "claim": "In type_resolver.go, reTypeWhitelist matches array types with suffix [] and underscore catalog types.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/type_resolver.go:40-42\nvar (\n\treTypeWhitelist = regexp.MustCompile(`^(SMALLINT|INTEGER|INT|BIGINT|REAL|DOUBLE PRECISION|NUMERIC|DECIMAL|BOOLEAN|BOOL|Bool|DATE|Date|DATE32|Date32|TIME|TIMESTAMP|TIMESTAMPTZ|DATETIME|DateTime|DATETIME64\\([0-9](?:,\\s*'UTC')?\\)|DateTime64\\([0-9](?:,\\s*'UTC')?\\)|INTERVAL|JSON|JSONB|UUID|OBJECTID|OID|INET|CIDR|MACADDR|BYTEA|TEXT|VARCHAR|CHAR|STRING|String|FIXEDSTRING|FixedString|INT8|Int8|INT16|Int16|INT32|Int32|INT64|Int64|UINT8|UInt8|UINT16|UInt16|UINT32|UInt32|UINT64|UInt64|FLOAT32|Float32|FLOAT64|Float64|CHAR\\([1-9][0-9]{0,7}\\)|VARCHAR\\([1-9][0-9]{0,7}\\)|(?:FIXEDSTRING|FixedString)\\([1-9][0-9]{0,7}\\)|NUMERIC\\([1-9][0-9]{0,3},\\s*[0-9][0-9]{0,3}\\)|(?:DECIMAL|Decimal)\\([1-9][0-9]{0,3},\\s*[0-9][0-9]{0,3}\\)|(?i:(?:SMALLINT|INTEGER|INT|BIGINT|REAL|DOUBLE PRECISION|NUMERIC|DECIMAL|BOOLEAN|BOOL|DATE|TIMESTAMP|TIMESTAMPTZ|JSON|JSONB|UUID|TEXT|VARCHAR|CHAR)\\[\\])|(?i:_(?:text|varchar|bpchar|int2|int4|int8|uuid|numeric|float4|float8|bool|timestamptz|timestamp|date|jsonb|json|bytea))|ENUM:[a-z_][a-z0-9_]{0,62})$`)\n",
+    "flow": "reTypeWhitelist includes case-insensitive array and underscore types."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In shadow_schema_reader_gorm.go, case \"_text\" returns \"TEXT[]\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/shadow/shadow_schema_reader_gorm.go:47-48\n\t\tcase \"_text\":\n\t\t\treturn \"TEXT[]\"",
+    "flow": "_text maps to TEXT[]."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In shadow_schema_reader_gorm.go, case \"_text\" returns \"INTEGER\".",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/shadow/shadow_schema_reader_gorm.go:47-48\n\t\tcase \"_text\":\n\t\t\treturn \"TEXT[]\"",
+    "flow": "_text maps to TEXT[]."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In validate.go, strings.HasSuffix(base, \"[]\") always returns false for every input.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/pkgs/utils/dbutil/validate.go:46-49\n\tif strings.HasSuffix(base, \"[]\") {\n\t\telem := strings.TrimSpace(strings.TrimSuffix(base, \"[]\"))\n\t\treturn allowed[elem]\n\t}",
+    "flow": "HasSuffix checks for array bracket suffix."
+  }
+]

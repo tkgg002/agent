@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC-22",
+    "kind": "claim",
+    "claim": "In utils/constants.ts, TRANSACTION_TYPE_LIST ends at SOFTPIN on lines 586-593 without entries for WALLET_UNMATCH_CASHIN, WALLET_UNMATCH_REFUND, CASHOUT_MERCHANT, or BATCH_DISBURSEMENT_SETTLE.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/utils/constants.ts:572-593\n\t{\n\t\tvalue: \"BILLING\",\n\t\tlabel: {\n\t\t\tvi: \"Thanh toán hóa đơn\",\n\t\t\ten: \"Billing\"\n\t\t}\n\t},\n\t{\n\t\tvalue: \"TOPUP\",\n\t\tlabel: {\n\t\t\tvi: \"Nạp tiền điện thoại\",\n\t\t\ten: \"Topup\"\n\t\t}\n\t},\n\t{\n\t\tvalue: \"SOFTPIN\",\n\t\tlabel: {\n\t\t\tvi: \"Mua thẻ cào\",\n\t\t\ten: \"Softpin\"\n\t\t}\n\t}\n];",
+    "flow": "utils/constants.ts -> TRANSACTION_TYPE_LIST"
+  },
+  {
+    "id": "S-FIX-22",
+    "kind": "claim",
+    "claim": "In utils/centralrecon.constants.ts, CentralReconExport defines its domain-specific constants (CENTRAL_RECON_PARTNER_LIST, CENTRAL_RECON_RECONCILE_STATUS_LIST) in a dedicated constants file separate from utils/constants.ts.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/utils/centralrecon.constants.ts:1-24\n// Central Recon Constants\nexport const CENTRAL_RECON_PARTNER_LIST = [\n    {\n        value: 1,\n        label: {\n            vi: \"Napas\",\n            en: \"Napas\"\n        }\n    },\n    {\n        value: 2,\n        label: {\n            vi: \"BIDV\",\n            en: \"BIDV\"\n        }\n    },\n    {\n        value: 3,\n        label: {\n            vi: \"VMG\",\n            en: \"VMG\"\n        }\n    },",
+    "flow": "utils/centralrecon.constants.ts single-responsibility pattern"
+  },
+  {
+    "id": "S-IMPACT-22",
+    "kind": "claim",
+    "claim": "In data-transfers/params/index.ts, each export domain exports dedicated parameter classes per export type such as DisbursementTicketExportParams and DisbursementTransHisExportParams.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/index.ts:18-28\n// DISBURSEMENT\nimport { DisbursementTicketExportParams } from \"./disbursement/disbursement-ticket-export.params\";\nimport { DisbursementTransHisExportParams } from \"./disbursement/disbursement-trans-his-export.params\";\n\n// MERCHANT\nimport { MerchantExportParams } from \"./merchant/merchant-export.params\";\nimport { MerchantOnboardingExportParams } from \"./merchant/merchant-onboarding-export.params\";\nimport { PayoutRequestExportParams } from \"./merchant/payout-request-export.params\";\nimport { ReconciliationReportExportParams } from \"./merchant/reconciliation-report-export.params\";\nimport { RegistrationExportParams } from \"./merchant/registration-export.params\";",
+    "flow": "data-transfers/params/index.ts DTO separation pattern"
+  },
+  {
+    "id": "S-PATTERN-22",
+    "kind": "claim",
+    "claim": "In internal-transfer-export.pure.ts, buildFilter initializes filter with sysTrans: { $ne: true } and 5 default transType values on lines 20-33, without BATCH_DISBURSEMENT_SETTLE.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:20-33\nconst buildFilter = (params: any) => {\n    let filter: any = {\n        sysTrans: { $ne: true },\n        transType: {\n            $in: [\n                TRANS_TYPE.INTERNAL_BANK_TRANSFER,\n                TRANS_TYPE.REFUND_CASHIN,\n                TRANS_TYPE.WALLET_UNMATCH_CASHIN,\n                TRANS_TYPE.WALLET_UNMATCH_REFUND,\n                TRANS_TYPE.CASHOUT_MERCHANT\n            ]\n        }\n    };",
+    "flow": "InternalTransferExport.buildFilter -> default transTypes"
+  },
+  {
+    "id": "D-BEHAV-22",
+    "kind": "claim",
+    "claim": "In internal-transfer-export.pure.ts, buildSort checks sortType === 'asc' || sortType === 1 on line 161, and trans-his-export.pure.ts checks sortType === 'asc' || sortType === 1 on line 126.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:155-167\nconst buildSort = (params: any): object => {\n    let sort: any = {};\n    const sortBy = params.sortBy;\n    const sortType = params.sortType;\n\n    if (sortBy && sortType) {\n        const order = sortType === \"asc\" || sortType === 1 ? 1 : -1;\n        sort[sortBy] = order;\n    } else {\n        sort = { createdAt: -1 };\n    }\n    return sort;\n};",
+    "flow": "InternalTransferExport.buildSort -> sortType coercion"
+  },
+  {
+    "id": "D-EDGE-22",
+    "kind": "claim",
+    "claim": "In internal-transfer-export.pure.ts, transformRow assigns receiverBankAccount: history.receiver?.credit || '' on line 289 without checking history.info?.bankTransferData?.credit.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:285-291\n        senderBankName,\n        senderBankAccount,\n        senderBankAccountName,\n        receiverBankName: history.receiver?.bankCode || \"\",\n        receiverBankAccount: history.receiver?.credit || \"\",\n        receiverBankAccountName: history.receiver?.creditName || \"\"\n    };",
+    "flow": "InternalTransferExport.transformRow -> receiverBankAccount"
+  },
+  {
+    "id": "D-API-22",
+    "kind": "claim",
+    "claim": "In utils/constants.ts, TRANS_TYPE on lines 424-447 was modified in TASK-21 to add WALLET_UNMATCH_CASHIN, CASHOUT_MERCHANT, and WALLET_UNMATCH_REFUND.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/utils/constants.ts:424-447\nexport const TRANS_TYPE = {\n\tPAY: \"PAY\",\n\tCASHIN: \"CASHIN\",\n\tWALLET_UNMATCH_CASHIN: \"WALLET_UNMATCH_CASHIN\",\n\tCASHOUT: \"CASHOUT\",\n\tCASHOUT_MERCHANT: \"CASHOUT_MERCHANT\",\n\tMERCHANT_WITHDRAW: \"MERCHANT_WITHDRAW\",\n\tTRANSFER: \"TRANSFER\",\n\tREFUND: \"REFUND\",\n\tREFUND_CASHIN: \"REFUND_CASHIN\",\n\tWALLET_UNMATCH_REFUND: \"WALLET_UNMATCH_REFUND\",\n\tTRANSFER_SENDER: \"TRANSFER_SENDER\",\n\tTRANSFER_RECEIVER: \"TRANSFER_RECEIVER\",\n\tMERCHANT_REVENUE: \"MERCHANT_REVENUE\",\n\tADJUST: \"ADJUST\",\n\tPAYOUT_WALLET: \"PAYOUT_WALLET\",\n\tPAYOUT_WALLET_SETTLE: \"PAYOUT_WALLET_SETTLE\",\n\tBILLING: \"BILLING\",\n\tTOPUP: \"TOPUP\",\n\tSOFTPIN: \"SOFTPIN\",\n\tDISBURSEMENT: \"DISBURSEMENT\",\n\tBANK_TRANSFER: \"BANK_TRANSFER\",\n\tINTERNAL_BANK_TRANSFER: \"INTERNAL_BANK_TRANSFER\"\n};",
+    "flow": "utils/constants.ts -> TRANS_TYPE"
+  },
+  {
+    "id": "CTRL-TRUE-22",
+    "kind": "control_true",
+    "claim": "In models/trans-his-pg/trans-his-pg.query.ts, TEXT_COLUMNS maps 'serviceCode', 'channelId', 'sender.customerId', 'receiver.customerId', 'sender.phone', 'receiver.phone', and 'info.partnerCode' to their corresponding core.* columns.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:84-97\nconst TEXT_COLUMNS: Readonly<Record<string, string>> = {\n\t\"transId\": \"core.trans_id\",\n\t\"transType\": \"core.trans_type\",\n\t\"status\": \"core.status\",\n\t\"originalTransHisId\": \"core.original_trans_his_id\",\n\t\"serviceCode\": \"core.service_code\",\n\t\"channelId\": \"core.channel_id\",\n\t\"sender.customerId\": \"core.sender_customer_id\",\n\t\"receiver.customerId\": \"core.receiver_customer_id\",\n\t\"sender.phone\": \"core.sender_phone\",\n\t\"receiver.phone\": \"core.receiver_phone\",\n\t\"receiver.credit\": \"core.receiver_credit\",\n\t\"info.partnerCode\": \"core.partner_code\"\n};",
+    "flow": "trans-his-pg.query.ts -> TEXT_COLUMNS"
+  },
+  {
+    "id": "CTRL-FALSE-22A",
+    "kind": "control_false",
+    "claim": "In internal-transfer-export.pure.ts, buildFilter filters partnerCode using a case-insensitive $regex on info.bankTransferResponse.partnerCode.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:46-48\n    if (params.partnerCode) {\n        filter[\"info.partnerCode\"] = params.partnerCode;\n    }",
+    "flow": "InternalTransferExport.buildFilter -> partnerCode"
+  },
+  {
+    "id": "CTRL-FALSE-22B",
+    "kind": "control_false",
+    "claim": "In core-trans-proxy-history-service/logics/transHis.manage.logic.ts, getList filters partnerCode using a case-insensitive $regex on info.bankTransferResponse.partnerCode.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/core-trans-proxy-history-service/logics/transHis.manage.logic.ts:74-76\n\t\tif (params.partnerCode) {\n\t\t\tfilter[\"info.partnerCode\"] = params.partnerCode;\n\t\t}",
+    "flow": "TransHisManageLogic.getList -> partnerCode"
+  }
+]

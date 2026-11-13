@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ-19",
+    "kind": "claim",
+    "claim": "In svc-env.ts, setEnvironments copies process.env into _env without re-reading the .envfile from disk, and in start.ts loadEnvAndInitService calls setEnvironments and VaultSecurity.overWriteVaultEnv only once at startup.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/svc-env.ts:182-199\n\tsetEnvironments(broker: ServiceBroker, serviceName: string) {\n\t\tlet envServices = JSON.parse(JSON.stringify(process.env));\n\n\t\tconst brokerEnv = broker.envServices ? broker.envServices[serviceName] : null;\n\t\tif (brokerEnv && !_.isEmpty(brokerEnv)) {\n\t\t\tenvServices = { ...envServices, ...brokerEnv };\n\t\t}\n\n\t\tconst serviceEnv = broker.services.find(x => x.name === serviceName)?.settings?.envServices;\n\t\tif (serviceEnv && !_.isEmpty(serviceEnv)) {\n\t\t\tenvServices = { ...envServices, ...serviceEnv };\n\t\t}\n\n\t\tObject.keys(envServices).forEach(key => {\n\t\t\tSVC_ENV.set(key, envServices[key] || \"\");\n\t\t});\n\t\treturn Promise.resolve();\n\t}",
+    "flow": "start.ts loadEnvAndInitService -> SVC_ENV.setEnvironments -> _env in memory"
+  },
+  {
+    "id": "C-REALITY-19",
+    "kind": "claim",
+    "claim": "In data-transfers/main-process.ts, initializeModels is private and called only once in the constructor for aliases present in this.connections, with no method to reconnect a failed DB alias or initialize missing models later.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/data-transfers/main-process.ts:17-30\n  public constructor(\n    broker: ServiceBroker,\n    logger?: LoggerInstance,\n    connections?: MultiDbConnections,\n    plugins?: any[]\n  ) {\n    this.broker = broker;\n    this.logger = logger || broker.logger;\n    this.connections = connections || { default: undefined };\n\n    if (plugins) {\n      this.initializeModels(plugins);\n    }\n  }",
+    "flow": "start.ts initService -> new MainProcess -> initializeModels"
+  },
+  {
+    "id": "C-CONTRA-19",
+    "kind": "claim",
+    "claim": "In logics/processors/BaseExportProcessor.ts, execute calls this.getConfig() and this.validatePrerequisites(mainProcess, config) synchronously without attempting to reconnect or initialize missing models.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/processors/BaseExportProcessor.ts:157-168\n    try {\n      config = await this.getConfig();\n      this.validatePrerequisites(mainProcess, config);\n    } catch (validationError: any) {\n      this.context.broker.logger.error(`[ExportJob Validation Failed] JobId: ${jobId}, Type: ${this.constructor.name}`, validationError);\n\n      await this.redis.setJobProgress(jobId, 100, \"FAILED\", {\n        error: validationError.message || \"Prerequisite validation failed\"\n      });\n\n      throw validationError;\n    }",
+    "flow": "ExportWorker.processJobLogic -> BaseExportProcessor.execute -> validatePrerequisites"
+  },
+  {
+    "id": "CTRL-TRUE-19",
+    "kind": "control_true",
+    "claim": "In dbHandler/DbConnectorFactory.ts, connectPostgres creates a new Pool and executes await pool.query('SELECT 1') before returning the DbConnection object.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/dbHandler/DbConnectorFactory.ts:182-197\n  private async connectPostgres(config: DbConfig): Promise<DbConnection> {\n    const pool = new Pool({\n      host: config.host!,\n      port: config.port || 5432,\n      database: config.database!,\n      user: config.username,\n      password: config.password,\n      max: config.poolSize || 10, // Use poolSize\n      connectionTimeoutMillis: 10000 // fail a connect instead of waiting for the OS\n    });\n    // an idle connection dropped by the proxy is an 'error' event of the pool: without a listener it would stop the process\n    pool.on(\"error\", err => this.logger.error(`Postgres pool (${config.host}:${config.port}/${config.database}) idle client error:`, err.message));\n\n    await pool.query(\"SELECT 1\");\n\n    return {",
+    "flow": "DbConnectorFactory.connect -> connectPostgres -> pool.query('SELECT 1')"
+  },
+  {
+    "id": "CTRL-FALSE-19A",
+    "kind": "control_false",
+    "claim": "In data-transfers/main-process.ts, MainProcess automatically polls DB_LIST every 5 seconds to reconnect failed databases and re-initialize missing models.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/data-transfers/main-process.ts:17-42\n  public constructor(\n    broker: ServiceBroker,\n    logger?: LoggerInstance,\n    connections?: MultiDbConnections,\n    plugins?: any[]\n  ) {\n    this.broker = broker;\n    this.logger = logger || broker.logger;\n    this.connections = connections || { default: undefined };\n\n    if (plugins) {\n      this.initializeModels(plugins);\n    }\n  }\n\n  public isDbConnected(alias: string = \"default\"): boolean {\n    const conn = this.connections[alias];\n    if (conn && \"readyState\" in conn) {\n      return (conn as any).readyState === 1;\n    }\n    if (conn && \"ended\" in conn) {\n      return !(conn as any).ended;\n    }\n    return !!conn;\n  }",
+    "flow": "MainProcess methods"
+  },
+  {
+    "id": "CTRL-FALSE-19B",
+    "kind": "control_false",
+    "claim": "In svc-env.ts, SVC_ENV.get() watches .run.local.env with fs.watchFile and reloads environment variables on every read.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/svc-env.ts:174-182\nexport const SVC_ENV: Environment = {\n\tset(key: string, val: any): object {\n\t\t_env[key] = val;\n\t\treturn _env[key];\n\t},\n\tget(): IEnvironmentField {\n\t\treturn _env;\n\t},",
+    "flow": "SVC_ENV.get implementation"
+  }
+]

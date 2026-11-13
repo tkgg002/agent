@@ -1,0 +1,51 @@
+[
+  {
+    "id": "A-CONFIG",
+    "kind": "claim",
+    "claim": "In masterEngineConfig.ts lines 23-95, MASTER_ENGINE_CONFIGS defines brandColor, deviconSlug, namespaceLabel, namespacePluralLabel, objectLabel, and objectPluralLabel for postgresql, mongodb, mysql, and clickhouse.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/master/masterEngineConfig.ts:23-40\n  postgresql: {\n    value: 'postgresql',\n    label: 'PostgreSQL (port 5432)',\n    shortLabel: 'POSTGRESQL',\n    tagColor: 'geekblue',\n    brandColor: '#2f54eb',\n    deviconSlug: 'postgresql/postgresql-original',\n    namespaceLabel: 'Schema',\n    namespacePluralLabel: 'schemas',\n    objectLabel: 'Table',\n    objectPluralLabel: 'tables',\n    defaultPort: 5432,\n    defaultDatabase: 'postgres',\n    defaultUserPlaceholder: 'ví dụ: postgres',\n    codePlaceholder: 'ví dụ: pg_analytics_01',\n    displayNamePlaceholder: 'ví dụ: PostgreSQL Analytics Cluster',\n    isDatabaseScoped: false,\n  },",
+    "flow": "MasterEngineMeta configured with engine-specific hierarchy labels and icons."
+  },
+  {
+    "id": "A-GROUPING",
+    "kind": "claim",
+    "claim": "In MasterGroupedCollapse.tsx lines 129-162, buildMasterHierarchyGroups groups rows by connCode (master_connection_code || 'default_master') first and resolves engineType via normalizeMasterEngineTypeUI.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/master/MasterGroupedCollapse.tsx:153-162\n  rows.forEach((row) => {\n    const connCode = (row.master_connection_code || '').trim() || 'default_master';\n    const connInfo = connMap.get(connCode);\n    const engineType = normalizeMasterEngineTypeUI(\n      row.master_engine_type || connInfo?.engine_type || 'postgresql',\n    );\n    const meta = getMasterEngineMeta(engineType);\n\n    let dbGroup = dbGroupsMap.get(connCode);",
+    "flow": "3-level hierarchy builder in MasterGroupedCollapse.tsx."
+  },
+  {
+    "id": "A-ICONS",
+    "kind": "claim",
+    "claim": "In MasterGroupedCollapse.tsx lines 112-127, MasterNamespaceIcon renders HddOutlined when meta.isDatabaseScoped is true and PartitionOutlined otherwise, while MasterObjectIcon renders AppstoreOutlined for mongodb and TableOutlined otherwise.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/master/MasterGroupedCollapse.tsx:112-127\nexport const MasterNamespaceIcon: React.FC<{ engine?: string | null }> = ({ engine }) => {\n  const meta = getMasterEngineMeta(engine);\n  if (meta.isDatabaseScoped) {\n    return <HddOutlined style={{ color: meta.brandColor, fontSize: 15 }} />;\n  }\n  return <PartitionOutlined style={{ color: meta.brandColor, fontSize: 15 }} />;\n};\n\nexport const MasterObjectIcon: React.FC<{ engine?: string | null }> = ({ engine }) => {\n  const normalized = normalizeMasterEngineTypeUI(engine);\n  const meta = getMasterEngineMeta(normalized);\n  if (normalized === 'mongodb') {\n    return <AppstoreOutlined style={{ color: meta.brandColor, fontSize: 14 }} />;\n  }\n  return <TableOutlined style={{ color: meta.brandColor, fontSize: 14 }} />;\n};",
+    "flow": "Icons for Namespace and Table/Collection levels."
+  },
+  {
+    "id": "A-REGISTRY",
+    "kind": "claim",
+    "claim": "In MasterRegistry.tsx lines 1318-1329, MasterGroupedCollapse is rendered with groups={masterHierarchyGroups}, activeDbKeys, activeNamespaceKeys, onChangeDbKeys, onChangeNamespaceKeys, and columns.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:1318-1329\n        {isLoading ? (\n          <Table loading columns={columns} dataSource={[]} rowKey=\"id\" pagination={false} />\n        ) : (\n          <MasterGroupedCollapse\n            groups={masterHierarchyGroups}\n            activeDbKeys={activeDbKeys}\n            activeNamespaceKeys={activeNamespaceKeys}\n            onChangeDbKeys={handleDbKeysChange}\n            onChangeNamespaceKeys={handleNamespaceKeysChange}\n            columns={columns}\n          />\n        )}",
+    "flow": "MasterRegistry wired with MasterGroupedCollapse."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In masterEngineConfig.ts lines 102-108, normalizeMasterEngineTypeUI maps mongodb/mongo to mongodb, mysql/mariadb to mysql, clickhouse/ch to clickhouse, and defaults to postgresql.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/master/masterEngineConfig.ts:102-108\nexport function normalizeMasterEngineTypeUI(raw?: string | null): MasterEngineType {\n  const lower = (raw || '').trim().toLowerCase();\n  if (lower === 'mongodb' || lower === 'mongo') return 'mongodb';\n  if (lower === 'mysql' || lower === 'mariadb') return 'mysql';\n  if (lower === 'clickhouse' || lower === 'ch') return 'clickhouse';\n  return 'postgresql';\n}",
+    "flow": "normalizeMasterEngineTypeUI helper."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In masterEngineConfig.ts lines 102-108, normalizeMasterEngineTypeUI always returns 'oracle' for every input.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/master/masterEngineConfig.ts:102-108\nexport function normalizeMasterEngineTypeUI(raw?: string | null): MasterEngineType {\n  const lower = (raw || '').trim().toLowerCase();\n  if (lower === 'mongodb' || lower === 'mongo') return 'mongodb';\n  if (lower === 'mysql' || lower === 'mariadb') return 'mysql';\n  if (lower === 'clickhouse' || lower === 'ch') return 'clickhouse';\n  return 'postgresql';\n}",
+    "flow": "normalizeMasterEngineTypeUI helper."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In MasterGroupedCollapse.tsx lines 112-127, MasterNamespaceIcon deletes all database records via an HTTP DELETE request on render.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/master/MasterGroupedCollapse.tsx:112-127\nexport const MasterNamespaceIcon: React.FC<{ engine?: string | null }> = ({ engine }) => {\n  const meta = getMasterEngineMeta(engine);\n  if (meta.isDatabaseScoped) {\n    return <HddOutlined style={{ color: meta.brandColor, fontSize: 15 }} />;\n  }\n  return <PartitionOutlined style={{ color: meta.brandColor, fontSize: 15 }} />;\n};\n\nexport const MasterObjectIcon: React.FC<{ engine?: string | null }> = ({ engine }) => {\n  const normalized = normalizeMasterEngineTypeUI(engine);\n  const meta = getMasterEngineMeta(normalized);\n  if (normalized === 'mongodb') {\n    return <AppstoreOutlined style={{ color: meta.brandColor, fontSize: 14 }} />;\n  }\n  return <TableOutlined style={{ color: meta.brandColor, fontSize: 14 }} />;\n};",
+    "flow": "MasterNamespaceIcon and MasterObjectIcon components."
+  }
+]

@@ -1,0 +1,1056 @@
+[
+  {
+    "id": "S-DIFF-1",
+    "kind": "claim",
+    "claim": "TableDebouncer.drainRemainingOnStop sorts all pendingBatches in ascending sequence order (seq) and shares a single 4s drainCtx across all batches so excess tasks receive drainCtx.Err() and NATS NakWithDelay instead of violating the 15s shutdown budget.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/debounce.go:324-351\n\t// Sửa C4.1: Sắp xếp toàn bộ các batch theo đúng số thứ tự seq tăng dần (FIFO tuyệt đối: Batch #17 luôn trước Batch #18)\n\tsort.Slice(pendingBatches, func(i, j int) bool {\n\t\treturn pendingBatches[i].seq < pendingBatches[j].seq\n\t})\n\n\t// Sửa C4.2: Dùng chung ĐÚNG 1 drainCtx 4s cho toàn bộ vòng lặp xả của TableDebouncer;\n\t// nếu hết 4s, gọi task.complete(drainCtx.Err()) để JetStream NakWithDelay phát lại.\n\tdrainCtx, cancel := context.WithTimeout(context.Background(), 4*time.Second)\n\tdefer cancel()\n\n\trunOrNak := func(tasks []NatsMsgTask) {\n\t\tif len(tasks) == 0 {\n\t\t\treturn\n\t\t}\n\t\tif drainCtx.Err() != nil {\n\t\t\tfor _, t := range tasks {\n\t\t\t\tt.complete(drainCtx.Err())\n\t\t\t}\n\t\t\treturn\n\t\t}\n\t\ttd.executeBatchWithMetrics(drainCtx, tasks)\n\t}\n\n\tfor _, b := range pendingBatches {\n\t\trunOrNak(b.tasks)\n\t}\n\trunOrNak(tailTasks)\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2952,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6943,
+                "INCORRECT": 0.2403,
+                "UNSUPPORTED": 0.0654
+              },
+              "confidence": 0.2952,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 584,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "TableDebouncer.drainRemainingOnStop sorts all pendingBatches in ascending sequence order (seq) and shares a single 4s drainCtx across all batches so excess tasks receive drainCtx.Err() and NATS NakWithDelay instead of violating the 15s shutdown budget.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/debounce.go:324-351\n\t// Sửa C4.1: Sắp xếp toàn bộ các batch theo đúng số thứ tự seq tăng dần (FIFO tuyệt đối: Batch #17 luôn trước Batch #18)\n\tsort.Slice(pendingBatches, func(i, j int) bool {\n\t\treturn pendingBatches[i].seq < pendingBatches[j].seq\n\t})\n\n\t// Sửa C4.2: Dùng chung ĐÚNG 1 drainCtx 4s cho toàn bộ vòng lặp xả của TableDebouncer;\n\t// nếu hết 4s, gọi task.complete(drainCtx.Err()) để JetStream NakWithDelay phát lại.\n\tdrainCtx, cancel := context.WithTimeout(context.Background(), 4*time.Second)\n\tdefer cancel()\n\n\trunOrNak := func(tasks []NatsMsgTask) {\n\t\tif len(tasks) == 0 {\n\t\t\treturn\n\t\t}\n\t\tif drainCtx.Err() != nil {\n\t\t\tfor _, t := range tasks {\n\t\t\t\tt.complete(drainCtx.Err())\n\t\t\t}\n\t\t\treturn\n\t\t}\n\t\ttd.executeBatchWithMetrics(drainCtx, tasks)\n\t}\n\n\tfor _, b := range pendingBatches {\n\t\trunOrNak(b.tasks)\n\t}\n\trunOrNak(tailTasks)\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4573,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8194,
+                "INCORRECT": 0.0796,
+                "UNSUPPORTED": 0.101
+              },
+              "confidence": 0.4573,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 590,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/debounce.go:324-351\n\t// Sửa C4.1: Sắp xếp toàn bộ các batch theo đúng số thứ tự seq tăng dần (FIFO tuyệt đối: Batch #17 luôn trước Batch #18)\n\tsort.Slice(pendingBatches, func(i, j int) bool {\n\t\treturn pendingBatches[i].seq < pendingBatches[j].seq\n\t})\n\n\t// Sửa C4.2: Dùng chung ĐÚNG 1 drainCtx 4s cho toàn bộ vòng lặp xả của TableDebouncer;\n\t// nếu hết 4s, gọi task.complete(drainCtx.Err()) để JetStream NakWithDelay phát lại.\n\tdrainCtx, cancel := context.WithTimeout(context.Background(), 4*time.Second)\n\tdefer cancel()\n\n\trunOrNak := func(tasks []NatsMsgTask) {\n\t\tif len(tasks) == 0 {\n\t\t\treturn\n\t\t}\n\t\tif drainCtx.Err() != nil {\n\t\t\tfor _, t := range tasks {\n\t\t\t\tt.complete(drainCtx.Err())\n\t\t\t}\n\t\t\treturn\n\t\t}\n\t\ttd.executeBatchWithMetrics(drainCtx, tasks)\n\t}\n\n\tfor _, b := range pendingBatches {\n\t\trunOrNak(b.tasks)\n\t}\n\trunOrNak(tailTasks)\n}",
+          "claim": "TableDebouncer.drainRemainingOnStop sorts all pendingBatches in ascending sequence order (seq) and shares a single 4s drainCtx across all batches so excess tasks receive drainCtx.Err() and NATS NakWithDelay instead of violating the 15s shutdown budget."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7615,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9608,
+                "NO": 0.0392
+              },
+              "confidence": 0.7615,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 523,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/debounce.go:324-351\n\t// Sửa C4.1: Sắp xếp toàn bộ các batch theo đúng số thứ tự seq tăng dần (FIFO tuyệt đối: Batch #17 luôn trước Batch #18)\n\tsort.Slice(pendingBatches, func(i, j int) bool {\n\t\treturn pendingBatches[i].seq < pendingBatches[j].seq\n\t})\n\n\t// Sửa C4.2: Dùng chung ĐÚNG 1 drainCtx 4s cho toàn bộ vòng lặp xả của TableDebouncer;\n\t// nếu hết 4s, gọi task.complete(drainCtx.Err()) để JetStream NakWithDelay phát lại.\n\tdrainCtx, cancel := context.WithTimeout(context.Background(), 4*time.Second)\n\tdefer cancel()\n\n\trunOrNak := func(tasks []NatsMsgTask) {\n\t\tif len(tasks) == 0 {\n\t\t\treturn\n\t\t}\n\t\tif drainCtx.Err() != nil {\n\t\t\tfor _, t := range tasks {\n\t\t\t\tt.complete(drainCtx.Err())\n\t\t\t}\n\t\t\treturn\n\t\t}\n\t\ttd.executeBatchWithMetrics(drainCtx, tasks)\n\t}\n\n\tfor _, b := range pendingBatches {\n\t\trunOrNak(b.tasks)\n\t}\n\trunOrNak(tailTasks)\n}",
+          "claim": "TableDebouncer.drainRemainingOnStop sorts all pendingBatches in ascending sequence order (seq) and shares a single 4s drainCtx across all batches so excess tasks receive drainCtx.Err() and NATS NakWithDelay instead of violating the 15s shutdown budget."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "S-DIFF-2",
+    "kind": "claim",
+    "claim": "In SnapshotRunnerHandler.runSnapshot (G1), when ctx.Done() fires at the top of the batch loop and r.stopping.Load() is true, it calls r.markProgressPaused(progressID) and returns nil instead of returning a cancellation error.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:654-664\n\tfor {\n\t\tselect {\n\t\tcase <-ctx.Done():\n\t\t\tif r.stopping.Load() {\n\t\t\t\tr.markProgressPaused(progressID)\n\t\t\t\treturn nil\n\t\t\t}\n\t\t\tr.markProgressPaused(progressID)\n\t\t\treturn fmt.Errorf(\"snapshot cancelled after %d rows: %w\", rowsTotal, ctx.Err())\n\t\tdefault:\n\t\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2705,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6542,
+                "INCORRECT": 0.2877,
+                "UNSUPPORTED": 0.0581
+              },
+              "confidence": 0.2705,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 357,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In SnapshotRunnerHandler.runSnapshot (G1), when ctx.Done() fires at the top of the batch loop and r.stopping.Load() is true, it calls r.markProgressPaused(progressID) and returns nil instead of returning a cancellation error.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:654-664\n\tfor {\n\t\tselect {\n\t\tcase <-ctx.Done():\n\t\t\tif r.stopping.Load() {\n\t\t\t\tr.markProgressPaused(progressID)\n\t\t\t\treturn nil\n\t\t\t}\n\t\t\tr.markProgressPaused(progressID)\n\t\t\treturn fmt.Errorf(\"snapshot cancelled after %d rows: %w\", rowsTotal, ctx.Err())\n\t\tdefault:\n\t\t}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1987,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6493,
+                "INCORRECT": 0.2183,
+                "UNSUPPORTED": 0.1324
+              },
+              "confidence": 0.1987,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 363,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:654-664\n\tfor {\n\t\tselect {\n\t\tcase <-ctx.Done():\n\t\t\tif r.stopping.Load() {\n\t\t\t\tr.markProgressPaused(progressID)\n\t\t\t\treturn nil\n\t\t\t}\n\t\t\tr.markProgressPaused(progressID)\n\t\t\treturn fmt.Errorf(\"snapshot cancelled after %d rows: %w\", rowsTotal, ctx.Err())\n\t\tdefault:\n\t\t}",
+          "claim": "In SnapshotRunnerHandler.runSnapshot (G1), when ctx.Done() fires at the top of the batch loop and r.stopping.Load() is true, it calls r.markProgressPaused(progressID) and returns nil instead of returning a cancellation error."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6779,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9413,
+                "NO": 0.0587
+              },
+              "confidence": 0.6779,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 296,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:654-664\n\tfor {\n\t\tselect {\n\t\tcase <-ctx.Done():\n\t\t\tif r.stopping.Load() {\n\t\t\t\tr.markProgressPaused(progressID)\n\t\t\t\treturn nil\n\t\t\t}\n\t\t\tr.markProgressPaused(progressID)\n\t\t\treturn fmt.Errorf(\"snapshot cancelled after %d rows: %w\", rowsTotal, ctx.Err())\n\t\tdefault:\n\t\t}",
+          "claim": "In SnapshotRunnerHandler.runSnapshot (G1), when ctx.Done() fires at the top of the batch loop and r.stopping.Load() is true, it calls r.markProgressPaused(progressID) and returns nil instead of returning a cancellation error."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "S-DIFF-3",
+    "kind": "claim",
+    "claim": "In Worker TransmuteJobRepo.UpdateStatus (G2), when status is RUNNING or PAUSED, the query filters by cancel_requested = false AND status NOT IN ('CANCELLED', 'COMPLETED', 'FAILED') so worker shutdown never overwrites a user-cancelled job with PAUSED.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/transmute_job_repo.go:170-177\n\tq := r.db.WithContext(ctx).Model(&TransmuteJob{})\n\tif status == \"RUNNING\" || status == \"PAUSED\" {\n\t\tq = q.Where(\"job_id = ? AND cancel_requested = false AND status NOT IN ('CANCELLED', 'COMPLETED', 'FAILED')\", jobID)\n\t} else {\n\t\tq = q.Where(\"job_id = ?\", jobID)\n\t}\n\treturn q.Updates(updates).Error\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.8012,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9508,
+                "INCORRECT": 0.0408,
+                "UNSUPPORTED": 0.0084
+              },
+              "confidence": 0.8012,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 343,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In Worker TransmuteJobRepo.UpdateStatus (G2), when status is RUNNING or PAUSED, the query filters by cancel_requested = false AND status NOT IN ('CANCELLED', 'COMPLETED', 'FAILED') so worker shutdown never overwrites a user-cancelled job with PAUSED.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/transmute_job_repo.go:170-177\n\tq := r.db.WithContext(ctx).Model(&TransmuteJob{})\n\tif status == \"RUNNING\" || status == \"PAUSED\" {\n\t\tq = q.Where(\"job_id = ? AND cancel_requested = false AND status NOT IN ('CANCELLED', 'COMPLETED', 'FAILED')\", jobID)\n\t} else {\n\t\tq = q.Where(\"job_id = ?\", jobID)\n\t}\n\treturn q.Updates(updates).Error\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0974,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5591,
+                "INCORRECT": 0.2166,
+                "UNSUPPORTED": 0.2242
+              },
+              "confidence": 0.0974,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 349,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/transmute_job_repo.go:170-177\n\tq := r.db.WithContext(ctx).Model(&TransmuteJob{})\n\tif status == \"RUNNING\" || status == \"PAUSED\" {\n\t\tq = q.Where(\"job_id = ? AND cancel_requested = false AND status NOT IN ('CANCELLED', 'COMPLETED', 'FAILED')\", jobID)\n\t} else {\n\t\tq = q.Where(\"job_id = ?\", jobID)\n\t}\n\treturn q.Updates(updates).Error\n}",
+          "claim": "In Worker TransmuteJobRepo.UpdateStatus (G2), when status is RUNNING or PAUSED, the query filters by cancel_requested = false AND status NOT IN ('CANCELLED', 'COMPLETED', 'FAILED') so worker shutdown never overwrites a user-cancelled job with PAUSED."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.873,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9825,
+                "NO": 0.0175
+              },
+              "confidence": 0.873,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 282,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/transmute_job_repo.go:170-177\n\tq := r.db.WithContext(ctx).Model(&TransmuteJob{})\n\tif status == \"RUNNING\" || status == \"PAUSED\" {\n\t\tq = q.Where(\"job_id = ? AND cancel_requested = false AND status NOT IN ('CANCELLED', 'COMPLETED', 'FAILED')\", jobID)\n\t} else {\n\t\tq = q.Where(\"job_id = ?\", jobID)\n\t}\n\treturn q.Updates(updates).Error\n}",
+          "claim": "In Worker TransmuteJobRepo.UpdateStatus (G2), when status is RUNNING or PAUSED, the query filters by cancel_requested = false AND status NOT IN ('CANCELLED', 'COMPLETED', 'FAILED') so worker shutdown never overwrites a user-cancelled job with PAUSED."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "S-DIFF-4",
+    "kind": "claim",
+    "claim": "In BatchTransformHandler.runTransformJob (G3), GetByID restores parsedForce and parsedFields into isForceJob and forceFieldsNote before building forceSet and setClauses, and BatchBuffer.Stop() (G4) waits up to 4500ms on bb.doneCh before calling bb.cancel().",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:405-421\n\t\t\tparsedForce, parsedFields := repository.ParseTransformForce(existingJob.ErrorMessage)\n\t\t\tif parsedForce {\n\t\t\t\tisForceJob = true\n\t\t\t}\n\t\t\tif len(forceFieldsNote) == 0 && len(parsedFields) > 0 {\n\t\t\t\tforceFieldsNote = parsedFields\n\t\t\t}\n\t\t}\n\t}\n\n\t// Build lookup set cho force_fields (lowercase để so sánh case-insensitive; nếu forceFieldsNote rỗng thì áp dụng cho toàn bộ cột active mapping — C3.1, D3 & G3)\n\tforceSet := make(map[string]struct{}, len(forceFieldsNote))\n\tfor _, f := range forceFieldsNote {\n\t\tif trimmed := strings.ToLower(strings.TrimSpace(f)); trimmed != \"\" {\n\t\t\tforceSet[trimmed] = struct{}{}\n\t\t}\n\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3153,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7259,
+                "INCORRECT": 0.1947,
+                "UNSUPPORTED": 0.0793
+              },
+              "confidence": 0.3153,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 482,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In BatchTransformHandler.runTransformJob (G3), GetByID restores parsedForce and parsedFields into isForceJob and forceFieldsNote before building forceSet and setClauses, and BatchBuffer.Stop() (G4) waits up to 4500ms on bb.doneCh before calling bb.cancel().",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:405-421\n\t\t\tparsedForce, parsedFields := repository.ParseTransformForce(existingJob.ErrorMessage)\n\t\t\tif parsedForce {\n\t\t\t\tisForceJob = true\n\t\t\t}\n\t\t\tif len(forceFieldsNote) == 0 && len(parsedFields) > 0 {\n\t\t\t\tforceFieldsNote = parsedFields\n\t\t\t}\n\t\t}\n\t}\n\n\t// Build lookup set cho force_fields (lowercase để so sánh case-insensitive; nếu forceFieldsNote rỗng thì áp dụng cho toàn bộ cột active mapping — C3.1, D3 & G3)\n\tforceSet := make(map[string]struct{}, len(forceFieldsNote))\n\tfor _, f := range forceFieldsNote {\n\t\tif trimmed := strings.ToLower(strings.TrimSpace(f)); trimmed != \"\" {\n\t\t\tforceSet[trimmed] = struct{}{}\n\t\t}\n\t}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0966,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4628,
+                "INCORRECT": 0.4029,
+                "UNSUPPORTED": 0.1343
+              },
+              "confidence": 0.0966,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 488,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:405-421\n\t\t\tparsedForce, parsedFields := repository.ParseTransformForce(existingJob.ErrorMessage)\n\t\t\tif parsedForce {\n\t\t\t\tisForceJob = true\n\t\t\t}\n\t\t\tif len(forceFieldsNote) == 0 && len(parsedFields) > 0 {\n\t\t\t\tforceFieldsNote = parsedFields\n\t\t\t}\n\t\t}\n\t}\n\n\t// Build lookup set cho force_fields (lowercase để so sánh case-insensitive; nếu forceFieldsNote rỗng thì áp dụng cho toàn bộ cột active mapping — C3.1, D3 & G3)\n\tforceSet := make(map[string]struct{}, len(forceFieldsNote))\n\tfor _, f := range forceFieldsNote {\n\t\tif trimmed := strings.ToLower(strings.TrimSpace(f)); trimmed != \"\" {\n\t\t\tforceSet[trimmed] = struct{}{}\n\t\t}\n\t}",
+          "claim": "In BatchTransformHandler.runTransformJob (G3), GetByID restores parsedForce and parsedFields into isForceJob and forceFieldsNote before building forceSet and setClauses, and BatchBuffer.Stop() (G4) waits up to 4500ms on bb.doneCh before calling bb.cancel()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.0267,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.596,
+                "NO": 0.404
+              },
+              "confidence": 0.0267,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 421,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:405-421\n\t\t\tparsedForce, parsedFields := repository.ParseTransformForce(existingJob.ErrorMessage)\n\t\t\tif parsedForce {\n\t\t\t\tisForceJob = true\n\t\t\t}\n\t\t\tif len(forceFieldsNote) == 0 && len(parsedFields) > 0 {\n\t\t\t\tforceFieldsNote = parsedFields\n\t\t\t}\n\t\t}\n\t}\n\n\t// Build lookup set cho force_fields (lowercase để so sánh case-insensitive; nếu forceFieldsNote rỗng thì áp dụng cho toàn bộ cột active mapping — C3.1, D3 & G3)\n\tforceSet := make(map[string]struct{}, len(forceFieldsNote))\n\tfor _, f := range forceFieldsNote {\n\t\tif trimmed := strings.ToLower(strings.TrimSpace(f)); trimmed != \"\" {\n\t\t\tforceSet[trimmed] = struct{}{}\n\t\t}\n\t}",
+          "claim": "In BatchTransformHandler.runTransformJob (G3), GetByID restores parsedForce and parsedFields into isForceJob and forceFieldsNote before building forceSet and setClauses, and BatchBuffer.Stop() (G4) waits up to 4500ms on bb.doneCh before calling bb.cancel()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "StripJobCheckpointTags in cdc-cms-service only strips internal checkpoint tags when status is COMPLETED or RUNNING.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/transmute_job_repo.go:44-49\nfunc StripJobCheckpointTags(status, errMsg string) string {\n\tupper := strings.ToUpper(strings.TrimSpace(status))\n\tif upper != \"COMPLETED\" && upper != \"RUNNING\" {\n\t\treturn errMsg\n\t}\n\tcleaned := errMsg",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7857,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9458,
+                "INCORRECT": 0.045,
+                "UNSUPPORTED": 0.0092
+              },
+              "confidence": 0.7857,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 253,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "StripJobCheckpointTags in cdc-cms-service only strips internal checkpoint tags when status is COMPLETED or RUNNING.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/transmute_job_repo.go:44-49\nfunc StripJobCheckpointTags(status, errMsg string) string {\n\tupper := strings.ToUpper(strings.TrimSpace(status))\n\tif upper != \"COMPLETED\" && upper != \"RUNNING\" {\n\t\treturn errMsg\n\t}\n\tcleaned := errMsg",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.1384,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2399,
+                "INCORRECT": 0.5967,
+                "UNSUPPORTED": 0.1634
+              },
+              "confidence": 0.1384,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 259,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/transmute_job_repo.go:44-49\nfunc StripJobCheckpointTags(status, errMsg string) string {\n\tupper := strings.ToUpper(strings.TrimSpace(status))\n\tif upper != \"COMPLETED\" && upper != \"RUNNING\" {\n\t\treturn errMsg\n\t}\n\tcleaned := errMsg",
+          "claim": "StripJobCheckpointTags in cdc-cms-service only strips internal checkpoint tags when status is COMPLETED or RUNNING."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.8378,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0238,
+                "NO": 0.9762
+              },
+              "confidence": 0.8378,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 192,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/transmute_job_repo.go:44-49\nfunc StripJobCheckpointTags(status, errMsg string) string {\n\tupper := strings.ToUpper(strings.TrimSpace(status))\n\tif upper != \"COMPLETED\" && upper != \"RUNNING\" {\n\t\treturn errMsg\n\t}\n\tcleaned := errMsg",
+          "claim": "StripJobCheckpointTags in cdc-cms-service only strips internal checkpoint tags when status is COMPLETED or RUNNING."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "BatchBuffer.Stop() calls bb.cancel() immediately before closing bb.stopCh and never waits on bb.doneCh.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:863-876\nfunc (bb *BatchBuffer) Stop() {\n\tbb.stopOnce.Do(func() {\n\t\tif bb.stopCh != nil {\n\t\t\tclose(bb.stopCh)\n\t\t}\n\t})\n\tif bb.doneCh != nil {\n\t\tselect {\n\t\tcase <-bb.doneCh:\n\t\tcase <-time.After(4500 * time.Millisecond):\n\t\t}\n\t}\n\tbb.cancel()\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5878,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8612,
+                "INCORRECT": 0.1225,
+                "UNSUPPORTED": 0.0163
+              },
+              "confidence": 0.5878,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 321,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "BatchBuffer.Stop() calls bb.cancel() immediately before closing bb.stopCh and never waits on bb.doneCh.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:863-876\nfunc (bb *BatchBuffer) Stop() {\n\tbb.stopOnce.Do(func() {\n\t\tif bb.stopCh != nil {\n\t\t\tclose(bb.stopCh)\n\t\t}\n\t})\n\tif bb.doneCh != nil {\n\t\tselect {\n\t\tcase <-bb.doneCh:\n\t\tcase <-time.After(4500 * time.Millisecond):\n\t\t}\n\t}\n\tbb.cancel()\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.833,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9592,
+                "INCORRECT": 0.0368,
+                "UNSUPPORTED": 0.004
+              },
+              "confidence": 0.833,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 327,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:863-876\nfunc (bb *BatchBuffer) Stop() {\n\tbb.stopOnce.Do(func() {\n\t\tif bb.stopCh != nil {\n\t\t\tclose(bb.stopCh)\n\t\t}\n\t})\n\tif bb.doneCh != nil {\n\t\tselect {\n\t\tcase <-bb.doneCh:\n\t\tcase <-time.After(4500 * time.Millisecond):\n\t\t}\n\t}\n\tbb.cancel()\n}",
+          "claim": "BatchBuffer.Stop() calls bb.cancel() immediately before closing bb.stopCh and never waits on bb.doneCh."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5578,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9083,
+                "NO": 0.0917
+              },
+              "confidence": 0.5578,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 260,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:863-876\nfunc (bb *BatchBuffer) Stop() {\n\tbb.stopOnce.Do(func() {\n\t\tif bb.stopCh != nil {\n\t\t\tclose(bb.stopCh)\n\t\t}\n\t})\n\tif bb.doneCh != nil {\n\t\tselect {\n\t\tcase <-bb.doneCh:\n\t\tcase <-time.After(4500 * time.Millisecond):\n\t\t}\n\t}\n\tbb.cancel()\n}",
+          "claim": "BatchBuffer.Stop() calls bb.cancel() immediately before closing bb.stopCh and never waits on bb.doneCh."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "BatchTransformHandler.detectPrimaryKey only returns the column name and never queries format_type(a.atttypid, a.atttypmod) for the PostgreSQL data type.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:803-826\nfunc (h *BatchTransformHandler) detectPrimaryKey(execDB *gorm.DB, schemaName, tableName string) (string, string, error) {\n\tif strings.TrimSpace(schemaName) == \"\" {\n\t\tschemaName = \"public\"\n\t}\n\ttype pkMeta struct {\n\t\tColName  string `gorm:\"column:col_name\"`\n\t\tDataType string `gorm:\"column:data_type\"`\n\t}\n\tvar cols []pkMeta\n\tsql := `\n        SELECT a.attname AS col_name, format_type(a.atttypid, a.atttypmod) AS data_type\n        FROM pg_index i\n        JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)\n        WHERE i.indrelid = (?::text)::regclass AND i.indisprimary\n        ORDER BY array_position(i.indkey, a.attnum)`\n\tqualified := schemaName + \".\" + tableName\n\tif err := execDB.Raw(sql, qualified).Scan(&cols).Error; err != nil {\n\t\treturn \"\", \"\", err\n\t}\n\tif len(cols) != 1 {\n\t\treturn \"\", \"\", nil\n\t}\n\treturn cols[0].ColName, cols[0].DataType, nil\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2631,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6359,
+                "INCORRECT": 0.3096,
+                "UNSUPPORTED": 0.0545
+              },
+              "confidence": 0.2631,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 581,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "BatchTransformHandler.detectPrimaryKey only returns the column name and never queries format_type(a.atttypid, a.atttypmod) for the PostgreSQL data type.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:803-826\nfunc (h *BatchTransformHandler) detectPrimaryKey(execDB *gorm.DB, schemaName, tableName string) (string, string, error) {\n\tif strings.TrimSpace(schemaName) == \"\" {\n\t\tschemaName = \"public\"\n\t}\n\ttype pkMeta struct {\n\t\tColName  string `gorm:\"column:col_name\"`\n\t\tDataType string `gorm:\"column:data_type\"`\n\t}\n\tvar cols []pkMeta\n\tsql := `\n        SELECT a.attname AS col_name, format_type(a.atttypid, a.atttypmod) AS data_type\n        FROM pg_index i\n        JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)\n        WHERE i.indrelid = (?::text)::regclass AND i.indisprimary\n        ORDER BY array_position(i.indkey, a.attnum)`\n\tqualified := schemaName + \".\" + tableName\n\tif err := execDB.Raw(sql, qualified).Scan(&cols).Error; err != nil {\n\t\treturn \"\", \"\", err\n\t}\n\tif len(cols) != 1 {\n\t\treturn \"\", \"\", nil\n\t}\n\treturn cols[0].ColName, cols[0].DataType, nil\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.0159,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2484,
+                "INCORRECT": 0.3872,
+                "UNSUPPORTED": 0.3644
+              },
+              "confidence": 0.0159,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 587,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:803-826\nfunc (h *BatchTransformHandler) detectPrimaryKey(execDB *gorm.DB, schemaName, tableName string) (string, string, error) {\n\tif strings.TrimSpace(schemaName) == \"\" {\n\t\tschemaName = \"public\"\n\t}\n\ttype pkMeta struct {\n\t\tColName  string `gorm:\"column:col_name\"`\n\t\tDataType string `gorm:\"column:data_type\"`\n\t}\n\tvar cols []pkMeta\n\tsql := `\n        SELECT a.attname AS col_name, format_type(a.atttypid, a.atttypmod) AS data_type\n        FROM pg_index i\n        JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)\n        WHERE i.indrelid = (?::text)::regclass AND i.indisprimary\n        ORDER BY array_position(i.indkey, a.attnum)`\n\tqualified := schemaName + \".\" + tableName\n\tif err := execDB.Raw(sql, qualified).Scan(&cols).Error; err != nil {\n\t\treturn \"\", \"\", err\n\t}\n\tif len(cols) != 1 {\n\t\treturn \"\", \"\", nil\n\t}\n\treturn cols[0].ColName, cols[0].DataType, nil\n}",
+          "claim": "BatchTransformHandler.detectPrimaryKey only returns the column name and never queries format_type(a.atttypid, a.atttypmod) for the PostgreSQL data type."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.0,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.5031,
+                "NO": 0.4969
+              },
+              "confidence": 0.0,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 520,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:803-826\nfunc (h *BatchTransformHandler) detectPrimaryKey(execDB *gorm.DB, schemaName, tableName string) (string, string, error) {\n\tif strings.TrimSpace(schemaName) == \"\" {\n\t\tschemaName = \"public\"\n\t}\n\ttype pkMeta struct {\n\t\tColName  string `gorm:\"column:col_name\"`\n\t\tDataType string `gorm:\"column:data_type\"`\n\t}\n\tvar cols []pkMeta\n\tsql := `\n        SELECT a.attname AS col_name, format_type(a.atttypid, a.atttypmod) AS data_type\n        FROM pg_index i\n        JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)\n        WHERE i.indrelid = (?::text)::regclass AND i.indisprimary\n        ORDER BY array_position(i.indkey, a.attnum)`\n\tqualified := schemaName + \".\" + tableName\n\tif err := execDB.Raw(sql, qualified).Scan(&cols).Error; err != nil {\n\t\treturn \"\", \"\", err\n\t}\n\tif len(cols) != 1 {\n\t\treturn \"\", \"\", nil\n\t}\n\treturn cols[0].ColName, cols[0].DataType, nil\n}",
+          "claim": "BatchTransformHandler.detectPrimaryKey only returns the column name and never queries format_type(a.atttypid, a.atttypmod) for the PostgreSQL data type."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

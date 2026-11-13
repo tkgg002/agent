@@ -1,0 +1,78 @@
+[
+  {
+    "id": "S-RC-50",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "worker probe endpoint mismatch",
+    "claim": "probes.Worker requests /healthz while the worker Fiber server only registers /health, /ready, /metrics, and /api/v1/internal/stats.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/observability/probes/worker.go:13-17\nfunc Worker(ctx context.Context, deps HTTPDeps, workerURL string) map[string]any {\n\turl := strings.TrimRight(workerURL, \"/\") + \"/healthz\"\n\tstart := time.Now()\n\tbody, code, err := deps.Get(ctx, url)\n\tsec := map[string]any{\"latency_ms\": time.Since(start).Milliseconds()}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:549-567\n\tapp.Get(\"/health\", func(c *fiber.Ctx) error { return c.JSON(fiber.Map{\"status\": \"ok\", \"service\": \"cdc-worker\"}) })\n\tapp.Get(\"/ready\", func(c *fiber.Ctx) error {\n\t\tsqlDB, _ := db.DB()\n\t\tif err := sqlDB.Ping(); err != nil {\n\t\t\treturn c.Status(503).JSON(fiber.Map{\"status\": \"not ready\", \"error\": err.Error()})\n\t\t}\n\t\treturn c.JSON(fiber.Map{\"status\": \"ready\"})\n\t})\n\tapp.Get(\"/metrics\", adaptor.HTTPHandler(promhttp.Handler()))\n\tapp.Get(\"/api/reconciliation/jobs/active\", jobHandler.HandleGetActiveJobsFiber)\n\tapp.Get(\"/api/reconciliation/jobs/:job_id\", jobHandler.HandleGetJobStatusFiber)\n\tapp.Get(\"/api/v1/internal/stats\", func(c *fiber.Ctx) error {\n\t\treturn c.JSON(fiber.Map{\n\t\t\t\"queue\":           collectPoolStats(consumerPools),\n\t\t\t\"buffer\":          cdcBatchBuffer.GetStatus(),\n\t\t\t\"snapshot_buffer\": snapshotBatchBuffer.GetStatus(),\n\t\t\t\"config\":          fiber.Map{\"pool_size\": cfg.Worker.PoolSize, \"batch_size\": cfg.Worker.BatchSize},\n\t\t})\n\t})",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/observability/probes/worker.go:13-17",
+    "must_contain": [
+      "strings.TrimRight(workerURL, \"/\") + \"/healthz\"",
+      "app.Get(\"/api/v1/internal/stats\""
+    ]
+  },
+  {
+    "id": "S-RC-51",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "debezium failed tasks hidden in UI and probe",
+    "claim": "DebeziumFailurePanel reads debezium.tasks directly instead of iterating over debezium.connectors, and DebeziumAll only checks top-level connector status.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/SystemHealth.tsx:235-241\n  const pipelineObj = (pipeline as Record<string, unknown>) || {};\n  const debezium = (pipelineObj.debezium as Record<string, unknown>) || {};\n  const tasks = (debezium.tasks as Array<Record<string, unknown>>) || [];\n  const failedTasks = tasks.filter((t) => t.state === 'FAILED');\n  const debeziumFailed = debezium.status === 'FAILED' || debezium.status === 'down';\n\n  if (failedTasks.length === 0 && !debeziumFailed) return null;\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/observability/probes/debezium.go:41-56\n\tconnectors := make([]map[string]any, 0, len(names))\n\toverall := StatusOK\n\tfor _, name := range names {\n\t\tc := Debezium(ctx, deps, kafkaConnectURL, name)\n\t\tconnectors = append(connectors, c)\n\t\tstate, _ := c[\"status\"].(string)\n\t\t// Worst-of aggregation: any non-RUNNING → degraded.\n\t\tif state != \"\" && !strings.EqualFold(state, \"RUNNING\") && overall == StatusOK {\n\t\t\toverall = StatusDegraded\n\t\t}\n\t}\n\treturn map[string]any{\n\t\t\"status\":     overall,\n\t\t\"connectors\": connectors,\n\t\t\"count\":      len(connectors),\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/SystemHealth.tsx:235-241",
+    "must_contain": [
+      "const tasks = (debezium.tasks as Array<Record<string, unknown>>) || [];",
+      "connectors = append(connectors, c)"
+    ]
+  },
+  {
+    "id": "S-FIX-52",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "restart debezium payload and header",
+    "claim": "useRestartConnector sends JSON field connector while RestartDebezium parses JSON field connector_name.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/hooks/useSystemHealth.ts:61-70\n      const { data } = await cmsApi.post<RestartConnectorResult>(\n        '/api/tools/restart-debezium',\n        { reason, connector: connectorName },\n        {\n          headers: {\n            'Idempotency-Key': idempotencyKey,\n            'X-Action-Reason': reason,\n          },\n        },\n      );\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/system_health_handler.go:97-105\n\tconnectorName := c.Query(\"connector_name\")\n\tif connectorName == \"\" {\n\t\tvar body struct {\n\t\t\tConnectorName string `json:\"connector_name\"`\n\t\t}\n\t\t_ = c.BodyParser(&body)\n\t\tconnectorName = body.ConnectorName\n\t}\n\tif connectorName == \"\" {",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/hooks/useSystemHealth.ts:61-70",
+    "must_contain": [
+      "{ reason, connector: connectorName }",
+      "ConnectorName string `json:\"connector_name\"`"
+    ]
+  },
+  {
+    "id": "D-BEHAV-50",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "batch buffer status and db flush duration",
+    "claim": "BatchBuffer.GetStatus currently returns BufferSize, MaxSize, and LastFlush, while DBFlushDuration loads dbFlushNanos atomically.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:811-819\nfunc (bb *BatchBuffer) GetStatus() BatchStatus {\n\tbb.mu.Lock()\n\tdefer bb.mu.Unlock()\n\treturn BatchStatus{\n\t\tBufferSize: len(bb.records),\n\t\tMaxSize:    bb.maxSize,\n\t\tLastFlush:  bb.lastFlush,\n\t}\n}\nREF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_flush_timing.go:8-13\nfunc (bb *BatchBuffer) DBFlushDuration() time.Duration {\n\tif bb == nil {\n\t\treturn 0\n\t}\n\treturn time.Duration(bb.dbFlushNanos.Load())\n}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:811-819",
+    "must_contain": [
+      "BufferSize: len(bb.records)",
+      "return time.Duration(bb.dbFlushNanos.Load())"
+    ]
+  },
+  {
+    "id": "CTRL-TRUE-DG1-50",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "worker probe endpoint path",
+    "claim": "probes.Worker sends an HTTP GET request to workerURL + /healthz.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/observability/probes/worker.go:13-17\nfunc Worker(ctx context.Context, deps HTTPDeps, workerURL string) map[string]any {\n\turl := strings.TrimRight(workerURL, \"/\") + \"/healthz\"\n\tstart := time.Now()\n\tbody, code, err := deps.Get(ctx, url)\n\tsec := map[string]any{\"latency_ms\": time.Since(start).Milliseconds()}"
+  },
+  {
+    "id": "CTRL-FALSE-DG1-50",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "worker probe endpoint path",
+    "claim": "probes.Worker deletes the database table when workerURL is empty.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/observability/probes/worker.go:13-17\nfunc Worker(ctx context.Context, deps HTTPDeps, workerURL string) map[string]any {\n\turl := strings.TrimRight(workerURL, \"/\") + \"/healthz\"\n\tstart := time.Now()\n\tbody, code, err := deps.Get(ctx, url)\n\tsec := map[string]any{\"latency_ms\": time.Since(start).Milliseconds()}"
+  },
+  {
+    "id": "CTRL-FALSE-DG1-51",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "restart debezium body key",
+    "claim": "RestartDebezium parses ConnectorName only from the HTTP Authorization header.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/system/system_health_handler.go:97-105\n\tconnectorName := c.Query(\"connector_name\")\n\tif connectorName == \"\" {\n\t\tvar body struct {\n\t\t\tConnectorName string `json:\"connector_name\"`\n\t\t}\n\t\t_ = c.BodyParser(&body)\n\t\tconnectorName = body.ConnectorName\n\t}\n\tif connectorName == \"\" {"
+  }
+]

@@ -1,0 +1,76 @@
+[
+  {
+    "id": "S-RC-40",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "snapshot page size default",
+    "claim": "The snapshot runner falls back to snapshotV2DefaultBatchSize when neither the payload nor the source object sets a batch size.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:433-438\n\tif p.BatchSize <= 0 && so.SnapshotBatchSize != nil && *so.SnapshotBatchSize > 0 {\n\t\tp.BatchSize = *so.SnapshotBatchSize\n\t}\n\tif p.BatchSize <= 0 {\n\t\tp.BatchSize = snapshotV2DefaultBatchSize\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:433-438",
+    "must_contain": [
+      "p.BatchSize = *so.SnapshotBatchSize",
+      "p.BatchSize = snapshotV2DefaultBatchSize"
+    ]
+  },
+  {
+    "id": "S-RC-41",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "default value",
+    "claim": "snapshotV2DefaultBatchSize is 5000.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_utils.go:23-23\n\tsnapshotV2DefaultBatchSize = 5000",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_utils.go:23-23",
+    "must_contain": [
+      "snapshotV2DefaultBatchSize = 5000"
+    ]
+  },
+  {
+    "id": "S-RC-42",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "written equals rows affected",
+    "claim": "The activity log written field is the batch written count, which accumulates RowsAffected of the upsert statements.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:662-662\n\t\t\t\t\t\ttxWritten += res.RowsAffected",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:662-662",
+    "must_contain": [
+      "txWritten += res.RowsAffected"
+    ]
+  },
+  {
+    "id": "S-RC-43",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "upsert skips unchanged rows",
+    "claim": "The batch upsert DO UPDATE clause only updates when _hash or _deleted differs from the incoming row.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:753-757\n\t\tchangeConditions = append(changeConditions, fmt.Sprintf(`%s.\"_hash\" IS DISTINCT FROM EXCLUDED.\"_hash\"`, qualifiedTable))\n\t}\n\tif hasDeleted {\n\t\tchangeConditions = append(changeConditions, fmt.Sprintf(`%s.\"_deleted\" IS DISTINCT FROM EXCLUDED.\"_deleted\"`, qualifiedTable))\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:753-757",
+    "must_contain": [
+      "\"_hash\" IS DISTINCT FROM EXCLUDED.\"_hash\"",
+      "\"_deleted\" IS DISTINCT FROM EXCLUDED.\"_deleted\""
+    ]
+  },
+  {
+    "id": "CTRL-TRUE-40",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "snapshot buffer size",
+    "claim": "The snapshot batch buffer size is at least 1000.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:155-157\n\tif snapshotBatchSize < 1000 {\n\t\tsnapshotBatchSize = 1000\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-40",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "default value",
+    "claim": "snapshotV2DefaultBatchSize is 1000.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_utils.go:23-23\n\tsnapshotV2DefaultBatchSize = 5000"
+  },
+  {
+    "id": "CTRL-FALSE-41",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "upsert skips unchanged rows",
+    "claim": "The batch upsert DO UPDATE clause always updates every conflicting row regardless of hash.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go:753-757\n\t\tchangeConditions = append(changeConditions, fmt.Sprintf(`%s.\"_hash\" IS DISTINCT FROM EXCLUDED.\"_hash\"`, qualifiedTable))\n\t}\n\tif hasDeleted {\n\t\tchangeConditions = append(changeConditions, fmt.Sprintf(`%s.\"_deleted\" IS DISTINCT FROM EXCLUDED.\"_deleted\"`, qualifiedTable))\n\t}"
+  }
+]

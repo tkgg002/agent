@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "claim",
+    "basis": "code",
+    "evidence": "REF: /Users/trainguyen/Documents/work/config-service/start.ts:447-452\n\t\tdbHandler.createConnection((err, dbConnection) => {\n\t\t\tif (err) {\n\t\t\t\tthis.logger.error(err);\n\t\t\t\tthis.stopService(this.broker,\"STOP_SERVICE_ERR_CONNECT_DB\");\n\t\t\t\treturn;\n\t\t\t}",
+    "claim": "When dbHandler.createConnection returns an error in ConfigService.initService() at start.ts:447-452, it logs the error and calls this.stopService(this.broker, 'STOP_SERVICE_ERR_CONNECT_DB')."
+  },
+  {
+    "id": "S-FIX",
+    "kind": "claim",
+    "basis": "code",
+    "evidence": "REF: /Users/trainguyen/Documents/work/config-service/start.ts:502-506\n\tprivate stopService(broker: ServiceBroker, messageOut: string) {\n\t\tbroker.destroyService(broker.services.find(x => x.name === SVC_ENV.get().SERVICE_NAME))\n\t\t\t.then(() => broker.logger.fatal(messageOut,SVC_ENV.get().SERVICE_NAME))\n\t\t\t.catch(stopSvcError => broker.logger.fatal(stopSvcError));\n\t}",
+    "claim": "ConfigService.stopService in start.ts:502-506 calls broker.destroyService on the config-service instance, unregistering its actions from the broker."
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "claim",
+    "basis": "code",
+    "evidence": "REF: /Users/trainguyen/Documents/work/auth-service/logics/auth.logic.js:325-333\n\t\tconst picklistOptionsResp = await context.call(\n\t\t\t\"config-service.getAllSystemConfigsByIds\",\n\t\t\t{\n\t\t\t\tids: picklistOptionsIds.map((optionId) =>\n\t\t\t\t\tFunctionHelper.convertToMongoId(optionId),\n\t\t\t\t),\n\t\t\t},\n\t\t\t{ meta: context.meta },\n\t\t);",
+    "claim": "AuthLogic.getRoutesOfUser in auth.logic.js:325-333 calls config-service.getAllSystemConfigsByIds via context.call."
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "claim",
+    "basis": "code",
+    "evidence": "REF: /Users/trainguyen/Documents/work/config-service/dbHandler/mongo.ts:11-15\n\tpublic createConnection(next: (err, connection) => void) {\n\t\tmongoose\n\t\t\t.createConnection(SVC_ENV.get().MONGO_URI, {})\n\t\t\t.asPromise()",
+    "claim": "MongoDb.createConnection in dbHandler/mongo.ts:11-15 connects to MongoDB using SVC_ENV.get().MONGO_URI."
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "claim",
+    "basis": "code",
+    "evidence": "REF: /Users/trainguyen/Documents/work/config-service/start.ts:101-103\n\t\t\t\tgetListByKeyTypes: ctx => this.systemConfigLogic.getListByKeyType(ctx),\n\t\t\t\tgetAllSystemConfigsByIds: ctx => this.systemConfigLogic.getAllByIds(ctx),\n\t\t\t\t// COUNTER",
+    "claim": "ConfigService in start.ts:102 registers the action getAllSystemConfigsByIds which delegates to this.systemConfigLogic.getAllByIds(ctx)."
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "claim",
+    "basis": "code",
+    "evidence": "REF: /Users/trainguyen/Documents/work/config-service/start.ts:472-474\n\t\t\tthis.mobileLogic = new MobileConfigLogic({logger: this.logger, dbConnection, models});\n\t\t\tthis.systemConfigLogic = new SystemConfigLogic({logger: this.logger, dbConnection, models});\n\t\t\tthis.businessLineConfigLogic = new BusinessLineConfigLogic({logger: this.logger, dbConnection, models});",
+    "claim": "In ConfigService.initService() at start.ts:473, this.systemConfigLogic is instantiated with dbConnection and models once dbHandler.createConnection succeeds."
+  },
+  {
+    "id": "D-API",
+    "kind": "claim",
+    "basis": "code",
+    "evidence": "REF: /Users/trainguyen/Documents/work/config-service/start.ts:489-500\n\tprivate async loadEnvAndInitService(): Promise<void> {\n\t\tSVC_ENV.setEnvironmentsFromEnv(this.broker, ServiceName);\n\t\tawait VaultSecurity.overWriteVaultEnv();\n\t\tconst isMissing = VaultSecurity.checkMissingEnvVariable();\n\t\tif (isMissing){\n\t\t\tawait this.broker.stop();\n\t\t\tthrow Error(\"MIS_ENV_KEY\");\n\t\t} else {\n\t\t\tawait redis.connect();\n\t\t\tthis.initService();\n\t\t}\n\t}",
+    "claim": "ConfigService.loadEnvAndInitService() in start.ts:490 loads environment variables via SVC_ENV.setEnvironmentsFromEnv before calling this.initService()."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "basis": "code",
+    "evidence": "REF: /Users/trainguyen/Documents/work/config-service/start.ts:101-103\n\t\t\t\tgetListByKeyTypes: ctx => this.systemConfigLogic.getListByKeyType(ctx),\n\t\t\t\tgetAllSystemConfigsByIds: ctx => this.systemConfigLogic.getAllByIds(ctx),\n\t\t\t\t// COUNTER",
+    "claim": "Line 102 of config-service/start.ts defines getAllSystemConfigsByIds: ctx => this.systemConfigLogic.getAllByIds(ctx)."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "basis": "code",
+    "evidence": "REF: /Users/trainguyen/Documents/work/config-service/start.ts:447-452\n\t\tdbHandler.createConnection((err, dbConnection) => {\n\t\t\tif (err) {\n\t\t\t\tthis.logger.error(err);\n\t\t\t\tthis.stopService(this.broker,\"STOP_SERVICE_ERR_CONNECT_DB\");\n\t\t\t\treturn;\n\t\t\t}",
+    "claim": "When dbHandler.createConnection returns an error in start.ts:448, ConfigService ignores the error and does not call this.stopService."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "basis": "code",
+    "evidence": "REF: /Users/trainguyen/Documents/work/config-service/dbHandler/mongo.ts:11-15\n\tpublic createConnection(next: (err, connection) => void) {\n\t\tmongoose\n\t\t\t.createConnection(SVC_ENV.get().MONGO_URI, {})\n\t\t\t.asPromise()",
+    "claim": "MongoDb.createConnection in dbHandler/mongo.ts connects to MySQL instead of MongoDB."
+  }
+]

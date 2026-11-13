@@ -1,0 +1,51 @@
+[
+  {
+    "id": "BC-1-PK",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In master_ddl_generator.go, Master tables always define \"_gpay_id\" BIGINT PRIMARY KEY as the first system column.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator.go:148-153\n\tcols := []string{\n\t\t`\"_gpay_id\" BIGINT PRIMARY KEY`,\n\t\t`\"_source_ts\" BIGINT`,\n\t\t`\"_deleted\" BOOLEAN NOT NULL DEFAULT FALSE`,\n\t\t`\"_updated_at\" TIMESTAMPTZ NOT NULL DEFAULT NOW()`,\n\t}"
+  },
+  {
+    "id": "BC-2-TIERA",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In recon_tier_a.go, RunTierA calls rc.destAgent.CountRows(ctxCount, entry.QualifiedTarget(), entry.PrimaryKeyField) passing the source PrimaryKeyField.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_tier_a.go:1066-1070\n\tspanNameCount := fmt.Sprintf(\"pg.query.count_rows: %s\", entry.TargetTable)\n\tctxCount, spanCount := observability.ChildSpan(ctx, spanNameCount, attribute.String(\"table\", entry.QualifiedTarget()))\n\tdestCount, err := rc.destAgent.CountRows(ctxCount, entry.QualifiedTarget(), entry.PrimaryKeyField)\n\tobservability.EndSpan(spanCount, &err)\n\tif err != nil {"
+  },
+  {
+    "id": "BC-4-DIALECT",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In recon_dest_sql_dialects.go, sqlDialectCountRows executes SELECT COUNT(*) FROM quoteDialectRelation(tableName) with da.finalModifier() regardless of pkColumn.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_dest_sql_dialects.go:103-116\nfunc (da *ReconDestAgent) sqlDialectCountRows(ctx context.Context, tableName, pkColumn string) (int64, error) {\n\tif err := validateIdent(tableName); err != nil {\n\t\treturn 0, err\n\t}\n\tqCtx, cancel := context.WithTimeout(ctx, da.cfg.QueryTimeout)\n\tdefer cancel()\n\n\tvar count int64\n\tsql := fmt.Sprintf(\"SELECT COUNT(*) FROM %s%s\", quoteDialectRelation(tableName), da.finalModifier())\n\tif err := da.replica.WithContext(qCtx).Raw(sql).Scan(&count).Error; err != nil {\n\t\treturn 0, err\n\t}\n\treturn count, nil\n}"
+  },
+  {
+    "id": "BC-5-NONPG",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In recon_window_index_probe.go, CountRowsBeforeCutoff checks da.IsNonPostgresSQL() and subtracts post from total only when errW is nil and total >= post.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_window_index_probe.go:209-219\n\tif da.IsNonPostgresSQL() {\n\t\ttotal, err := da.sqlDialectCountRows(ctx, tableName, pkColumn)\n\t\tif err != nil {\n\t\t\treturn 0, err\n\t\t}\n\t\tpost, errW := da.sqlDialectCountInWindow(ctx, tableName, \"_source_ts\", cutoffHi, time.Now().UTC().Add(time.Minute))\n\t\tif errW == nil && total >= post {\n\t\t\ttotal -= post\n\t\t}\n\t\treturn total, nil\n\t}"
+  },
+  {
+    "id": "CTRL-T-BC",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "In recon_smoke.go, scanExact calls agent.CountRowsBeforeCutoff with pkColumn \"_gpay_id\" and then calls agent.CountDeletedRowsBeforeCutoff.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_smoke.go:132-138\n\ttotal, err = agent.CountRowsBeforeCutoff(traceCtx, relation, \"_gpay_id\", cutoffHi)\n\tif err != nil {\n\t\treturn 0, 0, err\n\t}\n\tactive = total\n\tif del, errD := agent.CountDeletedRowsBeforeCutoff(traceCtx, relation, cutoffHi); errD == nil {\n\t\tif a := total - del; a >= 0 {"
+  },
+  {
+    "id": "CTRL-F-BC1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In recon_dest_sql_dialects.go, sqlDialectCountRows deletes all rows from tableName using TRUNCATE TABLE before counting.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_dest_sql_dialects.go:103-116\nfunc (da *ReconDestAgent) sqlDialectCountRows(ctx context.Context, tableName, pkColumn string) (int64, error) {\n\tif err := validateIdent(tableName); err != nil {\n\t\treturn 0, err\n\t}\n\tqCtx, cancel := context.WithTimeout(ctx, da.cfg.QueryTimeout)\n\tdefer cancel()\n\n\tvar count int64\n\tsql := fmt.Sprintf(\"SELECT COUNT(*) FROM %s%s\", quoteDialectRelation(tableName), da.finalModifier())\n\tif err := da.replica.WithContext(qCtx).Raw(sql).Scan(&count).Error; err != nil {\n\t\treturn 0, err\n\t}\n\treturn count, nil\n}"
+  },
+  {
+    "id": "CTRL-F-BC2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In master_ddl_generator.go, Master tables never include a _gpay_id column and instead use a random UUID column.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator.go:148-153\n\tcols := []string{\n\t\t`\"_gpay_id\" BIGINT PRIMARY KEY`,\n\t\t`\"_source_ts\" BIGINT`,\n\t\t`\"_deleted\" BOOLEAN NOT NULL DEFAULT FALSE`,\n\t\t`\"_updated_at\" TIMESTAMPTZ NOT NULL DEFAULT NOW()`,\n\t}"
+  }
+]

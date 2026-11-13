@@ -1,0 +1,75 @@
+[
+  {
+    "id": "S-FIX-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "Deferred fix direction: disable statement cache via DSN",
+    "claim": "pgx v5.9.1 accepts default_query_exec_mode in the connection string and maps cache_describe to QueryExecModeCacheDescribe and exec to QueryExecModeExec.",
+    "evidence": "REF: /Users/trainguyen/go/pkg/mod/github.com/jackc/pgx/v5@v5.9.1/conn.go:192-202\n\tif s, ok := config.RuntimeParams[\"default_query_exec_mode\"]; ok {\n\t\tdelete(config.RuntimeParams, \"default_query_exec_mode\")\n\t\tswitch s {\n\t\tcase \"cache_statement\":\n\t\t\tdefaultQueryExecMode = QueryExecModeCacheStatement\n\t\tcase \"cache_describe\":\n\t\t\tdefaultQueryExecMode = QueryExecModeCacheDescribe\n\t\tcase \"describe_exec\":\n\t\t\tdefaultQueryExecMode = QueryExecModeDescribeExec\n\t\tcase \"exec\":\n\t\t\tdefaultQueryExecMode = QueryExecModeExec",
+    "evidence_ref": "REF: /Users/trainguyen/go/pkg/mod/github.com/jackc/pgx/v5@v5.9.1/conn.go:192-202",
+    "must_contain": [
+      "case \"cache_describe\":",
+      "defaultQueryExecMode = QueryExecModeExec"
+    ]
+  },
+  {
+    "id": "S-RC-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "Root-cause hypothesis basis: default statement caching",
+    "claim": "pgx v5.9.1 defaults to QueryExecModeCacheStatement when default_query_exec_mode is absent.",
+    "evidence": "REF: /Users/trainguyen/go/pkg/mod/github.com/jackc/pgx/v5@v5.9.1/conn.go:191-192\n\tdefaultQueryExecMode := QueryExecModeCacheStatement\n\tif s, ok := config.RuntimeParams[\"default_query_exec_mode\"]; ok {",
+    "evidence_ref": "REF: /Users/trainguyen/go/pkg/mod/github.com/jackc/pgx/v5@v5.9.1/conn.go:191-192",
+    "must_contain": [
+      "defaultQueryExecMode := QueryExecModeCacheStatement"
+    ]
+  },
+  {
+    "id": "S-IMPACT-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "Deferred fix direction: pgxpool lifetime",
+    "claim": "pgxpool default MaxConnLifetime is one hour when not configured.",
+    "evidence": "REF: /Users/trainguyen/go/pkg/mod/github.com/jackc/pgx/v5@v5.9.1/pgxpool/pool.go:22-22\n\tdefaultMaxConnLifetime   = time.Hour",
+    "evidence_ref": "REF: /Users/trainguyen/go/pkg/mod/github.com/jackc/pgx/v5@v5.9.1/pgxpool/pool.go:22-22",
+    "must_contain": [
+      "defaultMaxConnLifetime   = time.Hour"
+    ]
+  },
+  {
+    "id": "S-PATTERN-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "Pool sizing site to change",
+    "claim": "Registry.openPgx derives pgxpool MinConns from DBPool.MaxIdleConn.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go:257-258\n\tpoolCfg.MaxConns = int32(r.cfg.DBPool.MaxOpenConn)\n\tpoolCfg.MinConns = int32(r.cfg.DBPool.MaxIdleConn)",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go:257-258",
+    "must_contain": [
+      "poolCfg.MinConns = int32(r.cfg.DBPool.MaxIdleConn)"
+    ]
+  },
+  {
+    "id": "CTRL-TRUE-D1",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "shadow retry classifier",
+    "claim": "isRetryableDBError returns true for SQLSTATE codes with prefix 53.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_dlq.go:146-148\n\t\tif strings.HasPrefix(pgErr.Code, \"53\") {\n\t\t\treturn true\n\t\t}"
+  },
+  {
+    "id": "CTRL-FALSE-D1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "pgx exec mode",
+    "claim": "pgx v5.9.1 defaults to QueryExecModeSimpleProtocol when default_query_exec_mode is absent.",
+    "evidence": "REF: /Users/trainguyen/go/pkg/mod/github.com/jackc/pgx/v5@v5.9.1/conn.go:191-192\n\tdefaultQueryExecMode := QueryExecModeCacheStatement\n\tif s, ok := config.RuntimeParams[\"default_query_exec_mode\"]; ok {"
+  },
+  {
+    "id": "CTRL-FALSE-D2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "pgxpool lifetime",
+    "claim": "pgxpool default MaxConnLifetime is five minutes when not configured.",
+    "evidence": "REF: /Users/trainguyen/go/pkg/mod/github.com/jackc/pgx/v5@v5.9.1/pgxpool/pool.go:22-22\n\tdefaultMaxConnLifetime   = time.Hour"
+  }
+]

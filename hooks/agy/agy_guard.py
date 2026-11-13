@@ -77,10 +77,11 @@ CLEAN_ROOM_START = re.compile(r"^\s*(BẮT\s*ĐẦU|APPROVE)\s*[.!]?\s*$", re.I 
 # G-03: mỗi rule trong Clean-Room Approved Spec phải có REF: path:line.
 SPEC_RULE_RE = re.compile(r"^[ \t]*(?:[-*][ \t]*|\|[ \t]*)?\**(C?R-?\d+)\b[^:\n|]*\**[ \t]*[:.|]", re.I | re.M)
 SPEC_REF_RE = re.compile(r"REF:\s*`?\S+:\d+")
-SPEC_REJECT_RE = re.compile(r"(\[(?:REJECTED\vert{}NO_EVIDENCE\vert{}UNVERIFIED\vert{}BLOCKED)\]|trạng\s+thái\s*:\s*(?:REJECTED|BLOCK|NO_EVIDENCE))", re.I)
+SPEC_REJECT_RE = re.compile(r"(\[(?:REJECTED|NO_EVIDENCE|UNVERIFIED|BLOCKED)\]|trạng\s+thái\s*:\s*(?:REJECTED|BLOCK|NO_EVIDENCE))", re.I)
 # G-02: tool-call args có thể chứa nội dung/đường dẫn file đọc được.
 READ_ARG_KEYS = {
     "view_file": ("AbsolutePath",),
+    "read_file": ("Path",),
     "view_file_outline": ("AbsolutePath", "File"),
     "view_code_item": ("AbsolutePath", "File"),
     "grep_search": ("SearchPath",),
@@ -88,12 +89,24 @@ READ_ARG_KEYS = {
     "run_command": ("CommandLine", "Cwd"),
     "read_url_content": ("Url",),
 }
+WRITE_TOOLS = frozenset(
+    {
+        "write_to_file",
+        "replace_file_content",
+        "multi_replace_file_content",
+        "write_file",
+        "edit_file",
+        "multi_edit",
+    }
+)
+FULL_WRITE_TOOLS = frozenset({"write_to_file", "write_file"})
+MAX_SOLUTION_LINES = 800
 # G-08: lesson tripwires.
 TRIPWIRE_LIMIT = 5
 TRIPWIRE_GUARDED_DOCS = re.compile(r"/workspaces/[^/]+/(13_analysis|09_tasks_solution|audit_report)_[^/]*\.md$")
 # AF-1: bằng chứng Require chỉ tính từ tool đọc/lệnh — tool ghi (kể cả lần ghi bị chặn) không được tự thoả.
 TRIPWIRE_EVIDENCE_TOOLS = frozenset(
-    {"view_file", "grep_search", "find_by_name", "list_dir", "run_command", "read_url_content", "search_web"}
+    {"view_file", "read_file", "grep_search", "find_by_name", "list_dir", "run_command", "read_url_content", "search_web"}
 )
 # AF-5: ranh giới token trong args JSON (khoảng trắng, quote, toán tử shell, backslash escape, '=').
 TRIPWIRE_TOKEN_BOUNDARY = frozenset(" \t\n\"'`;|<>()\\=")
@@ -204,7 +217,57 @@ def last_user_idx(st: List[Dict[str, Any]]) -> int:
 
 
 def tgt(args: Dict[str, Any]) -> str:
-    return str(_unquote(args.get("TargetFile") or ""))
+    return str(_unquote(args.get("TargetFile") or args.get("Path") or args.get("file_path") or ""))
+
+
+def _parse_chunks(raw_args: Dict[str, Any]) -> List[Dict[str, Any]]:
+    chunks = raw_args.get("ReplacementChunks") or raw_args.get("Edits") or raw_args.get("edits") or []
+    if isinstance(chunks, str):
+        try:
+            chunks = json.loads(chunks)
+        except Exception:
+            return []
+    return [ch for ch in chunks if isinstance(ch, dict)] if isinstance(chunks, list) else []
+
+
+def _chunk_texts(raw_args: Dict[str, Any], keys: Tuple[str, ...]) -> str:
+    return "\n".join(
+        str(_unquote(ch.get(k) or ""))
+        for ch in _parse_chunks(raw_args)
+        for k in keys
+        if ch.get(k)
+    )
+
+
+def old_arg(raw_args: Dict[str, Any]) -> str:
+    base = str(_unquote(raw_args.get("TargetContent") or raw_args.get("Target") or raw_args.get("old_string") or ""))
+    extra = _chunk_texts(raw_args, ("TargetContent", "Target", "oldText", "old_string"))
+    return f"{base}\n{extra}".strip("\n") if extra else base
+
+
+def new_arg(raw_args: Dict[str, Any]) -> str:
+    base = (
+        str(_unquote(raw_args.get("CodeContent") or ""))
+        + str(_unquote(raw_args.get("ReplacementContent") or ""))
+        + str(_unquote(raw_args.get("Content") or ""))
+        + str(_unquote(raw_args.get("Replacement") or ""))
+        + str(_unquote(raw_args.get("new_string") or ""))
+    )
+    extra = _chunk_texts(raw_args, ("ReplacementContent", "Replacement", "newText", "new_string"))
+    return f"{base}\n{extra}".strip("\n") if extra else base
+
+
+def _apply_edit_preview(cur_txt: str, raw_args: Dict[str, Any], old_s: str, body: str) -> str:
+    chunks = _parse_chunks(raw_args)
+    if chunks:
+        merged = cur_txt
+        for ch in chunks:
+            c_old = str(_unquote(ch.get("TargetContent") or ch.get("Target") or ch.get("oldText") or ch.get("old_string") or ""))
+            c_new = str(_unquote(ch.get("ReplacementContent") or ch.get("Replacement") or ch.get("newText") or ch.get("new_string") or ""))
+            if c_old:
+                merged = merged.replace(c_old, c_new, 1)
+        return merged
+    return cur_txt.replace(old_s, body, 1) if old_s else body
 
 
 def is_mem_path(path_str: str, mem_root: Optional[Path] = None) -> bool:
@@ -234,8 +297,12 @@ def is_test_file(path_str: str) -> bool:
 
 def touched(st: List[Dict[str, Any]], pattern: str, after: int = -1) -> bool:
     return any(
-        i > after and re.search(pattern, json.dumps(a, ensure_ascii=False))
-        for i, _, a in calls(st)
+        i > after
+        and (
+            (nm in WRITE_TOOLS and bool(re.search(pattern, tgt(a) or json.dumps(a, ensure_ascii=False))))
+            or (nm == "run_command" and bool(re.search(pattern, str(a.get("CommandLine") or ""))))
+        )
+        for i, nm, a in calls(st)
     )
 
 
@@ -243,7 +310,7 @@ def src_edits(st: List[Dict[str, Any]], mem_root: Optional[Path] = None) -> List
     return [
         (i, tgt(a))
         for i, n, a in calls(st)
-        if n in ("write_to_file", "replace_file_content") and is_src(tgt(a), mem_root)
+        if n in WRITE_TOOLS and is_src(tgt(a), mem_root)
     ]
 
 
@@ -252,15 +319,14 @@ def lessons_edits_since(st: List[Dict[str, Any]], after: int = -1) -> List[int]:
         i
         for i, n, a in calls(st)
         if i > after
-        and n in ("write_to_file", "replace_file_content")
+        and n in WRITE_TOOLS
         and tgt(a).replace("\\", "/").endswith("/memory/global/lessons.md")
     ]
 
 
 def validate_lesson_append_hygiene(args: Dict[str, Any]) -> List[str]:
     """H2b: Chặn ngay tại pre-write nếu Agent append bài học mới sai cấu trúc Global vào lessons.md."""
-    old_text = str(args.get("TargetContent") or "")
-    new_text = str(args.get("ReplacementContent") or "") or str(args.get("CodeContent") or "")
+    old_text, new_text = old_arg(args), new_arg(args)
     if old_text and new_text.startswith(old_text):
         added = new_text[len(old_text) :]
     elif old_text and old_text in new_text:
@@ -315,9 +381,10 @@ def project_reads_since(
     for i, n, a in calls(st):
         if i <= after:
             continue
-        if n in ("view_file", "grep_search", "find_by_name"):
+        if n in ("view_file", "read_file", "grep_search", "find_by_name"):
             p = str(
                 a.get("AbsolutePath")
+                or a.get("Path")
                 or a.get("SearchPath")
                 or a.get("SearchDirectory")
                 or ""
@@ -328,8 +395,8 @@ def project_reads_since(
 
 
 def latest_solution_suffix(st: List[Dict[str, Any]], after: int = -1) -> Optional[str]:
-    for i, _, a in reversed(list(calls(st))):
-        if i <= after:
+    for i, nm, a in reversed(list(calls(st))):
+        if i <= after or nm not in WRITE_TOOLS:
             continue
         m = re.search(r"09_tasks_solution_([^/\"\\]+)\.md$", tgt(a))
         if m:
@@ -504,8 +571,27 @@ def spec_rule_issues(text: str) -> List[str]:
     return issues
 
 
-def load_tripwires(mem_root: Optional[Path] = None) -> List[Dict[str, str]]:
-    path = (mem_root or MEM) / "global" / "lessons" / "tripwires.json"
+def _infer_tripwire_exts(trig: str) -> List[str]:
+    has_go = bool(re.search(r"(?:\\\.|\.)go\b|\bfunc\s*\(|goroutine|errgroup|sqlDB\.Close|natsserver\.NewServer", trig))
+    has_py = bool(re.search(r"(?:\\\.|\.)py\b|\bdef\s+\w+\s*\(|PYTHONDONTWRITEBYTECODE|ast\.parse", trig))
+    has_ts = bool(re.search(r"(?:\\\.|\.)(?:tsx|ts|jsx|js)\b|Form\.useWatch|encodeURIComponent", trig))
+    has_css = bool(re.search(r"(?:\\\.|\.)(?:css|scss)\b|#sri-markdown-content|\.sri-pre-block", trig))
+    if sum([has_go, has_py, has_ts, has_css]) != 1:
+        return []
+    if has_go:
+        return [".go"]
+    if has_py:
+        return [".py"]
+    if has_ts:
+        return [".tsx", ".ts", ".jsx", ".js"]
+    return [".css", ".scss"]
+
+
+def load_tripwires(mem_root: Optional[Path] = None) -> List[Dict[str, Any]]:
+    base = (mem_root or MEM) / "global"
+    path = base / "lessons" / "tripwires.json"
+    if not path.is_file() and (base / "tripwires.json").is_file():
+        path = base / "tripwires.json"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, dict) and "tripwires" in data:
@@ -514,11 +600,36 @@ def load_tripwires(mem_root: Optional[Path] = None) -> List[Dict[str, str]]:
         return []
     if not isinstance(data, list):
         return []
-    return [t for t in data if isinstance(t, dict) and t.get("id") and (t.get("trigger") or t.get("trigger_regex")) and t.get("check")]
+    out: List[Dict[str, Any]] = []
+    for t in data:
+        if not isinstance(t, dict) or not t.get("id") or not t.get("check"):
+            continue
+        trig = (
+            t.get("trigger_regex")
+            or t.get("trigger")
+            or t.get("pattern")
+            or t.get("forbid_regex")
+            or t.get("forbid")
+            or t.get("Forbid")
+            or ""
+        )
+        if not trig:
+            continue
+        item = dict(t)
+        item.setdefault("trigger_regex", str(trig))
+        if not any(
+            k in item
+            for k in ("ext", "extensions", "file_ext", "glob", "file_glob", "files", "path_regex", "file_regex", "file_pattern", "lang", "language")
+        ):
+            inferred = _infer_tripwire_exts(str(trig))
+            if inferred:
+                item["ext"] = inferred
+        out.append(item)
+    return out
 
 
-def match_tripwires(prompt: str, trips: List[Dict[str, str]], limit: int = TRIPWIRE_LIMIT) -> List[Dict[str, str]]:
-    hits: List[Dict[str, str]] = []
+def match_tripwires(prompt: str, trips: List[Dict[str, Any]], limit: int = TRIPWIRE_LIMIT) -> List[Dict[str, Any]]:
+    hits: List[Dict[str, Any]] = []
     for t in trips:
         trig = t.get("trigger") or t.get("trigger_regex") or ""
         if not trig:
@@ -533,30 +644,158 @@ def match_tripwires(prompt: str, trips: List[Dict[str, str]], limit: int = TRIPW
     return hits
 
 
-def code_tripwire_violations(file_path: str, new_code_body: str, trips: List[Dict[str, str]]) -> List[Dict[str, str]]:
-    """H4t-Code: Kiểm tra trực tiếp nội dung code mới chuẩn bị ghi đối chiếu với các Tripwires có Require."""
-    out: List[Dict[str, str]] = []
+def _tripwire_matches_file(file_path: str, t: Dict[str, Any]) -> bool:
+    if not file_path:
+        return True
+    from fnmatch import fnmatch
+
+    fp = file_path.replace("\\", "/")
+    p = Path(fp)
+    ext = p.suffix.lower()
+    exts = t.get("ext") or t.get("extensions") or t.get("file_ext")
+    if exts:
+        ext_list = [exts] if isinstance(exts, str) else list(exts)
+        norm_exts = {str(e).lower() if str(e).startswith(".") else f".{str(e).lower()}" for e in ext_list if e}
+        if norm_exts and ext not in norm_exts:
+            return False
+    lang = str(t.get("lang") or t.get("language") or "").strip().lower()
+    if lang:
+        lang_map = {
+            "go": {".go"},
+            "golang": {".go"},
+            "py": {".py"},
+            "python": {".py"},
+            "ts": {".ts", ".tsx"},
+            "typescript": {".ts", ".tsx"},
+            "js": {".js", ".jsx"},
+            "javascript": {".js", ".jsx"},
+            "sql": {".sql"},
+            "css": {".css", ".scss"},
+        }
+        if lang in lang_map and ext not in lang_map[lang]:
+            return False
+    globs = t.get("glob") or t.get("file_glob") or t.get("files")
+    if globs:
+        glob_list = [globs] if isinstance(globs, str) else list(globs)
+        if glob_list and not any(
+            fnmatch(fp.lower(), str(g).lower()) or fnmatch(p.name.lower(), str(g).lower()) for g in glob_list if g
+        ):
+            return False
+    path_re = str(t.get("path_regex") or t.get("file_regex") or t.get("file_pattern") or "").strip()
+    if path_re:
+        try:
+            if not re.search(path_re, fp, re.I):
+                return False
+        except re.error:
+            pass
+    return True
+
+
+def code_tripwire_violations(
+    file_path: str,
+    new_code_body: str,
+    trips: List[Dict[str, Any]],
+    full_code_body: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """H4t-Code: Kiểm tra trực tiếp nội dung code mới chuẩn bị ghi đối chiếu với các Tripwires có Require/Forbid."""
+    if not new_code_body.strip():
+        return []
+    req_context = full_code_body if full_code_body is not None else new_code_body
+    out: List[Dict[str, Any]] = []
     for t in trips:
         tid = str(t.get("id") or "")
         # Bỏ qua các tripwire chỉ dành cho tra cứu tài liệu/workspace ở pha Brain
         if "prior-workspace" in tid or "propose-only" in tid or "agnostic-core" in tid or "worktree-isolation" in tid:
             continue
-        trig = t.get("trigger") or t.get("trigger_regex") or ""
-        req = t.get("require") or t.get("require_regex") or ""
-        forbid = t.get("forbid_regex") or ""
-        if not trig:
+        if not _tripwire_matches_file(file_path, t):
+            continue
+        trig = str(t.get("trigger") or t.get("trigger_regex") or t.get("pattern") or "")
+        req = str(t.get("require") or t.get("Require") or t.get("require_regex") or "")
+        forbid = str(t.get("forbid") or t.get("Forbid") or t.get("forbid_regex") or "")
+        if not trig and not forbid:
             continue
         try:
-            if not re.search(trig, new_code_body, re.I):
+            if trig and not re.search(trig, new_code_body, re.I):
                 continue
             if forbid and re.search(forbid, new_code_body, re.I):
                 out.append(t)
                 continue
-            if req and not re.search(req, new_code_body, re.I):
+            if req and not re.search(req, req_context, re.I):
                 out.append(t)
         except re.error:
             continue
     return out
+
+
+_DEMO_FENCE_RE = re.compile(r"```([a-zA-Z0-9_\-+]*)\n(.*?)```", re.DOTALL)
+_BEFORE_LABEL_RE = re.compile(r"\b(before|hiện tại|current|old|cũ|trước khi sửa)\b", re.IGNORECASE)
+_AFTER_LABEL_RE = re.compile(r"\b(after|mới|new|sau|fix|đề xuất|proposed|bản vá)\b", re.IGNORECASE)
+_LANG_EXT_MAP = {
+    "go": ".go",
+    "golang": ".go",
+    "python": ".py",
+    "py": ".py",
+    "ts": ".ts",
+    "tsx": ".tsx",
+    "typescript": ".ts",
+    "js": ".js",
+    "jsx": ".jsx",
+    "javascript": ".js",
+    "sql": ".sql",
+    "css": ".css",
+    "sh": ".sh",
+    "bash": ".sh",
+}
+
+
+def _is_before_only_context(prefix: str) -> bool:
+    lines = [ln.strip() for ln in prefix.strip().splitlines() if ln.strip()]
+    if not lines:
+        return False
+    last_ln = lines[-1]
+    if not (last_ln.startswith("#") or last_ln.startswith("**") or last_ln.startswith("- **")):
+        return False
+    return bool(_BEFORE_LABEL_RE.search(last_ln)) and not bool(_AFTER_LABEL_RE.search(last_ln))
+
+
+def _extract_demo_snippets(md_text: str) -> List[Tuple[str, str]]:
+    """F-04/N-03: Tách chỉ các dòng code đề xuất từ 09_tasks_solution (bỏ dòng '-' trong diff và block Before theo L026)."""
+    snippets: List[Tuple[str, str]] = []
+    for m in _DEMO_FENCE_RE.finditer(md_text):
+        lang = (m.group(1) or "").strip().lower()
+        block = m.group(2) or ""
+        if lang in ("diff", "patch") or block.lstrip().startswith(("--- ", "@@ ", "diff --git")):
+            cur_file = "_demo.txt"
+            plus_by_file: Dict[str, List[str]] = {}
+            for ln in block.splitlines():
+                if ln.startswith("diff --git "):
+                    parts = ln.split()
+                    if len(parts) >= 4 and parts[3].startswith("b/"):
+                        cur_file = parts[3][2:]
+                elif ln.startswith("--- ") and cur_file == "_demo.txt":
+                    raw_a = ln[4:].strip().split("\t")[0]
+                    if raw_a.startswith("a/"):
+                        cur_file = raw_a[2:]
+                elif ln.startswith("+++ "):
+                    raw_p = ln[4:].strip().split("\t")[0]
+                    if raw_p.startswith("b/"):
+                        raw_p = raw_p[2:]
+                    if raw_p and raw_p != "/dev/null":
+                        cur_file = raw_p
+                elif ln.startswith("+") and not ln.startswith("+++"):
+                    plus_by_file.setdefault(cur_file, []).append(ln[1:])
+            for fp_name, lines in plus_by_file.items():
+                if lines:
+                    snippets.append((fp_name, "\n".join(lines)))
+            continue
+        prefix = md_text[max(0, m.start() - 240) : m.start()]
+        if _is_before_only_context(prefix):
+            continue
+        ext = _LANG_EXT_MAP.get(lang, "")
+        target_m = re.search(r"(?:#|//|--)\s*Target[^:\n]*:\s*([^\s:`\n]+)", block)
+        vpath = target_m.group(1) if target_m else (f"_demo{ext}" if ext else "_demo.txt")
+        snippets.append((vpath, block))
+    return snippets
 
 
 def tripwire_violations(
@@ -645,7 +884,7 @@ def claim_issues(text: str, ws_dir: Path, st: List[Dict[str, Any]], fingerprint:
     issues: List[str] = []
     ran = [str(a.get("CommandLine") or "") for _, n, a in calls(st) if n == "run_command"]
     forged = any(
-        n in ("write_to_file", "replace_file_content") and "06_evidence/" in tgt(a).replace("\\", "/")
+        n in WRITE_TOOLS and "06_evidence/" in tgt(a).replace("\\", "/")
         for _, n, a in calls(st)
     )
     fp_cache: Dict[str, Optional[str]] = {}
@@ -860,10 +1099,14 @@ def handle_pre_write(
     mem_root: Optional[Path] = None,
     ws_root: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    raw_args = (payload.get("toolCall") or {}).get("args") or {}
+    tool_call = payload.get("toolCall") or {}
+    tool_name = str(tool_call.get("name") or payload.get("tool_name") or payload.get("name") or "")
+    raw_args = tool_call.get("args") or payload.get("tool_input") or payload.get("args") or {}
     args = {k: _unquote(v) for k, v in raw_args.items()}
     f = tgt(args)
-    body = str(args.get("CodeContent") or "") + str(args.get("ReplacementContent") or "")
+    old_s = old_arg(raw_args)
+    body = new_arg(raw_args)
+    is_overwrite_flag = raw_args.get("Overwrite") in (True, "true", "True", "1", 1)
 
     # H2: Memory File Protection & Global Lesson Hygiene (Rule #4, #5, #17)
     if is_mem_path(f, mem_root):
@@ -871,22 +1114,22 @@ def handle_pre_write(
             exists = Path(f).exists()
         except PermissionError:
             exists = True
-        if args.get("Overwrite") and exists:
+        is_partial_edit = tool_name in (WRITE_TOOLS - FULL_WRITE_TOOLS)
+        if exists and (tool_name in FULL_WRITE_TOOLS or is_overwrite_flag or (is_partial_edit and not old_s)):
             return {
                 "decision": "deny",
-                "reason": f"Rule 17: CẤM Overwrite memory file {f}. Chỉ APPEND bằng replace_file_content.",
+                "reason": (
+                    f"Rule 17 (append-only guard): CẤM Overwrite hoặc bỏ trống TargetContent/Target trên memory file {f}. "
+                    "Chỉ sửa/append bằng replace_file_content hoặc edit_file."
+                ),
             }
-        if (
-            APPEND_ONLY.search(f)
-            and args.get("TargetContent")
-            and str(args["TargetContent"]) not in str(args.get("ReplacementContent") or "")
-        ):
+        if APPEND_ONLY.search(f) and exists and (not old_s or old_s not in body):
             return {
                 "decision": "deny",
-                "reason": f"Rule 4/17: {Path(f).name} là file append-only — bắt buộc giữ nguyên TargetContent.",
+                "reason": f"Rule 4/17: {Path(f).name} là file append-only — bắt buộc truyền và giữ nguyên TargetContent/Target.",
             }
         if f.replace("\\", "/").endswith("/memory/global/lessons.md"):
-            hygiene_errs = validate_lesson_append_hygiene(args)
+            hygiene_errs = validate_lesson_append_hygiene(raw_args)
             if hygiene_errs:
                 return {
                     "decision": "deny",
@@ -921,11 +1164,8 @@ def handle_pre_write(
     # H4c: Claim ↔ Evidence Linter (anti_fake_evidence) — chỉ lint dòng MỚI ghi.
     claim_doc = re.search(r"/workspaces/([^/]+)/", f.replace("\\", "/")) if CLAIM_DOCS.search(f.replace("\\", "/")) else None
     if claim_doc and is_mem_path(f, mem_root):
-        old_lines = set(str(args.get("TargetContent") or "").splitlines())
-        new_text = "\n".join(
-            ln for ln in (str(args.get("CodeContent") or "") + "\n" + str(args.get("ReplacementContent") or "")).splitlines()
-            if ln not in old_lines
-        )
+        old_lines = set(old_s.splitlines())
+        new_text = body if not old_s else "\n".join(ln for ln in body.splitlines() if ln not in old_lines)
         st_c = steps(payload)
         c_issues = claim_issues(new_text, (ws_root or WS_ROOT) / claim_doc.group(1), st_c, None)
         if c_issues:
@@ -935,11 +1175,52 @@ def handle_pre_write(
                 "`tooling/evidence_run.py` (EV-…):\n- " + "\n- ".join(c_issues[:8]),
             }
 
-    # H4a: S1 Intake Gate before S3 Solution (Rule #4, #9, #16)
+    # H4a: S1 Intake Gate, Line-Cap (800) & H4t-Demo before S3 Solution (Rule #4, #9, #16)
     sol_match = re.search(r"/workspaces/([^/]+)/09_tasks_solution_([^/]+)\.md$", f)
     if sol_match and is_mem_path(f, mem_root):
         ws_name, suffix = sol_match.group(1), sol_match.group(2)
         ws_dir = (ws_root or WS_ROOT) / ws_name
+        cur_txt = ""
+        try:
+            sol_path = Path(f)
+            if sol_path.is_file():
+                cur_txt = sol_path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            cur_txt = ""
+        merged_sol = _apply_edit_preview(cur_txt, raw_args, old_s, body) if cur_txt else body
+        if len(merged_sol.splitlines()) > MAX_SOLUTION_LINES:
+            return {
+                "decision": "deny",
+                "reason": (
+                    f"Lesson L004 (Anti-Solution-File Bloat): {Path(f).name} đạt {len(merged_sol.splitlines())} dòng "
+                    f"(vượt trần {MAX_SOLUTION_LINES} dòng). Bắt buộc tách sang suffix mới (01/08/09_<new_suffix>.md)!"
+                ),
+            }
+        old_snippets_by_path: Dict[str, set[str]] = {}
+        for old_vp, old_code in _extract_demo_snippets(cur_txt):
+            old_snippets_by_path.setdefault(old_vp, set()).update(old_code.splitlines())
+        loaded_tws = load_tripwires(mem_root)
+        demo_tw_viol: List[Dict[str, Any]] = []
+        seen_tw_ids = set()
+        for synth_path, snippet_code in _extract_demo_snippets(merged_sol):
+            prior_lines = old_snippets_by_path.get(synth_path, set())
+            added_snippet = (
+                snippet_code
+                if not prior_lines
+                else "\n".join(ln for ln in snippet_code.splitlines() if ln not in prior_lines)
+            )
+            for hit in code_tripwire_violations(synth_path, added_snippet, loaded_tws, full_code_body=snippet_code):
+                if hit["id"] not in seen_tw_ids:
+                    seen_tw_ids.add(hit["id"])
+                    demo_tw_viol.append(hit)
+        if demo_tw_viol:
+            return {
+                "decision": "deny",
+                "reason": (
+                    "Demo Tripwire Gate (H4t-Demo): Code Demo trong 09_tasks_solution vi phạm bài học trong lessons.md:\n"
+                    + "\n".join(f"- [{t['id']}] {t['check']}" for t in demo_tw_viol)
+                ),
+            }
         st = steps(payload)
         u_idx = last_user_idx(st)
         try:
@@ -948,14 +1229,14 @@ def handle_pre_write(
                 for p in ws_dir.glob("09_tasks_solution_*.md")
                 if p.name != f"09_tasks_solution_{suffix}.md"
             ] if ws_dir.exists() else []
-            any_req = bool(list(ws_dir.glob("01_requirements*.md"))) if ws_dir.exists() else False
+            any_req = bool(list(ws_dir.glob("01_requirements*.md")) or list(ws_dir.glob("01_plan*.md"))) if ws_dir.exists() else False
             any_tsk = bool(list(ws_dir.glob("08_tasks*.md"))) if ws_dir.exists() else False
-            exact_req = (ws_dir / f"01_requirements_{suffix}.md").is_file() if ws_dir.exists() else False
+            exact_req = ((ws_dir / f"01_requirements_{suffix}.md").is_file() or (ws_dir / f"01_plan_{suffix}.md").is_file()) if ws_dir.exists() else False
             exact_tsk = (ws_dir / f"08_tasks_{suffix}.md").is_file() if ws_dir.exists() else False
         except OSError:
             other_sols, any_req, any_tsk, exact_req, exact_tsk = [], True, True, True, True
 
-        req_ok = exact_req or touched(st, r"01_requirements", u_idx) or (not other_sols and any_req)
+        req_ok = exact_req or touched(st, r"01_(requirements|plan)", u_idx) or (not other_sols and any_req)
         tsk_ok = exact_tsk or touched(st, r"08_tasks", u_idx) or (not other_sols and any_tsk)
         prg_ok = touched(st, r"05_progress", u_idx)
 
@@ -1005,8 +1286,16 @@ def handle_pre_write(
 
     # H4b: Source Change Gate, Code-Level Tripwires & Anti-Mock-Pollution (Rule #4, #10, #12, #13, #14, #16)
     if is_src(f, mem_root):
-        old_src_lines = set(str(args.get("TargetContent") or "").splitlines())
-        added_src_body = "\n".join(ln for ln in body.splitlines() if ln not in old_src_lines) or body
+        old_src_lines = set(old_s.splitlines())
+        added_src_body = body if not old_s else "\n".join(ln for ln in body.splitlines() if ln not in old_src_lines)
+        cur_src = ""
+        try:
+            src_path = Path(f)
+            if src_path.is_file():
+                cur_src = src_path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            cur_src = ""
+        merged_src_body = _apply_edit_preview(cur_src, raw_args, old_s, body) if cur_src else body
 
         if not is_test_file(f) and PROD_MOCK_POLLUTION.search(added_src_body):
             return {
@@ -1025,7 +1314,7 @@ def handle_pre_write(
                 ),
             }
 
-        code_tw_viol = code_tripwire_violations(f, added_src_body, load_tripwires(mem_root))
+        code_tw_viol = code_tripwire_violations(f, added_src_body, load_tripwires(mem_root), full_code_body=merged_src_body)
         if code_tw_viol:
             return {
                 "decision": "deny",
@@ -1084,11 +1373,11 @@ def handle_pre_write(
                     "decision": "deny",
                     "reason": f"Rule 13 (Harness² Pre-Flight Clean-Room Check): {exc}",
                 }
-        sol = [i for i, _, x in calls(st) if "09_tasks_solution" in tgt(x)]
+        sol = [i for i, nm, x in calls(st) if nm in WRITE_TOOLS and "09_tasks_solution" in tgt(x)]
         aud = [
             i
             for i, nm, x in calls(st)
-            if nm in ("write_to_file", "replace_file_content") and "audit_report_" in tgt(x)
+            if nm in WRITE_TOOLS and "audit_report_" in tgt(x)
         ]
         first_sol_idx = sol[0] if sol else -1
         last_sol_idx = sol[-1] if sol else -1

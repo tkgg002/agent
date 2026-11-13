@@ -1,0 +1,79 @@
+[
+  {
+    "id": "S-RC-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "DG1 Self-Heal Root Cause Verification: Honest 401/Quota Error Detection in task_llm_trace.go",
+    "claim": "Hàm isLLMErrorText trong task_llm_trace.go kiểm tra các mẫu lỗi xác thực và hạn mức như failed to authenticate, api error: 401, oauth access token is invalid để chặn gắn nhãn REAL_LLM_OK sai sự thật.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_trace.go:41-56\nfunc isLLMErrorText(raw string) bool {\n\tfor _, pat := range []string{\n\t\t\"failed to authenticate\", \"api error: 401\", \"oauth access token is invalid\",\n\t\t\"terminalquotaerror\", \"quota exceeded\", \"invalid api key\", \"authentication_error\", \"[runner_init_error]\",\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_trace.go:41-56",
+    "must_contain": [
+      "func isLLMErrorText(raw string) bool",
+      "\"failed to authenticate\", \"api error: 401\", \"oauth access token is invalid\""
+    ]
+  },
+  {
+    "id": "S-FIX-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "DG1 Self-Heal Solution Verification: Branch-Aware Repository Resolution in repo_memory_store.go",
+    "claim": "Hàm resolveWorkspaceRepoByBranchHint trong repo_memory_store.go trích xuất tên nhánh từ văn bản task và đối chiếu nhánh hiện tại hoặc git ref của các repo trong workspace.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/repo_memory_store.go:161-182\nfunc (s *Server) resolveWorkspaceRepoByBranchHint(text string) string {\n\tm := branchMentionRe.FindStringSubmatch(text)\n\tif strings.EqualFold(strings.TrimSpace(detectRepoBranchFast(r.Path)), branchHint) {\n\t\treturn r.Path\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/repo_memory_store.go:161-182",
+    "must_contain": [
+      "func (s *Server) resolveWorkspaceRepoByBranchHint(text string) string",
+      "detectRepoBranchFast(r.Path)"
+    ]
+  },
+  {
+    "id": "D-BEHAV-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "DG2 Self-Heal Code Demo & Plan Section 4 Verification",
+    "claim": "Mục 4 trong 09_tasks_solution ghi nhận vòng lặp tự khắc phục AF-1 tới AF-5 gồm bổ sung isLLMErrorText, resolveWorkspaceRepoByBranchHint và tách tệp Single-Responsibility.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feat-ai-orchestrator-transparency-ui-declutter-2026-11-04/09_tasks_solution_transparency_ui_declutter_2026_11_04.md:453-468\n## 4. Vòng Lặp Phản Tỉnh & Tự Khắc Phục `S5 → S3 → S4 → S5` (`AF-1` → `AF-5`)\n- Bổ sung hàm `isLLMErrorText(raw string) bool` trong `task_llm_trace.go`\n- Bổ sung `resolveWorkspaceRepoByBranchHint(lowerText)` trong `repo_memory_store.go`",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feat-ai-orchestrator-transparency-ui-declutter-2026-11-04/09_tasks_solution_transparency_ui_declutter_2026_11_04.md:453-468",
+    "must_contain": [
+      "isLLMErrorText(raw string) bool",
+      "resolveWorkspaceRepoByBranchHint(lowerText)"
+    ]
+  },
+  {
+    "id": "K1",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "DG1 Control True",
+    "claim": "Struct DashboardResponse trong server.go định nghĩa các trường JSON trả về cho giao diện WebUI gồm ActiveRepoMemory và ActiveModelCallLedger.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:198-216\ntype DashboardResponse struct {\n\tActiveRepoMemory RepoMemoryDefinitionDTO `json:\"active_repo_memory\"`\n\tActiveModelCallLedger []TaskModelCallTraceDTO `json:\"active_model_call_ledger\"`",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:198-216",
+    "must_contain": [
+      "type DashboardResponse struct",
+      "ActiveRepoMemory",
+      "ActiveModelCallLedger"
+    ]
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG1 Control False 1",
+    "claim": "Hàm isLLMErrorText trả về false cho lỗi 401 OAuth.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_trace.go:41-56\nfunc isLLMErrorText(raw string) bool {",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_trace.go:41-56",
+    "must_contain": [
+      "NONEXISTENT_TOKEN_401_BYPASS_999"
+    ]
+  },
+  {
+    "id": "K3",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG1 Control False 2",
+    "claim": "Hàm resolveWorkspaceRepoByBranchHint bỏ qua mọi nhánh có dấu gạch chéo.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/repo_memory_store.go:161-182\nfunc (s *Server) resolveWorkspaceRepoByBranchHint(text string) string {",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/repo_memory_store.go:161-182",
+    "must_contain": [
+      "NONEXISTENT_BRANCH_SKIP_TOKEN_888"
+    ]
+  }
+]

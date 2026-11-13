@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "claim",
+    "claim": "In type_resolver.go lines 110-128, ValidateValue treats UINT8 as a numeric-only type without a bool case, rejecting Go bool values for ClickHouse UInt8 columns.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/type_resolver.go:110-128\n\tspecUpper := strings.ToUpper(spec)\n\tif specUpper == \"SMALLINT\" || specUpper == \"INTEGER\" || specUpper == \"INT\" || specUpper == \"BIGINT\" || specUpper == \"REAL\" || specUpper == \"DOUBLE PRECISION\" || specUpper == \"NUMERIC\" || specUpper == \"DECIMAL\" || specUpper == \"INT8\" || specUpper == \"INT16\" || specUpper == \"INT32\" || specUpper == \"INT64\" || specUpper == \"UINT8\" || specUpper == \"UINT16\" || specUpper == \"UINT32\" || specUpper == \"UINT64\" || specUpper == \"FLOAT32\" || specUpper == \"FLOAT64\" {\n\t\tvar s string\n\t\tswitch v := value.(type) {\n\t\tcase string:\n\t\t\ts = strings.TrimSpace(v)\n\t\tcase float64:\n\t\t\ts = strconv.FormatFloat(v, 'f', -1, 64)\n\t\tcase int64:\n\t\t\ts = strconv.FormatInt(v, 10)\n\t\tcase int:\n\t\t\ts = strconv.FormatInt(int64(v), 10)\n\t\tdefault:\n\t\t\treturn fmt.Sprintf(\"expected numeric for %s, got %T\", spec, value)\n\t\t}",
+    "flow": "TypeResolver.ValidateValue checks extracted column values during Transmuter extractColumns."
+  },
+  {
+    "id": "S-FIX",
+    "kind": "claim",
+    "claim": "Extracting clickhouseDataTypes.ts and clickhouse_types.go enforces Single-Responsibility while adding bool-to-UInt8 support in ValidateValue and bulkUpsertClickHouseMaster.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-clickhouse-master-data-types-2026-11-09/09_tasks_solution_clickhouse_master_data_types_20261109.md:928-936\n## 4. Vòng Lặp Phản Tỉnh `S5 → S3 → S4` (Adversarial Audit Findings `G1..G3` & Khắc phục Triệt để)\n\nSau khi rà soát phản biện từng dòng (`git diff`) và kiểm tra luồng runtime từ `_raw_data` → `extractColumns` → `ValidateValue` → `bulkUpsertClickHouseMaster`, phát hiện **3 điểm vi phạm / lỗi tiềm ẩn (`G1..G3`)** trong bản sửa đầu tiên cần khắc phục triệt để:",
+    "flow": "S5->S3->S4 Self-Healing Loop across cdc-cms-web, cdc-cms-service, and centralized-data-service."
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "claim",
+    "claim": "Non-ClickHouse master bindings continue using POSTGRES_DATA_TYPES and existing PostgreSQL/MySQL/MongoDB DDL and transmute flows remain 100% unchanged.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/constants/postgresDataTypes.ts:1-25\nexport const POSTGRES_DATA_TYPES = [\n  'VARCHAR',\n  'VARCHAR(50)',\n  'VARCHAR(100)',\n  'VARCHAR(255)',\n  'CHAR',\n  'TEXT',\n  'INTEGER',\n  'BIGINT',\n  'SMALLINT',\n  'NUMERIC',\n  'DECIMAL(18,6)',\n  'DOUBLE PRECISION',\n  'REAL',\n  'BOOLEAN',\n  'TIMESTAMP',\n  'TIMESTAMPTZ',\n  'DATE',\n  'JSONB',\n  'JSON',\n  'BYTEA',\n  'OBJECTID',\n] as const;\n\nexport type PostgresDataType = typeof POSTGRES_DATA_TYPES[number];",
+    "flow": "Backward compatibility for PostgreSQL, MySQL, and MongoDB master bindings."
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "claim",
+    "claim": "GET /api/v1/masters already exposes master_engine_type on MasterListItem so MasterMappingFieldsPage can detect ClickHouse bindings without new endpoints.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/master/list_masters.go:20-23\n\tMasterDatabase       *string         `json:\"master_database,omitempty\"`\n\tMasterConnectionCode *string         `json:\"master_connection_code,omitempty\"`\n\tMasterEngineType     *string         `json:\"master_engine_type,omitempty\"`",
+    "flow": "fetchBinding reads /api/v1/masters and sets binding state."
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "claim": "Code Demo maps both inherited PostgreSQL types and native ClickHouse types in normalizeClickHouseDataType and mapToClickHouseColumnType.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-clickhouse-master-data-types-2026-11-09/09_tasks_solution_clickhouse_master_data_types_20261109.md:110-137\nexport const CLICKHOUSE_DATA_TYPES = [\n  'String',\n  'FixedString',\n  'FixedString(50)',\n  'FixedString(100)',\n  'FixedString(255)',\n  'Int64',\n  'Int32',\n  'Int16',\n  'Int8',\n  'UInt64',\n  'UInt32',\n  'UInt16',\n  'UInt8',\n  'Float64',\n  'Float32',\n  'Decimal(18, 6)',\n  'Decimal(38, 10)',\n  'Bool',\n  \"DateTime64(3, 'UTC')\",\n  'DateTime',\n  'Date32',\n  'Date',\n  'UUID',\n  'JSON',\n] as const;",
+    "flow": "UI and Worker ClickHouse data type normalization."
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "claim": "Code Demo updates isTimestampColumnType, isTimestampOrDateColumnType, and isTextColumnType in transmuter_utils.go to handle DateTime64, Date32, String, and FixedString.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:391-400\nfunc isTimestampColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(dataType))\n\treturn strings.HasPrefix(dt, \"timestamp\") || strings.HasPrefix(dt, \"datetime\")\n}\n\n// isTextColumnType reports whether the mapping rule targets a text or varchar column\nfunc isTextColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(dataType))\n\treturn dt == \"text\" || dt == \"string\" || strings.HasPrefix(dt, \"varchar\") || strings.HasPrefix(dt, \"char\") || strings.HasPrefix(dt, \"fixedstring\")\n}",
+    "flow": "Runtime extraction and coercion in transmuter_utils.go."
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "claim": "Code Demo updates UpdateDataType in master_mapping_rule_handler.go to normalize and validate ClickHouse data types via dbutil.NormalizeMasterDataType and dbutil.IsValidDataType.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_mapping_rule_handler.go:205-213\n\tcmd := masterCmd.UpdateColumnMetadataCommand{ID: id}\n\tif req.DataType != nil {\n\t\tdt := dbutil.NormalizeMasterDataType(*req.DataType)\n\t\tif !dbutil.IsValidDataType(dt) {\n\t\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"data_type không hợp lệ\"})\n\t\t}\n\t\tcmd.DataType = &dt\n\t}",
+    "flow": "PUT /api/v1/master-mapping-rules/:id/data-type validation."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In validate.go lines 80-92, VARCHAR, TEXT, INTEGER, BIGINT, and TIMESTAMPTZ are present in the allowed map.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/pkgs/utils/dbutil/validate.go:80-92\n\tallowed := map[string]bool{\n\t\t\"VARCHAR\": true, \"CHAR\": true, \"TEXT\": true, \"INTEGER\": true, \"INT\": true,\n\t\t\"BIGINT\": true, \"SMALLINT\": true, \"NUMERIC\": true, \"DECIMAL\": true, \"REAL\": true,\n\t\t\"DOUBLE PRECISION\": true, \"BOOLEAN\": true, \"BOOL\": true, \"DATE\": true,\n\t\t\"TIMESTAMP\": true, \"TIMESTAMPTZ\": true, \"JSONB\": true, \"JSON\": true, \"UUID\": true,\n\t\t\"OBJECTID\": true, \"OID\": true, \"BYTEA\": true,\n\t\t\"STRING\": true, \"FIXEDSTRING\": true,\n\t\t\"INT8\": true, \"INT16\": true, \"INT32\": true, \"INT64\": true,\n\t\t\"UINT8\": true, \"UINT16\": true, \"UINT32\": true, \"UINT64\": true,\n\t\t\"FLOAT32\": true, \"FLOAT64\": true,\n\t\t\"DATE32\": true, \"DATETIME\": true, \"DATETIME64\": true,\n\t}\n\treturn allowed[base]",
+    "flow": "dbutil.IsValidDataType allowed map."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In postgresDataTypes.ts lines 1-25, POSTGRES_DATA_TYPES is an empty array with zero elements.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/constants/postgresDataTypes.ts:1-25\nexport const POSTGRES_DATA_TYPES = [\n  'VARCHAR',\n  'VARCHAR(50)',\n  'VARCHAR(100)',\n  'VARCHAR(255)',\n  'CHAR',\n  'TEXT',\n  'INTEGER',\n  'BIGINT',\n  'SMALLINT',\n  'NUMERIC',\n  'DECIMAL(18,6)',\n  'DOUBLE PRECISION',\n  'REAL',\n  'BOOLEAN',\n  'TIMESTAMP',\n  'TIMESTAMPTZ',\n  'DATE',\n  'JSONB',\n  'JSON',\n  'BYTEA',\n  'OBJECTID',\n] as const;\n\nexport type PostgresDataType = typeof POSTGRES_DATA_TYPES[number];",
+    "flow": "POSTGRES_DATA_TYPES constant definition."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In transmuter_utils.go lines 391-400, isTimestampColumnType always returns false for every input string including timestamp.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:391-400\nfunc isTimestampColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(dataType))\n\treturn strings.HasPrefix(dt, \"timestamp\") || strings.HasPrefix(dt, \"datetime\")\n}\n\n// isTextColumnType reports whether the mapping rule targets a text or varchar column\nfunc isTextColumnType(dataType string) bool {\n\tdt := strings.ToLower(strings.TrimSpace(dataType))\n\treturn dt == \"text\" || dt == \"string\" || strings.HasPrefix(dt, \"varchar\") || strings.HasPrefix(dt, \"char\") || strings.HasPrefix(dt, \"fixedstring\")\n}",
+    "flow": "isTimestampColumnType helper."
+  }
+]

@@ -1,0 +1,175 @@
+{
+  "mode": "claim",
+  "stage": "dg1",
+  "workspace": "fix-clickhouse-master-data-types-2026-11-09",
+  "ts": "20261109T145338",
+  "trusted_rounds": [
+    "r1",
+    "r2"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-clickhouse-master-data-types-2026-11-09/06_laya_raw_dg1_20261109T145338.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "MasterMappingFieldsPage currently uses POSTGRES_DATA_TYPES unconditionally for the Master Data Type column and nested rule creation modal.",
+      "decision": "FLAG",
+      "resolved": "Verified in MasterMappingFieldsPage.tsx lines 767 and 1163 that POSTGRES_DATA_TYPES is used unconditionally. REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx:762-768",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.1583
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.5838
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.2186
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Adding CLICKHOUSE_DATA_TYPES and normalizeClickHouseDataType while extending dbutil.IsValidDataType, shadow.IsTypeWhitelisted, mapToClickHouseColumnType, and transmuter_utils helpers enables full ClickHouse Master Data Type support.",
+      "decision": "FLAG",
+      "resolved": "Verified that adding CLICKHOUSE_DATA_TYPES and extending dbutil.IsValidDataType, shadow.IsTypeWhitelisted, mapToClickHouseColumnType, and transmuter_utils covers all 4 layers. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator_clickhouse.go:47-70",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2721
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.264
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.9211
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Non-ClickHouse master bindings continue using POSTGRES_DATA_TYPES and existing PostgreSQL/MySQL/MongoDB DDL and transmute flows remain 100% unchanged.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0127
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.6545
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8594
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "GET /api/v1/masters already exposes master_engine_type on MasterListItem so MasterMappingFieldsPage can detect ClickHouse bindings without new endpoints.",
+      "decision": "FLAG",
+      "resolved": "Verified in list_masters.go lines 20-23 that MasterListItem includes MasterEngineType json master_engine_type. REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/master/list_masters.go:20-23",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "INCORRECT",
+          "confidence": 0.0892
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.1533
+        },
+        "r3": {
+          "choice": "NO",
+          "confidence": 0.4159
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "Code Demo maps both inherited PostgreSQL types and native ClickHouse types in normalizeClickHouseDataType and mapToClickHouseColumnType.",
+      "decision": "FLAG",
+      "resolved": "Verified in 09_tasks_solution lines 110-219 and 824-880 that CLICKHOUSE_DATA_TYPES, normalizeClickHouseDataType, and mapToClickHouseColumnType map both Postgres and ClickHouse types. REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-clickhouse-master-data-types-2026-11-09/09_tasks_solution_clickhouse_master_data_types_20261109.md:110-137",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2954
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.061
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "Code Demo updates isTimestampColumnType, isTimestampOrDateColumnType, and isTextColumnType in transmuter_utils.go to handle DateTime64, Date32, String, and FixedString.",
+      "decision": "FLAG",
+      "resolved": "Verified in 09_tasks_solution lines 899-922 that transmuter_utils helpers handle DateTime64, Date32, String, and FixedString. REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_utils.go:391-400",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.0552
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.0403
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0491
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "Code Demo updates UpdateDataType in master_mapping_rule_handler.go to normalize and validate ClickHouse data types via dbutil.NormalizeMasterDataType and dbutil.IsValidDataType.",
+      "decision": "FLAG",
+      "resolved": "Verified in 09_tasks_solution lines 742-750 that UpdateDataType uses dbutil.NormalizeMasterDataType and dbutil.IsValidDataType. REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_mapping_rule_handler.go:205-213",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.2579
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.0468
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.6637
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

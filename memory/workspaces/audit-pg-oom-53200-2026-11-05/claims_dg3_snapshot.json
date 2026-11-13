@@ -1,0 +1,76 @@
+[
+  {
+    "id": "A-SNAP-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "server_setup buffers",
+    "claim": "In the current working tree the cdc, snapshot and heal batch buffers are separate objects but all are built with the same db handle and the same connectionManager.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:152-159\n\tcdcBatchBuffer := newConfiguredBatchBuffer(ws, cfg.Worker.BatchSize, cfg.Worker.BatchTimeout, false, db, schemaAdapter, connectionManager, maskingSvc, natsClient, failedSyncLogRepo, logger)\n\n\tsnapshotBatchSize := cfg.Worker.BatchSize * 2\n\tif snapshotBatchSize < 1000 {\n\t\tsnapshotBatchSize = 1000\n\t}\n\tsnapshotBatchBuffer := newConfiguredBatchBuffer(ws, snapshotBatchSize, 5*time.Second, true, db, schemaAdapter, connectionManager, maskingSvc, natsClient, failedSyncLogRepo, logger)\n\thealBatchBuffer := newConfiguredBatchBuffer(ws, snapshotBatchSize, 5*time.Second, true, db, schemaAdapter, connectionManager, maskingSvc, natsClient, failedSyncLogRepo, logger)",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:152-159",
+    "must_contain": [
+      "newConfiguredBatchBuffer(ws, cfg.Worker.BatchSize",
+      "healBatchBuffer := newConfiguredBatchBuffer(ws, snapshotBatchSize"
+    ]
+  },
+  {
+    "id": "A-SNAP-02",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "snapshot transmute fanout",
+    "claim": "publishTransmuteTrigger still runs for the snapshot buffer and only labels triggeredBy as snapshot instead of skipping the trigger.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:76-80\n\t// Dấu snapshot đi theo trigger để log transmute phân biệt snapshot vs CDC stream.\n\ttriggeredBy := \"batch-buffer\"\n\tif bb.isSnapshotBuffer {\n\t\ttriggeredBy = \"snapshot\"\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:76-80",
+    "must_contain": [
+      "triggeredBy = \"snapshot\""
+    ]
+  },
+  {
+    "id": "A-SNAP-03",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "transmute debouncer",
+    "claim": "The transmute handler creates one debouncer per master table with concurrency 1, shared by every trigger source.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:502-505\n\t}\n\t// Đăng ký TableDebouncer: size 500, idle 100ms, max 1s, concurrency 1 (tránh deadlock 40P01 trên cùng 1 master table)\n\ttd := NewTableDebouncer(context.Background(), masterTable, 500, 100*time.Millisecond, time.Second, 1, h.logger, h.runDebouncedTransmute)\n\th.debouncers[masterTable] = td",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:502-505",
+    "must_contain": [
+      "NewTableDebouncer(context.Background(), masterTable, 500, 100*time.Millisecond, time.Second, 1, h.logger, h.runDebouncedTransmute)"
+    ]
+  },
+  {
+    "id": "A-SNAP-04",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "snapshot throttling",
+    "claim": "Snapshot adaptive throttling only reacts to kafka consumer lag and pauses at most 500 milliseconds.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:119-130\nfunc (r *SnapshotRunner) checkAdaptiveLagThrottling(ctx context.Context) {\n\tif li, ok := r.topicController.(lagInspector); ok && li != nil {\n\t\tlag := li.GetMaxLag()\n\t\tif lag > 10000 {\n\t\t\tobservability.Ctx(ctx, r.logger).Warn(\"snapshot.v2 adaptive pause: kafka consumer lag critical\",\n\t\t\t\tzap.Int64(\"kafka_lag\", lag),\n\t\t\t)\n\t\t\tselect {\n\t\t\tcase <-ctx.Done():\n\t\t\t\treturn\n\t\t\tcase <-time.After(500 * time.Millisecond):\n\t\t\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:119-130",
+    "must_contain": [
+      "lag := li.GetMaxLag()",
+      "case <-time.After(500 * time.Millisecond):"
+    ]
+  },
+  {
+    "id": "CTRL-TRUE-S1",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "shadow flush concurrency",
+    "claim": "Snapshot batch buffers limit parallel table flush groups to 4.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer.go:419-422\n\tlimit := 20\n\tif bb.isSnapshotBuffer {\n\t\tlimit = 4\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-S1",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "snapshot transmute fanout",
+    "claim": "publishTransmuteTrigger returns early without publishing whenever the buffer is a snapshot buffer.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go:76-80\n\t// Dấu snapshot đi theo trigger để log transmute phân biệt snapshot vs CDC stream.\n\ttriggeredBy := \"batch-buffer\"\n\tif bb.isSnapshotBuffer {\n\t\ttriggeredBy = \"snapshot\"\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-S2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "transmute debouncer",
+    "claim": "The transmute handler runs each master table debouncer with concurrency 20.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:502-505\n\t}\n\t// Đăng ký TableDebouncer: size 500, idle 100ms, max 1s, concurrency 1 (tránh deadlock 40P01 trên cùng 1 master table)\n\ttd := NewTableDebouncer(context.Background(), masterTable, 500, 100*time.Millisecond, time.Second, 1, h.logger, h.runDebouncedTransmute)\n\th.debouncers[masterTable] = td"
+  }
+]

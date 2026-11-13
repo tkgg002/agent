@@ -1,0 +1,754 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "claim",
+    "claim": "Nguyên nhân gốc của R-01..R-03 là nhánh elif re.search dòng/line trong cmd_resolve cho phép vượt rào INLINE_REF_RE, hàm touched() chưa lọc nm in WRITE_TOOLS nên read_file(Path=05_progress) giả mạo ghi tiến độ, và code_tripwire_violations chỉ kiểm tra req trên added_snippet thay vì toàn khối snippet_code.",
+    "evidence": "REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:8-11\n| **`F-02` / `R-03`** | **CRITICAL** | `hooks/agy/agy_guard.py:858-898` | `write_file` ghi đè không cần cờ `Overwrite` và `old_s == \"\"` đi xuyên qua cả 2 nhánh `if` của `H2`; `not old_s` cần giới hạn cho nhóm `is_partial_edit = tool_name in (WRITE_TOOLS - FULL_WRITE_TOOLS)`. | **`P1b`**: Khai báo `FULL_WRITE_TOOLS = frozenset({\"write_to_file\", \"write_file\"})`; trong `H2`, nếu file memory đã tồn tại thì chặn khi `tool_name in FULL_WRITE_TOOLS or is_overwrite_flag or (is_partial_edit and not old_s)`; với `APPEND_ONLY` bắt buộc `bool(old_s) and (old_s in body)`. |\n| **`F-03` / `R-02`** | **CRITICAL** | `hooks/agy/agy_guard.py:80-105,206-258,330-338,648,960,1087-1096,1253` | Thêm `args.get(\"Path\")` vào `tgt()` và chưa lọc `nm in WRITE_TOOLS` trong `def touched(...)` làm `read_file(Path=\".../05_progress_*.md\")` hoặc `read_file(Path=\".../09_tasks_solution_*.md\")` giả mạo thao tác ghi tiến độ / sửa file giải pháp. | **`P1b`**: Đồng bộ Hunk 1 với `READ_ARG_KEYS` trên đĩa (`agy_guard.py:80-105`), lọc `nm in WRITE_TOOLS` ngay trong `def touched(...)` (kèm ngoại lệ `run_command` cho `build_lessons_index`) và tại mọi vị trí gọi `tgt(...)`, giữ nguyên `prg_ok = touched(st, r\"05_progress\", u_idx)` tại `H4a`. |\n| **`F3` / `F-04` / `F-06` / `N-02`..`N-05` / `R-03`** | **CRITICAL** | `hooks/agy/agy_guard.py:206-275,507-560,921-1036` | (1) `code_tripwire_violations` cần lọc đuôi file, tách rời `forbid` với `req` (`N-02`), kiểm tra `trig`/`forbid` trên `new_code_body` nhưng kiểm tra `req` trên toàn khối `full_code_body` (`R-03`), và chỉ suy đoán `ext` từ `trig` (`N-04`); (2) Hợp nhất `_apply_edit_preview` trước khi chạy `_extract_demo_snippets(merged_sol)` (`N-03`/`N-05`) và bỏ `or body`. | **`P1b` + `P3`**: (1) Thêm `_parse_chunks`, `_chunk_texts`, `_apply_edit_preview` và bỏ `or body`; (2) Bổ sung `full_code_body: Optional[str] = None` vào `code_tripwire_violations`, tách biệt `forbid`/`req`, chỉ suy đoán `ext` từ `trig`; (3) Trích xuất `_extract_demo_snippets(merged_sol)` trừ đi `_extract_demo_snippets(cur_txt)` sau khi hợp nhất preview. |\n| **`F2` / `F-05` / `F-07` / `N-01` / `R-01` / `R-03`** | **CRITICAL** | `tooling/laya_gate.py:108-142,188-206,284-415,634-644` | (1) Cấm vượt rào khi `0` control claims (`N-01`), xử lý `List[str]` trong `_normalize_evidence_str` (`R-03`), ánh xạ `kind`/`type`/`control` (`bool`); (2) Cấm nới lỏng `INLINE_REF_RE` trong `cmd_resolve` (`R-01`), cấm `--id ALL`, đồng bộ `dg2` khớp cùng timestamp; (3) Cần `--workers` (mặc định `3`). | **`P2`**: (1) Giữ nguyên bắt buộc `>=2 control_false` & `>=1 control_true`, bảo toàn `List[str]` trong `_normalize_evidence_str`, chạy song song qua `ThreadPoolExecutor` (`--workers 3`); (2) Bắt buộc khớp `INLINE_REF_RE` + `resolve_ref_path` cho mọi `REF:` trong `cmd_resolve`, cấm `--id ALL`, kiểm tra nguyên tử toàn bộ `req_ids` trước khi mutate, đồng bộ ưu tiên file `dg2` cùng timestamp. |",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3909,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.751,
+                "INCORRECT": 0.2101,
+                "UNSUPPORTED": 0.0389
+              },
+              "confidence": 0.3909,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Nguyên nhân gốc của R-01..R-03 là nhánh elif re.search dòng/line trong cmd_resolve cho phép vượt rào INLINE_REF_RE, hàm touched() chưa lọc nm in WRITE_TOOLS nên read_file(Path=05_progress) giả mạo ghi tiến độ, và code_tripwire_violations chỉ kiểm tra req trên added_snippet thay vì toàn khối snippet_code.",
+          "evidence": "REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:8-11\n| **`F-02` / `R-03`** | **CRITICAL** | `hooks/agy/agy_guard.py:858-898` | `write_file` ghi đè không cần cờ `Overwrite` và `old_s == \"\"` đi xuyên qua cả 2 nhánh `if` của `H2`; `not old_s` cần giới hạn cho nhóm `is_partial_edit = tool_name in (WRITE_TOOLS - FULL_WRITE_TOOLS)`. | **`P1b`**: Khai báo `FULL_WRITE_TOOLS = frozenset({\"write_to_file\", \"write_file\"})`; trong `H2`, nếu file memory đã tồn tại thì chặn khi `tool_name in FULL_WRITE_TOOLS or is_overwrite_flag or (is_partial_edit and not old_s)`; với `APPEND_ONLY` bắt buộc `bool(old_s) and (old_s in body)`. |\n| **`F-03` / `R-02`** | **CRITICAL** | `hooks/agy/agy_guard.py:80-105,206-258,330-338,648,960,1087-1096,1253` | Thêm `args.get(\"Path\")` vào `tgt()` và chưa lọc `nm in WRITE_TOOLS` trong `def touched(...)` làm `read_file(Path=\".../05_progress_*.md\")` hoặc `read_file(Path=\".../09_tasks_solution_*.md\")` giả mạo thao tác ghi tiến độ / sửa file giải pháp. | **`P1b`**: Đồng bộ Hunk 1 với `READ_ARG_KEYS` trên đĩa (`agy_guard.py:80-105`), lọc `nm in WRITE_TOOLS` ngay trong `def touched(...)` (kèm ngoại lệ `run_command` cho `build_lessons_index`) và tại mọi vị trí gọi `tgt(...)`, giữ nguyên `prg_ok = touched(st, r\"05_progress\", u_idx)` tại `H4a`. |\n| **`F3` / `F-04` / `F-06` / `N-02`..`N-05` / `R-03`** | **CRITICAL** | `hooks/agy/agy_guard.py:206-275,507-560,921-1036` | (1) `code_tripwire_violations` cần lọc đuôi file, tách rời `forbid` với `req` (`N-02`), kiểm tra `trig`/`forbid` trên `new_code_body` nhưng kiểm tra `req` trên toàn khối `full_code_body` (`R-03`), và chỉ suy đoán `ext` từ `trig` (`N-04`); (2) Hợp nhất `_apply_edit_preview` trước khi chạy `_extract_demo_snippets(merged_sol)` (`N-03`/`N-05`) và bỏ `or body`. | **`P1b` + `P3`**: (1) Thêm `_parse_chunks`, `_chunk_texts`, `_apply_edit_preview` và bỏ `or body`; (2) Bổ sung `full_code_body: Optional[str] = None` vào `code_tripwire_violations`, tách biệt `forbid`/`req`, chỉ suy đoán `ext` từ `trig`; (3) Trích xuất `_extract_demo_snippets(merged_sol)` trừ đi `_extract_demo_snippets(cur_txt)` sau khi hợp nhất preview. |\n| **`F2` / `F-05` / `F-07` / `N-01` / `R-01` / `R-03`** | **CRITICAL** | `tooling/laya_gate.py:108-142,188-206,284-415,634-644` | (1) Cấm vượt rào khi `0` control claims (`N-01`), xử lý `List[str]` trong `_normalize_evidence_str` (`R-03`), ánh xạ `kind`/`type`/`control` (`bool`); (2) Cấm nới lỏng `INLINE_REF_RE` trong `cmd_resolve` (`R-01`), cấm `--id ALL`, đồng bộ `dg2` khớp cùng timestamp; (3) Cần `--workers` (mặc định `3`). | **`P2`**: (1) Giữ nguyên bắt buộc `>=2 control_false` & `>=1 control_true`, bảo toàn `List[str]` trong `_normalize_evidence_str`, chạy song song qua `ThreadPoolExecutor` (`--workers 3`); (2) Bắt buộc khớp `INLINE_REF_RE` + `resolve_ref_path` cho mọi `REF:` trong `cmd_resolve`, cấm `--id ALL`, kiểm tra nguyên tử toàn bộ `req_ids` trước khi mutate, đồng bộ ưu tiên file `dg2` cùng timestamp. |",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1952,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6071,
+                "INCORRECT": 0.3007,
+                "UNSUPPORTED": 0.0923
+              },
+              "confidence": 0.1952,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:8-11\n| **`F-02` / `R-03`** | **CRITICAL** | `hooks/agy/agy_guard.py:858-898` | `write_file` ghi đè không cần cờ `Overwrite` và `old_s == \"\"` đi xuyên qua cả 2 nhánh `if` của `H2`; `not old_s` cần giới hạn cho nhóm `is_partial_edit = tool_name in (WRITE_TOOLS - FULL_WRITE_TOOLS)`. | **`P1b`**: Khai báo `FULL_WRITE_TOOLS = frozenset({\"write_to_file\", \"write_file\"})`; trong `H2`, nếu file memory đã tồn tại thì chặn khi `tool_name in FULL_WRITE_TOOLS or is_overwrite_flag or (is_partial_edit and not old_s)`; với `APPEND_ONLY` bắt buộc `bool(old_s) and (old_s in body)`. |\n| **`F-03` / `R-02`** | **CRITICAL** | `hooks/agy/agy_guard.py:80-105,206-258,330-338,648,960,1087-1096,1253` | Thêm `args.get(\"Path\")` vào `tgt()` và chưa lọc `nm in WRITE_TOOLS` trong `def touched(...)` làm `read_file(Path=\".../05_progress_*.md\")` hoặc `read_file(Path=\".../09_tasks_solution_*.md\")` giả mạo thao tác ghi tiến độ / sửa file giải pháp. | **`P1b`**: Đồng bộ Hunk 1 với `READ_ARG_KEYS` trên đĩa (`agy_guard.py:80-105`), lọc `nm in WRITE_TOOLS` ngay trong `def touched(...)` (kèm ngoại lệ `run_command` cho `build_lessons_index`) và tại mọi vị trí gọi `tgt(...)`, giữ nguyên `prg_ok = touched(st, r\"05_progress\", u_idx)` tại `H4a`. |\n| **`F3` / `F-04` / `F-06` / `N-02`..`N-05` / `R-03`** | **CRITICAL** | `hooks/agy/agy_guard.py:206-275,507-560,921-1036` | (1) `code_tripwire_violations` cần lọc đuôi file, tách rời `forbid` với `req` (`N-02`), kiểm tra `trig`/`forbid` trên `new_code_body` nhưng kiểm tra `req` trên toàn khối `full_code_body` (`R-03`), và chỉ suy đoán `ext` từ `trig` (`N-04`); (2) Hợp nhất `_apply_edit_preview` trước khi chạy `_extract_demo_snippets(merged_sol)` (`N-03`/`N-05`) và bỏ `or body`. | **`P1b` + `P3`**: (1) Thêm `_parse_chunks`, `_chunk_texts`, `_apply_edit_preview` và bỏ `or body`; (2) Bổ sung `full_code_body: Optional[str] = None` vào `code_tripwire_violations`, tách biệt `forbid`/`req`, chỉ suy đoán `ext` từ `trig`; (3) Trích xuất `_extract_demo_snippets(merged_sol)` trừ đi `_extract_demo_snippets(cur_txt)` sau khi hợp nhất preview. |\n| **`F2` / `F-05` / `F-07` / `N-01` / `R-01` / `R-03`** | **CRITICAL** | `tooling/laya_gate.py:108-142,188-206,284-415,634-644` | (1) Cấm vượt rào khi `0` control claims (`N-01`), xử lý `List[str]` trong `_normalize_evidence_str` (`R-03`), ánh xạ `kind`/`type`/`control` (`bool`); (2) Cấm nới lỏng `INLINE_REF_RE` trong `cmd_resolve` (`R-01`), cấm `--id ALL`, đồng bộ `dg2` khớp cùng timestamp; (3) Cần `--workers` (mặc định `3`). | **`P2`**: (1) Giữ nguyên bắt buộc `>=2 control_false` & `>=1 control_true`, bảo toàn `List[str]` trong `_normalize_evidence_str`, chạy song song qua `ThreadPoolExecutor` (`--workers 3`); (2) Bắt buộc khớp `INLINE_REF_RE` + `resolve_ref_path` cho mọi `REF:` trong `cmd_resolve`, cấm `--id ALL`, kiểm tra nguyên tử toàn bộ `req_ids` trước khi mutate, đồng bộ ưu tiên file `dg2` cùng timestamp. |",
+          "claim": "Nguyên nhân gốc của R-01..R-03 là nhánh elif re.search dòng/line trong cmd_resolve cho phép vượt rào INLINE_REF_RE, hàm touched() chưa lọc nm in WRITE_TOOLS nên read_file(Path=05_progress) giả mạo ghi tiến độ, và code_tripwire_violations chỉ kiểm tra req trên added_snippet thay vì toàn khối snippet_code."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7244,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9525,
+                "NO": 0.0475
+              },
+              "confidence": 0.7244,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:8-11\n| **`F-02` / `R-03`** | **CRITICAL** | `hooks/agy/agy_guard.py:858-898` | `write_file` ghi đè không cần cờ `Overwrite` và `old_s == \"\"` đi xuyên qua cả 2 nhánh `if` của `H2`; `not old_s` cần giới hạn cho nhóm `is_partial_edit = tool_name in (WRITE_TOOLS - FULL_WRITE_TOOLS)`. | **`P1b`**: Khai báo `FULL_WRITE_TOOLS = frozenset({\"write_to_file\", \"write_file\"})`; trong `H2`, nếu file memory đã tồn tại thì chặn khi `tool_name in FULL_WRITE_TOOLS or is_overwrite_flag or (is_partial_edit and not old_s)`; với `APPEND_ONLY` bắt buộc `bool(old_s) and (old_s in body)`. |\n| **`F-03` / `R-02`** | **CRITICAL** | `hooks/agy/agy_guard.py:80-105,206-258,330-338,648,960,1087-1096,1253` | Thêm `args.get(\"Path\")` vào `tgt()` và chưa lọc `nm in WRITE_TOOLS` trong `def touched(...)` làm `read_file(Path=\".../05_progress_*.md\")` hoặc `read_file(Path=\".../09_tasks_solution_*.md\")` giả mạo thao tác ghi tiến độ / sửa file giải pháp. | **`P1b`**: Đồng bộ Hunk 1 với `READ_ARG_KEYS` trên đĩa (`agy_guard.py:80-105`), lọc `nm in WRITE_TOOLS` ngay trong `def touched(...)` (kèm ngoại lệ `run_command` cho `build_lessons_index`) và tại mọi vị trí gọi `tgt(...)`, giữ nguyên `prg_ok = touched(st, r\"05_progress\", u_idx)` tại `H4a`. |\n| **`F3` / `F-04` / `F-06` / `N-02`..`N-05` / `R-03`** | **CRITICAL** | `hooks/agy/agy_guard.py:206-275,507-560,921-1036` | (1) `code_tripwire_violations` cần lọc đuôi file, tách rời `forbid` với `req` (`N-02`), kiểm tra `trig`/`forbid` trên `new_code_body` nhưng kiểm tra `req` trên toàn khối `full_code_body` (`R-03`), và chỉ suy đoán `ext` từ `trig` (`N-04`); (2) Hợp nhất `_apply_edit_preview` trước khi chạy `_extract_demo_snippets(merged_sol)` (`N-03`/`N-05`) và bỏ `or body`. | **`P1b` + `P3`**: (1) Thêm `_parse_chunks`, `_chunk_texts`, `_apply_edit_preview` và bỏ `or body`; (2) Bổ sung `full_code_body: Optional[str] = None` vào `code_tripwire_violations`, tách biệt `forbid`/`req`, chỉ suy đoán `ext` từ `trig`; (3) Trích xuất `_extract_demo_snippets(merged_sol)` trừ đi `_extract_demo_snippets(cur_txt)` sau khi hợp nhất preview. |\n| **`F2` / `F-05` / `F-07` / `N-01` / `R-01` / `R-03`** | **CRITICAL** | `tooling/laya_gate.py:108-142,188-206,284-415,634-644` | (1) Cấm vượt rào khi `0` control claims (`N-01`), xử lý `List[str]` trong `_normalize_evidence_str` (`R-03`), ánh xạ `kind`/`type`/`control` (`bool`); (2) Cấm nới lỏng `INLINE_REF_RE` trong `cmd_resolve` (`R-01`), cấm `--id ALL`, đồng bộ `dg2` khớp cùng timestamp; (3) Cần `--workers` (mặc định `3`). | **`P2`**: (1) Giữ nguyên bắt buộc `>=2 control_false` & `>=1 control_true`, bảo toàn `List[str]` trong `_normalize_evidence_str`, chạy song song qua `ThreadPoolExecutor` (`--workers 3`); (2) Bắt buộc khớp `INLINE_REF_RE` + `resolve_ref_path` cho mọi `REF:` trong `cmd_resolve`, cấm `--id ALL`, kiểm tra nguyên tử toàn bộ `req_ids` trước khi mutate, đồng bộ ưu tiên file `dg2` cùng timestamp. |",
+          "claim": "Nguyên nhân gốc của R-01..R-03 là nhánh elif re.search dòng/line trong cmd_resolve cho phép vượt rào INLINE_REF_RE, hàm touched() chưa lọc nm in WRITE_TOOLS nên read_file(Path=05_progress) giả mạo ghi tiến độ, và code_tripwire_violations chỉ kiểm tra req trên added_snippet thay vì toàn khối snippet_code."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "claim": "Code Demo trong 09_tasks_solution_agent_core_v2.md đã khóa chặt INLINE_REF_RE trong cmd_resolve, lọc nm in WRITE_TOOLS trong def touched(...), và thêm full_code_body vào code_tripwire_violations.",
+    "evidence": "REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:8-11\n| **`F-02` / `R-03`** | **CRITICAL** | `hooks/agy/agy_guard.py:858-898` | `write_file` ghi đè không cần cờ `Overwrite` và `old_s == \"\"` đi xuyên qua cả 2 nhánh `if` của `H2`; `not old_s` cần giới hạn cho nhóm `is_partial_edit = tool_name in (WRITE_TOOLS - FULL_WRITE_TOOLS)`. | **`P1b`**: Khai báo `FULL_WRITE_TOOLS = frozenset({\"write_to_file\", \"write_file\"})`; trong `H2`, nếu file memory đã tồn tại thì chặn khi `tool_name in FULL_WRITE_TOOLS or is_overwrite_flag or (is_partial_edit and not old_s)`; với `APPEND_ONLY` bắt buộc `bool(old_s) and (old_s in body)`. |\n| **`F-03` / `R-02`** | **CRITICAL** | `hooks/agy/agy_guard.py:80-105,206-258,330-338,648,960,1087-1096,1253` | Thêm `args.get(\"Path\")` vào `tgt()` và chưa lọc `nm in WRITE_TOOLS` trong `def touched(...)` làm `read_file(Path=\".../05_progress_*.md\")` hoặc `read_file(Path=\".../09_tasks_solution_*.md\")` giả mạo thao tác ghi tiến độ / sửa file giải pháp. | **`P1b`**: Đồng bộ Hunk 1 với `READ_ARG_KEYS` trên đĩa (`agy_guard.py:80-105`), lọc `nm in WRITE_TOOLS` ngay trong `def touched(...)` (kèm ngoại lệ `run_command` cho `build_lessons_index`) và tại mọi vị trí gọi `tgt(...)`, giữ nguyên `prg_ok = touched(st, r\"05_progress\", u_idx)` tại `H4a`. |\n| **`F3` / `F-04` / `F-06` / `N-02`..`N-05` / `R-03`** | **CRITICAL** | `hooks/agy/agy_guard.py:206-275,507-560,921-1036` | (1) `code_tripwire_violations` cần lọc đuôi file, tách rời `forbid` với `req` (`N-02`), kiểm tra `trig`/`forbid` trên `new_code_body` nhưng kiểm tra `req` trên toàn khối `full_code_body` (`R-03`), và chỉ suy đoán `ext` từ `trig` (`N-04`); (2) Hợp nhất `_apply_edit_preview` trước khi chạy `_extract_demo_snippets(merged_sol)` (`N-03`/`N-05`) và bỏ `or body`. | **`P1b` + `P3`**: (1) Thêm `_parse_chunks`, `_chunk_texts`, `_apply_edit_preview` và bỏ `or body`; (2) Bổ sung `full_code_body: Optional[str] = None` vào `code_tripwire_violations`, tách biệt `forbid`/`req`, chỉ suy đoán `ext` từ `trig`; (3) Trích xuất `_extract_demo_snippets(merged_sol)` trừ đi `_extract_demo_snippets(cur_txt)` sau khi hợp nhất preview. |\n| **`F2` / `F-05` / `F-07` / `N-01` / `R-01` / `R-03`** | **CRITICAL** | `tooling/laya_gate.py:108-142,188-206,284-415,634-644` | (1) Cấm vượt rào khi `0` control claims (`N-01`), xử lý `List[str]` trong `_normalize_evidence_str` (`R-03`), ánh xạ `kind`/`type`/`control` (`bool`); (2) Cấm nới lỏng `INLINE_REF_RE` trong `cmd_resolve` (`R-01`), cấm `--id ALL`, đồng bộ `dg2` khớp cùng timestamp; (3) Cần `--workers` (mặc định `3`). | **`P2`**: (1) Giữ nguyên bắt buộc `>=2 control_false` & `>=1 control_true`, bảo toàn `List[str]` trong `_normalize_evidence_str`, chạy song song qua `ThreadPoolExecutor` (`--workers 3`); (2) Bắt buộc khớp `INLINE_REF_RE` + `resolve_ref_path` cho mọi `REF:` trong `cmd_resolve`, cấm `--id ALL`, kiểm tra nguyên tử toàn bộ `req_ids` trước khi mutate, đồng bộ ưu tiên file `dg2` cùng timestamp. |",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2716,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6797,
+                "INCORRECT": 0.2462,
+                "UNSUPPORTED": 0.0741
+              },
+              "confidence": 0.2716,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Code Demo trong 09_tasks_solution_agent_core_v2.md đã khóa chặt INLINE_REF_RE trong cmd_resolve, lọc nm in WRITE_TOOLS trong def touched(...), và thêm full_code_body vào code_tripwire_violations.",
+          "evidence": "REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:8-11\n| **`F-02` / `R-03`** | **CRITICAL** | `hooks/agy/agy_guard.py:858-898` | `write_file` ghi đè không cần cờ `Overwrite` và `old_s == \"\"` đi xuyên qua cả 2 nhánh `if` của `H2`; `not old_s` cần giới hạn cho nhóm `is_partial_edit = tool_name in (WRITE_TOOLS - FULL_WRITE_TOOLS)`. | **`P1b`**: Khai báo `FULL_WRITE_TOOLS = frozenset({\"write_to_file\", \"write_file\"})`; trong `H2`, nếu file memory đã tồn tại thì chặn khi `tool_name in FULL_WRITE_TOOLS or is_overwrite_flag or (is_partial_edit and not old_s)`; với `APPEND_ONLY` bắt buộc `bool(old_s) and (old_s in body)`. |\n| **`F-03` / `R-02`** | **CRITICAL** | `hooks/agy/agy_guard.py:80-105,206-258,330-338,648,960,1087-1096,1253` | Thêm `args.get(\"Path\")` vào `tgt()` và chưa lọc `nm in WRITE_TOOLS` trong `def touched(...)` làm `read_file(Path=\".../05_progress_*.md\")` hoặc `read_file(Path=\".../09_tasks_solution_*.md\")` giả mạo thao tác ghi tiến độ / sửa file giải pháp. | **`P1b`**: Đồng bộ Hunk 1 với `READ_ARG_KEYS` trên đĩa (`agy_guard.py:80-105`), lọc `nm in WRITE_TOOLS` ngay trong `def touched(...)` (kèm ngoại lệ `run_command` cho `build_lessons_index`) và tại mọi vị trí gọi `tgt(...)`, giữ nguyên `prg_ok = touched(st, r\"05_progress\", u_idx)` tại `H4a`. |\n| **`F3` / `F-04` / `F-06` / `N-02`..`N-05` / `R-03`** | **CRITICAL** | `hooks/agy/agy_guard.py:206-275,507-560,921-1036` | (1) `code_tripwire_violations` cần lọc đuôi file, tách rời `forbid` với `req` (`N-02`), kiểm tra `trig`/`forbid` trên `new_code_body` nhưng kiểm tra `req` trên toàn khối `full_code_body` (`R-03`), và chỉ suy đoán `ext` từ `trig` (`N-04`); (2) Hợp nhất `_apply_edit_preview` trước khi chạy `_extract_demo_snippets(merged_sol)` (`N-03`/`N-05`) và bỏ `or body`. | **`P1b` + `P3`**: (1) Thêm `_parse_chunks`, `_chunk_texts`, `_apply_edit_preview` và bỏ `or body`; (2) Bổ sung `full_code_body: Optional[str] = None` vào `code_tripwire_violations`, tách biệt `forbid`/`req`, chỉ suy đoán `ext` từ `trig`; (3) Trích xuất `_extract_demo_snippets(merged_sol)` trừ đi `_extract_demo_snippets(cur_txt)` sau khi hợp nhất preview. |\n| **`F2` / `F-05` / `F-07` / `N-01` / `R-01` / `R-03`** | **CRITICAL** | `tooling/laya_gate.py:108-142,188-206,284-415,634-644` | (1) Cấm vượt rào khi `0` control claims (`N-01`), xử lý `List[str]` trong `_normalize_evidence_str` (`R-03`), ánh xạ `kind`/`type`/`control` (`bool`); (2) Cấm nới lỏng `INLINE_REF_RE` trong `cmd_resolve` (`R-01`), cấm `--id ALL`, đồng bộ `dg2` khớp cùng timestamp; (3) Cần `--workers` (mặc định `3`). | **`P2`**: (1) Giữ nguyên bắt buộc `>=2 control_false` & `>=1 control_true`, bảo toàn `List[str]` trong `_normalize_evidence_str`, chạy song song qua `ThreadPoolExecutor` (`--workers 3`); (2) Bắt buộc khớp `INLINE_REF_RE` + `resolve_ref_path` cho mọi `REF:` trong `cmd_resolve`, cấm `--id ALL`, kiểm tra nguyên tử toàn bộ `req_ids` trước khi mutate, đồng bộ ưu tiên file `dg2` cùng timestamp. |",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1952,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6071,
+                "INCORRECT": 0.3007,
+                "UNSUPPORTED": 0.0923
+              },
+              "confidence": 0.1952,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:8-11\n| **`F-02` / `R-03`** | **CRITICAL** | `hooks/agy/agy_guard.py:858-898` | `write_file` ghi đè không cần cờ `Overwrite` và `old_s == \"\"` đi xuyên qua cả 2 nhánh `if` của `H2`; `not old_s` cần giới hạn cho nhóm `is_partial_edit = tool_name in (WRITE_TOOLS - FULL_WRITE_TOOLS)`. | **`P1b`**: Khai báo `FULL_WRITE_TOOLS = frozenset({\"write_to_file\", \"write_file\"})`; trong `H2`, nếu file memory đã tồn tại thì chặn khi `tool_name in FULL_WRITE_TOOLS or is_overwrite_flag or (is_partial_edit and not old_s)`; với `APPEND_ONLY` bắt buộc `bool(old_s) and (old_s in body)`. |\n| **`F-03` / `R-02`** | **CRITICAL** | `hooks/agy/agy_guard.py:80-105,206-258,330-338,648,960,1087-1096,1253` | Thêm `args.get(\"Path\")` vào `tgt()` và chưa lọc `nm in WRITE_TOOLS` trong `def touched(...)` làm `read_file(Path=\".../05_progress_*.md\")` hoặc `read_file(Path=\".../09_tasks_solution_*.md\")` giả mạo thao tác ghi tiến độ / sửa file giải pháp. | **`P1b`**: Đồng bộ Hunk 1 với `READ_ARG_KEYS` trên đĩa (`agy_guard.py:80-105`), lọc `nm in WRITE_TOOLS` ngay trong `def touched(...)` (kèm ngoại lệ `run_command` cho `build_lessons_index`) và tại mọi vị trí gọi `tgt(...)`, giữ nguyên `prg_ok = touched(st, r\"05_progress\", u_idx)` tại `H4a`. |\n| **`F3` / `F-04` / `F-06` / `N-02`..`N-05` / `R-03`** | **CRITICAL** | `hooks/agy/agy_guard.py:206-275,507-560,921-1036` | (1) `code_tripwire_violations` cần lọc đuôi file, tách rời `forbid` với `req` (`N-02`), kiểm tra `trig`/`forbid` trên `new_code_body` nhưng kiểm tra `req` trên toàn khối `full_code_body` (`R-03`), và chỉ suy đoán `ext` từ `trig` (`N-04`); (2) Hợp nhất `_apply_edit_preview` trước khi chạy `_extract_demo_snippets(merged_sol)` (`N-03`/`N-05`) và bỏ `or body`. | **`P1b` + `P3`**: (1) Thêm `_parse_chunks`, `_chunk_texts`, `_apply_edit_preview` và bỏ `or body`; (2) Bổ sung `full_code_body: Optional[str] = None` vào `code_tripwire_violations`, tách biệt `forbid`/`req`, chỉ suy đoán `ext` từ `trig`; (3) Trích xuất `_extract_demo_snippets(merged_sol)` trừ đi `_extract_demo_snippets(cur_txt)` sau khi hợp nhất preview. |\n| **`F2` / `F-05` / `F-07` / `N-01` / `R-01` / `R-03`** | **CRITICAL** | `tooling/laya_gate.py:108-142,188-206,284-415,634-644` | (1) Cấm vượt rào khi `0` control claims (`N-01`), xử lý `List[str]` trong `_normalize_evidence_str` (`R-03`), ánh xạ `kind`/`type`/`control` (`bool`); (2) Cấm nới lỏng `INLINE_REF_RE` trong `cmd_resolve` (`R-01`), cấm `--id ALL`, đồng bộ `dg2` khớp cùng timestamp; (3) Cần `--workers` (mặc định `3`). | **`P2`**: (1) Giữ nguyên bắt buộc `>=2 control_false` & `>=1 control_true`, bảo toàn `List[str]` trong `_normalize_evidence_str`, chạy song song qua `ThreadPoolExecutor` (`--workers 3`); (2) Bắt buộc khớp `INLINE_REF_RE` + `resolve_ref_path` cho mọi `REF:` trong `cmd_resolve`, cấm `--id ALL`, kiểm tra nguyên tử toàn bộ `req_ids` trước khi mutate, đồng bộ ưu tiên file `dg2` cùng timestamp. |",
+          "claim": "Code Demo trong 09_tasks_solution_agent_core_v2.md đã khóa chặt INLINE_REF_RE trong cmd_resolve, lọc nm in WRITE_TOOLS trong def touched(...), và thêm full_code_body vào code_tripwire_violations."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7244,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9525,
+                "NO": 0.0475
+              },
+              "confidence": 0.7244,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:8-11\n| **`F-02` / `R-03`** | **CRITICAL** | `hooks/agy/agy_guard.py:858-898` | `write_file` ghi đè không cần cờ `Overwrite` và `old_s == \"\"` đi xuyên qua cả 2 nhánh `if` của `H2`; `not old_s` cần giới hạn cho nhóm `is_partial_edit = tool_name in (WRITE_TOOLS - FULL_WRITE_TOOLS)`. | **`P1b`**: Khai báo `FULL_WRITE_TOOLS = frozenset({\"write_to_file\", \"write_file\"})`; trong `H2`, nếu file memory đã tồn tại thì chặn khi `tool_name in FULL_WRITE_TOOLS or is_overwrite_flag or (is_partial_edit and not old_s)`; với `APPEND_ONLY` bắt buộc `bool(old_s) and (old_s in body)`. |\n| **`F-03` / `R-02`** | **CRITICAL** | `hooks/agy/agy_guard.py:80-105,206-258,330-338,648,960,1087-1096,1253` | Thêm `args.get(\"Path\")` vào `tgt()` và chưa lọc `nm in WRITE_TOOLS` trong `def touched(...)` làm `read_file(Path=\".../05_progress_*.md\")` hoặc `read_file(Path=\".../09_tasks_solution_*.md\")` giả mạo thao tác ghi tiến độ / sửa file giải pháp. | **`P1b`**: Đồng bộ Hunk 1 với `READ_ARG_KEYS` trên đĩa (`agy_guard.py:80-105`), lọc `nm in WRITE_TOOLS` ngay trong `def touched(...)` (kèm ngoại lệ `run_command` cho `build_lessons_index`) và tại mọi vị trí gọi `tgt(...)`, giữ nguyên `prg_ok = touched(st, r\"05_progress\", u_idx)` tại `H4a`. |\n| **`F3` / `F-04` / `F-06` / `N-02`..`N-05` / `R-03`** | **CRITICAL** | `hooks/agy/agy_guard.py:206-275,507-560,921-1036` | (1) `code_tripwire_violations` cần lọc đuôi file, tách rời `forbid` với `req` (`N-02`), kiểm tra `trig`/`forbid` trên `new_code_body` nhưng kiểm tra `req` trên toàn khối `full_code_body` (`R-03`), và chỉ suy đoán `ext` từ `trig` (`N-04`); (2) Hợp nhất `_apply_edit_preview` trước khi chạy `_extract_demo_snippets(merged_sol)` (`N-03`/`N-05`) và bỏ `or body`. | **`P1b` + `P3`**: (1) Thêm `_parse_chunks`, `_chunk_texts`, `_apply_edit_preview` và bỏ `or body`; (2) Bổ sung `full_code_body: Optional[str] = None` vào `code_tripwire_violations`, tách biệt `forbid`/`req`, chỉ suy đoán `ext` từ `trig`; (3) Trích xuất `_extract_demo_snippets(merged_sol)` trừ đi `_extract_demo_snippets(cur_txt)` sau khi hợp nhất preview. |\n| **`F2` / `F-05` / `F-07` / `N-01` / `R-01` / `R-03`** | **CRITICAL** | `tooling/laya_gate.py:108-142,188-206,284-415,634-644` | (1) Cấm vượt rào khi `0` control claims (`N-01`), xử lý `List[str]` trong `_normalize_evidence_str` (`R-03`), ánh xạ `kind`/`type`/`control` (`bool`); (2) Cấm nới lỏng `INLINE_REF_RE` trong `cmd_resolve` (`R-01`), cấm `--id ALL`, đồng bộ `dg2` khớp cùng timestamp; (3) Cần `--workers` (mặc định `3`). | **`P2`**: (1) Giữ nguyên bắt buộc `>=2 control_false` & `>=1 control_true`, bảo toàn `List[str]` trong `_normalize_evidence_str`, chạy song song qua `ThreadPoolExecutor` (`--workers 3`); (2) Bắt buộc khớp `INLINE_REF_RE` + `resolve_ref_path` cho mọi `REF:` trong `cmd_resolve`, cấm `--id ALL`, kiểm tra nguyên tử toàn bộ `req_ids` trước khi mutate, đồng bộ ưu tiên file `dg2` cùng timestamp. |",
+          "claim": "Code Demo trong 09_tasks_solution_agent_core_v2.md đã khóa chặt INLINE_REF_RE trong cmd_resolve, lọc nm in WRITE_TOOLS trong def touched(...), và thêm full_code_body vào code_tripwire_violations."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "CTRL-F1",
+    "kind": "control_false",
+    "claim": "Nothing is supported; this is completely false and broken with zero evidence.",
+    "evidence": "Empty.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4775,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7915,
+                "INCORRECT": 0.1902,
+                "UNSUPPORTED": 0.0183
+              },
+              "confidence": 0.4775,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 138,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Nothing is supported; this is completely false and broken with zero evidence.",
+          "evidence": "Empty.",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.2238,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.4615,
+                "INCORRECT": 0.4901,
+                "UNSUPPORTED": 0.0483
+              },
+              "confidence": 0.2238,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 144,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "Empty.",
+          "claim": "Nothing is supported; this is completely false and broken with zero evidence."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5805,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.915,
+                "NO": 0.085
+              },
+              "confidence": 0.5805,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 77,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "Empty.",
+          "claim": "Nothing is supported; this is completely false and broken with zero evidence."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-F2",
+    "kind": "control_false",
+    "claim": "The code deletes the database and crashes every time.",
+    "evidence": "None.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1783,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5208,
+                "INCORRECT": 0.4027,
+                "UNSUPPORTED": 0.0765
+              },
+              "confidence": 0.1783,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 134,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "The code deletes the database and crashes every time.",
+          "evidence": "None.",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.2125,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.0579,
+                "INCORRECT": 0.5363,
+                "UNSUPPORTED": 0.4058
+              },
+              "confidence": 0.2125,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 140,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "None.",
+          "claim": "The code deletes the database and crashes every time."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.2688,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.2047,
+                "NO": 0.7953
+              },
+              "confidence": 0.2688,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 73,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "None.",
+          "claim": "The code deletes the database and crashes every time."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-T1",
+    "kind": "control_true",
+    "claim": "Hàm code_tripwire_violations kiểm tra trig và forbid trên new_code_body nhưng kiểm tra req trên full_code_body.",
+    "evidence": "REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:278-298\nCode Demo xác nhận req_context = full_code_body if full_code_body is not None else new_code_body.",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6651,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.896,
+                "INCORRECT": 0.0934,
+                "UNSUPPORTED": 0.0106
+              },
+              "confidence": 0.6651,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 237,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "Hàm code_tripwire_violations kiểm tra trig và forbid trên new_code_body nhưng kiểm tra req trên full_code_body.",
+          "evidence": "REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:278-298\nCode Demo xác nhận req_context = full_code_body if full_code_body is not None else new_code_body.",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.7102,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0308,
+                "INCORRECT": 0.0446,
+                "UNSUPPORTED": 0.9246
+              },
+              "confidence": 0.7102,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 243,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:278-298\nCode Demo xác nhận req_context = full_code_body if full_code_body is not None else new_code_body.",
+          "claim": "Hàm code_tripwire_violations kiểm tra trig và forbid trên new_code_body nhưng kiểm tra req trên full_code_body."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.5583,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0916,
+                "NO": 0.9084
+              },
+              "confidence": 0.5583,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 176,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:278-298\nCode Demo xác nhận req_context = full_code_body if full_code_body is not None else new_code_body.",
+          "claim": "Hàm code_tripwire_violations kiểm tra trig và forbid trên new_code_body nhưng kiểm tra req trên full_code_body."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

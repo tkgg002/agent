@@ -1,0 +1,58 @@
+[
+  {
+    "id": "S-RC-1",
+    "kind": "claim",
+    "claim": "Migration 023_add_last_trace_id_to_transmute_schedule.sql guards ALTER TABLE cdc_system.transmute_schedule with IF to_regclass('cdc_system.transmute_schedule') IS NOT NULL.",
+    "flow": "023 checks to_regclass('cdc_system.transmute_schedule') IS NOT NULL before ALTER TABLE.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/migrations/schema/worker/023_add_last_trace_id_to_transmute_schedule.sql:1-7\n-- Migration 023 — Thêm last_trace_id cho transmute_schedule phục vụ truy vết SigNoz\nDO $$\nBEGIN\n  IF to_regclass('cdc_system.transmute_schedule') IS NOT NULL THEN\n    ALTER TABLE cdc_system.transmute_schedule\n      ADD COLUMN IF NOT EXISTS last_trace_id VARCHAR(64) DEFAULT NULL;"
+  },
+  {
+    "id": "S-FIX-1",
+    "kind": "claim",
+    "claim": "In pruneSQLDialectMasterMissingFromSrc, when effectivePruneIDType == \"gpay\", liveGpaySet filters active shadow rows out of toDeleteGpay and resyncSourceIDs are published via publishTransmuteChunked.",
+    "flow": "pruneSQLDialectMasterMissingFromSrc -> check h.shadowDB -> filter toDeleteGpay -> publishTransmuteChunked.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_execute_heal_segb_sql_dialects.go:197-214\ntoDeleteGpay = filtered\n}\n}\n}\n}\n}\nif len(toDeleteGpay) > 0 {\npruned += execDeleteByCol(\"`_gpay_id`\", toDeleteGpay, len(toDeleteGpay))\n}\n}\nif len(resyncSourceIDs) > 0 {\nresyncSourceIDs = uniqueStrings(resyncSourceIDs)\nif _, err := h.publishTransmuteChunked(ctx, rpt.TargetTable, resyncSourceIDs, \"execute-heal-b\", masterBindingID); err == nil {\npruned += liveGpayCount\n}\n}\nreturn pruned"
+  },
+  {
+    "id": "S-IMPACT-1",
+    "kind": "claim",
+    "claim": "In FetchAndWriteByIDsWithAccepted, if entry.SourceType is non-empty and neither mongo nor mongodb (after checking isPostgresSourceEntry), the function returns an unsupported source_type error.",
+    "flow": "FetchAndWriteByIDsWithAccepted -> check isPostgresSourceEntry -> check entry.SourceType != mongo/mongodb -> return error.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/recon/recon_heal_fetch.go:33-40\nif isPostgresSourceEntry(entry) {\n\treturn h.fetchAndWritePostgresByIDs(ctx, entry, ids)\n}\nif entry != nil {\n\tif st := strings.ToLower(strings.TrimSpace(entry.SourceType)); st != \"\" && st != \"mongo\" && st != \"mongodb\" {\n\t\treturn 0, nil, fmt.Errorf(\"execute-heal fetch by ids: unsupported source_type %q for table %s\", entry.SourceType, entry.TargetTable)\n\t}\n}"
+  },
+  {
+    "id": "S-PATTERN-1",
+    "kind": "claim",
+    "claim": "In queries_test.go, stubReconReader.GetActiveReconJobs accepts (context.Context, []string) matching ReconReader.GetActiveReconJobs.",
+    "flow": "stubReconReader.GetActiveReconJobs(context.Context, []string) matches ReconReader.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/test/internal/app/queries/queries_test.go:337-339\nfunc (s *stubReconReader) GetActiveReconJobs(context.Context, []string) ([]reconQueries.ActiveReconJob, error) {\n\treturn nil, nil\n}\nREF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/recon/recon_reader.go:136-137\nGetActiveReconJobs(ctx context.Context, targetTables []string) ([]ActiveReconJob, error)\n}"
+  },
+  {
+    "id": "D-BEHAV-1",
+    "kind": "demo",
+    "claim": "ActivityLogReader interface defines ListActivity, Stats24h, and GetDailyFlow methods.",
+    "flow": "stubActivityLogReader implements ListActivity, Stats24h, and GetDailyFlow.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/system/list_activity_logs.go:41-45\ntype ActivityLogReader interface {\n\tListActivity(ctx context.Context, f ActivityLogFilter, page, pageSize int) ([]ActivityLogRow, int64, error)\n\tStats24h(ctx context.Context) (ops []OpStat, recentErrors []ActivityLogRow, err error)\n\tGetDailyFlow(ctx context.Context, p DailyFlowParams) (*DailyFlowResult, error)\n}"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "ActivityLogReader interface defines ListActivity, Stats24h, and GetDailyFlow methods.",
+    "flow": "ActivityLogReader interface definition.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/system/list_activity_logs.go:41-45\ntype ActivityLogReader interface {\n\tListActivity(ctx context.Context, f ActivityLogFilter, page, pageSize int) ([]ActivityLogRow, int64, error)\n\tStats24h(ctx context.Context) (ops []OpStat, recentErrors []ActivityLogRow, err error)\n\tGetDailyFlow(ctx context.Context, p DailyFlowParams) (*DailyFlowResult, error)\n}"
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "ActivityLogReader interface has no methods and is an empty struct.",
+    "flow": "False control claim.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/system/list_activity_logs.go:41-45\ntype ActivityLogReader interface {\n\tListActivity(ctx context.Context, f ActivityLogFilter, page, pageSize int) ([]ActivityLogRow, int64, error)\n\tStats24h(ctx context.Context) (ops []OpStat, recentErrors []ActivityLogRow, err error)\n\tGetDailyFlow(ctx context.Context, p DailyFlowParams) (*DailyFlowResult, error)\n}"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "ReconReader interface does not define GetActiveReconJobs and instead returns a single bool.",
+    "flow": "False control claim.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/queries/recon/recon_reader.go:133-137\nGetActiveReconJobs(ctx context.Context, targetTables []string) ([]ActiveReconJob, error)\n}"
+  }
+]

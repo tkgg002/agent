@@ -1,0 +1,84 @@
+{
+  "mode": "claim",
+  "stage": "dg0",
+  "workspace": "audit-pg-oom-53200-2026-11-05",
+  "ts": "20261109T164303",
+  "trusted_rounds": [
+    "r1",
+    "r2",
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/06_laya_raw_dg0_20261109T164303.json",
+  "claims": [
+    {
+      "id": "C-REQ",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In MasterTransmuteJobHandler.CancelTransmute, only PENDING and RUNNING jobs are accepted, and transmuteJobRepo.RequestCancel only sets cancel_requested=true and updated_at=time.Now() without transitioning PENDING jobs to CANCELLED or publishing a NATS cancel command.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6996
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.3859
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0554
+        }
+      }
+    },
+    {
+      "id": "C-REALITY",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "In TableDebouncer.workerLoop in debounce.go, when td.ctx.Done() fires, it only takes td.tasks and returns without draining batches remaining in td.flushCh, while in-flight goroutines in case batch := <-td.flushCh receive td.ctx directly without td.wg tracking.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2657
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1714
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.596
+        }
+      }
+    },
+    {
+      "id": "C-CONTRA",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "Both TransmuteHandler and BatchTransformHandler spawn detached background goroutines for multi-chunk jobs without registering OnStop or OnStart hooks on WorkerServer to pause at chunk boundaries or auto-resume on startup.",
+      "decision": "FLAG",
+      "resolved": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_transform_handler.go:97-101 and /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:288-343 show HandleBatchTransform and HandleTransmute spawn detached goroutines without ws.RegisterOnStop or ws.RegisterOnStart.",
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "INCORRECT",
+          "confidence": 0.1234
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.175
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.366
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

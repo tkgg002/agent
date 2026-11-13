@@ -1,0 +1,44 @@
+[
+  {
+    "id": "S-RC-16",
+    "kind": "claim",
+    "claim": "In rule-service/application/rule/actions/executeRoutingRule.handler.ts, ExecuteRoutingRuleHandler queries ruleModel.getAll with ruleFilter for ruleType ROUTING and ruleDomain command.domain, selecting _id, priority, conditions, event, activeFr, and activeTo.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/rule-service/application/rule/actions/executeRoutingRule.handler.ts:34-45\n      const ruleFilter = ruleMainLogic.getDefaultRuleFilter({\n        ruleIds: command._ids,\n        ruleType: RULE_TYPES_ENUM.ROUTING,\n        ruleDomain: command.domain\n      });\n      if(command.isLoadBalancing){\n        ruleFilter[\"event.isLoadBalancing\"] = true;\n      }\n\n      this.logger.debug(\"ExecuteRoutingRuleHandler filter: \" + JSON.stringify(ruleFilter));\n      const ruleList = await this.ruleModel.getAll(ruleFilter, {}, { _id: 1, priority: 1, conditions: 1, event: 1, activeFr: 1, activeTo: 1 });\n      const resp = await (new RoutingRuleLogic(this.mainProcess)).execute({...command, ruleList}, context);",
+    "flow": "ExecuteRoutingRuleHandler.excute -> getDefaultRuleFilter -> ruleModel.getAll -> RoutingRuleLogic.execute"
+  },
+  {
+    "id": "S-FIX-16",
+    "kind": "claim",
+    "claim": "In rule-service/models/rule.model.ts, RuleModel defines the Mongoose schema on collection DB_COLLECTION.RULE with fields name, domain, domainCode, activeFr, activeTo, priority, status, conditions, event, ruleType, ruleAction, isDefault, isActive, and isDelete.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/rule-service/models/rule.model.ts:17-37\n    this.schema = new Schema<RuleEntity>(\n      {\n        name: { type: String, required: true },\n        domain: { type: String, required: true },\n        domainCode: { type: String, required: true },\n        activeFr: { type: String, required: true },\n        activeTo: { type: String, required: true },\n        priority: { type: Number, default: 1 },\n        status: { type: String, default: \"\" },\n        description: { type: String, default: \"\" },\n        conditions: { type: Object, default: {} },\n        event: { type: Object, default: {} },\n        ruleType: { type: String, default: \"\" },\n        ruleAction: { type: String, default: \"\" },\n        isDefault: { type: Boolean, default: false },\n        isActive: { type: Boolean, default: true },\n        isDelete: { type: Boolean, default: false },\n        extData: { type: Object, default: null },\n        createdBy: { type: String, default: \"\" },\n        lastUpdatedBy: { type: String, default: \"\" }\n      },",
+    "flow": "RuleModel constructor -> new Schema<RuleEntity> -> dbConnection.model(DB_COLLECTION.RULE, this.schema)"
+  },
+  {
+    "id": "D-BEHAV-16",
+    "kind": "claim",
+    "claim": "In rule-service/application/rule/processors/executeRoutingRule.processors.ts, RoutingRuleLogic.execute adds each rule's conditions, event, and priority to the rules engine and returns events['0']?.params.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/rule-service/application/rule/processors/executeRoutingRule.processors.ts:57-76\n    const engine = new Engine([], { allowUndefinedFacts: true });\n    ruleList.forEach(element => {\n      const rule: RuleProperties = {\n        conditions: element.conditions,\n        event: element.event,\n        priority: element.priority\n      };\n      engine.addRule(rule);\n    });\n\n    const ruleInputData = flatten({ ...command.data, base }, { safe: true });\n    for (const key of Object.keys(ruleInputData)) {\n      if (isIsoDate(ruleInputData[key])) {\n        ruleInputData[key] = new Date(ruleInputData[key]).valueOf();\n      }\n    }\n\n    const { events } = await engine.run(ruleInputData);\n    return { ruleId: events[\"0\"]?.type, ...events[\"0\"]?.params, events };",
+    "flow": "RoutingRuleLogic.execute -> engine.addRule -> engine.run -> events[0].params"
+  },
+  {
+    "id": "CTRL-TRUE-16-DG1",
+    "kind": "control_true",
+    "claim": "In centralized-export-service/domain/QueryBus.ts, execute looks up the handler using this.handlerFactory.getHandler(queryName) and throws an Error if no handler is registered.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/domain/QueryBus.ts:19-25\n    const queryName = query.constructor.name;\n    const handler = this.handlerFactory.getHandler(queryName);\n\n    if (!handler) {\n      throw new Error(`No handler registered for query: ${queryName} `);\n    }",
+    "flow": "QueryBus.execute -> handlerFactory.getHandler(queryName) -> handler.execute"
+  },
+  {
+    "id": "CTRL-FALSE-16A-DG1",
+    "kind": "control_false",
+    "claim": "In centralized-export-service/domain/QueryBus.ts, execute silently returns null when this.handlerFactory.getHandler(queryName) returns undefined.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/domain/QueryBus.ts:19-25\n    const queryName = query.constructor.name;\n    const handler = this.handlerFactory.getHandler(queryName);\n\n    if (!handler) {\n      throw new Error(`No handler registered for query: ${queryName} `);\n    }",
+    "flow": "QueryBus.execute missing handler handling"
+  },
+  {
+    "id": "CTRL-FALSE-16B-DG1",
+    "kind": "control_false",
+    "claim": "In rule-service/defined/app-setting.ts, DB_COLLECTION.RULE is set to 'domains' instead of 'rules'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/rule-service/defined/app-setting.ts:4-8\nconst DB_COLLECTION = {\n  DOMAIN: \"domains\",\n  RULE: \"rules\",\n  CONDITION: \"conditions\",\n\tUSER_RULE_DOMAIN: \"user-rule-domain\",",
+    "flow": "DB_COLLECTION constant definitions"
+  }
+]

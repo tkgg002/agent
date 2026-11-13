@@ -1,0 +1,82 @@
+[
+  {
+    "id": "S-RC-24",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In internal-transfer-export.pure.ts, the originalTransHisId filter only matches the top-level originalTransHisId field and never checks info.refundFor.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:86-91\n    if (params.originalTransHisId) {\n        filter.originalTransHisId = {\n            $regex: params.originalTransHisId.trim(),\n            $options: \"i\"\n        };\n    }",
+    "flow": "InternalTransferExport.buildFilter -> originalTransHisId"
+  },
+  {
+    "id": "S-FIX-24",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In trans-his-pg.query.ts, JSON_STRING_PATHS is the whitelist of payload JSONB string paths and currently does not contain info.refundFor or info.dstBankAccount.bankAccount.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:118-123\n/** String paths below a JSONB column of payload (no core column): [column, ...segments]. */\nconst JSON_STRING_PATHS: Readonly<Record<string, { column: \"info\" | \"sender\"; segments: readonly string[]; operators: readonly string[] }>> = {\n\t\"info.masterMerchantInfo.merchantEmail\": { column: \"info\", segments: [\"masterMerchantInfo\", \"merchantEmail\"], operators: [\"eq\"] },\n\t\"info.bankConnector\": { column: \"info\", segments: [\"bankConnector\"], operators: [\"eq\"] },\n\t\"info.bankTransferResponse.partnerCode\": { column: \"info\", segments: [\"bankTransferResponse\", \"partnerCode\"], operators: [\"$regex\"] }\n};",
+    "flow": "compileFilter -> JSON_STRING_PATHS whitelist"
+  },
+  {
+    "id": "S-IMPACT-24",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In trans-his-pg.query.ts, compileFilter supports $or, $and and $expr keys at any conjunction level and refuses any other key that starts with $.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:142-158\nfunction conjunction(filter: Record<string, any>, bind: Bind, depth: number): string[] {\n\tconst parts: string[] = [];\n\tfor (const key of Object.keys(filter)) {\n\t\tif (key === \"$or\") {\n\t\t\tparts.push(disjunction(filter.$or, bind, depth));\n\t\t} else if (key === \"$and\") {\n\t\t\tparts.push(...conjunctionList(filter.$and, bind, depth));\n\t\t} else if (key === \"$expr\") {\n\t\t\tparts.push(exprSql(filter.$expr, bind));\n\t\t} else if (key.startsWith(\"$\")) {\n\t\t\treturn refuse(\"unsupported_operator\", `top-level operator \"${shown(key)}\"`);\n\t\t} else {\n\t\t\tparts.push(...fieldSql(key, filter[key], bind));\n\t\t}\n\t}\n\treturn parts;\n}",
+    "flow": "compileFilter -> conjunction"
+  },
+  {
+    "id": "S-PATTERN-24",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In internal-transfer-export.pure.ts, transformRow exports the sender account as info.dstBankAccount.bankAccount first, then sender.bankAccount.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:251-253\n    const senderBankName = history.info?.dstBankAccount?.bankCode || history.sender?.bankCode || \"\";\n\n    const senderBankAccount = history.info?.dstBankAccount?.bankAccount || history.sender?.bankAccount || \"\";",
+    "flow": "InternalTransferExport.transformRow -> senderBankAccount"
+  },
+  {
+    "id": "CTRL-TRUE-24-1",
+    "kind": "control_true",
+    "basis": "code",
+    "claim": "In models/trans-his-pg/trans-his-pg.query.ts, TEXT_COLUMNS maps 'serviceCode', 'channelId', 'sender.customerId', 'receiver.customerId', 'sender.phone', 'receiver.phone', and 'info.partnerCode' to their corresponding core.* columns.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:84-97\nconst TEXT_COLUMNS: Readonly<Record<string, string>> = {\n\t\"transId\": \"core.trans_id\",\n\t\"transType\": \"core.trans_type\",\n\t\"status\": \"core.status\",\n\t\"originalTransHisId\": \"core.original_trans_his_id\",\n\t\"serviceCode\": \"core.service_code\",\n\t\"channelId\": \"core.channel_id\",\n\t\"sender.customerId\": \"core.sender_customer_id\",\n\t\"receiver.customerId\": \"core.receiver_customer_id\",\n\t\"sender.phone\": \"core.sender_phone\",\n\t\"receiver.phone\": \"core.receiver_phone\",\n\t\"receiver.credit\": \"core.receiver_credit\",\n\t\"info.partnerCode\": \"core.partner_code\"\n};",
+    "flow": "trans-his-pg.query.ts -> TEXT_COLUMNS"
+  },
+  {
+    "id": "CTRL-FALSE-24-1",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In internal-transfer-export.pure.ts, buildFilter filters partnerCode using a case-insensitive $regex on info.bankTransferResponse.partnerCode.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:35-37\n    if (params.partnerCode) {\n        filter[\"info.partnerCode\"] = params.partnerCode;\n    }",
+    "flow": "InternalTransferExport.buildFilter -> partnerCode"
+  },
+  {
+    "id": "CTRL-FALSE-24-2",
+    "kind": "control_false",
+    "basis": "code",
+    "claim": "In core-trans-proxy-history-service/logics/transHis.manage.logic.ts, getList filters partnerCode using a case-insensitive $regex on info.bankTransferResponse.partnerCode.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/core-trans-proxy-history-service/logics/transHis.manage.logic.ts:74-76\n\t\tif (params.partnerCode) {\n\t\t\tfilter[\"info.partnerCode\"] = params.partnerCode;\n\t\t}",
+    "flow": "TransHisManageLogic.getList -> partnerCode"
+  },
+  {
+    "id": "D-BEHAV-24",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In trans-his-pg.query.ts, the $expr $regexMatch shape is accepted only when it exactly equals input $ifNull of $info.bankAccountNumber and $sender.bankAccount with options i, otherwise it is refused.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:346-351\n\tif (isPlainObject(expr) && isPlainObject(expr.$regexMatch)) {\n\t\tconst match = expr.$regexMatch;\n\t\tconst shape = { input: { $ifNull: [\"$info.bankAccountNumber\", \"$sender.bankAccount\"] }, regex: match.regex, options: \"i\" };\n\t\tif (Object.keys(expr).length !== 1 || typeof match.regex !== \"string\" || JSON.stringify(match) !== JSON.stringify(shape)) {\n\t\t\treturn refuse(\"unsupported_expr\", \"$expr ($regexMatch)\");\n\t\t}",
+    "flow": "compileFilter -> exprSql $regexMatch shape"
+  },
+  {
+    "id": "D-EDGE-24",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In trans-his-pg.query.ts, fieldSql refuses a stored-field key that is not in TEXT_COLUMNS, JSON_STRING_PATHS or JSON_NUMBER_PATHS with unsupported_key.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:213-223\nfunction fieldSql(key: string, spec: unknown, bind: Bind): string[] {\n\tif (Object.prototype.hasOwnProperty.call(TEXT_COLUMNS, key)) { return [textSql(key, TEXT_COLUMNS[key], spec, bind)]; }\n\tif (Object.prototype.hasOwnProperty.call(JSON_STRING_PATHS, key)) { return [jsonStringSql(key, spec, bind)]; }\n\tif (Object.prototype.hasOwnProperty.call(JSON_NUMBER_PATHS, key)) { return [jsonInSql(key, JSON_NUMBER_PATHS[key], spec, bind)]; }\n\tif (key === \"sysTrans\") { return [booleanSql(key, \"core.sys_trans\", spec)]; }\n\tif (key === \"createdAt\") { return dateSql(key, \"core.created_at\", spec, bind); }\n\t// a top-level name no stored document has (`transIdRef`, \"0\", \"1\"... the characters of the string `info` param): v1 strictQuery is off, so\n\t// Mongo sends it as is and nothing matches\n\tif (!STORED_FIELDS.includes(key.split(\".\")[0])) { return [absentSql(key, spec)]; }\n\treturn refuse(\"unsupported_key\", `filter key \"${shown(key)}\"`);\n}",
+    "flow": "compileFilter -> fieldSql whitelist"
+  },
+  {
+    "id": "D-API-24",
+    "kind": "claim",
+    "basis": "code",
+    "claim": "In trans-his-pg.query.ts, disjunction refuses an $or when depth is greater than or equal to MAX_FILTER_DEPTH and wraps each branch conjunction in parentheses joined by OR.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:173-183\nfunction disjunction(branches: unknown, bind: Bind, depth: number): string {\n\tif (depth >= MAX_FILTER_DEPTH) { return refuse(\"unsupported_filter\", \"$or (nested too deep)\"); }\n\tif (!Array.isArray(branches) || branches.length === 0) { return refuse(\"unsupported_value\", \"$or (a non-empty array is expected)\"); }\n\tconst compiled = branches.map(branch => {\n\t\tif (!isPlainObject(branch)) { return refuse(\"unsupported_value\", \"$or (an array of objects is expected)\"); }\n\t\tconst parts = conjunction(branch, bind, depth + 1);\n\t\tif (parts.length === 0) { return refuse(\"unsupported_value\", \"$or (empty branch)\"); }\n\t\treturn `(${parts.join(\" AND \")})`;\n\t});\n\treturn `(${compiled.join(\"\\n\\t\\t\\tOR \")})`;\n}",
+    "flow": "compileFilter -> depth limit"
+  }
+]

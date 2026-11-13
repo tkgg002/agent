@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC-18",
+    "kind": "claim",
+    "claim": "When 'trans-his-pg' fails to connect inside start.ts initService, start.ts catches the error and omits connections['trans-his-pg'], so MainProcess does not initialize TransHisPgModel while transHisModelNames() still returns ['TransHisPgModel'] when TRANS_HIS_EXPORT_SOURCE=postgres.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/start.ts:271-304\n                    } else if (config.type === \"postgres\") {\n                        connection = await new Promise((resolve, reject) => {\n                            this.postgresDbHandler.createConnection({\n                                alias,\n                                host: SVC_ENV.get()[config.hostEnvKey],\n                                port: SVC_ENV.get()[config.portEnvKey],\n                                database: SVC_ENV.get()[config.dbEnvKey],\n                                username: SVC_ENV.get()[config.userEnvKey],\n                                password: SVC_ENV.get()[config.passEnvKey],\n                                poolSize: SVC_ENV.get()[config.poolSizeEnvKey] || 10\n                            }, (err, pool) => err ? reject(err) : resolve(pool));\n                        });\n                    }\n                    if (connection) {\n                        connections[alias] = connection;\n                        successCount++;\n                        this.logger.info(`DB '${alias}' (${config.type}) connected.`);\n                    }\n                } catch (error) {\n                    this.logger.error(`Failed to connect DB '${alias}':`, error.message);\n                }\n\n            }\n\n            this.logger.info(`Connected to ${successCount}/${DB_LIST.length} databases.`);\n            this.logger.info(\"Connections object keys before MainProcess instantiation:\", Object.keys(connections));\n\n            if (!connections.default) {\n                throw new Error(\"CRITICAL: Default database failed to connect!\");\n            }\n\n            // Initialize MainProcess\n            this.mainProcess = new MainProcess(this.broker, this.logger, connections, [paginate]);",
+    "flow": "start.ts initService -> catch on trans-his-pg -> MainProcess.initializeModels -> BaseExportProcessor.validatePrerequisites"
+  },
+  {
+    "id": "S-FIX-18",
+    "kind": "claim",
+    "claim": "svc-env.ts currently lists RECONCILE_MARIADB_HOST through RECONCILE_MARIADB_POOLSIZE in REQUIRED_KEYS right before EXPORT_STORAGE_PATH without listing TRANS_HIS_PG_HOST through TRANS_HIS_PG_POOLSIZE.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/svc-env.ts:162-170\n\t\"RECONCILE_MARIADB_HOST\",\n\t\"RECONCILE_MARIADB_PORT\",\n\t\"RECONCILE_MARIADB_DB\",\n\t\"RECONCILE_MARIADB_USER\",\n\t\"RECONCILE_MARIADB_PASS\",\n\t\"RECONCILE_MARIADB_POOLSIZE\",\n\n\t\"EXPORT_STORAGE_PATH\"\n];",
+    "flow": "VaultSecurity.checkMissingEnvVariable -> REQUIRED_KEYS validation"
+  },
+  {
+    "id": "S-IMPACT-18",
+    "kind": "claim",
+    "claim": "In data-transfers/main-process.ts, initializeModels iterates over Object.keys(this.connections) and instantiates ModelRegistry[alias] only for aliases present and ready in this.connections.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/data-transfers/main-process.ts:43-71\n  private initializeModels(plugins: any[]) {\n    Object.keys(this.connections).forEach(alias => {\n      const connection = this.connections[alias];\n\n      let isReady = false;\n      if (connection) {\n        if (\"readyState\" in connection) {\n          isReady = (connection as any).readyState === 1;\n        } else if (\"ended\" in connection) {\n          isReady = !(connection as any).ended;\n        } else {\n          isReady = true;\n        }\n      }\n\n      if (!isReady) {\n        this.logger.warn(`[MainProcess] Connection '${alias}' is not ready. Skipping models.`);\n        return;\n      }\n\n      const ModelClasses = ModelRegistry[alias];\n\n      if (!ModelClasses || ModelClasses.length === 0) {\n        this.logger.debug(`[MainProcess] No models registered for DB alias '${alias}'.`);\n        return;\n      }\n\n      this.logger.info(`[MainProcess] Initializing ${ModelClasses.length} models for DB '${alias}'...`);",
+    "flow": "new MainProcess -> initializeModels -> this.models[modelName]"
+  },
+  {
+    "id": "S-PATTERN-18",
+    "kind": "claim",
+    "claim": "In dbHandler/postgres.ts, createConnection builds a DbConfig with DbType.POSTGRES, host: options.host!, port: options.port || 5432, database: options.database!, username: options.username, password: options.password, and poolSize: options.poolSize || 10.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/dbHandler/postgres.ts:23-36\n    public async createConnection(\n        options: ConnectOptions,\n        callback: (err: any, pool: Pool | null) => void\n    ) {\n        const config: DbConfig = {\n            type: DbType.POSTGRES,\n            host: options.host!,\n            port: options.port || 5432,\n            database: options.database!,\n            username: options.username,\n            password: options.password,\n            poolSize: options.poolSize || 10\n        };",
+    "flow": "start.ts -> PostgresDb.createConnection -> DbConnectorFactory.connect"
+  },
+  {
+    "id": "D-BEHAV-18",
+    "kind": "claim",
+    "claim": "In utils/trans-his-export-source.ts, transHisModelNames returns ['TransHisPgModel'] when getTransHisExportSource() === 'postgres' and ['TransHisModel'] otherwise.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/utils/trans-his-export-source.ts:6-15\nexport const getTransHisExportSource = (): TransHisExportSource => {\n\tconst source = String(SVC_ENV.get().TRANS_HIS_EXPORT_SOURCE || \"mongo\").trim().toLowerCase();\n\tif (source !== \"mongo\" && source !== \"postgres\") {\n\t\tthrow new Error(`Invalid TRANS_HIS_EXPORT_SOURCE \"${source}\": expected \"mongo\" or \"postgres\"`);\n\t}\n\treturn source;\n};\n\n/** The model the trans-his exports need in the current source. */\nexport const transHisModelNames = (): string[] => (getTransHisExportSource() === \"postgres\" ? [\"TransHisPgModel\"] : [\"TransHisModel\"]);",
+    "flow": "TransHisExport.getRequiredModelName -> transHisModelNames -> getTransHisExportSource"
+  },
+  {
+    "id": "D-EDGE-18",
+    "kind": "claim",
+    "claim": "In start.ts, if connections.default is falsy after the DB_LIST connection loop, initService throws 'CRITICAL: Default database failed to connect!'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/start.ts:298-300\n            if (!connections.default) {\n                throw new Error(\"CRITICAL: Default database failed to connect!\");\n            }",
+    "flow": "start.ts initService critical connection guard"
+  },
+  {
+    "id": "D-API-18",
+    "kind": "claim",
+    "claim": "In defined/app-setting.ts, the 'trans-his-pg' entry in DB_LIST has type 'postgres' and maps hostEnvKey, portEnvKey, dbEnvKey, userEnvKey, passEnvKey, and poolSizeEnvKey to TRANS_HIS_PG_HOST, TRANS_HIS_PG_PORT, TRANS_HIS_PG_DB, TRANS_HIS_PG_USER, TRANS_HIS_PG_PASS, and TRANS_HIS_PG_POOLSIZE.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/defined/app-setting.ts:35-45\n\t{\n\t\talias: \"trans-his-pg\",\n\t\ttype: \"postgres\",\n\t\thostEnvKey: \"TRANS_HIS_PG_HOST\",\n\t\tportEnvKey: \"TRANS_HIS_PG_PORT\",\n\t\tdbEnvKey: \"TRANS_HIS_PG_DB\",\n\t\tuserEnvKey: \"TRANS_HIS_PG_USER\",\n\t\tpassEnvKey: \"TRANS_HIS_PG_PASS\",\n\t\tpoolSizeEnvKey: \"TRANS_HIS_PG_POOLSIZE\"\n\t}\n];",
+    "flow": "DB_LIST config -> start.ts initService -> PostgresDb.createConnection"
+  },
+  {
+    "id": "CTRL-TRUE-18",
+    "kind": "control_true",
+    "claim": "In security/vault.security.ts, checkMissingEnvVariable iterates over REQUIRED_KEYS and logs 'MIS_ENV_KEY: ' + keyMustHave when envVariable[keyMustHave] is falsy.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/security/vault.security.ts:19-29\n\tpublic static checkMissingEnvVariable(): boolean {\n\t\tconst envVariable = SVC_ENV.get();\n\t\tlet isMissingEnvVariable = false;\n\t\tREQUIRED_KEYS.forEach(keyMustHave => {\n\t\t\tif (!envVariable[keyMustHave]) {\n\t\t\t\tconsole.log(\"MIS_ENV_KEY: \" + keyMustHave);\n\t\t\t\tisMissingEnvVariable = true;\n\t\t\t}\n\t\t});\n\t\treturn isMissingEnvVariable;\n\t}",
+    "flow": "loadEnvAndInitService -> VaultSecurity.checkMissingEnvVariable"
+  },
+  {
+    "id": "CTRL-FALSE-18A",
+    "kind": "control_false",
+    "claim": "In start.ts, initService immediately rethrows any error from any database in DB_LIST inside the catch block and never logs 'Failed to connect DB'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/start.ts:289-291\n                } catch (error) {\n                    this.logger.error(`Failed to connect DB '${alias}':`, error.message);\n                }",
+    "flow": "start.ts initService catch block"
+  },
+  {
+    "id": "CTRL-FALSE-18B",
+    "kind": "control_false",
+    "claim": "In defined/app-setting.ts, the 'trans-his-pg' entry in DB_LIST uses type 'mongodb' and uriEnvKey 'TRANS_HIS_PG_URI'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/defined/app-setting.ts:35-45\n\t{\n\t\talias: \"trans-his-pg\",\n\t\ttype: \"postgres\",\n\t\thostEnvKey: \"TRANS_HIS_PG_HOST\",\n\t\tportEnvKey: \"TRANS_HIS_PG_PORT\",\n\t\tdbEnvKey: \"TRANS_HIS_PG_DB\",\n\t\tuserEnvKey: \"TRANS_HIS_PG_USER\",\n\t\tpassEnvKey: \"TRANS_HIS_PG_PASS\",\n\t\tpoolSizeEnvKey: \"TRANS_HIS_PG_POOLSIZE\"\n\t}\n];",
+    "flow": "defined/app-setting.ts DB_LIST"
+  }
+]

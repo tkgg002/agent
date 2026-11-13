@@ -91,6 +91,14 @@ def run(ws: str, kind: str, cmd: List[str], cwd: Path, ws_root: Path = DEFAULT_W
         "stdout_sha256": hashlib.sha256(out.encode("utf-8")).hexdigest(),
         "src_fingerprint": source_fingerprint(cwd),
     }
+    if proc.returncode != 0:
+        # Flywheel: a real FAIL after the gate ACCEPTed -> hard negatives for VegaML (fail-soft, exit code unchanged).
+        try:
+            from hard_negative_feedback import feed_runtime_fail
+        except ImportError:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from hard_negative_feedback import feed_runtime_fail
+        record["hard_negatives"] = feed_runtime_fail(ws_dir, ev_id)
     ev_dir = ws_dir / "06_evidence"
     ev_dir.mkdir(parents=True, exist_ok=True)
     (ev_dir / f"{ev_id}.json").write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

@@ -1,0 +1,64 @@
+{
+  "workspace": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-debezium-config-masked-password-2026-11-10",
+  "stage": "dg0",
+  "context": "Audit /sources connector config update flow across SourceConnectors.tsx, system_connectors_handler.go, system_connectors_credentials.go, debezium_connector.go, and kafka_connect.go. Live Kafka Connect (10.200.186.203:8083) currently holds real 32-char database.password for testcoretrans and devcoretrans because PostgreSQL Edit mode sends __KEEP__ which UpdateSystemConnectorConfigHandler skips; however API responses mask database.password to *** via FilterSafeConfig, validatePostgresConnectorPrereqs fails to skip __KEEP__ and connects to Postgres with literal password __KEEP__, and masked values (***, *******, mongodb://***:***@..., sftp://***:***@...) are NOT skipped/unmasked in UpdateSystemConnectorConfigHandler or Recover.",
+  "claims": [
+    {
+      "id": "C-REQ",
+      "role": "target",
+      "Premise": "UpdateSystemConnectorConfigHandler.Handle merges current config from Kafka Connect with cmd.Config and only skips keys where v == KeepSecretSentinel (__KEEP__), overwriting current[k] with cmd.Config[k] for any other value including *** or masked URIs (mongodb://***:***@..., sftp://***:***@...).",
+      "Hypothesis": "If a client or UI form submits a masked password (*** / *******) or a sanitized URI (mongodb://***:***@... / sftp://***:***@...) in PATCH /api/v1/system/connectors/:name/config, UpdateSystemConnectorConfigHandler.Handle overwrites the real secret on Debezium with the masked string.",
+      "evidence_refs": [
+        "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go:427-440"
+      ]
+    },
+    {
+      "id": "C-REALITY",
+      "role": "target",
+      "Premise": "In kafka_connect.go, UpdateConfig and ListConnectors call FilterSafeConfig which replaces any key containing password/secret/token/credentials/ssl.key with *** and masks user:pass in mongodb.connection.string and fs.uris to ***:***, while on live Kafka Connect (10.200.186.203:8083) testcoretrans currently retains its 32-character database.password because SourceConnectors.tsx sent __KEEP__ on Edit.",
+      "Hypothesis": "For PostgreSQL Edit mode when password is left blank, Debezium retains the real 32-character password on 10.200.186.203:8083 while the HTTP response and raw_config_sanitized return database.password as ***, whereas SFTP (fs.uris), MongoDB (when seeded from sanitized config), Recover mode, and custom kafkaConfig keys actually send masked or empty secrets to Debezium.",
+      "evidence_refs": [
+        "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/http/kafka_connect.go:154-179",
+        "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/http/kafka_connect.go:243-264",
+        "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/SourceConnectors.tsx:250-285"
+      ]
+    },
+    {
+      "id": "C-CONTRA",
+      "role": "target",
+      "Premise": "In system_connectors_credentials.go, isKeepOrMaskedSecret checks v == KeepSecretSentinel (__KEEP__) || v == ***, but validatePostgresConnectorPrereqs at line 48 only checks pass == \"\" || pass == \"***\" and does not check pass == KeepSecretSentinel.",
+      "Hypothesis": "When UpdateConfig is called from SourceConnectors.tsx Edit mode with database.password set to __KEEP__, validatePostgresConnectorPrereqs attempts a GORM Postgres connection using literal password __KEEP__ instead of skipping or resolving the existing password.",
+      "evidence_refs": [
+        "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/source/system_connectors_credentials.go:24-56"
+      ]
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "role": "control_true",
+      "Premise": "KeepSecretSentinel is defined as the constant string \"__KEEP__\" in package source commands and in SourceConnectors.tsx.",
+      "Hypothesis": "Both frontend SourceConnectors.tsx and backend debezium_connector.go use the sentinel string \"__KEEP__\" to represent keeping an existing secret.",
+      "evidence_refs": [
+        "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go:358-360",
+        "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/SourceConnectors.tsx:166-168"
+      ]
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "role": "control_false",
+      "Premise": "UpdateSystemConnectorConfigHandler.Handle merges current config from Kafka Connect with cmd.Config and only skips keys where v == KeepSecretSentinel (__KEEP__).",
+      "Hypothesis": "UpdateSystemConnectorConfigHandler.Handle deletes the connector from Kafka Connect and drops all PostgreSQL tables instead of calling UpdateConfig.",
+      "evidence_refs": [
+        "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/debezium_connector.go:427-440"
+      ]
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "role": "control_false",
+      "Premise": "FilterSafeConfig in kafka_connect.go replaces sensitive keys containing password, secret, token, credentials, or ssl.key with ***.",
+      "Hypothesis": "FilterSafeConfig encrypts all connector keys using RSA-4096 and stores them in Redis Streams.",
+      "evidence_refs": [
+        "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/http/kafka_connect.go:243-264"
+      ]
+    }
+  ]
+}

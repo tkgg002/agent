@@ -1,0 +1,72 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "claim",
+    "claim": "FieldCryptoHelper.isConfigured reads active = parseActiveVersion() from ENCRYPTION_ACTIVE_VERSION and checks resolveKeyForVersion(active), which requires ENCRYPTION_KEY_V{active} to be set in process.env.",
+    "function_workflow": "isConfigured validates that ENCRYPTION_ACTIVE_VERSION and its matching ENCRYPTION_KEY_V{version} exist and are valid.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/customer-service/node_modules/goopay-library/helpers/field-crypto.helper.js:24-36\nfunction resolveKeyForVersion(version) {\n\tconst envKey = getEnv(`ENCRYPTION_KEY_V${version}`)?.trim();\n\tif (!envKey) {\n\t\treturn null;\n\t}\n\tif (/^[0-9a-fA-F]{64}$/.test(envKey)) {\n\t\treturn Buffer.from(envKey, \"hex\");\n\t}\n\tif (envKey.length === KEY_BYTES) {\n\t\treturn Buffer.from(envKey, \"utf8\");\n\t}\n\tthrow new Error(`FieldCrypto: ENCRYPTION_KEY_V${version} must be 32 utf8 chars or 64 hex chars`);\n}"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "claim",
+    "claim": "assertFieldCryptoAtStartup in lib/sensitive-crypto.ts copies ENCRYPTION_ keys from SVC_ENV.get() into process.env and then calls fieldCryptoHelper.assertConfiguredAtStartup(logger).",
+    "function_workflow": "assertFieldCryptoAtStartup syncs ENCRYPTION_ environment variables and invokes assertConfiguredAtStartup.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/customer-service/lib/sensitive-crypto.ts:474-484\nexport function assertFieldCryptoAtStartup(logger?: { info?: (...args: any[]) => void; error?: (...args: any[]) => void }): void {\n\tconst envs = SVC_ENV.get() as any;\n\tfor (const [key, value] of Object.entries(envs || {})) {\n\t\tif (key.startsWith(\"ENCRYPTION_\") && process.env[key] == null && value != null) {\n\t\t\tprocess.env[key] = String(value);\n\t\t}\n\t}\n\ttry {\n\t\tgetCryptoScope(CUSTOMER_ROOT_SCOPE_NAME);\n\t\tfieldCryptoHelper.assertConfiguredAtStartup(logger);"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "claim",
+    "claim": "CustomerService.loadEnvAndInitService in start.ts calls assertCustomerFieldCryptoAtStartup(this.logger) before connecting to Redis and initializing the service.",
+    "function_workflow": "loadEnvAndInitService validates environment variables and field crypto configuration on startup.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/customer-service/start.ts:436-444\n\t\tconst isMissing = VaultSecurity.checkMissingEnvVariable();\n\t\tif (isMissing) {\n\t\t\tawait this.broker.stop();\n\t\t\tthrow Error(\"MIS_ENV_KEY\");\n\t\t} else {\n\t\t\tassertCustomerFieldCryptoAtStartup(this.logger);\n\t\t\tawait redis.connect();\n\t\t\tthis.initService();\n\t\t}"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "claim",
+    "claim": "In lib/sensitive-crypto.test.ts, when ENCRYPTION_ACTIVE_VERSION is set to 2, ENCRYPTION_KEY_V2 is also set alongside ENCRYPTION_KEY_V1.",
+    "function_workflow": "sensitive-crypto.test.ts configures matching ENCRYPTION_KEY_V{n} for active version 1 and 2.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/customer-service/lib/sensitive-crypto.test.ts:15-19\n\tbeforeEach(() => {\n\t\tprocess.env.ENCRYPTION_ACTIVE_VERSION = \"1\";\n\t\tprocess.env.ENCRYPTION_KEY_V1 = \"0123456789abcdef0123456789abcdef\";\n\t\tdelete process.env.ENCRYPTION_KEY_V2;\n\t});"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "claim",
+    "claim": "assertConfiguredAtStartup throws 'FieldCrypto: ENCRYPTION_ACTIVE_VERSION or ENCRYPTION_KEY_V{n} is not configured' when this.isConfigured() returns false.",
+    "function_workflow": "assertConfiguredAtStartup checks isConfigured() and performs a deterministic encrypt/decrypt self-test.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/customer-service/node_modules/goopay-library/helpers/field-crypto.helper.js:222-227\n\tassertConfiguredAtStartup(logger) {\n\t\tif (!this.isConfigured()) {\n\t\t\tconst message = \"FieldCrypto: ENCRYPTION_ACTIVE_VERSION or ENCRYPTION_KEY_V{n} is not configured\";\n\t\t\tlogger?.error?.(message);\n\t\t\tthrow new Error(message);\n\t\t}"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "claim",
+    "claim": "resolveKeyForVersion accepts either a 64-character hex string or a 32-character UTF-8 string for ENCRYPTION_KEY_V{version}.",
+    "function_workflow": "resolveKeyForVersion parses the key into a 32-byte Buffer.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/customer-service/node_modules/goopay-library/helpers/field-crypto.helper.js:29-35\n\tif (/^[0-9a-fA-F]{64}$/.test(envKey)) {\n\t\treturn Buffer.from(envKey, \"hex\");\n\t}\n\tif (envKey.length === KEY_BYTES) {\n\t\treturn Buffer.from(envKey, \"utf8\");\n\t}\n\tthrow new Error(`FieldCrypto: ENCRYPTION_KEY_V${version} must be 32 utf8 chars or 64 hex chars`);"
+  },
+  {
+    "id": "D-API",
+    "kind": "claim",
+    "claim": "decryptDeterministic resolves the encryption key using parsed.version extracted from the ciphertext prefix.",
+    "function_workflow": "decryptDeterministic parses version from gpd:v{N}:... and calls this.resolveKey(parsed.version).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/customer-service/node_modules/goopay-library/helpers/field-crypto.helper.js:149-154\n\t\tconst parsed = parseVersionedCipher(raw, DETERMINISTIC_PREFIX);\n\t\tif (!parsed) {\n\t\t\tthrow new Error(\"FieldCrypto: invalid deterministic ciphertext format\");\n\t\t}\n\t\tconst key = this.resolveKey(parsed.version);\n\t\tconst iv = Buffer.from(parsed.ivHex, \"hex\");"
+  },
+  {
+    "id": "CTRL-TRUE-01",
+    "kind": "control_true",
+    "claim": "isConfigured returns false when parseActiveVersion() returns null.",
+    "function_workflow": "isConfigured checks active version and key resolution.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/customer-service/node_modules/goopay-library/helpers/field-crypto.helper.js:82-92\n\tisConfigured() {\n\t\tconst active = parseActiveVersion();\n\t\tif (!active) {\n\t\t\treturn false;\n\t\t}\n\t\ttry {\n\t\t\treturn !!resolveKeyForVersion(active);\n\t\t} catch {\n\t\t\treturn false;\n\t\t}\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-01",
+    "kind": "control_false",
+    "claim": "isConfigured always returns true even when ENCRYPTION_ACTIVE_VERSION is missing.",
+    "function_workflow": "isConfigured checks active version and key resolution.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/customer-service/node_modules/goopay-library/helpers/field-crypto.helper.js:82-92\n\tisConfigured() {\n\t\tconst active = parseActiveVersion();\n\t\tif (!active) {\n\t\t\treturn false;\n\t\t}\n\t\ttry {\n\t\t\treturn !!resolveKeyForVersion(active);\n\t\t} catch {\n\t\t\treturn false;\n\t\t}\n\t}"
+  },
+  {
+    "id": "CTRL-FALSE-02",
+    "kind": "control_false",
+    "claim": "assertConfiguredAtStartup never throws an error when isConfigured() returns false.",
+    "function_workflow": "assertConfiguredAtStartup checks isConfigured() and throws on failure.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/customer-service/node_modules/goopay-library/helpers/field-crypto.helper.js:222-227\n\tassertConfiguredAtStartup(logger) {\n\t\tif (!this.isConfigured()) {\n\t\t\tconst message = \"FieldCrypto: ENCRYPTION_ACTIVE_VERSION or ENCRYPTION_KEY_V{n} is not configured\";\n\t\t\tlogger?.error?.(message);\n\t\t\tthrow new Error(message);\n\t\t}"
+  }
+]

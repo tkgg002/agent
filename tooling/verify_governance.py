@@ -29,7 +29,8 @@ CLEAN_ROOM_SPEC_RE = re.compile(r"clean-room\s+approved\s+spec", re.I)
 SPEC_RULE_RE = re.compile(r"^[ \t]*(?:[-*][ \t]*|\|[ \t]*)?\**(C?R-?\d+)\b[^:\n|]*\**[ \t]*[:.|]", re.I | re.M)
 SPEC_REF_RE = re.compile(r"REF:\s*`?\S+:\d+")
 SPEC_REJECT_RE = re.compile(r"(\[(?:REJECTED|NO_EVIDENCE|UNVERIFIED|BLOCKED)\]|trạng\s+thái\s*:\s*(?:REJECTED|BLOCK|NO_EVIDENCE))", re.I)
-LOG_LINE_RE = re.compile(r"^-\s*\[\d{4}-\d{2}-\d{2}[^\]]*\]\s*\[Agent:[a-zA-Z0-9.\-_]+\]\s+.+")
+AGENT_TAG_RE = r"\[Agent:[^\s\]][^\r\n\]]*\]"
+LOG_LINE_RE = re.compile(rf"^-\s*\[\d{{4}}-\d{{2}}-\d{{2}}[^\]]*\]\s*{AGENT_TAG_RE}\s+.+")
 
 # Mỗi phần tử là (nhãn mô tả, tuple các glob pattern chấp nhận 1 trong số đó)
 TIER_RULES: dict[str, List[Tuple[str, Tuple[str, ...]]]] = {
@@ -355,7 +356,7 @@ def verify_workspace_docs(
     progress_files = match_any(ws_path, ("05_progress*.md",))
     progress_file = max(progress_files, key=lambda p: p.stat().st_mtime)
     today_str = today_override or datetime.now().strftime("%Y-%m-%d")
-    today_re = re.compile(rf"^-\s*\[{re.escape(today_str)}[^\]]*\]\s*\[Agent:[a-zA-Z0-9.\-_]+\]")
+    today_re = re.compile(rf"^-\s*\[{re.escape(today_str)}[^\]]*\]\s*{AGENT_TAG_RE}")
 
     has_today_log = False
     malformed_lines: List[Tuple[int, str]] = []

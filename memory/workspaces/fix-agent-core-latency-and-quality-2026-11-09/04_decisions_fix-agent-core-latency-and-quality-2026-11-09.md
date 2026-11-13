@@ -1,0 +1,21 @@
+# 04 — Decisions (Append ONLY)
+
+- [2026-11-09T19:55:30+07:00] [Agent:laya_gate] DG0 C-REQ FLAG resolved: Verified directly against HEAD source code REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:206-207
+- [2026-11-09T19:55:30+07:00] [Agent:laya_gate] DG0 C-CONTRA FLAG resolved: Verified directly against HEAD source code REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:206-207
+- [2026-11-09T19:55:35+07:00] [Agent:laya_gate] DG1 S-FIX FLAG resolved: Verified directly against HEAD source code REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:206-207
+- [2026-11-09T19:55:35+07:00] [Agent:laya_gate] DG2 S-FIX FLAG resolved: Verified directly against HEAD source code REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:206-207
+- [2026-11-09T19:55:36+07:00] [Agent:laya_gate] DG3 S-FIX FLAG resolved: Verified directly against HEAD source code REF: /Users/trainguyen/Documents/work/agent/hooks/agy/agy_guard.py:206-207
+- [2026-11-10T09:13:44+07:00] [Agent:laya_gate] DG1 S-FIX FLAG resolved: REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:21-26
+- [2026-11-10T09:13:44+07:00] [Agent:laya_gate] DG2 S-FIX FLAG resolved: REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:21-26
+- [2026-11-10T09:13:44+07:00] [Agent:laya_gate] DG3 A-F01-F04 FLAG resolved: REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/audit_report_agent_core_v2.md:7-10
+- [2026-11-10T09:13:57+07:00] [Agent:laya_gate] DG3 A-F05-F08 FLAG resolved: REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/audit_report_agent_core_v2.md:11-12
+- [2026-11-10T10:30:08+07:00] [Agent:laya_gate] DG1 S-FIX FLAG resolved: REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:21-26
+- [2026-11-10T10:30:09+07:00] [Agent:laya_gate] DG2 S-FIX FLAG resolved: REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:21-26
+- [2026-11-10T10:30:09+07:00] [Agent:laya_gate] DG3 A-F01-N05 FLAG resolved: REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/audit_report_agent_core_v2.md:7-10
+- [2026-11-10T10:30:09+07:00] [Agent:laya_gate] DG3 A-F05-N01 FLAG resolved: REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/audit_report_agent_core_v2.md:11-12
+- [2026-11-10T10:56:57+07:00] [Agent:laya_gate] DG1 S-RC FLAG resolved: Đã đối chiếu REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:8-11
+- [2026-11-10T10:56:57+07:00] [Agent:laya_gate] DG3 A-R01-R03 FLAG resolved: Đã đối chiếu REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:8-11
+- [2026-11-10T10:57:13+07:00] [Agent:laya_gate] DG1 D-BEHAV FLAG resolved: Đã đối chiếu REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:136-148
+- [2026-11-10T10:57:14+07:00] [Agent:laya_gate] DG2 S-RC FLAG resolved: Đã đối chiếu REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:8-11
+- [2026-11-10T10:57:14+07:00] [Agent:laya_gate] DG2 D-BEHAV FLAG resolved: Đã đối chiếu REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:136-148
+- [2026-11-10T13:22:38+07:00] [Agent:laya_gate] DG1 S-RC,D-BEHAV FLAG resolved (DG1+DG2): Đã đối chiếu REF: memory/workspaces/fix-agent-core-latency-and-quality-2026-11-09/09_tasks_solution_agent_core_v2.md:8-11

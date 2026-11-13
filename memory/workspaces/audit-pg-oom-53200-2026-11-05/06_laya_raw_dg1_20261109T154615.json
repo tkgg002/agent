@@ -1,0 +1,1519 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "claim",
+    "claim": "In snapshot_runner_handler.go lines 151-199, Handle spawns runSnapshot in an untracked goroutine with context.Background() and places defer recover() outside the spawned goroutine.",
+    "flow": "1. Handle sets defer recover() at line 152. 2. Handle spawns go func at line 183 using context.Background() without recover inside the goroutine.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:151-199\nfunc (r *SnapshotRunner) Handle(msg *nats.Msg) {\n\tdefer func() {\n\t\tif rec := recover(); rec != nil {\n\t\t\tctx := observability.ExtractNATSHeader(context.Background(), msg.Header)\n\t\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 panic\", zap.Any(\"panic\", rec))\n\t\t}\n\t}()\n\n\tvar p snapshotV2Payload\n\tif err := json.Unmarshal(msg.Data, &p); err != nil {\n\t\tctx := observability.ExtractNATSHeader(context.Background(), msg.Header)\n\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 invalid payload\",\n\t\t\tzap.Error(err), zap.ByteString(\"data\", msg.Data))\n\t\treturn\n\t}\n\tif p.SourceObjectID <= 0 {\n\t\tctx := observability.ExtractNATSHeader(context.Background(), msg.Header)\n\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 source_object_id missing\", zap.ByteString(\"data\", msg.Data))\n\t\treturn\n\t}\n\tif p.TraceID == \"\" {\n\t\tp.TraceID = strings.TrimSpace(msg.Header.Get(\"Cdc-Correlation-Id\"))\n\t}\n\tif p.TraceID == \"\" {\n\t\tp.TraceID = fmt.Sprintf(\"worker-snapshot.v2-%d\", time.Now().UnixNano())\n\t}\n\tif p.BatchSize > snapshotV2MaxBatchSize {\n\t\tp.BatchSize = snapshotV2MaxBatchSize\n\t}\n\n\tjobID := msg.Header.Get(\"Cdc-Job-Id\")\n\n\tgo func(p snapshotV2Payload, jobID string, header nats.Header) {\n\t\tctx := observability.ExtractNATSHeader(context.Background(), map[string][]string(header))\n\t\tctx, span := observability.ChildSpan(ctx, \"nats.SnapshotV2Runner\")\n\t\tdefer span.End()\n\n\t\tif sc := span.SpanContext(); sc.IsValid() {\n\t\t\tp.TraceID = sc.TraceID().String()\n\t\t}\n\n\t\tif err := r.runSnapshot(ctx, p, jobID); err != nil {\n\t\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 run failed\",\n\t\t\t\tzap.Int64(\"source_object_id\", p.SourceObjectID),\n\t\t\t\tzap.String(\"trace_id\", p.TraceID),\n\t\t\t\tzap.String(\"job_id\", jobID),\n\t\t\t\tzap.Error(err))\n\t\t}\n\t}(p, jobID, msg.Header)",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3955,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7584,
+                "INCORRECT": 0.1998,
+                "UNSUPPORTED": 0.0418
+              },
+              "confidence": 0.3955,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 994,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In snapshot_runner_handler.go lines 151-199, Handle spawns runSnapshot in an untracked goroutine with context.Background() and places defer recover() outside the spawned goroutine.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:151-199\nfunc (r *SnapshotRunner) Handle(msg *nats.Msg) {\n\tdefer func() {\n\t\tif rec := recover(); rec != nil {\n\t\t\tctx := observability.ExtractNATSHeader(context.Background(), msg.Header)\n\t\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 panic\", zap.Any(\"panic\", rec))\n\t\t}\n\t}()\n\n\tvar p snapshotV2Payload\n\tif err := json.Unmarshal(msg.Data, &p); err != nil {\n\t\tctx := observability.ExtractNATSHeader(context.Background(), msg.Header)\n\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 invalid payload\",\n\t\t\tzap.Error(err), zap.ByteString(\"data\", msg.Data))\n\t\treturn\n\t}\n\tif p.SourceObjectID <= 0 {\n\t\tctx := observability.ExtractNATSHeader(context.Background(), msg.Header)\n\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 source_object_id missing\", zap.ByteString(\"data\", msg.Data))\n\t\treturn\n\t}\n\tif p.TraceID == \"\" {\n\t\tp.TraceID = strings.TrimSpace(msg.Header.Get(\"Cdc-Correlation-Id\"))\n\t}\n\tif p.TraceID == \"\" {\n\t\tp.TraceID = fmt.Sprintf(\"worker-snapshot.v2-%d\", time.Now().UnixNano())\n\t}\n\tif p.BatchSize > snapshotV2MaxBatchSize {\n\t\tp.BatchSize = snapshotV2MaxBatchSize\n\t}\n\n\tjobID := msg.Header.Get(\"Cdc-Job-Id\")\n\n\tgo func(p snapshotV2Payload, jobID string, header nats.Header) {\n\t\tctx := observability.ExtractNATSHeader(context.Background(), map[string][]string(header))\n\t\tctx, span := observability.ChildSpan(ctx, \"nats.SnapshotV2Runner\")\n\t\tdefer span.End()\n\n\t\tif sc := span.SpanContext(); sc.IsValid() {\n\t\t\tp.TraceID = sc.TraceID().String()\n\t\t}\n\n\t\tif err := r.runSnapshot(ctx, p, jobID); err != nil {\n\t\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 run failed\",\n\t\t\t\tzap.Int64(\"source_object_id\", p.SourceObjectID),\n\t\t\t\tzap.String(\"trace_id\", p.TraceID),\n\t\t\t\tzap.String(\"job_id\", jobID),\n\t\t\t\tzap.Error(err))\n\t\t}\n\t}(p, jobID, msg.Header)",
+          "flow": "1. Handle sets defer recover() at line 152. 2. Handle spawns go func at line 183 using context.Background() without recover inside the goroutine."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2166,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6634,
+                "INCORRECT": 0.2121,
+                "UNSUPPORTED": 0.1246
+              },
+              "confidence": 0.2166,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 999,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "1. Handle sets defer recover() at line 152. 2. Handle spawns go func at line 183 using context.Background() without recover inside the goroutine.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:151-199\nfunc (r *SnapshotRunner) Handle(msg *nats.Msg) {\n\tdefer func() {\n\t\tif rec := recover(); rec != nil {\n\t\t\tctx := observability.ExtractNATSHeader(context.Background(), msg.Header)\n\t\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 panic\", zap.Any(\"panic\", rec))\n\t\t}\n\t}()\n\n\tvar p snapshotV2Payload\n\tif err := json.Unmarshal(msg.Data, &p); err != nil {\n\t\tctx := observability.ExtractNATSHeader(context.Background(), msg.Header)\n\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 invalid payload\",\n\t\t\tzap.Error(err), zap.ByteString(\"data\", msg.Data))\n\t\treturn\n\t}\n\tif p.SourceObjectID <= 0 {\n\t\tctx := observability.ExtractNATSHeader(context.Background(), msg.Header)\n\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 source_object_id missing\", zap.ByteString(\"data\", msg.Data))\n\t\treturn\n\t}\n\tif p.TraceID == \"\" {\n\t\tp.TraceID = strings.TrimSpace(msg.Header.Get(\"Cdc-Correlation-Id\"))\n\t}\n\tif p.TraceID == \"\" {\n\t\tp.TraceID = fmt.Sprintf(\"worker-snapshot.v2-%d\", time.Now().UnixNano())\n\t}\n\tif p.BatchSize > snapshotV2MaxBatchSize {\n\t\tp.BatchSize = snapshotV2MaxBatchSize\n\t}\n\n\tjobID := msg.Header.Get(\"Cdc-Job-Id\")\n\n\tgo func(p snapshotV2Payload, jobID string, header nats.Header) {\n\t\tctx := observability.ExtractNATSHeader(context.Background(), map[string][]string(header))\n\t\tctx, span := observability.ChildSpan(ctx, \"nats.SnapshotV2Runner\")\n\t\tdefer span.End()\n\n\t\tif sc := span.SpanContext(); sc.IsValid() {\n\t\t\tp.TraceID = sc.TraceID().String()\n\t\t}\n\n\t\tif err := r.runSnapshot(ctx, p, jobID); err != nil {\n\t\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 run failed\",\n\t\t\t\tzap.Int64(\"source_object_id\", p.SourceObjectID),\n\t\t\t\tzap.String(\"trace_id\", p.TraceID),\n\t\t\t\tzap.String(\"job_id\", jobID),\n\t\t\t\tzap.Error(err))\n\t\t}\n\t}(p, jobID, msg.Header)",
+          "claim": "In snapshot_runner_handler.go lines 151-199, Handle spawns runSnapshot in an untracked goroutine with context.Background() and places defer recover() outside the spawned goroutine."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4199,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8616,
+                "NO": 0.1384
+              },
+              "confidence": 0.4199,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 893,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:151-199\nfunc (r *SnapshotRunner) Handle(msg *nats.Msg) {\n\tdefer func() {\n\t\tif rec := recover(); rec != nil {\n\t\t\tctx := observability.ExtractNATSHeader(context.Background(), msg.Header)\n\t\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 panic\", zap.Any(\"panic\", rec))\n\t\t}\n\t}()\n\n\tvar p snapshotV2Payload\n\tif err := json.Unmarshal(msg.Data, &p); err != nil {\n\t\tctx := observability.ExtractNATSHeader(context.Background(), msg.Header)\n\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 invalid payload\",\n\t\t\tzap.Error(err), zap.ByteString(\"data\", msg.Data))\n\t\treturn\n\t}\n\tif p.SourceObjectID <= 0 {\n\t\tctx := observability.ExtractNATSHeader(context.Background(), msg.Header)\n\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 source_object_id missing\", zap.ByteString(\"data\", msg.Data))\n\t\treturn\n\t}\n\tif p.TraceID == \"\" {\n\t\tp.TraceID = strings.TrimSpace(msg.Header.Get(\"Cdc-Correlation-Id\"))\n\t}\n\tif p.TraceID == \"\" {\n\t\tp.TraceID = fmt.Sprintf(\"worker-snapshot.v2-%d\", time.Now().UnixNano())\n\t}\n\tif p.BatchSize > snapshotV2MaxBatchSize {\n\t\tp.BatchSize = snapshotV2MaxBatchSize\n\t}\n\n\tjobID := msg.Header.Get(\"Cdc-Job-Id\")\n\n\tgo func(p snapshotV2Payload, jobID string, header nats.Header) {\n\t\tctx := observability.ExtractNATSHeader(context.Background(), map[string][]string(header))\n\t\tctx, span := observability.ChildSpan(ctx, \"nats.SnapshotV2Runner\")\n\t\tdefer span.End()\n\n\t\tif sc := span.SpanContext(); sc.IsValid() {\n\t\t\tp.TraceID = sc.TraceID().String()\n\t\t}\n\n\t\tif err := r.runSnapshot(ctx, p, jobID); err != nil {\n\t\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 run failed\",\n\t\t\t\tzap.Int64(\"source_object_id\", p.SourceObjectID),\n\t\t\t\tzap.String(\"trace_id\", p.TraceID),\n\t\t\t\tzap.String(\"job_id\", jobID),\n\t\t\t\tzap.Error(err))\n\t\t}\n\t}(p, jobID, msg.Header)",
+          "claim": "In snapshot_runner_handler.go lines 151-199, Handle spawns runSnapshot in an untracked goroutine with context.Background() and places defer recover() outside the spawned goroutine."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "claim",
+    "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-2 adds Start, Stop, spawnSnapshot, trackAndHeartbeatProgress (15s ticker), markProgressPaused, ensureProgressNotStuckRunning, and recoverOrphanedSnapshots (30s ticker) to snapshot_runner_state.go.",
+    "flow": "1. Start launches a 30s ticker calling recoverOrphanedSnapshots. 2. Stop cancels active snapshot contexts and calls markProgressPaused. 3. trackAndHeartbeatProgress updates updated_at every 15s while status is running.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1345-1673\n\t}()\n```\n2. Kích hoạt Heartbeat nền `15s` ngay sau khi `claimProgress` thành công (`lines 478-482`), kiểm tra `ctx.Err()` ở đầu vòng lặp (`line 652`), và bỏ `strconv.ParseFloat` khi phân trang PostgreSQL (`lines 718-723`):\n```go\n\tprogressID = claim.rowID\n\tlastSeen := claim.lastSeen\n\trunCtx, stopHeartbeat := r.trackAndHeartbeatProgress(ctx, progressID)\n\tdefer stopHeartbeat()\n\tctx = runCtx\n```\n```go\n\tfor {\n\t\tif ctx.Err() != nil {\n\t\t\tr.markProgressPaused(progressID)\n\t\t\treturn nil\n\t\t}\n\t\tif isPaused.Load() {\n```\n```go\n\t\t\t} else {\n\t\t\t\tvar pkVal interface{} = lastSeen\n\t\t\t\tif isDigitsOnly(lastSeen) {\n\t\t\t\t\tif val, pErr := strconv.ParseInt(lastSeen, 10, 64); pErr == nil {\n\t\t\t\t\t\tpkVal = val\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tquery := fmt.Sprintf(\"SELECT row_to_json(t) FROM (SELECT * FROM %s WHERE %s > $1 ORDER BY %s ASC LIMIT $2) t\", tableName, pkName, pkName)\n\t\t\t\trows, err = pgConn.Query(pgQueryCtx, query, pkVal, p.BatchSize)\n\t\t\t}\n```\n\n#### Demo P12-2: `centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go`\nBổ sung các hàm quản lý vòng đời (`Start`, `Stop`, `spawnSnapshot`, `trackAndHeartbeatProgress`, `markProgressPaused`, `ensureProgressNotStuckRunning`, `recoverOrphanedSnapshots`, `isDigitsOnly`) vào cuối tệp `snapshot_runner_state.go`:\n```go\nfunc isDigitsOnly(s string) bool {\n\tif s == \"\" || len(s) > 19 {\n\t\treturn false\n\t}\n\tfor i := 0; i < len(s); i++ {\n\t\tif s[i] < '0' || s[i] > '9' {\n\t\t\treturn false\n\t\t}\n\t}\n\treturn true\n}\n\nfunc (r *SnapshotRunner) baseContext() context.Context {\n\tr.lifecycleMu.Lock()\n\tdefer r.lifecycleMu.Unlock()\n\tif r.lifecycleCtx != nil {\n\t\treturn r.lifecycleCtx\n\t}\n\treturn context.Background()\n}\n\nfunc (r *SnapshotRunner) Start(ctx context.Context) {\n\tif ctx == nil {\n\t\tctx = context.Background()\n\t}\n\tr.lifecycleMu.Lock()\n\tif r.lifecycleCancel != nil {\n\t\tr.lifecycleMu.Unlock()\n\t\treturn\n\t}\n\tr.lifecycleCtx, r.lifecycleCancel = context.WithCancel(ctx)\n\tif r.activeProgressIDs == nil {\n\t\tr.activeProgressIDs = make(map[int64]context.CancelFunc)\n\t}\n\tloopCtx := r.lifecycleCtx\n\tr.lifecycleMu.Unlock()\n\n\tr.activeWg.Add(1)\n\tgo func() {\n\t\tdefer r.activeWg.Done()\n\t\tr.recoverOrphanedSnapshots(loopCtx)\n\t\tticker := time.NewTicker(30 * time.Second)\n\t\tdefer ticker.Stop()\n\t\tfor {\n\t\t\tselect {\n\t\t\tcase <-loopCtx.Done():\n\t\t\t\treturn\n\t\t\tcase <-ticker.C:\n\t\t\t\tr.recoverOrphanedSnapshots(loopCtx)\n\t\t\t}\n\t\t}\n\t}()\n}\n\nfunc (r *SnapshotRunner) Stop() {\n\tr.lifecycleMu.Lock()\n\tcancel := r.lifecycleCancel\n\tr.lifecycleCancel = nil\n\tactiveIDs := make([]int64, 0, len(r.activeProgressIDs))\n\tfor id, fn := range r.activeProgressIDs {\n\t\tactiveIDs = append(activeIDs, id)\n\t\tif fn != nil {\n\t\t\tfn()\n\t\t}\n\t}\n\tr.lifecycleMu.Unlock()\n\n\tif cancel != nil {\n\t\tcancel()\n\t}\n\n\tdoneCh := make(chan struct{})\n\tgo func() {\n\t\tr.activeWg.Wait()\n\t\tclose(doneCh)\n\t}()\n\tselect {\n\tcase <-doneCh:\n\tcase <-time.After(10 * time.Second):\n\t}\n\n\tfor _, id := range activeIDs {\n\t\tr.markProgressPaused(id)\n\t}\n}\n\nfunc (r *SnapshotRunner) spawnSnapshot(p snapshotV2Payload, jobID string, header map[string][]string) {\n\tr.activeWg.Add(1)\n\tgo func(p snapshotV2Payload, jobID string, header map[string][]string) {\n\t\tdefer r.activeWg.Done()\n\t\tdefer func() {\n\t\t\tif rec := recover(); rec != nil {\n\t\t\t\tif r.logger != nil {\n\t\t\t\t\tr.logger.Error(\"snapshot.v2 goroutine panic recovered\",\n\t\t\t\t\t\tzap.Int64(\"source_object_id\", p.SourceObjectID),\n\t\t\t\t\t\tzap.Int64(\"progress_id\", p.ProgressID),\n\t\t\t\t\t\tzap.Any(\"panic\", rec))\n\t\t\t\t}\n\t\t\t\tif p.ProgressID > 0 {\n\t\t\t\t\tr.markProgressError(context.Background(), p.ProgressID, fmt.Sprintf(\"panic: %v\", rec))\n\t\t\t\t}\n\t\t\t}\n\t\t}()\n\n\t\tbaseCtx := r.baseContext()\n\t\tctx := observability.ExtractNATSHeader(baseCtx, header)\n\t\tctx, span := observability.ChildSpan(ctx, \"nats.SnapshotV2Runner\")\n\t\tdefer span.End()\n\n\t\tif sc := span.SpanContext(); sc.IsValid() && p.TraceID == \"\" {\n\t\t\tp.TraceID = sc.TraceID().String()\n\t\t}\n\n\t\tif err := r.runSnapshot(ctx, p, jobID); err != nil {\n\t\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 run failed\",\n\t\t\t\tzap.Int64(\"source_object_id\", p.SourceObjectID),\n\t\t\t\tzap.String(\"trace_id\", p.TraceID),\n\t\t\t\tzap.String(\"job_id\", jobID),\n\t\t\t\tzap.Error(err))\n\t\t}\n\t}(p, jobID, header)\n}\n\nfunc (r *SnapshotRunner) trackAndHeartbeatProgress(parentCtx context.Context, progressID int64) (context.Context, func()) {\n\tif parentCtx == nil {\n\t\tparentCtx = context.Background()\n\t}\n\trunCtx, runCancel := context.WithCancel(parentCtx)\n\n\tr.lifecycleMu.Lock()\n\tif r.activeProgressIDs == nil {\n\t\tr.activeProgressIDs = make(map[int64]context.CancelFunc)\n\t}\n\tr.activeProgressIDs[progressID] = runCancel\n\tr.lifecycleMu.Unlock()\n\n\thbDone := make(chan struct{})\n\tgo func() {\n\t\tdefer close(hbDone)\n\t\tticker := time.NewTicker(15 * time.Second)\n\t\tdefer ticker.Stop()\n\t\tfor {\n\t\t\tselect {\n\t\t\tcase <-runCtx.Done():\n\t\t\t\treturn\n\t\t\tcase <-ticker.C:\n\t\t\t\tif r.db != nil {\n\t\t\t\t\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\t\t\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\t\t\t\tSET updated_at = NOW()\n\t\t\t\t\t\tWHERE id = ? AND status = 'running'\n\t\t\t\t\t`, progressID).Error\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}()\n\n\tstop := func() {\n\t\trunCancel()\n\t\t<-hbDone\n\t\tr.lifecycleMu.Lock()\n\t\tdelete(r.activeProgressIDs, progressID)\n\t\tr.lifecycleMu.Unlock()\n\t}\n\treturn runCtx, stop\n}\n\nfunc (r *SnapshotRunner) isProgressActiveInMemory(progressID int64) bool {\n\tr.lifecycleMu.Lock()\n\tdefer r.lifecycleMu.Unlock()\n\t_, ok := r.activeProgressIDs[progressID]\n\treturn ok\n}\n\nfunc (r *SnapshotRunner) markProgressPaused(progressID int64) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}\n\nfunc (r *SnapshotRunner) ensureProgressNotStuckRunning(progressID int64, retErr error) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\tif retErr != nil {\n\t\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\tSET status = 'error',\n\t\t\t    error_msg = COALESCE(NULLIF(error_msg, ''), ?),\n\t\t\t    updated_at = NOW(),\n\t\t\t    finished_at = COALESCE(finished_at, NOW())\n\t\t\tWHERE id = ? AND status = 'running'\n\t\t`, retErr.Error(), progressID).Error\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}\n\nfunc (r *SnapshotRunner) recoverOrphanedSnapshots(ctx context.Context) {\n\tif r == nil || r.db == nil {\n\t\treturn\n\t}\n\ttype orphanRow struct {\n\t\tID              int64   `gorm:\"column:id\"`\n\t\tSourceObjectID  int64   `gorm:\"column:source_object_id\"`\n\t\tShadowBindingID *int64  `gorm:\"column:shadow_binding_id\"`\n\t\tTraceID         *string `gorm:\"column:trace_id\"`\n\t\tStatus          string  `gorm:\"column:status\"`\n\t}\n\tvar rows []orphanRow\n\terr := r.db.WithContext(ctx).Raw(`\n\t\tSELECT id, source_object_id, shadow_binding_id, trace_id, status\n\t\tFROM cdc_system.snapshot_progress\n\t\tWHERE (\n\t\t\tstatus = 'running'\n\t\t\tAND updated_at < NOW() - INTERVAL '45 seconds'\n\t\t) OR (\n\t\t\tstatus IN ('paused', 'error')\n\t\t\tAND error_msg LIKE 'Heartbeat timeout:%'\n\t\t\tAND last_seen_id IS NOT NULL\n\t\t\tAND last_seen_id <> ''\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t)\n\t\tORDER BY id ASC\n\t\tLIMIT 10\n\t`).Scan(&rows).Error\n\tif err != nil || len(rows) == 0 {\n\t\treturn\n\t}\n\n\tfor _, row := range rows {\n\t\tif ctx.Err() != nil {\n\t\t\treturn\n\t\t}\n\t\tif r.isProgressActiveInMemory(row.ID) {\n\t\t\tcontinue\n\t\t}\n\t\tres := r.db.WithContext(ctx).Exec(`\n\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\tSET status = 'paused',\n\t\t\t    error_msg = NULL,\n\t\t\t    finished_at = NULL,\n\t\t\t    updated_at = NOW()\n\t\t\tWHERE id = ? AND status IN ('running', 'paused', 'error')\n\t\t`, row.ID)\n\t\tif res.Error != nil || res.RowsAffected == 0 {\n\t\t\tcontinue\n\t\t}\n\n\t\tvar bindingID int64\n\t\tif row.ShadowBindingID != nil {\n\t\t\tbindingID = *row.ShadowBindingID\n\t\t}\n\t\ttraceID := \"\"\n\t\tif row.TraceID != nil {\n\t\t\ttraceID = *row.TraceID\n\t\t}\n\t\tif r.logger != nil {\n\t\t\tr.logger.Info(\"snapshot.v2 auto-resuming interrupted snapshot progress\",\n\t\t\t\tzap.Int64(\"progress_id\", row.ID),\n\t\t\t\tzap.Int64(\"source_object_id\", row.SourceObjectID),\n\t\t\t\tzap.Int64(\"shadow_binding_id\", bindingID),\n\t\t\t\tzap.String(\"prev_status\", row.Status),\n\t\t\t\tzap.String(\"trace_id\", traceID))\n\t\t}\n\t\tr.spawnSnapshot(snapshotV2Payload{\n\t\t\tSourceObjectID:  row.SourceObjectID,\n\t\t\tShadowBindingID: bindingID,\n\t\t\tProgressID:      row.ID,\n\t\t\tTraceID:         traceID,\n\t\t\tAction:          \"auto-resume\",\n\t\t\tOrigin:          \"worker-recovery\",\n\t\t\tOverwrite:       false,\n\t\t}, \"\", nil)\n\t}\n}\n```\nVà thêm import `\"centralized-data-service/pkgs/observability\"` vào đầu `snapshot_runner_state.go`:\n```go\nimport (\n\t\"centralized-data-service/internal/activity\"\n\t\"centralized-data-service/internal/model/system\"\n\t\"centralized-data-service/pkgs/observability\"",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2407,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.684,
+                "INCORRECT": 0.195,
+                "UNSUPPORTED": 0.121
+              },
+              "confidence": 0.2407,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-2 adds Start, Stop, spawnSnapshot, trackAndHeartbeatProgress (15s ticker), markProgressPaused, ensureProgressNotStuckRunning, and recoverOrphanedSnapshots (30s ticker) to snapshot_runner_state.go.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1345-1673\n\t}()\n```\n2. Kích hoạt Heartbeat nền `15s` ngay sau khi `claimProgress` thành công (`lines 478-482`), kiểm tra `ctx.Err()` ở đầu vòng lặp (`line 652`), và bỏ `strconv.ParseFloat` khi phân trang PostgreSQL (`lines 718-723`):\n```go\n\tprogressID = claim.rowID\n\tlastSeen := claim.lastSeen\n\trunCtx, stopHeartbeat := r.trackAndHeartbeatProgress(ctx, progressID)\n\tdefer stopHeartbeat()\n\tctx = runCtx\n```\n```go\n\tfor {\n\t\tif ctx.Err() != nil {\n\t\t\tr.markProgressPaused(progressID)\n\t\t\treturn nil\n\t\t}\n\t\tif isPaused.Load() {\n```\n```go\n\t\t\t} else {\n\t\t\t\tvar pkVal interface{} = lastSeen\n\t\t\t\tif isDigitsOnly(lastSeen) {\n\t\t\t\t\tif val, pErr := strconv.ParseInt(lastSeen, 10, 64); pErr == nil {\n\t\t\t\t\t\tpkVal = val\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tquery := fmt.Sprintf(\"SELECT row_to_json(t) FROM (SELECT * FROM %s WHERE %s > $1 ORDER BY %s ASC LIMIT $2) t\", tableName, pkName, pkName)\n\t\t\t\trows, err = pgConn.Query(pgQueryCtx, query, pkVal, p.BatchSize)\n\t\t\t}\n```\n\n#### Demo P12-2: `centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go`\nBổ sung các hàm quản lý vòng đời (`Start`, `Stop`, `spawnSnapshot`, `trackAndHeartbeatProgress`, `markProgressPaused`, `ensureProgressNotStuckRunning`, `recoverOrphanedSnapshots`, `isDigitsOnly`) vào cuối tệp `snapshot_runner_state.go`:\n```go\nfunc isDigitsOnly(s string) bool {\n\tif s == \"\" || len(s) > 19 {\n\t\treturn false\n\t}\n\tfor i := 0; i < len(s); i++ {\n\t\tif s[i] < '0' || s[i] > '9' {\n\t\t\treturn false\n\t\t}\n\t}\n\treturn true\n}\n\nfunc (r *SnapshotRunner) baseContext() context.Context {\n\tr.lifecycleMu.Lock()\n\tdefer r.lifecycleMu.Unlock()\n\tif r.lifecycleCtx != nil {\n\t\treturn r.lifecycleCtx\n\t}\n\treturn context.Background()\n}\n\nfunc (r *SnapshotRunner) Start(ctx context.Context) {\n\tif ctx == nil {\n\t\tctx = context.Background()\n\t}\n\tr.lifecycleMu.Lock()\n\tif r.lifecycleCancel != nil {\n\t\tr.lifecycleMu.Unlock()\n\t\treturn\n\t}\n\tr.lifecycleCtx, r.lifecycleCancel = context.WithCancel(ctx)\n\tif r.activeProgressIDs == nil {\n\t\tr.activeProgressIDs = make(map[int64]context.CancelFunc)\n\t}\n\tloopCtx := r.lifecycleCtx\n\tr.lifecycleMu.Unlock()\n\n\tr.activeWg.Add(1)\n\tgo func() {\n\t\tdefer r.activeWg.Done()\n\t\tr.recoverOrphanedSnapshots(loopCtx)\n\t\tticker := time.NewTicker(30 * time.Second)\n\t\tdefer ticker.Stop()\n\t\tfor {\n\t\t\tselect {\n\t\t\tcase <-loopCtx.Done():\n\t\t\t\treturn\n\t\t\tcase <-ticker.C:\n\t\t\t\tr.recoverOrphanedSnapshots(loopCtx)\n\t\t\t}\n\t\t}\n\t}()\n}\n\nfunc (r *SnapshotRunner) Stop() {\n\tr.lifecycleMu.Lock()\n\tcancel := r.lifecycleCancel\n\tr.lifecycleCancel = nil\n\tactiveIDs := make([]int64, 0, len(r.activeProgressIDs))\n\tfor id, fn := range r.activeProgressIDs {\n\t\tactiveIDs = append(activeIDs, id)\n\t\tif fn != nil {\n\t\t\tfn()\n\t\t}\n\t}\n\tr.lifecycleMu.Unlock()\n\n\tif cancel != nil {\n\t\tcancel()\n\t}\n\n\tdoneCh := make(chan struct{})\n\tgo func() {\n\t\tr.activeWg.Wait()\n\t\tclose(doneCh)\n\t}()\n\tselect {\n\tcase <-doneCh:\n\tcase <-time.After(10 * time.Second):\n\t}\n\n\tfor _, id := range activeIDs {\n\t\tr.markProgressPaused(id)\n\t}\n}\n\nfunc (r *SnapshotRunner) spawnSnapshot(p snapshotV2Payload, jobID string, header map[string][]string) {\n\tr.activeWg.Add(1)\n\tgo func(p snapshotV2Payload, jobID string, header map[string][]string) {\n\t\tdefer r.activeWg.Done()\n\t\tdefer func() {\n\t\t\tif rec := recover(); rec != nil {\n\t\t\t\tif r.logger != nil {\n\t\t\t\t\tr.logger.Error(\"snapshot.v2 goroutine panic recovered\",\n\t\t\t\t\t\tzap.Int64(\"source_object_id\", p.SourceObjectID),\n\t\t\t\t\t\tzap.Int64(\"progress_id\", p.ProgressID),\n\t\t\t\t\t\tzap.Any(\"panic\", rec))\n\t\t\t\t}\n\t\t\t\tif p.ProgressID > 0 {\n\t\t\t\t\tr.markProgressError(context.Background(), p.ProgressID, fmt.Sprintf(\"panic: %v\", rec))\n\t\t\t\t}\n\t\t\t}\n\t\t}()\n\n\t\tbaseCtx := r.baseContext()\n\t\tctx := observability.ExtractNATSHeader(baseCtx, header)\n\t\tctx, span := observability.ChildSpan(ctx, \"nats.SnapshotV2Runner\")\n\t\tdefer span.End()\n\n\t\tif sc := span.SpanContext(); sc.IsValid() && p.TraceID == \"\" {\n\t\t\tp.TraceID = sc.TraceID().String()\n\t\t}\n\n\t\tif err := r.runSnapshot(ctx, p, jobID); err != nil {\n\t\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 run failed\",\n\t\t\t\tzap.Int64(\"source_object_id\", p.SourceObjectID),\n\t\t\t\tzap.String(\"trace_id\", p.TraceID),\n\t\t\t\tzap.String(\"job_id\", jobID),\n\t\t\t\tzap.Error(err))\n\t\t}\n\t}(p, jobID, header)\n}\n\nfunc (r *SnapshotRunner) trackAndHeartbeatProgress(parentCtx context.Context, progressID int64) (context.Context, func()) {\n\tif parentCtx == nil {\n\t\tparentCtx = context.Background()\n\t}\n\trunCtx, runCancel := context.WithCancel(parentCtx)\n\n\tr.lifecycleMu.Lock()\n\tif r.activeProgressIDs == nil {\n\t\tr.activeProgressIDs = make(map[int64]context.CancelFunc)\n\t}\n\tr.activeProgressIDs[progressID] = runCancel\n\tr.lifecycleMu.Unlock()\n\n\thbDone := make(chan struct{})\n\tgo func() {\n\t\tdefer close(hbDone)\n\t\tticker := time.NewTicker(15 * time.Second)\n\t\tdefer ticker.Stop()\n\t\tfor {\n\t\t\tselect {\n\t\t\tcase <-runCtx.Done():\n\t\t\t\treturn\n\t\t\tcase <-ticker.C:\n\t\t\t\tif r.db != nil {\n\t\t\t\t\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\t\t\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\t\t\t\tSET updated_at = NOW()\n\t\t\t\t\t\tWHERE id = ? AND status = 'running'\n\t\t\t\t\t`, progressID).Error\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}()\n\n\tstop := func() {\n\t\trunCancel()\n\t\t<-hbDone\n\t\tr.lifecycleMu.Lock()\n\t\tdelete(r.activeProgressIDs, progressID)\n\t\tr.lifecycleMu.Unlock()\n\t}\n\treturn runCtx, stop\n}\n\nfunc (r *SnapshotRunner) isProgressActiveInMemory(progressID int64) bool {\n\tr.lifecycleMu.Lock()\n\tdefer r.lifecycleMu.Unlock()\n\t_, ok := r.activeProgressIDs[progressID]\n\treturn ok\n}\n\nfunc (r *SnapshotRunner) markProgressPaused(progressID int64) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}\n\nfunc (r *SnapshotRunner) ensureProgressNotStuckRunning(progressID int64, retErr error) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\tif retErr != nil {\n\t\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\tSET status = 'error',\n\t\t\t    error_msg = COALESCE(NULLIF(error_msg, ''), ?),\n\t\t\t    updated_at = NOW(),\n\t\t\t    finished_at = COALESCE(finished_at, NOW())\n\t\t\tWHERE id = ? AND status = 'running'\n\t\t`, retErr.Error(), progressID).Error\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}\n\nfunc (r *SnapshotRunner) recoverOrphanedSnapshots(ctx context.Context) {\n\tif r == nil || r.db == nil {\n\t\treturn\n\t}\n\ttype orphanRow struct {\n\t\tID              int64   `gorm:\"column:id\"`\n\t\tSourceObjectID  int64   `gorm:\"column:source_object_id\"`\n\t\tShadowBindingID *int64  `gorm:\"column:shadow_binding_id\"`\n\t\tTraceID         *string `gorm:\"column:trace_id\"`\n\t\tStatus          string  `gorm:\"column:status\"`\n\t}\n\tvar rows []orphanRow\n\terr := r.db.WithContext(ctx).Raw(`\n\t\tSELECT id, source_object_id, shadow_binding_id, trace_id, status\n\t\tFROM cdc_system.snapshot_progress\n\t\tWHERE (\n\t\t\tstatus = 'running'\n\t\t\tAND updated_at < NOW() - INTERVAL '45 seconds'\n\t\t) OR (\n\t\t\tstatus IN ('paused', 'error')\n\t\t\tAND error_msg LIKE 'Heartbeat timeout:%'\n\t\t\tAND last_seen_id IS NOT NULL\n\t\t\tAND last_seen_id <> ''\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t)\n\t\tORDER BY id ASC\n\t\tLIMIT 10\n\t`).Scan(&rows).Error\n\tif err != nil || len(rows) == 0 {\n\t\treturn\n\t}\n\n\tfor _, row := range rows {\n\t\tif ctx.Err() != nil {\n\t\t\treturn\n\t\t}\n\t\tif r.isProgressActiveInMemory(row.ID) {\n\t\t\tcontinue\n\t\t}\n\t\tres := r.db.WithContext(ctx).Exec(`\n\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\tSET status = 'paused',\n\t\t\t    error_msg = NULL,\n\t\t\t    finished_at = NULL,\n\t\t\t    updated_at = NOW()\n\t\t\tWHERE id = ? AND status IN ('running', 'paused', 'error')\n\t\t`, row.ID)\n\t\tif res.Error != nil || res.RowsAffected == 0 {\n\t\t\tcontinue\n\t\t}\n\n\t\tvar bindingID int64\n\t\tif row.ShadowBindingID != nil {\n\t\t\tbindingID = *row.ShadowBindingID\n\t\t}\n\t\ttraceID := \"\"\n\t\tif row.TraceID != nil {\n\t\t\ttraceID = *row.TraceID\n\t\t}\n\t\tif r.logger != nil {\n\t\t\tr.logger.Info(\"snapshot.v2 auto-resuming interrupted snapshot progress\",\n\t\t\t\tzap.Int64(\"progress_id\", row.ID),\n\t\t\t\tzap.Int64(\"source_object_id\", row.SourceObjectID),\n\t\t\t\tzap.Int64(\"shadow_binding_id\", bindingID),\n\t\t\t\tzap.String(\"prev_status\", row.Status),\n\t\t\t\tzap.String(\"trace_id\", traceID))\n\t\t}\n\t\tr.spawnSnapshot(snapshotV2Payload{\n\t\t\tSourceObjectID:  row.SourceObjectID,\n\t\t\tShadowBindingID: bindingID,\n\t\t\tProgressID:      row.ID,\n\t\t\tTraceID:         traceID,\n\t\t\tAction:          \"auto-resume\",\n\t\t\tOrigin:          \"worker-recovery\",\n\t\t\tOverwrite:       false,\n\t\t}, \"\", nil)\n\t}\n}\n```\nVà thêm import `\"centralized-data-service/pkgs/observability\"` vào đầu `snapshot_runner_state.go`:\n```go\nimport (\n\t\"centralized-data-service/internal/activity\"\n\t\"centralized-data-service/internal/model/system\"\n\t\"centralized-data-service/pkgs/observability\"",
+          "flow": "1. Start launches a 30s ticker calling recoverOrphanedSnapshots. 2. Stop cancels active snapshot contexts and calls markProgressPaused. 3. trackAndHeartbeatProgress updates updated_at every 15s while status is running."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1268,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4942,
+                "INCORRECT": 0.3947,
+                "UNSUPPORTED": 0.1111
+              },
+              "confidence": 0.1268,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "1. Start launches a 30s ticker calling recoverOrphanedSnapshots. 2. Stop cancels active snapshot contexts and calls markProgressPaused. 3. trackAndHeartbeatProgress updates updated_at every 15s while status is running.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1345-1673\n\t}()\n```\n2. Kích hoạt Heartbeat nền `15s` ngay sau khi `claimProgress` thành công (`lines 478-482`), kiểm tra `ctx.Err()` ở đầu vòng lặp (`line 652`), và bỏ `strconv.ParseFloat` khi phân trang PostgreSQL (`lines 718-723`):\n```go\n\tprogressID = claim.rowID\n\tlastSeen := claim.lastSeen\n\trunCtx, stopHeartbeat := r.trackAndHeartbeatProgress(ctx, progressID)\n\tdefer stopHeartbeat()\n\tctx = runCtx\n```\n```go\n\tfor {\n\t\tif ctx.Err() != nil {\n\t\t\tr.markProgressPaused(progressID)\n\t\t\treturn nil\n\t\t}\n\t\tif isPaused.Load() {\n```\n```go\n\t\t\t} else {\n\t\t\t\tvar pkVal interface{} = lastSeen\n\t\t\t\tif isDigitsOnly(lastSeen) {\n\t\t\t\t\tif val, pErr := strconv.ParseInt(lastSeen, 10, 64); pErr == nil {\n\t\t\t\t\t\tpkVal = val\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tquery := fmt.Sprintf(\"SELECT row_to_json(t) FROM (SELECT * FROM %s WHERE %s > $1 ORDER BY %s ASC LIMIT $2) t\", tableName, pkName, pkName)\n\t\t\t\trows, err = pgConn.Query(pgQueryCtx, query, pkVal, p.BatchSize)\n\t\t\t}\n```\n\n#### Demo P12-2: `centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go`\nBổ sung các hàm quản lý vòng đời (`Start`, `Stop`, `spawnSnapshot`, `trackAndHeartbeatProgress`, `markProgressPaused`, `ensureProgressNotStuckRunning`, `recoverOrphanedSnapshots`, `isDigitsOnly`) vào cuối tệp `snapshot_runner_state.go`:\n```go\nfunc isDigitsOnly(s string) bool {\n\tif s == \"\" || len(s) > 19 {\n\t\treturn false\n\t}\n\tfor i := 0; i < len(s); i++ {\n\t\tif s[i] < '0' || s[i] > '9' {\n\t\t\treturn false\n\t\t}\n\t}\n\treturn true\n}\n\nfunc (r *SnapshotRunner) baseContext() context.Context {\n\tr.lifecycleMu.Lock()\n\tdefer r.lifecycleMu.Unlock()\n\tif r.lifecycleCtx != nil {\n\t\treturn r.lifecycleCtx\n\t}\n\treturn context.Background()\n}\n\nfunc (r *SnapshotRunner) Start(ctx context.Context) {\n\tif ctx == nil {\n\t\tctx = context.Background()\n\t}\n\tr.lifecycleMu.Lock()\n\tif r.lifecycleCancel != nil {\n\t\tr.lifecycleMu.Unlock()\n\t\treturn\n\t}\n\tr.lifecycleCtx, r.lifecycleCancel = context.WithCancel(ctx)\n\tif r.activeProgressIDs == nil {\n\t\tr.activeProgressIDs = make(map[int64]context.CancelFunc)\n\t}\n\tloopCtx := r.lifecycleCtx\n\tr.lifecycleMu.Unlock()\n\n\tr.activeWg.Add(1)\n\tgo func() {\n\t\tdefer r.activeWg.Done()\n\t\tr.recoverOrphanedSnapshots(loopCtx)\n\t\tticker := time.NewTicker(30 * time.Second)\n\t\tdefer ticker.Stop()\n\t\tfor {\n\t\t\tselect {\n\t\t\tcase <-loopCtx.Done():\n\t\t\t\treturn\n\t\t\tcase <-ticker.C:\n\t\t\t\tr.recoverOrphanedSnapshots(loopCtx)\n\t\t\t}\n\t\t}\n\t}()\n}\n\nfunc (r *SnapshotRunner) Stop() {\n\tr.lifecycleMu.Lock()\n\tcancel := r.lifecycleCancel\n\tr.lifecycleCancel = nil\n\tactiveIDs := make([]int64, 0, len(r.activeProgressIDs))\n\tfor id, fn := range r.activeProgressIDs {\n\t\tactiveIDs = append(activeIDs, id)\n\t\tif fn != nil {\n\t\t\tfn()\n\t\t}\n\t}\n\tr.lifecycleMu.Unlock()\n\n\tif cancel != nil {\n\t\tcancel()\n\t}\n\n\tdoneCh := make(chan struct{})\n\tgo func() {\n\t\tr.activeWg.Wait()\n\t\tclose(doneCh)\n\t}()\n\tselect {\n\tcase <-doneCh:\n\tcase <-time.After(10 * time.Second):\n\t}\n\n\tfor _, id := range activeIDs {\n\t\tr.markProgressPaused(id)\n\t}\n}\n\nfunc (r *SnapshotRunner) spawnSnapshot(p snapshotV2Payload, jobID string, header map[string][]string) {\n\tr.activeWg.Add(1)\n\tgo func(p snapshotV2Payload, jobID string, header map[string][]string) {\n\t\tdefer r.activeWg.Done()\n\t\tdefer func() {\n\t\t\tif rec := recover(); rec != nil {\n\t\t\t\tif r.logger != nil {\n\t\t\t\t\tr.logger.Error(\"snapshot.v2 goroutine panic recovered\",\n\t\t\t\t\t\tzap.Int64(\"source_object_id\", p.SourceObjectID),\n\t\t\t\t\t\tzap.Int64(\"progress_id\", p.ProgressID),\n\t\t\t\t\t\tzap.Any(\"panic\", rec))\n\t\t\t\t}\n\t\t\t\tif p.ProgressID > 0 {\n\t\t\t\t\tr.markProgressError(context.Background(), p.ProgressID, fmt.Sprintf(\"panic: %v\", rec))\n\t\t\t\t}\n\t\t\t}\n\t\t}()\n\n\t\tbaseCtx := r.baseContext()\n\t\tctx := observability.ExtractNATSHeader(baseCtx, header)\n\t\tctx, span := observability.ChildSpan(ctx, \"nats.SnapshotV2Runner\")\n\t\tdefer span.End()\n\n\t\tif sc := span.SpanContext(); sc.IsValid() && p.TraceID == \"\" {\n\t\t\tp.TraceID = sc.TraceID().String()\n\t\t}\n\n\t\tif err := r.runSnapshot(ctx, p, jobID); err != nil {\n\t\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 run failed\",\n\t\t\t\tzap.Int64(\"source_object_id\", p.SourceObjectID),\n\t\t\t\tzap.String(\"trace_id\", p.TraceID),\n\t\t\t\tzap.String(\"job_id\", jobID),\n\t\t\t\tzap.Error(err))\n\t\t}\n\t}(p, jobID, header)\n}\n\nfunc (r *SnapshotRunner) trackAndHeartbeatProgress(parentCtx context.Context, progressID int64) (context.Context, func()) {\n\tif parentCtx == nil {\n\t\tparentCtx = context.Background()\n\t}\n\trunCtx, runCancel := context.WithCancel(parentCtx)\n\n\tr.lifecycleMu.Lock()\n\tif r.activeProgressIDs == nil {\n\t\tr.activeProgressIDs = make(map[int64]context.CancelFunc)\n\t}\n\tr.activeProgressIDs[progressID] = runCancel\n\tr.lifecycleMu.Unlock()\n\n\thbDone := make(chan struct{})\n\tgo func() {\n\t\tdefer close(hbDone)\n\t\tticker := time.NewTicker(15 * time.Second)\n\t\tdefer ticker.Stop()\n\t\tfor {\n\t\t\tselect {\n\t\t\tcase <-runCtx.Done():\n\t\t\t\treturn\n\t\t\tcase <-ticker.C:\n\t\t\t\tif r.db != nil {\n\t\t\t\t\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\t\t\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\t\t\t\tSET updated_at = NOW()\n\t\t\t\t\t\tWHERE id = ? AND status = 'running'\n\t\t\t\t\t`, progressID).Error\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}()\n\n\tstop := func() {\n\t\trunCancel()\n\t\t<-hbDone\n\t\tr.lifecycleMu.Lock()\n\t\tdelete(r.activeProgressIDs, progressID)\n\t\tr.lifecycleMu.Unlock()\n\t}\n\treturn runCtx, stop\n}\n\nfunc (r *SnapshotRunner) isProgressActiveInMemory(progressID int64) bool {\n\tr.lifecycleMu.Lock()\n\tdefer r.lifecycleMu.Unlock()\n\t_, ok := r.activeProgressIDs[progressID]\n\treturn ok\n}\n\nfunc (r *SnapshotRunner) markProgressPaused(progressID int64) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}\n\nfunc (r *SnapshotRunner) ensureProgressNotStuckRunning(progressID int64, retErr error) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\tif retErr != nil {\n\t\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\tSET status = 'error',\n\t\t\t    error_msg = COALESCE(NULLIF(error_msg, ''), ?),\n\t\t\t    updated_at = NOW(),\n\t\t\t    finished_at = COALESCE(finished_at, NOW())\n\t\t\tWHERE id = ? AND status = 'running'\n\t\t`, retErr.Error(), progressID).Error\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}\n\nfunc (r *SnapshotRunner) recoverOrphanedSnapshots(ctx context.Context) {\n\tif r == nil || r.db == nil {\n\t\treturn\n\t}\n\ttype orphanRow struct {\n\t\tID              int64   `gorm:\"column:id\"`\n\t\tSourceObjectID  int64   `gorm:\"column:source_object_id\"`\n\t\tShadowBindingID *int64  `gorm:\"column:shadow_binding_id\"`\n\t\tTraceID         *string `gorm:\"column:trace_id\"`\n\t\tStatus          string  `gorm:\"column:status\"`\n\t}\n\tvar rows []orphanRow\n\terr := r.db.WithContext(ctx).Raw(`\n\t\tSELECT id, source_object_id, shadow_binding_id, trace_id, status\n\t\tFROM cdc_system.snapshot_progress\n\t\tWHERE (\n\t\t\tstatus = 'running'\n\t\t\tAND updated_at < NOW() - INTERVAL '45 seconds'\n\t\t) OR (\n\t\t\tstatus IN ('paused', 'error')\n\t\t\tAND error_msg LIKE 'Heartbeat timeout:%'\n\t\t\tAND last_seen_id IS NOT NULL\n\t\t\tAND last_seen_id <> ''\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t)\n\t\tORDER BY id ASC\n\t\tLIMIT 10\n\t`).Scan(&rows).Error\n\tif err != nil || len(rows) == 0 {\n\t\treturn\n\t}\n\n\tfor _, row := range rows {\n\t\tif ctx.Err() != nil {\n\t\t\treturn\n\t\t}\n\t\tif r.isProgressActiveInMemory(row.ID) {\n\t\t\tcontinue\n\t\t}\n\t\tres := r.db.WithContext(ctx).Exec(`\n\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\tSET status = 'paused',\n\t\t\t    error_msg = NULL,\n\t\t\t    finished_at = NULL,\n\t\t\t    updated_at = NOW()\n\t\t\tWHERE id = ? AND status IN ('running', 'paused', 'error')\n\t\t`, row.ID)\n\t\tif res.Error != nil || res.RowsAffected == 0 {\n\t\t\tcontinue\n\t\t}\n\n\t\tvar bindingID int64\n\t\tif row.ShadowBindingID != nil {\n\t\t\tbindingID = *row.ShadowBindingID\n\t\t}\n\t\ttraceID := \"\"\n\t\tif row.TraceID != nil {\n\t\t\ttraceID = *row.TraceID\n\t\t}\n\t\tif r.logger != nil {\n\t\t\tr.logger.Info(\"snapshot.v2 auto-resuming interrupted snapshot progress\",\n\t\t\t\tzap.Int64(\"progress_id\", row.ID),\n\t\t\t\tzap.Int64(\"source_object_id\", row.SourceObjectID),\n\t\t\t\tzap.Int64(\"shadow_binding_id\", bindingID),\n\t\t\t\tzap.String(\"prev_status\", row.Status),\n\t\t\t\tzap.String(\"trace_id\", traceID))\n\t\t}\n\t\tr.spawnSnapshot(snapshotV2Payload{\n\t\t\tSourceObjectID:  row.SourceObjectID,\n\t\t\tShadowBindingID: bindingID,\n\t\t\tProgressID:      row.ID,\n\t\t\tTraceID:         traceID,\n\t\t\tAction:          \"auto-resume\",\n\t\t\tOrigin:          \"worker-recovery\",\n\t\t\tOverwrite:       false,\n\t\t}, \"\", nil)\n\t}\n}\n```\nVà thêm import `\"centralized-data-service/pkgs/observability\"` vào đầu `snapshot_runner_state.go`:\n```go\nimport (\n\t\"centralized-data-service/internal/activity\"\n\t\"centralized-data-service/internal/model/system\"\n\t\"centralized-data-service/pkgs/observability\"",
+          "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-2 adds Start, Stop, spawnSnapshot, trackAndHeartbeatProgress (15s ticker), markProgressPaused, ensureProgressNotStuckRunning, and recoverOrphanedSnapshots (30s ticker) to snapshot_runner_state.go."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.3864,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8485,
+                "NO": 0.1515
+              },
+              "confidence": 0.3864,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1345-1673\n\t}()\n```\n2. Kích hoạt Heartbeat nền `15s` ngay sau khi `claimProgress` thành công (`lines 478-482`), kiểm tra `ctx.Err()` ở đầu vòng lặp (`line 652`), và bỏ `strconv.ParseFloat` khi phân trang PostgreSQL (`lines 718-723`):\n```go\n\tprogressID = claim.rowID\n\tlastSeen := claim.lastSeen\n\trunCtx, stopHeartbeat := r.trackAndHeartbeatProgress(ctx, progressID)\n\tdefer stopHeartbeat()\n\tctx = runCtx\n```\n```go\n\tfor {\n\t\tif ctx.Err() != nil {\n\t\t\tr.markProgressPaused(progressID)\n\t\t\treturn nil\n\t\t}\n\t\tif isPaused.Load() {\n```\n```go\n\t\t\t} else {\n\t\t\t\tvar pkVal interface{} = lastSeen\n\t\t\t\tif isDigitsOnly(lastSeen) {\n\t\t\t\t\tif val, pErr := strconv.ParseInt(lastSeen, 10, 64); pErr == nil {\n\t\t\t\t\t\tpkVal = val\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tquery := fmt.Sprintf(\"SELECT row_to_json(t) FROM (SELECT * FROM %s WHERE %s > $1 ORDER BY %s ASC LIMIT $2) t\", tableName, pkName, pkName)\n\t\t\t\trows, err = pgConn.Query(pgQueryCtx, query, pkVal, p.BatchSize)\n\t\t\t}\n```\n\n#### Demo P12-2: `centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go`\nBổ sung các hàm quản lý vòng đời (`Start`, `Stop`, `spawnSnapshot`, `trackAndHeartbeatProgress`, `markProgressPaused`, `ensureProgressNotStuckRunning`, `recoverOrphanedSnapshots`, `isDigitsOnly`) vào cuối tệp `snapshot_runner_state.go`:\n```go\nfunc isDigitsOnly(s string) bool {\n\tif s == \"\" || len(s) > 19 {\n\t\treturn false\n\t}\n\tfor i := 0; i < len(s); i++ {\n\t\tif s[i] < '0' || s[i] > '9' {\n\t\t\treturn false\n\t\t}\n\t}\n\treturn true\n}\n\nfunc (r *SnapshotRunner) baseContext() context.Context {\n\tr.lifecycleMu.Lock()\n\tdefer r.lifecycleMu.Unlock()\n\tif r.lifecycleCtx != nil {\n\t\treturn r.lifecycleCtx\n\t}\n\treturn context.Background()\n}\n\nfunc (r *SnapshotRunner) Start(ctx context.Context) {\n\tif ctx == nil {\n\t\tctx = context.Background()\n\t}\n\tr.lifecycleMu.Lock()\n\tif r.lifecycleCancel != nil {\n\t\tr.lifecycleMu.Unlock()\n\t\treturn\n\t}\n\tr.lifecycleCtx, r.lifecycleCancel = context.WithCancel(ctx)\n\tif r.activeProgressIDs == nil {\n\t\tr.activeProgressIDs = make(map[int64]context.CancelFunc)\n\t}\n\tloopCtx := r.lifecycleCtx\n\tr.lifecycleMu.Unlock()\n\n\tr.activeWg.Add(1)\n\tgo func() {\n\t\tdefer r.activeWg.Done()\n\t\tr.recoverOrphanedSnapshots(loopCtx)\n\t\tticker := time.NewTicker(30 * time.Second)\n\t\tdefer ticker.Stop()\n\t\tfor {\n\t\t\tselect {\n\t\t\tcase <-loopCtx.Done():\n\t\t\t\treturn\n\t\t\tcase <-ticker.C:\n\t\t\t\tr.recoverOrphanedSnapshots(loopCtx)\n\t\t\t}\n\t\t}\n\t}()\n}\n\nfunc (r *SnapshotRunner) Stop() {\n\tr.lifecycleMu.Lock()\n\tcancel := r.lifecycleCancel\n\tr.lifecycleCancel = nil\n\tactiveIDs := make([]int64, 0, len(r.activeProgressIDs))\n\tfor id, fn := range r.activeProgressIDs {\n\t\tactiveIDs = append(activeIDs, id)\n\t\tif fn != nil {\n\t\t\tfn()\n\t\t}\n\t}\n\tr.lifecycleMu.Unlock()\n\n\tif cancel != nil {\n\t\tcancel()\n\t}\n\n\tdoneCh := make(chan struct{})\n\tgo func() {\n\t\tr.activeWg.Wait()\n\t\tclose(doneCh)\n\t}()\n\tselect {\n\tcase <-doneCh:\n\tcase <-time.After(10 * time.Second):\n\t}\n\n\tfor _, id := range activeIDs {\n\t\tr.markProgressPaused(id)\n\t}\n}\n\nfunc (r *SnapshotRunner) spawnSnapshot(p snapshotV2Payload, jobID string, header map[string][]string) {\n\tr.activeWg.Add(1)\n\tgo func(p snapshotV2Payload, jobID string, header map[string][]string) {\n\t\tdefer r.activeWg.Done()\n\t\tdefer func() {\n\t\t\tif rec := recover(); rec != nil {\n\t\t\t\tif r.logger != nil {\n\t\t\t\t\tr.logger.Error(\"snapshot.v2 goroutine panic recovered\",\n\t\t\t\t\t\tzap.Int64(\"source_object_id\", p.SourceObjectID),\n\t\t\t\t\t\tzap.Int64(\"progress_id\", p.ProgressID),\n\t\t\t\t\t\tzap.Any(\"panic\", rec))\n\t\t\t\t}\n\t\t\t\tif p.ProgressID > 0 {\n\t\t\t\t\tr.markProgressError(context.Background(), p.ProgressID, fmt.Sprintf(\"panic: %v\", rec))\n\t\t\t\t}\n\t\t\t}\n\t\t}()\n\n\t\tbaseCtx := r.baseContext()\n\t\tctx := observability.ExtractNATSHeader(baseCtx, header)\n\t\tctx, span := observability.ChildSpan(ctx, \"nats.SnapshotV2Runner\")\n\t\tdefer span.End()\n\n\t\tif sc := span.SpanContext(); sc.IsValid() && p.TraceID == \"\" {\n\t\t\tp.TraceID = sc.TraceID().String()\n\t\t}\n\n\t\tif err := r.runSnapshot(ctx, p, jobID); err != nil {\n\t\t\tobservability.Ctx(ctx, r.logger).Error(\"snapshot.v2 run failed\",\n\t\t\t\tzap.Int64(\"source_object_id\", p.SourceObjectID),\n\t\t\t\tzap.String(\"trace_id\", p.TraceID),\n\t\t\t\tzap.String(\"job_id\", jobID),\n\t\t\t\tzap.Error(err))\n\t\t}\n\t}(p, jobID, header)\n}\n\nfunc (r *SnapshotRunner) trackAndHeartbeatProgress(parentCtx context.Context, progressID int64) (context.Context, func()) {\n\tif parentCtx == nil {\n\t\tparentCtx = context.Background()\n\t}\n\trunCtx, runCancel := context.WithCancel(parentCtx)\n\n\tr.lifecycleMu.Lock()\n\tif r.activeProgressIDs == nil {\n\t\tr.activeProgressIDs = make(map[int64]context.CancelFunc)\n\t}\n\tr.activeProgressIDs[progressID] = runCancel\n\tr.lifecycleMu.Unlock()\n\n\thbDone := make(chan struct{})\n\tgo func() {\n\t\tdefer close(hbDone)\n\t\tticker := time.NewTicker(15 * time.Second)\n\t\tdefer ticker.Stop()\n\t\tfor {\n\t\t\tselect {\n\t\t\tcase <-runCtx.Done():\n\t\t\t\treturn\n\t\t\tcase <-ticker.C:\n\t\t\t\tif r.db != nil {\n\t\t\t\t\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\t\t\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\t\t\t\tSET updated_at = NOW()\n\t\t\t\t\t\tWHERE id = ? AND status = 'running'\n\t\t\t\t\t`, progressID).Error\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}()\n\n\tstop := func() {\n\t\trunCancel()\n\t\t<-hbDone\n\t\tr.lifecycleMu.Lock()\n\t\tdelete(r.activeProgressIDs, progressID)\n\t\tr.lifecycleMu.Unlock()\n\t}\n\treturn runCtx, stop\n}\n\nfunc (r *SnapshotRunner) isProgressActiveInMemory(progressID int64) bool {\n\tr.lifecycleMu.Lock()\n\tdefer r.lifecycleMu.Unlock()\n\t_, ok := r.activeProgressIDs[progressID]\n\treturn ok\n}\n\nfunc (r *SnapshotRunner) markProgressPaused(progressID int64) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}\n\nfunc (r *SnapshotRunner) ensureProgressNotStuckRunning(progressID int64, retErr error) {\n\tif progressID <= 0 || r.db == nil {\n\t\treturn\n\t}\n\tif retErr != nil {\n\t\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\tSET status = 'error',\n\t\t\t    error_msg = COALESCE(NULLIF(error_msg, ''), ?),\n\t\t\t    updated_at = NOW(),\n\t\t\t    finished_at = COALESCE(finished_at, NOW())\n\t\t\tWHERE id = ? AND status = 'running'\n\t\t`, retErr.Error(), progressID).Error\n\t\treturn\n\t}\n\t_ = r.db.WithContext(context.Background()).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'paused',\n\t\t    updated_at = NOW()\n\t\tWHERE id = ? AND status = 'running'\n\t`, progressID).Error\n}\n\nfunc (r *SnapshotRunner) recoverOrphanedSnapshots(ctx context.Context) {\n\tif r == nil || r.db == nil {\n\t\treturn\n\t}\n\ttype orphanRow struct {\n\t\tID              int64   `gorm:\"column:id\"`\n\t\tSourceObjectID  int64   `gorm:\"column:source_object_id\"`\n\t\tShadowBindingID *int64  `gorm:\"column:shadow_binding_id\"`\n\t\tTraceID         *string `gorm:\"column:trace_id\"`\n\t\tStatus          string  `gorm:\"column:status\"`\n\t}\n\tvar rows []orphanRow\n\terr := r.db.WithContext(ctx).Raw(`\n\t\tSELECT id, source_object_id, shadow_binding_id, trace_id, status\n\t\tFROM cdc_system.snapshot_progress\n\t\tWHERE (\n\t\t\tstatus = 'running'\n\t\t\tAND updated_at < NOW() - INTERVAL '45 seconds'\n\t\t) OR (\n\t\t\tstatus IN ('paused', 'error')\n\t\t\tAND error_msg LIKE 'Heartbeat timeout:%'\n\t\t\tAND last_seen_id IS NOT NULL\n\t\t\tAND last_seen_id <> ''\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t)\n\t\tORDER BY id ASC\n\t\tLIMIT 10\n\t`).Scan(&rows).Error\n\tif err != nil || len(rows) == 0 {\n\t\treturn\n\t}\n\n\tfor _, row := range rows {\n\t\tif ctx.Err() != nil {\n\t\t\treturn\n\t\t}\n\t\tif r.isProgressActiveInMemory(row.ID) {\n\t\t\tcontinue\n\t\t}\n\t\tres := r.db.WithContext(ctx).Exec(`\n\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\tSET status = 'paused',\n\t\t\t    error_msg = NULL,\n\t\t\t    finished_at = NULL,\n\t\t\t    updated_at = NOW()\n\t\t\tWHERE id = ? AND status IN ('running', 'paused', 'error')\n\t\t`, row.ID)\n\t\tif res.Error != nil || res.RowsAffected == 0 {\n\t\t\tcontinue\n\t\t}\n\n\t\tvar bindingID int64\n\t\tif row.ShadowBindingID != nil {\n\t\t\tbindingID = *row.ShadowBindingID\n\t\t}\n\t\ttraceID := \"\"\n\t\tif row.TraceID != nil {\n\t\t\ttraceID = *row.TraceID\n\t\t}\n\t\tif r.logger != nil {\n\t\t\tr.logger.Info(\"snapshot.v2 auto-resuming interrupted snapshot progress\",\n\t\t\t\tzap.Int64(\"progress_id\", row.ID),\n\t\t\t\tzap.Int64(\"source_object_id\", row.SourceObjectID),\n\t\t\t\tzap.Int64(\"shadow_binding_id\", bindingID),\n\t\t\t\tzap.String(\"prev_status\", row.Status),\n\t\t\t\tzap.String(\"trace_id\", traceID))\n\t\t}\n\t\tr.spawnSnapshot(snapshotV2Payload{\n\t\t\tSourceObjectID:  row.SourceObjectID,\n\t\t\tShadowBindingID: bindingID,\n\t\t\tProgressID:      row.ID,\n\t\t\tTraceID:         traceID,\n\t\t\tAction:          \"auto-resume\",\n\t\t\tOrigin:          \"worker-recovery\",\n\t\t\tOverwrite:       false,\n\t\t}, \"\", nil)\n\t}\n}\n```\nVà thêm import `\"centralized-data-service/pkgs/observability\"` vào đầu `snapshot_runner_state.go`:\n```go\nimport (\n\t\"centralized-data-service/internal/activity\"\n\t\"centralized-data-service/internal/model/system\"\n\t\"centralized-data-service/pkgs/observability\"",
+          "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-2 adds Start, Stop, spawnSnapshot, trackAndHeartbeatProgress (15s ticker), markProgressPaused, ensureProgressNotStuckRunning, and recoverOrphanedSnapshots (30s ticker) to snapshot_runner_state.go."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "claim",
+    "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-3 registers snapshotRunner.Start and snapshotRunner.Stop on WorkerServer via ws.RegisterOnStart and ws.RegisterOnStop in server_setup.go.",
+    "flow": "1. QueueSubscribe subscribes snapshotRunner.Handle. 2. ws.RegisterOnStart and ws.RegisterOnStop are registered right after.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1668-1713\nVà thêm import `\"centralized-data-service/pkgs/observability\"` vào đầu `snapshot_runner_state.go`:\n```go\nimport (\n\t\"centralized-data-service/internal/activity\"\n\t\"centralized-data-service/internal/model/system\"\n\t\"centralized-data-service/pkgs/observability\"\n\t\"context\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"time\"\n\n\t\"go.uber.org/zap\"\n\t\"gorm.io/gorm\"\n)\n```\n\n#### Demo P12-3: `centralized-data-service/internal/server/server_setup.go` (`lines 420-422`)\nĐăng ký `Start` và `Stop` của `snapshotRunner` vào vòng đời `WorkerServer`:\n```go\n\tnatsClient.Conn.QueueSubscribe(\"cdc.cmd.snapshot.v2\", \"cdc-snapshot-runner\", snapshotRunner.Handle)\n\tws.RegisterOnStart(func() { snapshotRunner.Start(context.Background()) })\n\tws.RegisterOnStop(func() { snapshotRunner.Stop() })\n```\n\n#### Demo P12-4: `cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go` (`lines 20-32`)\nChuyển các bản ghi `running` quá hạn 5 phút đã có `last_seen_id` sang `paused` (để tự động resume hoặc bấm Resume tiếp) thay vì đập chết thành `error`:\n```go\nfunc (r *SnapshotProgressReadRepoGorm) ListSnapshotProgress(ctx context.Context, f scheduler.SnapshotProgressFilter, page, pageSize int) ([]scheduler.SnapshotProgressRow, int64, error) {\n\t// Clean up stale \"running\" snapshot progress records (heartbeat timeout).\n\t// Rows that already recorded a last_seen_id checkpoint are marked as 'paused' so worker recovery can auto-resume them.\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN 'paused' ELSE 'error' END,\n\t\t    error_msg = 'Heartbeat timeout: progress was stuck in running state for too long (worker stopped)',\n\t\t    finished_at = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN NULL ELSE NOW() END,\n\t\t    updated_at = NOW()\n\t\tWHERE status = 'running'\n\t\t  AND updated_at < NOW() - INTERVAL '5 minutes'\n\t`)\n```\n\n\n\n\n\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6875,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9104,
+                "INCORRECT": 0.0738,
+                "UNSUPPORTED": 0.0158
+              },
+              "confidence": 0.6875,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 968,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-3 registers snapshotRunner.Start and snapshotRunner.Stop on WorkerServer via ws.RegisterOnStart and ws.RegisterOnStop in server_setup.go.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1668-1713\nVà thêm import `\"centralized-data-service/pkgs/observability\"` vào đầu `snapshot_runner_state.go`:\n```go\nimport (\n\t\"centralized-data-service/internal/activity\"\n\t\"centralized-data-service/internal/model/system\"\n\t\"centralized-data-service/pkgs/observability\"\n\t\"context\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"time\"\n\n\t\"go.uber.org/zap\"\n\t\"gorm.io/gorm\"\n)\n```\n\n#### Demo P12-3: `centralized-data-service/internal/server/server_setup.go` (`lines 420-422`)\nĐăng ký `Start` và `Stop` của `snapshotRunner` vào vòng đời `WorkerServer`:\n```go\n\tnatsClient.Conn.QueueSubscribe(\"cdc.cmd.snapshot.v2\", \"cdc-snapshot-runner\", snapshotRunner.Handle)\n\tws.RegisterOnStart(func() { snapshotRunner.Start(context.Background()) })\n\tws.RegisterOnStop(func() { snapshotRunner.Stop() })\n```\n\n#### Demo P12-4: `cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go` (`lines 20-32`)\nChuyển các bản ghi `running` quá hạn 5 phút đã có `last_seen_id` sang `paused` (để tự động resume hoặc bấm Resume tiếp) thay vì đập chết thành `error`:\n```go\nfunc (r *SnapshotProgressReadRepoGorm) ListSnapshotProgress(ctx context.Context, f scheduler.SnapshotProgressFilter, page, pageSize int) ([]scheduler.SnapshotProgressRow, int64, error) {\n\t// Clean up stale \"running\" snapshot progress records (heartbeat timeout).\n\t// Rows that already recorded a last_seen_id checkpoint are marked as 'paused' so worker recovery can auto-resume them.\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN 'paused' ELSE 'error' END,\n\t\t    error_msg = 'Heartbeat timeout: progress was stuck in running state for too long (worker stopped)',\n\t\t    finished_at = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN NULL ELSE NOW() END,\n\t\t    updated_at = NOW()\n\t\tWHERE status = 'running'\n\t\t  AND updated_at < NOW() - INTERVAL '5 minutes'\n\t`)\n```\n\n\n\n\n\n",
+          "flow": "1. QueueSubscribe subscribes snapshotRunner.Handle. 2. ws.RegisterOnStart and ws.RegisterOnStop are registered right after."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2832,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7173,
+                "INCORRECT": 0.1648,
+                "UNSUPPORTED": 0.1179
+              },
+              "confidence": 0.2832,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 973,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "1. QueueSubscribe subscribes snapshotRunner.Handle. 2. ws.RegisterOnStart and ws.RegisterOnStop are registered right after.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1668-1713\nVà thêm import `\"centralized-data-service/pkgs/observability\"` vào đầu `snapshot_runner_state.go`:\n```go\nimport (\n\t\"centralized-data-service/internal/activity\"\n\t\"centralized-data-service/internal/model/system\"\n\t\"centralized-data-service/pkgs/observability\"\n\t\"context\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"time\"\n\n\t\"go.uber.org/zap\"\n\t\"gorm.io/gorm\"\n)\n```\n\n#### Demo P12-3: `centralized-data-service/internal/server/server_setup.go` (`lines 420-422`)\nĐăng ký `Start` và `Stop` của `snapshotRunner` vào vòng đời `WorkerServer`:\n```go\n\tnatsClient.Conn.QueueSubscribe(\"cdc.cmd.snapshot.v2\", \"cdc-snapshot-runner\", snapshotRunner.Handle)\n\tws.RegisterOnStart(func() { snapshotRunner.Start(context.Background()) })\n\tws.RegisterOnStop(func() { snapshotRunner.Stop() })\n```\n\n#### Demo P12-4: `cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go` (`lines 20-32`)\nChuyển các bản ghi `running` quá hạn 5 phút đã có `last_seen_id` sang `paused` (để tự động resume hoặc bấm Resume tiếp) thay vì đập chết thành `error`:\n```go\nfunc (r *SnapshotProgressReadRepoGorm) ListSnapshotProgress(ctx context.Context, f scheduler.SnapshotProgressFilter, page, pageSize int) ([]scheduler.SnapshotProgressRow, int64, error) {\n\t// Clean up stale \"running\" snapshot progress records (heartbeat timeout).\n\t// Rows that already recorded a last_seen_id checkpoint are marked as 'paused' so worker recovery can auto-resume them.\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN 'paused' ELSE 'error' END,\n\t\t    error_msg = 'Heartbeat timeout: progress was stuck in running state for too long (worker stopped)',\n\t\t    finished_at = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN NULL ELSE NOW() END,\n\t\t    updated_at = NOW()\n\t\tWHERE status = 'running'\n\t\t  AND updated_at < NOW() - INTERVAL '5 minutes'\n\t`)\n```\n\n\n\n\n\n",
+          "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-3 registers snapshotRunner.Start and snapshotRunner.Stop on WorkerServer via ws.RegisterOnStart and ws.RegisterOnStop in server_setup.go."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5335,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9008,
+                "NO": 0.0992
+              },
+              "confidence": 0.5335,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 876,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1668-1713\nVà thêm import `\"centralized-data-service/pkgs/observability\"` vào đầu `snapshot_runner_state.go`:\n```go\nimport (\n\t\"centralized-data-service/internal/activity\"\n\t\"centralized-data-service/internal/model/system\"\n\t\"centralized-data-service/pkgs/observability\"\n\t\"context\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"time\"\n\n\t\"go.uber.org/zap\"\n\t\"gorm.io/gorm\"\n)\n```\n\n#### Demo P12-3: `centralized-data-service/internal/server/server_setup.go` (`lines 420-422`)\nĐăng ký `Start` và `Stop` của `snapshotRunner` vào vòng đời `WorkerServer`:\n```go\n\tnatsClient.Conn.QueueSubscribe(\"cdc.cmd.snapshot.v2\", \"cdc-snapshot-runner\", snapshotRunner.Handle)\n\tws.RegisterOnStart(func() { snapshotRunner.Start(context.Background()) })\n\tws.RegisterOnStop(func() { snapshotRunner.Stop() })\n```\n\n#### Demo P12-4: `cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go` (`lines 20-32`)\nChuyển các bản ghi `running` quá hạn 5 phút đã có `last_seen_id` sang `paused` (để tự động resume hoặc bấm Resume tiếp) thay vì đập chết thành `error`:\n```go\nfunc (r *SnapshotProgressReadRepoGorm) ListSnapshotProgress(ctx context.Context, f scheduler.SnapshotProgressFilter, page, pageSize int) ([]scheduler.SnapshotProgressRow, int64, error) {\n\t// Clean up stale \"running\" snapshot progress records (heartbeat timeout).\n\t// Rows that already recorded a last_seen_id checkpoint are marked as 'paused' so worker recovery can auto-resume them.\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN 'paused' ELSE 'error' END,\n\t\t    error_msg = 'Heartbeat timeout: progress was stuck in running state for too long (worker stopped)',\n\t\t    finished_at = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN NULL ELSE NOW() END,\n\t\t    updated_at = NOW()\n\t\tWHERE status = 'running'\n\t\t  AND updated_at < NOW() - INTERVAL '5 minutes'\n\t`)\n```\n\n\n\n\n\n",
+          "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-3 registers snapshotRunner.Start and snapshotRunner.Stop on WorkerServer via ws.RegisterOnStart and ws.RegisterOnStop in server_setup.go."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "claim",
+    "claim": "In snapshot_progress_read_repo_gorm.go lines 20-32, ListSnapshotProgress runs an UPDATE statement for rows with status = 'running' and updated_at older than 5 minutes.",
+    "flow": "1. ListSnapshotProgress executes an UPDATE on cdc_system.snapshot_progress before building the SELECT query.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go:20-32\nfunc (r *SnapshotProgressReadRepoGorm) ListSnapshotProgress(ctx context.Context, f scheduler.SnapshotProgressFilter, page, pageSize int) ([]scheduler.SnapshotProgressRow, int64, error) {\n\t// Clean up stale \"running\" snapshot progress records (heartbeat timeout).\n\t// If a progress has status = 'running' but updated_at is older than 5 minutes, it is marked as error (stale).\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'error',\n\t\t    error_msg = 'Heartbeat timeout: progress was stuck in running state for too long (worker stopped)',\n\t\t    finished_at = NOW(),\n\t\t    updated_at = NOW()\n\t\tWHERE status = 'running'\n\t\t  AND updated_at < NOW() - INTERVAL '5 minutes'\n\t`)\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.2498,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3229,
+                "INCORRECT": 0.6203,
+                "UNSUPPORTED": 0.0568
+              },
+              "confidence": 0.2498,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 474,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In snapshot_progress_read_repo_gorm.go lines 20-32, ListSnapshotProgress runs an UPDATE statement for rows with status = 'running' and updated_at older than 5 minutes.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go:20-32\nfunc (r *SnapshotProgressReadRepoGorm) ListSnapshotProgress(ctx context.Context, f scheduler.SnapshotProgressFilter, page, pageSize int) ([]scheduler.SnapshotProgressRow, int64, error) {\n\t// Clean up stale \"running\" snapshot progress records (heartbeat timeout).\n\t// If a progress has status = 'running' but updated_at is older than 5 minutes, it is marked as error (stale).\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'error',\n\t\t    error_msg = 'Heartbeat timeout: progress was stuck in running state for too long (worker stopped)',\n\t\t    finished_at = NOW(),\n\t\t    updated_at = NOW()\n\t\tWHERE status = 'running'\n\t\t  AND updated_at < NOW() - INTERVAL '5 minutes'\n\t`)\n",
+          "flow": "1. ListSnapshotProgress executes an UPDATE on cdc_system.snapshot_progress before building the SELECT query."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3915,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.707,
+                "INCORRECT": 0.2764,
+                "UNSUPPORTED": 0.0166
+              },
+              "confidence": 0.3915,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 479,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "1. ListSnapshotProgress executes an UPDATE on cdc_system.snapshot_progress before building the SELECT query.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go:20-32\nfunc (r *SnapshotProgressReadRepoGorm) ListSnapshotProgress(ctx context.Context, f scheduler.SnapshotProgressFilter, page, pageSize int) ([]scheduler.SnapshotProgressRow, int64, error) {\n\t// Clean up stale \"running\" snapshot progress records (heartbeat timeout).\n\t// If a progress has status = 'running' but updated_at is older than 5 minutes, it is marked as error (stale).\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'error',\n\t\t    error_msg = 'Heartbeat timeout: progress was stuck in running state for too long (worker stopped)',\n\t\t    finished_at = NOW(),\n\t\t    updated_at = NOW()\n\t\tWHERE status = 'running'\n\t\t  AND updated_at < NOW() - INTERVAL '5 minutes'\n\t`)\n",
+          "claim": "In snapshot_progress_read_repo_gorm.go lines 20-32, ListSnapshotProgress runs an UPDATE statement for rows with status = 'running' and updated_at older than 5 minutes."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7471,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9577,
+                "NO": 0.0423
+              },
+              "confidence": 0.7471,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 389,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go:20-32\nfunc (r *SnapshotProgressReadRepoGorm) ListSnapshotProgress(ctx context.Context, f scheduler.SnapshotProgressFilter, page, pageSize int) ([]scheduler.SnapshotProgressRow, int64, error) {\n\t// Clean up stale \"running\" snapshot progress records (heartbeat timeout).\n\t// If a progress has status = 'running' but updated_at is older than 5 minutes, it is marked as error (stale).\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = 'error',\n\t\t    error_msg = 'Heartbeat timeout: progress was stuck in running state for too long (worker stopped)',\n\t\t    finished_at = NOW(),\n\t\t    updated_at = NOW()\n\t\tWHERE status = 'running'\n\t\t  AND updated_at < NOW() - INTERVAL '5 minutes'\n\t`)\n",
+          "claim": "In snapshot_progress_read_repo_gorm.go lines 20-32, ListSnapshotProgress runs an UPDATE statement for rows with status = 'running' and updated_at older than 5 minutes."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "claim",
+    "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-1 replaces strconv.ParseFloat(lastSeen, 64) in PostgreSQL cursor pagination with an isDigitsOnly(lastSeen) check before strconv.ParseInt(lastSeen, 10, 64).",
+    "flow": "1. Demo P12-1 checks isDigitsOnly(lastSeen). 2. Only when true does it call strconv.ParseInt(lastSeen, 10, 64), avoiding strconv.ParseFloat.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1300-1348\n| **`F39`** | **CRITICAL** | `centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go:16-125`, `cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go:23-31` | 1. Khi Worker khởi động lại, `SnapshotRunner` không có cơ chế quét và tự động chạy tiếp (`auto-resume`) các bản ghi bị ngắt dở do Worker dừng.<br>2. `ListSnapshotProgress` (`snapshot_progress_read_repo_gorm.go:23-31`) đánh dấu mọi bản ghi quá hạn 5 phút thành `status = 'error'` kể cả khi đã có `last_seen_id`. | 1. Thêm `SnapshotRunner.Start(ctx)` (đăng ký vào `ws.RegisterOnStart`) kèm bộ canh gác `30s` (`recoverOrphanedSnapshots`): tự động tìm các bản ghi bị ngắt dở (`status = 'running'` mồ côi `> 45s` không thuộc tiến trình hiện tại, hoặc bị dính `'Heartbeat timeout:%'` trong 24h qua mà đã có `last_seen_id` và `rows_processed < total_rows`) để **tự động tiếp tục chạy (`auto-resume`) từ `last_seen_id` tới khi `done` 100%** (tự động cứu luôn `id=90` chạy nốt từ `100,000 -> 250,363`!).<br>2. Tại `snapshot_progress_read_repo_gorm.go:23-31`, nếu bản ghi quá hạn 5 phút đã có `last_seen_id`, chuyển sang `status = 'paused'` thay vì `'error'`. |\n| **`F40`** | **MEDIUM** | `centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:718-723` | Nhánh phân trang PostgreSQL gọi `strconv.ParseFloat(lastSeen, 64)`. Nếu cột khóa chính kiểu chuỗi (`TEXT`/`VARCHAR`) mang giá trị hex 24 ký tự gồm toàn chữ số và 1 chữ `'e'` (ví dụ `\"672864612345678901234e12\"`), `ParseFloat` ép nhầm thành `float64` làm sai kiểu tham số `$1`. | Bỏ hẳn nhánh `strconv.ParseFloat(lastSeen, 64)` và chỉ gọi `strconv.ParseInt(lastSeen, 10, 64)` khi `isDigitsOnly(lastSeen)` trả về `true`. |\n\n---\n\n### 3. Code Demo 1:1 cho `P12` (Khớp tuyệt đối 1-1 với bản vá sẽ thực thi sau `APPROVE`)\n\n#### Demo P12-1: `centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go`\n1. Bổ sung các trường quản lý vòng đời vào struct `SnapshotRunner` (`lines 83-87`) và gọi `r.spawnSnapshot(p, jobID, msg.Header)` trong `Handle` (`lines 183-218`):\n```go\n\ttransmuteCheckMu     sync.Mutex\n\tjsCtx                nats.JetStreamContext\n\tlastTransmuteCheckAt time.Time\n\tlastTransmutePending uint64\n\n\tlifecycleMu       sync.Mutex\n\tlifecycleCtx      context.Context\n\tlifecycleCancel   context.CancelFunc\n\tactiveProgressIDs map[int64]context.CancelFunc\n\tactiveWg          sync.WaitGroup\n}\n```\n```go\n\tjobID := msg.Header.Get(\"Cdc-Job-Id\")\n\n\tr.spawnSnapshot(p, jobID, msg.Header)\n}\n\nfunc (r *SnapshotRunner) runSnapshot(ctx context.Context, p snapshotV2Payload, jobID string) (retErr error) {\n\tstartedAt := time.Now()\n\tvar (\n\t\ttargetTable    string\n\t\tconnectionCode string\n\t\trowsTotal      int64\n\t\tprogressID     int64\n\t)\n\tdefer func() {\n\t\tr.ensureProgressNotStuckRunning(progressID, retErr)\n\t\tstatus := \"success\"\n\t\terrMsg := \"\"\n\t\tif retErr != nil {\n\t\t\tstatus = \"error\"\n\t\t\terrMsg = retErr.Error()\n\t\t}\n\t\tr.writeActivity(p, jobID, targetTable, connectionCode, status, rowsTotal, startedAt, errMsg)\n\t}()\n```\n2. Kích hoạt Heartbeat nền `15s` ngay sau khi `claimProgress` thành công (`lines 478-482`), kiểm tra `ctx.Err()` ở đầu vòng lặp (`line 652`), và bỏ `strconv.ParseFloat` khi phân trang PostgreSQL (`lines 718-723`):\n```go",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2898,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6522,
+                "INCORRECT": 0.3027,
+                "UNSUPPORTED": 0.0451
+              },
+              "confidence": 0.2898,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-1 replaces strconv.ParseFloat(lastSeen, 64) in PostgreSQL cursor pagination with an isDigitsOnly(lastSeen) check before strconv.ParseInt(lastSeen, 10, 64).",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1300-1348\n| **`F39`** | **CRITICAL** | `centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go:16-125`, `cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go:23-31` | 1. Khi Worker khởi động lại, `SnapshotRunner` không có cơ chế quét và tự động chạy tiếp (`auto-resume`) các bản ghi bị ngắt dở do Worker dừng.<br>2. `ListSnapshotProgress` (`snapshot_progress_read_repo_gorm.go:23-31`) đánh dấu mọi bản ghi quá hạn 5 phút thành `status = 'error'` kể cả khi đã có `last_seen_id`. | 1. Thêm `SnapshotRunner.Start(ctx)` (đăng ký vào `ws.RegisterOnStart`) kèm bộ canh gác `30s` (`recoverOrphanedSnapshots`): tự động tìm các bản ghi bị ngắt dở (`status = 'running'` mồ côi `> 45s` không thuộc tiến trình hiện tại, hoặc bị dính `'Heartbeat timeout:%'` trong 24h qua mà đã có `last_seen_id` và `rows_processed < total_rows`) để **tự động tiếp tục chạy (`auto-resume`) từ `last_seen_id` tới khi `done` 100%** (tự động cứu luôn `id=90` chạy nốt từ `100,000 -> 250,363`!).<br>2. Tại `snapshot_progress_read_repo_gorm.go:23-31`, nếu bản ghi quá hạn 5 phút đã có `last_seen_id`, chuyển sang `status = 'paused'` thay vì `'error'`. |\n| **`F40`** | **MEDIUM** | `centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:718-723` | Nhánh phân trang PostgreSQL gọi `strconv.ParseFloat(lastSeen, 64)`. Nếu cột khóa chính kiểu chuỗi (`TEXT`/`VARCHAR`) mang giá trị hex 24 ký tự gồm toàn chữ số và 1 chữ `'e'` (ví dụ `\"672864612345678901234e12\"`), `ParseFloat` ép nhầm thành `float64` làm sai kiểu tham số `$1`. | Bỏ hẳn nhánh `strconv.ParseFloat(lastSeen, 64)` và chỉ gọi `strconv.ParseInt(lastSeen, 10, 64)` khi `isDigitsOnly(lastSeen)` trả về `true`. |\n\n---\n\n### 3. Code Demo 1:1 cho `P12` (Khớp tuyệt đối 1-1 với bản vá sẽ thực thi sau `APPROVE`)\n\n#### Demo P12-1: `centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go`\n1. Bổ sung các trường quản lý vòng đời vào struct `SnapshotRunner` (`lines 83-87`) và gọi `r.spawnSnapshot(p, jobID, msg.Header)` trong `Handle` (`lines 183-218`):\n```go\n\ttransmuteCheckMu     sync.Mutex\n\tjsCtx                nats.JetStreamContext\n\tlastTransmuteCheckAt time.Time\n\tlastTransmutePending uint64\n\n\tlifecycleMu       sync.Mutex\n\tlifecycleCtx      context.Context\n\tlifecycleCancel   context.CancelFunc\n\tactiveProgressIDs map[int64]context.CancelFunc\n\tactiveWg          sync.WaitGroup\n}\n```\n```go\n\tjobID := msg.Header.Get(\"Cdc-Job-Id\")\n\n\tr.spawnSnapshot(p, jobID, msg.Header)\n}\n\nfunc (r *SnapshotRunner) runSnapshot(ctx context.Context, p snapshotV2Payload, jobID string) (retErr error) {\n\tstartedAt := time.Now()\n\tvar (\n\t\ttargetTable    string\n\t\tconnectionCode string\n\t\trowsTotal      int64\n\t\tprogressID     int64\n\t)\n\tdefer func() {\n\t\tr.ensureProgressNotStuckRunning(progressID, retErr)\n\t\tstatus := \"success\"\n\t\terrMsg := \"\"\n\t\tif retErr != nil {\n\t\t\tstatus = \"error\"\n\t\t\terrMsg = retErr.Error()\n\t\t}\n\t\tr.writeActivity(p, jobID, targetTable, connectionCode, status, rowsTotal, startedAt, errMsg)\n\t}()\n```\n2. Kích hoạt Heartbeat nền `15s` ngay sau khi `claimProgress` thành công (`lines 478-482`), kiểm tra `ctx.Err()` ở đầu vòng lặp (`line 652`), và bỏ `strconv.ParseFloat` khi phân trang PostgreSQL (`lines 718-723`):\n```go",
+          "flow": "1. Demo P12-1 checks isDigitsOnly(lastSeen). 2. Only when true does it call strconv.ParseInt(lastSeen, 10, 64), avoiding strconv.ParseFloat."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2569,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6158,
+                "INCORRECT": 0.3332,
+                "UNSUPPORTED": 0.0509
+              },
+              "confidence": 0.2569,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "1. Demo P12-1 checks isDigitsOnly(lastSeen). 2. Only when true does it call strconv.ParseInt(lastSeen, 10, 64), avoiding strconv.ParseFloat.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1300-1348\n| **`F39`** | **CRITICAL** | `centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go:16-125`, `cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go:23-31` | 1. Khi Worker khởi động lại, `SnapshotRunner` không có cơ chế quét và tự động chạy tiếp (`auto-resume`) các bản ghi bị ngắt dở do Worker dừng.<br>2. `ListSnapshotProgress` (`snapshot_progress_read_repo_gorm.go:23-31`) đánh dấu mọi bản ghi quá hạn 5 phút thành `status = 'error'` kể cả khi đã có `last_seen_id`. | 1. Thêm `SnapshotRunner.Start(ctx)` (đăng ký vào `ws.RegisterOnStart`) kèm bộ canh gác `30s` (`recoverOrphanedSnapshots`): tự động tìm các bản ghi bị ngắt dở (`status = 'running'` mồ côi `> 45s` không thuộc tiến trình hiện tại, hoặc bị dính `'Heartbeat timeout:%'` trong 24h qua mà đã có `last_seen_id` và `rows_processed < total_rows`) để **tự động tiếp tục chạy (`auto-resume`) từ `last_seen_id` tới khi `done` 100%** (tự động cứu luôn `id=90` chạy nốt từ `100,000 -> 250,363`!).<br>2. Tại `snapshot_progress_read_repo_gorm.go:23-31`, nếu bản ghi quá hạn 5 phút đã có `last_seen_id`, chuyển sang `status = 'paused'` thay vì `'error'`. |\n| **`F40`** | **MEDIUM** | `centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:718-723` | Nhánh phân trang PostgreSQL gọi `strconv.ParseFloat(lastSeen, 64)`. Nếu cột khóa chính kiểu chuỗi (`TEXT`/`VARCHAR`) mang giá trị hex 24 ký tự gồm toàn chữ số và 1 chữ `'e'` (ví dụ `\"672864612345678901234e12\"`), `ParseFloat` ép nhầm thành `float64` làm sai kiểu tham số `$1`. | Bỏ hẳn nhánh `strconv.ParseFloat(lastSeen, 64)` và chỉ gọi `strconv.ParseInt(lastSeen, 10, 64)` khi `isDigitsOnly(lastSeen)` trả về `true`. |\n\n---\n\n### 3. Code Demo 1:1 cho `P12` (Khớp tuyệt đối 1-1 với bản vá sẽ thực thi sau `APPROVE`)\n\n#### Demo P12-1: `centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go`\n1. Bổ sung các trường quản lý vòng đời vào struct `SnapshotRunner` (`lines 83-87`) và gọi `r.spawnSnapshot(p, jobID, msg.Header)` trong `Handle` (`lines 183-218`):\n```go\n\ttransmuteCheckMu     sync.Mutex\n\tjsCtx                nats.JetStreamContext\n\tlastTransmuteCheckAt time.Time\n\tlastTransmutePending uint64\n\n\tlifecycleMu       sync.Mutex\n\tlifecycleCtx      context.Context\n\tlifecycleCancel   context.CancelFunc\n\tactiveProgressIDs map[int64]context.CancelFunc\n\tactiveWg          sync.WaitGroup\n}\n```\n```go\n\tjobID := msg.Header.Get(\"Cdc-Job-Id\")\n\n\tr.spawnSnapshot(p, jobID, msg.Header)\n}\n\nfunc (r *SnapshotRunner) runSnapshot(ctx context.Context, p snapshotV2Payload, jobID string) (retErr error) {\n\tstartedAt := time.Now()\n\tvar (\n\t\ttargetTable    string\n\t\tconnectionCode string\n\t\trowsTotal      int64\n\t\tprogressID     int64\n\t)\n\tdefer func() {\n\t\tr.ensureProgressNotStuckRunning(progressID, retErr)\n\t\tstatus := \"success\"\n\t\terrMsg := \"\"\n\t\tif retErr != nil {\n\t\t\tstatus = \"error\"\n\t\t\terrMsg = retErr.Error()\n\t\t}\n\t\tr.writeActivity(p, jobID, targetTable, connectionCode, status, rowsTotal, startedAt, errMsg)\n\t}()\n```\n2. Kích hoạt Heartbeat nền `15s` ngay sau khi `claimProgress` thành công (`lines 478-482`), kiểm tra `ctx.Err()` ở đầu vòng lặp (`line 652`), và bỏ `strconv.ParseFloat` khi phân trang PostgreSQL (`lines 718-723`):\n```go",
+          "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-1 replaces strconv.ParseFloat(lastSeen, 64) in PostgreSQL cursor pagination with an isDigitsOnly(lastSeen) check before strconv.ParseInt(lastSeen, 10, 64)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7008,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.947,
+                "NO": 0.053
+              },
+              "confidence": 0.7008,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1300-1348\n| **`F39`** | **CRITICAL** | `centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go:16-125`, `cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go:23-31` | 1. Khi Worker khởi động lại, `SnapshotRunner` không có cơ chế quét và tự động chạy tiếp (`auto-resume`) các bản ghi bị ngắt dở do Worker dừng.<br>2. `ListSnapshotProgress` (`snapshot_progress_read_repo_gorm.go:23-31`) đánh dấu mọi bản ghi quá hạn 5 phút thành `status = 'error'` kể cả khi đã có `last_seen_id`. | 1. Thêm `SnapshotRunner.Start(ctx)` (đăng ký vào `ws.RegisterOnStart`) kèm bộ canh gác `30s` (`recoverOrphanedSnapshots`): tự động tìm các bản ghi bị ngắt dở (`status = 'running'` mồ côi `> 45s` không thuộc tiến trình hiện tại, hoặc bị dính `'Heartbeat timeout:%'` trong 24h qua mà đã có `last_seen_id` và `rows_processed < total_rows`) để **tự động tiếp tục chạy (`auto-resume`) từ `last_seen_id` tới khi `done` 100%** (tự động cứu luôn `id=90` chạy nốt từ `100,000 -> 250,363`!).<br>2. Tại `snapshot_progress_read_repo_gorm.go:23-31`, nếu bản ghi quá hạn 5 phút đã có `last_seen_id`, chuyển sang `status = 'paused'` thay vì `'error'`. |\n| **`F40`** | **MEDIUM** | `centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go:718-723` | Nhánh phân trang PostgreSQL gọi `strconv.ParseFloat(lastSeen, 64)`. Nếu cột khóa chính kiểu chuỗi (`TEXT`/`VARCHAR`) mang giá trị hex 24 ký tự gồm toàn chữ số và 1 chữ `'e'` (ví dụ `\"672864612345678901234e12\"`), `ParseFloat` ép nhầm thành `float64` làm sai kiểu tham số `$1`. | Bỏ hẳn nhánh `strconv.ParseFloat(lastSeen, 64)` và chỉ gọi `strconv.ParseInt(lastSeen, 10, 64)` khi `isDigitsOnly(lastSeen)` trả về `true`. |\n\n---\n\n### 3. Code Demo 1:1 cho `P12` (Khớp tuyệt đối 1-1 với bản vá sẽ thực thi sau `APPROVE`)\n\n#### Demo P12-1: `centralized-data-service/internal/handler/orchestration/snapshot_runner_handler.go`\n1. Bổ sung các trường quản lý vòng đời vào struct `SnapshotRunner` (`lines 83-87`) và gọi `r.spawnSnapshot(p, jobID, msg.Header)` trong `Handle` (`lines 183-218`):\n```go\n\ttransmuteCheckMu     sync.Mutex\n\tjsCtx                nats.JetStreamContext\n\tlastTransmuteCheckAt time.Time\n\tlastTransmutePending uint64\n\n\tlifecycleMu       sync.Mutex\n\tlifecycleCtx      context.Context\n\tlifecycleCancel   context.CancelFunc\n\tactiveProgressIDs map[int64]context.CancelFunc\n\tactiveWg          sync.WaitGroup\n}\n```\n```go\n\tjobID := msg.Header.Get(\"Cdc-Job-Id\")\n\n\tr.spawnSnapshot(p, jobID, msg.Header)\n}\n\nfunc (r *SnapshotRunner) runSnapshot(ctx context.Context, p snapshotV2Payload, jobID string) (retErr error) {\n\tstartedAt := time.Now()\n\tvar (\n\t\ttargetTable    string\n\t\tconnectionCode string\n\t\trowsTotal      int64\n\t\tprogressID     int64\n\t)\n\tdefer func() {\n\t\tr.ensureProgressNotStuckRunning(progressID, retErr)\n\t\tstatus := \"success\"\n\t\terrMsg := \"\"\n\t\tif retErr != nil {\n\t\t\tstatus = \"error\"\n\t\t\terrMsg = retErr.Error()\n\t\t}\n\t\tr.writeActivity(p, jobID, targetTable, connectionCode, status, rowsTotal, startedAt, errMsg)\n\t}()\n```\n2. Kích hoạt Heartbeat nền `15s` ngay sau khi `claimProgress` thành công (`lines 478-482`), kiểm tra `ctx.Err()` ở đầu vòng lặp (`line 652`), và bỏ `strconv.ParseFloat` khi phân trang PostgreSQL (`lines 718-723`):\n```go",
+          "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-1 replaces strconv.ParseFloat(lastSeen, 64) in PostgreSQL cursor pagination with an isDigitsOnly(lastSeen) check before strconv.ParseInt(lastSeen, 10, 64)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "claim",
+    "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-4 updates stale running rows in ListSnapshotProgress to status = 'paused' when last_seen_id is non-empty, and status = 'error' only when last_seen_id is null or empty.",
+    "flow": "1. Demo P12-4 uses CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> empty THEN paused ELSE error END.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1683-1713\n\n#### Demo P12-3: `centralized-data-service/internal/server/server_setup.go` (`lines 420-422`)\nĐăng ký `Start` và `Stop` của `snapshotRunner` vào vòng đời `WorkerServer`:\n```go\n\tnatsClient.Conn.QueueSubscribe(\"cdc.cmd.snapshot.v2\", \"cdc-snapshot-runner\", snapshotRunner.Handle)\n\tws.RegisterOnStart(func() { snapshotRunner.Start(context.Background()) })\n\tws.RegisterOnStop(func() { snapshotRunner.Stop() })\n```\n\n#### Demo P12-4: `cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go` (`lines 20-32`)\nChuyển các bản ghi `running` quá hạn 5 phút đã có `last_seen_id` sang `paused` (để tự động resume hoặc bấm Resume tiếp) thay vì đập chết thành `error`:\n```go\nfunc (r *SnapshotProgressReadRepoGorm) ListSnapshotProgress(ctx context.Context, f scheduler.SnapshotProgressFilter, page, pageSize int) ([]scheduler.SnapshotProgressRow, int64, error) {\n\t// Clean up stale \"running\" snapshot progress records (heartbeat timeout).\n\t// Rows that already recorded a last_seen_id checkpoint are marked as 'paused' so worker recovery can auto-resume them.\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN 'paused' ELSE 'error' END,\n\t\t    error_msg = 'Heartbeat timeout: progress was stuck in running state for too long (worker stopped)',\n\t\t    finished_at = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN NULL ELSE NOW() END,\n\t\t    updated_at = NOW()\n\t\tWHERE status = 'running'\n\t\t  AND updated_at < NOW() - INTERVAL '5 minutes'\n\t`)\n```\n\n\n\n\n\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5393,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8436,
+                "INCORRECT": 0.129,
+                "UNSUPPORTED": 0.0274
+              },
+              "confidence": 0.5393,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 839,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-4 updates stale running rows in ListSnapshotProgress to status = 'paused' when last_seen_id is non-empty, and status = 'error' only when last_seen_id is null or empty.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1683-1713\n\n#### Demo P12-3: `centralized-data-service/internal/server/server_setup.go` (`lines 420-422`)\nĐăng ký `Start` và `Stop` của `snapshotRunner` vào vòng đời `WorkerServer`:\n```go\n\tnatsClient.Conn.QueueSubscribe(\"cdc.cmd.snapshot.v2\", \"cdc-snapshot-runner\", snapshotRunner.Handle)\n\tws.RegisterOnStart(func() { snapshotRunner.Start(context.Background()) })\n\tws.RegisterOnStop(func() { snapshotRunner.Stop() })\n```\n\n#### Demo P12-4: `cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go` (`lines 20-32`)\nChuyển các bản ghi `running` quá hạn 5 phút đã có `last_seen_id` sang `paused` (để tự động resume hoặc bấm Resume tiếp) thay vì đập chết thành `error`:\n```go\nfunc (r *SnapshotProgressReadRepoGorm) ListSnapshotProgress(ctx context.Context, f scheduler.SnapshotProgressFilter, page, pageSize int) ([]scheduler.SnapshotProgressRow, int64, error) {\n\t// Clean up stale \"running\" snapshot progress records (heartbeat timeout).\n\t// Rows that already recorded a last_seen_id checkpoint are marked as 'paused' so worker recovery can auto-resume them.\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN 'paused' ELSE 'error' END,\n\t\t    error_msg = 'Heartbeat timeout: progress was stuck in running state for too long (worker stopped)',\n\t\t    finished_at = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN NULL ELSE NOW() END,\n\t\t    updated_at = NOW()\n\t\tWHERE status = 'running'\n\t\t  AND updated_at < NOW() - INTERVAL '5 minutes'\n\t`)\n```\n\n\n\n\n\n",
+          "flow": "1. Demo P12-4 uses CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> empty THEN paused ELSE error END."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2645,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6832,
+                "INCORRECT": 0.2326,
+                "UNSUPPORTED": 0.0843
+              },
+              "confidence": 0.2645,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 844,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "1. Demo P12-4 uses CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> empty THEN paused ELSE error END.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1683-1713\n\n#### Demo P12-3: `centralized-data-service/internal/server/server_setup.go` (`lines 420-422`)\nĐăng ký `Start` và `Stop` của `snapshotRunner` vào vòng đời `WorkerServer`:\n```go\n\tnatsClient.Conn.QueueSubscribe(\"cdc.cmd.snapshot.v2\", \"cdc-snapshot-runner\", snapshotRunner.Handle)\n\tws.RegisterOnStart(func() { snapshotRunner.Start(context.Background()) })\n\tws.RegisterOnStop(func() { snapshotRunner.Stop() })\n```\n\n#### Demo P12-4: `cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go` (`lines 20-32`)\nChuyển các bản ghi `running` quá hạn 5 phút đã có `last_seen_id` sang `paused` (để tự động resume hoặc bấm Resume tiếp) thay vì đập chết thành `error`:\n```go\nfunc (r *SnapshotProgressReadRepoGorm) ListSnapshotProgress(ctx context.Context, f scheduler.SnapshotProgressFilter, page, pageSize int) ([]scheduler.SnapshotProgressRow, int64, error) {\n\t// Clean up stale \"running\" snapshot progress records (heartbeat timeout).\n\t// Rows that already recorded a last_seen_id checkpoint are marked as 'paused' so worker recovery can auto-resume them.\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN 'paused' ELSE 'error' END,\n\t\t    error_msg = 'Heartbeat timeout: progress was stuck in running state for too long (worker stopped)',\n\t\t    finished_at = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN NULL ELSE NOW() END,\n\t\t    updated_at = NOW()\n\t\tWHERE status = 'running'\n\t\t  AND updated_at < NOW() - INTERVAL '5 minutes'\n\t`)\n```\n\n\n\n\n\n",
+          "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-4 updates stale running rows in ListSnapshotProgress to status = 'paused' when last_seen_id is non-empty, and status = 'error' only when last_seen_id is null or empty."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5572,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9081,
+                "NO": 0.0919
+              },
+              "confidence": 0.5572,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 744,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1683-1713\n\n#### Demo P12-3: `centralized-data-service/internal/server/server_setup.go` (`lines 420-422`)\nĐăng ký `Start` và `Stop` của `snapshotRunner` vào vòng đời `WorkerServer`:\n```go\n\tnatsClient.Conn.QueueSubscribe(\"cdc.cmd.snapshot.v2\", \"cdc-snapshot-runner\", snapshotRunner.Handle)\n\tws.RegisterOnStart(func() { snapshotRunner.Start(context.Background()) })\n\tws.RegisterOnStop(func() { snapshotRunner.Stop() })\n```\n\n#### Demo P12-4: `cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go` (`lines 20-32`)\nChuyển các bản ghi `running` quá hạn 5 phút đã có `last_seen_id` sang `paused` (để tự động resume hoặc bấm Resume tiếp) thay vì đập chết thành `error`:\n```go\nfunc (r *SnapshotProgressReadRepoGorm) ListSnapshotProgress(ctx context.Context, f scheduler.SnapshotProgressFilter, page, pageSize int) ([]scheduler.SnapshotProgressRow, int64, error) {\n\t// Clean up stale \"running\" snapshot progress records (heartbeat timeout).\n\t// Rows that already recorded a last_seen_id checkpoint are marked as 'paused' so worker recovery can auto-resume them.\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN 'paused' ELSE 'error' END,\n\t\t    error_msg = 'Heartbeat timeout: progress was stuck in running state for too long (worker stopped)',\n\t\t    finished_at = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN NULL ELSE NOW() END,\n\t\t    updated_at = NOW()\n\t\tWHERE status = 'running'\n\t\t  AND updated_at < NOW() - INTERVAL '5 minutes'\n\t`)\n```\n\n\n\n\n\n",
+          "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-4 updates stale running rows in ListSnapshotProgress to status = 'paused' when last_seen_id is non-empty, and status = 'error' only when last_seen_id is null or empty."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "ACCEPT"
+  },
+  {
+    "id": "D-API",
+    "kind": "claim",
+    "claim": "In snapshot_runner_state.go lines 23-56, claimProgress allows resuming a snapshot progress record when p.ProgressID > 0, !p.Overwrite, and status IN ('paused', 'error').",
+    "flow": "1. claimProgress locks the row FOR UPDATE. 2. It updates status to running where id = p.ProgressID and status IN (paused, error).",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go:23-56\n\t\tif p.ProgressID > 0 && !p.Overwrite {\n\t\t\t// Resume existing snapshot progress record directly (no new row)\n\t\t\tvar prev struct {\n\t\t\t\tLastSeenID    *string `gorm:\"column:last_seen_id\"`\n\t\t\t\tRowsProcessed int64   `gorm:\"column:rows_processed\"`\n\t\t\t\tStatus        string  `gorm:\"column:status\"`\n\t\t\t}\n\t\t\t// Use SELECT FOR UPDATE to lock the row and prevent concurrent checks\n\t\t\tif err := tx.Raw(`\n\t\t\t\tSELECT last_seen_id, rows_processed, status\n\t\t\t\tFROM cdc_system.snapshot_progress\n\t\t\t\tWHERE id = ?\n\t\t\t\tFOR UPDATE\n\t\t\t`, p.ProgressID).Scan(&prev).Error; err != nil {\n\t\t\t\treturn err\n\t\t\t}\n\t\t\tif prev.Status == \"running\" {\n\t\t\t\treturn fmt.Errorf(\"snapshot progress %d is already running\", p.ProgressID)\n\t\t\t}\n\n\t\t\tres := tx.Exec(`\n\t\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\t\tSET status = 'running',\n\t\t\t\t    trace_id = ?,\n\t\t\t\t    error_msg = NULL,\n\t\t\t\t    updated_at = NOW()\n\t\t\t\tWHERE id = ? AND status IN ('paused', 'error')\n\t\t\t`, p.TraceID, p.ProgressID)\n\t\t\tif res.Error != nil {\n\t\t\t\treturn res.Error\n\t\t\t}\n\t\t\tif res.RowsAffected == 0 {\n\t\t\t\treturn fmt.Errorf(\"failed to claim progress %d: status is not paused or error\", p.ProgressID)\n\t\t\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.3945,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2542,
+                "INCORRECT": 0.7241,
+                "UNSUPPORTED": 0.0218
+              },
+              "confidence": 0.3945,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 824,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In snapshot_runner_state.go lines 23-56, claimProgress allows resuming a snapshot progress record when p.ProgressID > 0, !p.Overwrite, and status IN ('paused', 'error').",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go:23-56\n\t\tif p.ProgressID > 0 && !p.Overwrite {\n\t\t\t// Resume existing snapshot progress record directly (no new row)\n\t\t\tvar prev struct {\n\t\t\t\tLastSeenID    *string `gorm:\"column:last_seen_id\"`\n\t\t\t\tRowsProcessed int64   `gorm:\"column:rows_processed\"`\n\t\t\t\tStatus        string  `gorm:\"column:status\"`\n\t\t\t}\n\t\t\t// Use SELECT FOR UPDATE to lock the row and prevent concurrent checks\n\t\t\tif err := tx.Raw(`\n\t\t\t\tSELECT last_seen_id, rows_processed, status\n\t\t\t\tFROM cdc_system.snapshot_progress\n\t\t\t\tWHERE id = ?\n\t\t\t\tFOR UPDATE\n\t\t\t`, p.ProgressID).Scan(&prev).Error; err != nil {\n\t\t\t\treturn err\n\t\t\t}\n\t\t\tif prev.Status == \"running\" {\n\t\t\t\treturn fmt.Errorf(\"snapshot progress %d is already running\", p.ProgressID)\n\t\t\t}\n\n\t\t\tres := tx.Exec(`\n\t\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\t\tSET status = 'running',\n\t\t\t\t    trace_id = ?,\n\t\t\t\t    error_msg = NULL,\n\t\t\t\t    updated_at = NOW()\n\t\t\t\tWHERE id = ? AND status IN ('paused', 'error')\n\t\t\t`, p.TraceID, p.ProgressID)\n\t\t\tif res.Error != nil {\n\t\t\t\treturn res.Error\n\t\t\t}\n\t\t\tif res.RowsAffected == 0 {\n\t\t\t\treturn fmt.Errorf(\"failed to claim progress %d: status is not paused or error\", p.ProgressID)\n\t\t\t}",
+          "flow": "1. claimProgress locks the row FOR UPDATE. 2. It updates status to running where id = p.ProgressID and status IN (paused, error)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.162,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5561,
+                "INCORRECT": 0.3463,
+                "UNSUPPORTED": 0.0976
+              },
+              "confidence": 0.162,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 829,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "1. claimProgress locks the row FOR UPDATE. 2. It updates status to running where id = p.ProgressID and status IN (paused, error).",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go:23-56\n\t\tif p.ProgressID > 0 && !p.Overwrite {\n\t\t\t// Resume existing snapshot progress record directly (no new row)\n\t\t\tvar prev struct {\n\t\t\t\tLastSeenID    *string `gorm:\"column:last_seen_id\"`\n\t\t\t\tRowsProcessed int64   `gorm:\"column:rows_processed\"`\n\t\t\t\tStatus        string  `gorm:\"column:status\"`\n\t\t\t}\n\t\t\t// Use SELECT FOR UPDATE to lock the row and prevent concurrent checks\n\t\t\tif err := tx.Raw(`\n\t\t\t\tSELECT last_seen_id, rows_processed, status\n\t\t\t\tFROM cdc_system.snapshot_progress\n\t\t\t\tWHERE id = ?\n\t\t\t\tFOR UPDATE\n\t\t\t`, p.ProgressID).Scan(&prev).Error; err != nil {\n\t\t\t\treturn err\n\t\t\t}\n\t\t\tif prev.Status == \"running\" {\n\t\t\t\treturn fmt.Errorf(\"snapshot progress %d is already running\", p.ProgressID)\n\t\t\t}\n\n\t\t\tres := tx.Exec(`\n\t\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\t\tSET status = 'running',\n\t\t\t\t    trace_id = ?,\n\t\t\t\t    error_msg = NULL,\n\t\t\t\t    updated_at = NOW()\n\t\t\t\tWHERE id = ? AND status IN ('paused', 'error')\n\t\t\t`, p.TraceID, p.ProgressID)\n\t\t\tif res.Error != nil {\n\t\t\t\treturn res.Error\n\t\t\t}\n\t\t\tif res.RowsAffected == 0 {\n\t\t\t\treturn fmt.Errorf(\"failed to claim progress %d: status is not paused or error\", p.ProgressID)\n\t\t\t}",
+          "claim": "In snapshot_runner_state.go lines 23-56, claimProgress allows resuming a snapshot progress record when p.ProgressID > 0, !p.Overwrite, and status IN ('paused', 'error')."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6029,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9214,
+                "NO": 0.0786
+              },
+              "confidence": 0.6029,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 728,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go:23-56\n\t\tif p.ProgressID > 0 && !p.Overwrite {\n\t\t\t// Resume existing snapshot progress record directly (no new row)\n\t\t\tvar prev struct {\n\t\t\t\tLastSeenID    *string `gorm:\"column:last_seen_id\"`\n\t\t\t\tRowsProcessed int64   `gorm:\"column:rows_processed\"`\n\t\t\t\tStatus        string  `gorm:\"column:status\"`\n\t\t\t}\n\t\t\t// Use SELECT FOR UPDATE to lock the row and prevent concurrent checks\n\t\t\tif err := tx.Raw(`\n\t\t\t\tSELECT last_seen_id, rows_processed, status\n\t\t\t\tFROM cdc_system.snapshot_progress\n\t\t\t\tWHERE id = ?\n\t\t\t\tFOR UPDATE\n\t\t\t`, p.ProgressID).Scan(&prev).Error; err != nil {\n\t\t\t\treturn err\n\t\t\t}\n\t\t\tif prev.Status == \"running\" {\n\t\t\t\treturn fmt.Errorf(\"snapshot progress %d is already running\", p.ProgressID)\n\t\t\t}\n\n\t\t\tres := tx.Exec(`\n\t\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\t\tSET status = 'running',\n\t\t\t\t    trace_id = ?,\n\t\t\t\t    error_msg = NULL,\n\t\t\t\t    updated_at = NOW()\n\t\t\t\tWHERE id = ? AND status IN ('paused', 'error')\n\t\t\t`, p.TraceID, p.ProgressID)\n\t\t\tif res.Error != nil {\n\t\t\t\treturn res.Error\n\t\t\t}\n\t\t\tif res.RowsAffected == 0 {\n\t\t\t\treturn fmt.Errorf(\"failed to claim progress %d: status is not paused or error\", p.ProgressID)\n\t\t\t}",
+          "claim": "In snapshot_runner_state.go lines 23-56, claimProgress allows resuming a snapshot progress record when p.ProgressID > 0, !p.Overwrite, and status IN ('paused', 'error')."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "FLAG"
+  },
+  {
+    "id": "CTRL-T1",
+    "kind": "control_true",
+    "claim": "In snapshot_runner_state.go lines 127-135, checkpoint updates last_seen_id, rows_processed, and updated_at = NOW() on cdc_system.snapshot_progress where id = progressID.",
+    "flow": "1. checkpoint executes UPDATE cdc_system.snapshot_progress SET last_seen_id, rows_processed, updated_at = NOW() WHERE id = ?.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go:127-135\nfunc (r *SnapshotRunner) checkpoint(ctx context.Context, progressID int64, lastSeen string, rowsTotal int64) error {\n\treturn r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET last_seen_id = ?,\n\t\t    rows_processed = ?,\n\t\t    updated_at = NOW()\n\t\tWHERE id = ?\n\t`, nullableString(lastSeen), rowsTotal, progressID).Error\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6341,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8913,
+                "INCORRECT": 0.0841,
+                "UNSUPPORTED": 0.0246
+              },
+              "confidence": 0.6341,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 392,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In snapshot_runner_state.go lines 127-135, checkpoint updates last_seen_id, rows_processed, and updated_at = NOW() on cdc_system.snapshot_progress where id = progressID.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go:127-135\nfunc (r *SnapshotRunner) checkpoint(ctx context.Context, progressID int64, lastSeen string, rowsTotal int64) error {\n\treturn r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET last_seen_id = ?,\n\t\t    rows_processed = ?,\n\t\t    updated_at = NOW()\n\t\tWHERE id = ?\n\t`, nullableString(lastSeen), rowsTotal, progressID).Error\n}",
+          "flow": "1. checkpoint executes UPDATE cdc_system.snapshot_progress SET last_seen_id, rows_processed, updated_at = NOW() WHERE id = ?."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.7318,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9291,
+                "INCORRECT": 0.0543,
+                "UNSUPPORTED": 0.0166
+              },
+              "confidence": 0.7318,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 397,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "1. checkpoint executes UPDATE cdc_system.snapshot_progress SET last_seen_id, rows_processed, updated_at = NOW() WHERE id = ?.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go:127-135\nfunc (r *SnapshotRunner) checkpoint(ctx context.Context, progressID int64, lastSeen string, rowsTotal int64) error {\n\treturn r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET last_seen_id = ?,\n\t\t    rows_processed = ?,\n\t\t    updated_at = NOW()\n\t\tWHERE id = ?\n\t`, nullableString(lastSeen), rowsTotal, progressID).Error\n}",
+          "claim": "In snapshot_runner_state.go lines 127-135, checkpoint updates last_seen_id, rows_processed, and updated_at = NOW() on cdc_system.snapshot_progress where id = progressID."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8245,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9737,
+                "NO": 0.0263
+              },
+              "confidence": 0.8245,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 295,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go:127-135\nfunc (r *SnapshotRunner) checkpoint(ctx context.Context, progressID int64, lastSeen string, rowsTotal int64) error {\n\treturn r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET last_seen_id = ?,\n\t\t    rows_processed = ?,\n\t\t    updated_at = NOW()\n\t\tWHERE id = ?\n\t`, nullableString(lastSeen), rowsTotal, progressID).Error\n}",
+          "claim": "In snapshot_runner_state.go lines 127-135, checkpoint updates last_seen_id, rows_processed, and updated_at = NOW() on cdc_system.snapshot_progress where id = progressID."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-F1",
+    "kind": "control_false",
+    "claim": "In snapshot_runner_state.go lines 127-135, checkpoint deletes the row from cdc_system.snapshot_progress.",
+    "flow": "False control claim.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go:127-135\nfunc (r *SnapshotRunner) checkpoint(ctx context.Context, progressID int64, lastSeen string, rowsTotal int64) error {\n\treturn r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET last_seen_id = ?,\n\t\t    rows_processed = ?,\n\t\t    updated_at = NOW()\n\t\tWHERE id = ?\n\t`, nullableString(lastSeen), rowsTotal, progressID).Error\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.1859,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3612,
+                "INCORRECT": 0.5592,
+                "UNSUPPORTED": 0.0796
+              },
+              "confidence": 0.1859,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 341,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In snapshot_runner_state.go lines 127-135, checkpoint deletes the row from cdc_system.snapshot_progress.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go:127-135\nfunc (r *SnapshotRunner) checkpoint(ctx context.Context, progressID int64, lastSeen string, rowsTotal int64) error {\n\treturn r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET last_seen_id = ?,\n\t\t    rows_processed = ?,\n\t\t    updated_at = NOW()\n\t\tWHERE id = ?\n\t`, nullableString(lastSeen), rowsTotal, progressID).Error\n}",
+          "flow": "False control claim."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.6791,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9049,
+                "INCORRECT": 0.0819,
+                "UNSUPPORTED": 0.0132
+              },
+              "confidence": 0.6791,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 346,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "False control claim.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go:127-135\nfunc (r *SnapshotRunner) checkpoint(ctx context.Context, progressID int64, lastSeen string, rowsTotal int64) error {\n\treturn r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET last_seen_id = ?,\n\t\t    rows_processed = ?,\n\t\t    updated_at = NOW()\n\t\tWHERE id = ?\n\t`, nullableString(lastSeen), rowsTotal, progressID).Error\n}",
+          "claim": "In snapshot_runner_state.go lines 127-135, checkpoint deletes the row from cdc_system.snapshot_progress."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.495,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.1117,
+                "NO": 0.8883
+              },
+              "confidence": 0.495,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 275,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_state.go:127-135\nfunc (r *SnapshotRunner) checkpoint(ctx context.Context, progressID int64, lastSeen string, rowsTotal int64) error {\n\treturn r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET last_seen_id = ?,\n\t\t    rows_processed = ?,\n\t\t    updated_at = NOW()\n\t\tWHERE id = ?\n\t`, nullableString(lastSeen), rowsTotal, progressID).Error\n}",
+          "claim": "In snapshot_runner_state.go lines 127-135, checkpoint deletes the row from cdc_system.snapshot_progress."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-F2",
+    "kind": "control_false",
+    "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-4 drops the table cdc_system.snapshot_progress instead of updating stale rows.",
+    "flow": "False control claim.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1683-1713\n\n#### Demo P12-3: `centralized-data-service/internal/server/server_setup.go` (`lines 420-422`)\nĐăng ký `Start` và `Stop` của `snapshotRunner` vào vòng đời `WorkerServer`:\n```go\n\tnatsClient.Conn.QueueSubscribe(\"cdc.cmd.snapshot.v2\", \"cdc-snapshot-runner\", snapshotRunner.Handle)\n\tws.RegisterOnStart(func() { snapshotRunner.Start(context.Background()) })\n\tws.RegisterOnStop(func() { snapshotRunner.Stop() })\n```\n\n#### Demo P12-4: `cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go` (`lines 20-32`)\nChuyển các bản ghi `running` quá hạn 5 phút đã có `last_seen_id` sang `paused` (để tự động resume hoặc bấm Resume tiếp) thay vì đập chết thành `error`:\n```go\nfunc (r *SnapshotProgressReadRepoGorm) ListSnapshotProgress(ctx context.Context, f scheduler.SnapshotProgressFilter, page, pageSize int) ([]scheduler.SnapshotProgressRow, int64, error) {\n\t// Clean up stale \"running\" snapshot progress records (heartbeat timeout).\n\t// Rows that already recorded a last_seen_id checkpoint are marked as 'paused' so worker recovery can auto-resume them.\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN 'paused' ELSE 'error' END,\n\t\t    error_msg = 'Heartbeat timeout: progress was stuck in running state for too long (worker stopped)',\n\t\t    finished_at = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN NULL ELSE NOW() END,\n\t\t    updated_at = NOW()\n\t\tWHERE status = 'running'\n\t\t  AND updated_at < NOW() - INTERVAL '5 minutes'\n\t`)\n```\n\n\n\n\n\n",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2528,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6909,
+                "INCORRECT": 0.1969,
+                "UNSUPPORTED": 0.1122
+              },
+              "confidence": 0.2528,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 784,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-4 drops the table cdc_system.snapshot_progress instead of updating stale rows.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1683-1713\n\n#### Demo P12-3: `centralized-data-service/internal/server/server_setup.go` (`lines 420-422`)\nĐăng ký `Start` và `Stop` của `snapshotRunner` vào vòng đời `WorkerServer`:\n```go\n\tnatsClient.Conn.QueueSubscribe(\"cdc.cmd.snapshot.v2\", \"cdc-snapshot-runner\", snapshotRunner.Handle)\n\tws.RegisterOnStart(func() { snapshotRunner.Start(context.Background()) })\n\tws.RegisterOnStop(func() { snapshotRunner.Stop() })\n```\n\n#### Demo P12-4: `cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go` (`lines 20-32`)\nChuyển các bản ghi `running` quá hạn 5 phút đã có `last_seen_id` sang `paused` (để tự động resume hoặc bấm Resume tiếp) thay vì đập chết thành `error`:\n```go\nfunc (r *SnapshotProgressReadRepoGorm) ListSnapshotProgress(ctx context.Context, f scheduler.SnapshotProgressFilter, page, pageSize int) ([]scheduler.SnapshotProgressRow, int64, error) {\n\t// Clean up stale \"running\" snapshot progress records (heartbeat timeout).\n\t// Rows that already recorded a last_seen_id checkpoint are marked as 'paused' so worker recovery can auto-resume them.\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN 'paused' ELSE 'error' END,\n\t\t    error_msg = 'Heartbeat timeout: progress was stuck in running state for too long (worker stopped)',\n\t\t    finished_at = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN NULL ELSE NOW() END,\n\t\t    updated_at = NOW()\n\t\tWHERE status = 'running'\n\t\t  AND updated_at < NOW() - INTERVAL '5 minutes'\n\t`)\n```\n\n\n\n\n\n",
+          "flow": "False control claim."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1477,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.568,
+                "INCORRECT": 0.3148,
+                "UNSUPPORTED": 0.1171
+              },
+              "confidence": 0.1477,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 789,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "False control claim.",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1683-1713\n\n#### Demo P12-3: `centralized-data-service/internal/server/server_setup.go` (`lines 420-422`)\nĐăng ký `Start` và `Stop` của `snapshotRunner` vào vòng đời `WorkerServer`:\n```go\n\tnatsClient.Conn.QueueSubscribe(\"cdc.cmd.snapshot.v2\", \"cdc-snapshot-runner\", snapshotRunner.Handle)\n\tws.RegisterOnStart(func() { snapshotRunner.Start(context.Background()) })\n\tws.RegisterOnStop(func() { snapshotRunner.Stop() })\n```\n\n#### Demo P12-4: `cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go` (`lines 20-32`)\nChuyển các bản ghi `running` quá hạn 5 phút đã có `last_seen_id` sang `paused` (để tự động resume hoặc bấm Resume tiếp) thay vì đập chết thành `error`:\n```go\nfunc (r *SnapshotProgressReadRepoGorm) ListSnapshotProgress(ctx context.Context, f scheduler.SnapshotProgressFilter, page, pageSize int) ([]scheduler.SnapshotProgressRow, int64, error) {\n\t// Clean up stale \"running\" snapshot progress records (heartbeat timeout).\n\t// Rows that already recorded a last_seen_id checkpoint are marked as 'paused' so worker recovery can auto-resume them.\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN 'paused' ELSE 'error' END,\n\t\t    error_msg = 'Heartbeat timeout: progress was stuck in running state for too long (worker stopped)',\n\t\t    finished_at = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN NULL ELSE NOW() END,\n\t\t    updated_at = NOW()\n\t\tWHERE status = 'running'\n\t\t  AND updated_at < NOW() - INTERVAL '5 minutes'\n\t`)\n```\n\n\n\n\n\n",
+          "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-4 drops the table cdc_system.snapshot_progress instead of updating stale rows."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5892,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9175,
+                "NO": 0.0825
+              },
+              "confidence": 0.5892,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 718,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/audit-pg-oom-53200-2026-11-05/09_tasks_solution_pg_oom_53200.md:1683-1713\n\n#### Demo P12-3: `centralized-data-service/internal/server/server_setup.go` (`lines 420-422`)\nĐăng ký `Start` và `Stop` của `snapshotRunner` vào vòng đời `WorkerServer`:\n```go\n\tnatsClient.Conn.QueueSubscribe(\"cdc.cmd.snapshot.v2\", \"cdc-snapshot-runner\", snapshotRunner.Handle)\n\tws.RegisterOnStart(func() { snapshotRunner.Start(context.Background()) })\n\tws.RegisterOnStop(func() { snapshotRunner.Stop() })\n```\n\n#### Demo P12-4: `cdc-cms-service/internal/infra/persistence/scheduler/snapshot_progress_read_repo_gorm.go` (`lines 20-32`)\nChuyển các bản ghi `running` quá hạn 5 phút đã có `last_seen_id` sang `paused` (để tự động resume hoặc bấm Resume tiếp) thay vì đập chết thành `error`:\n```go\nfunc (r *SnapshotProgressReadRepoGorm) ListSnapshotProgress(ctx context.Context, f scheduler.SnapshotProgressFilter, page, pageSize int) ([]scheduler.SnapshotProgressRow, int64, error) {\n\t// Clean up stale \"running\" snapshot progress records (heartbeat timeout).\n\t// Rows that already recorded a last_seen_id checkpoint are marked as 'paused' so worker recovery can auto-resume them.\n\t_ = r.db.WithContext(ctx).Exec(`\n\t\tUPDATE cdc_system.snapshot_progress\n\t\tSET status = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN 'paused' ELSE 'error' END,\n\t\t    error_msg = 'Heartbeat timeout: progress was stuck in running state for too long (worker stopped)',\n\t\t    finished_at = CASE WHEN last_seen_id IS NOT NULL AND last_seen_id <> '' THEN NULL ELSE NOW() END,\n\t\t    updated_at = NOW()\n\t\tWHERE status = 'running'\n\t\t  AND updated_at < NOW() - INTERVAL '5 minutes'\n\t`)\n```\n\n\n\n\n\n",
+          "claim": "In 09_tasks_solution_pg_oom_53200.md Section L, Demo P12-4 drops the table cdc_system.snapshot_progress instead of updating stale rows."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

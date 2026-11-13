@@ -1,0 +1,80 @@
+[
+  {
+    "id": "S-RC-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "DG1 Root Cause Verification: invokeArchitectLLM Missing Per-Session Prompt/Response Ledger",
+    "claim": "Hàm invokeArchitectLLM gọi agRunner.Complete với SystemPrompt và userMsg nhưng chỉ lưu kết quả phân tích JSON vào llm_analysis.json, chưa lưu nhật ký từng phiên gọi gồm SystemPrompt, UserPrompt và RawResponse nguyên bản.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_bridge.go:241-286\nagRunner := runner.NewAntigravityRunner(modelName)\nstream, err := agRunner.Complete(llmCtx, runner.CompletionRequest{\n\tModel: modelName,\n\tSystemPrompt: sysPrompt,\n})\ns.saveTaskLLMAnalysis(qt.ExternalID, parsed)",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_bridge.go:241-286",
+    "must_contain": [
+      "agRunner.Complete(llmCtx, runner.CompletionRequest{",
+      "s.saveTaskLLMAnalysis(qt.ExternalID, parsed)"
+    ]
+  },
+  {
+    "id": "S-FIX-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "DG1 Solution Verification: LoadOrInitRepoMemoryDefinition Reads Existing repo_definition.json",
+    "claim": "Hàm LoadOrInitRepoMemoryDefinition trong 09_tasks_solution kiểm tra và đọc tệp repo_definition.json nếu đã tồn tại với trạng thái LOADED_FROM_MEMORY trước khi quét khởi tạo mới.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feat-ai-orchestrator-transparency-ui-declutter-2026-11-04/09_tasks_solution_transparency_ui_declutter_2026_11_04.md:84-108\nfunc (s *Server) LoadOrInitRepoMemoryDefinition(repoPath string) RepoMemoryDefinitionDTO {\n\tdefPath := filepath.Join(localMemDir, \"repo_definition.json\")\n\tif raw, err := os.ReadFile(defPath); err == nil && len(raw) > 0 {\n\t\texisting.MemoryStatus = \"LOADED_FROM_MEMORY\"\n\t\treturn existing\n\t}",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feat-ai-orchestrator-transparency-ui-declutter-2026-11-04/09_tasks_solution_transparency_ui_declutter_2026_11_04.md:84-108",
+    "must_contain": [
+      "defPath := filepath.Join(localMemDir, \"repo_definition.json\")",
+      "existing.MemoryStatus = \"LOADED_FROM_MEMORY\""
+    ]
+  },
+  {
+    "id": "D-BEHAV-01",
+    "kind": "claim",
+    "basis": "code",
+    "flow": "DG2 Code Demo Verification: appendTaskModelCallTrace Records SystemPrompt UserPrompt and RawResponse",
+    "claim": "Hàm appendTaskModelCallTrace trong Code Demo gán CallID, TaskKey, che mật khẩu cho SystemPrompt, UserPrompt, RawResponse và lưu danh sách vào tệp llm_call_ledger.json của Task.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feat-ai-orchestrator-transparency-ui-declutter-2026-11-04/09_tasks_solution_transparency_ui_declutter_2026_11_04.md:200-239\nfunc (s *Server) taskModelCallLedgerPath(taskKey string) string {\n\treturn filepath.Join(s.Root, \".orchestrator\", \"tasks\", safeKey, \"llm_call_ledger.json\")\n}\nfunc (s *Server) appendTaskModelCallTrace(taskKey string, entry TaskModelCallTraceDTO) {\n\tentry.SystemPrompt = scout.MaskSecrets(entry.SystemPrompt)\n\tentry.UserPrompt = scout.MaskSecrets(entry.UserPrompt)\n\tentry.RawResponse = scout.MaskSecrets(entry.RawResponse)",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/feat-ai-orchestrator-transparency-ui-declutter-2026-11-04/09_tasks_solution_transparency_ui_declutter_2026_11_04.md:200-239",
+    "must_contain": [
+      "\"llm_call_ledger.json\"",
+      "entry.SystemPrompt = scout.MaskSecrets(entry.SystemPrompt)",
+      "entry.RawResponse = scout.MaskSecrets(entry.RawResponse)"
+    ]
+  },
+  {
+    "id": "K1",
+    "kind": "control_true",
+    "basis": "code",
+    "flow": "DG1 Control True",
+    "claim": "Struct DashboardResponse trong server.go định nghĩa các trường JSON trả về cho giao diện WebUI gồm ActiveTaskKey và ActiveStepReports.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:197-215\ntype DashboardResponse struct {\n\tActiveTaskKey string `json:\"active_task_key\"`\n\tActiveStepReports []StepReportDTO `json:\"active_step_reports\"`",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/server.go:197-215",
+    "must_contain": [
+      "type DashboardResponse struct",
+      "ActiveTaskKey",
+      "ActiveStepReports"
+    ]
+  },
+  {
+    "id": "K2",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG1 Control False 1",
+    "claim": "Hàm invokeArchitectLLM đã lưu llm_call_ledger.json ở HEAD hiện tại.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_bridge.go:241-286\nagRunner := runner.NewAntigravityRunner(modelName)",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_llm_bridge.go:241-286",
+    "must_contain": [
+      "NONEXISTENT_LEDGER_TOKEN_777"
+    ]
+  },
+  {
+    "id": "K3",
+    "kind": "control_false",
+    "basis": "code",
+    "flow": "DG1 Control False 2",
+    "claim": "Hàm generateDeepTaskArtifacts đã đọc repo_definition.json ở HEAD hiện tại.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:2799-2842\ntargetRepo := s.ResolveTaskTargetRepo(qt)",
+    "evidence_ref": "REF: /Users/trainguyen/Documents/work/ai-orchestrator/internal/webui/task_inspector.go:2799-2842",
+    "must_contain": [
+      "NONEXISTENT_REPO_DEF_TOKEN_666"
+    ]
+  }
+]

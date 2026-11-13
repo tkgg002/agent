@@ -1,0 +1,58 @@
+[
+  {
+    "id": "DG3-21-1",
+    "kind": "claim",
+    "claim": "In internal-transfer-export.pure.ts, buildFilter initializes filter with sysTrans: { $ne: true } and 5 default transType values: INTERNAL_BANK_TRANSFER, REFUND_CASHIN, WALLET_UNMATCH_CASHIN, WALLET_UNMATCH_REFUND, and CASHOUT_MERCHANT.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:20-33\nconst buildFilter = (params: any) => {\n    let filter: any = {\n        sysTrans: { $ne: true },\n        transType: {\n            $in: [\n                TRANS_TYPE.INTERNAL_BANK_TRANSFER,\n                TRANS_TYPE.REFUND_CASHIN,\n                TRANS_TYPE.WALLET_UNMATCH_CASHIN,\n                TRANS_TYPE.WALLET_UNMATCH_REFUND,\n                TRANS_TYPE.CASHOUT_MERCHANT\n            ]\n        }\n    };",
+    "flow": "InternalTransferExport.getConfig -> buildFilter"
+  },
+  {
+    "id": "DG3-21-2",
+    "kind": "claim",
+    "claim": "In internal-transfer-export.pure.ts, buildFilter sets filter['info.partnerCode'] = params.partnerCode and supports customerId, phone, serviceCode, and channelId filters.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:46-60\n    if (params.partnerCode) {\n        filter[\"info.partnerCode\"] = params.partnerCode;\n    }\n    if (params.customerId) {\n        filter.$or = [\n            { \"sender.customerId\": params.customerId },\n            { \"receiver.customerId\": params.customerId }\n        ];\n    }\n    if (params.phone) {\n        filter.$or = [\n            { \"sender.phone\": params.phone },\n            { \"receiver.phone\": params.phone }\n        ];\n    }",
+    "flow": "InternalTransferExport.buildFilter -> partnerCode, customerId, phone"
+  },
+  {
+    "id": "DG3-21-3",
+    "kind": "claim",
+    "claim": "In internal-transfer-export.pure.ts, NON_SYS_TRANS_TYPES contains REFUND_CASHIN, WALLET_UNMATCH_CASHIN, and WALLET_UNMATCH_REFUND, and buildFilter constructs an $or branch when otherTransTypes.length > 0 or omits sysTrans when otherTransTypes.length === 0.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:14-18\nconst NON_SYS_TRANS_TYPES = [\n    TRANS_TYPE.REFUND_CASHIN,\n    TRANS_TYPE.WALLET_UNMATCH_CASHIN,\n    TRANS_TYPE.WALLET_UNMATCH_REFUND\n];",
+    "flow": "InternalTransferExport.buildFilter -> NON_SYS_TRANS_TYPES"
+  },
+  {
+    "id": "DG3-21-4",
+    "kind": "claim",
+    "claim": "In trans-his-export.params.ts, TransHisExportParams declares senderAccount, receiverAccount, connector, originalTransHisId, serviceCode, and channelId as optional string parameters.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/trans-his/trans-his-export.params.ts:41-56\n    @IsOptional() @IsString() public transId?: string;\n    @IsOptional() @IsString() public transType?: string; // Ví dụ: \"PAY,CASHOUT\"\n    @IsOptional() @IsString() public status?: string; // Ví dụ: \"SUCCESS,FAILED\"\n    @IsOptional() @IsString() public partnerCode?: string;\n    @IsOptional() @IsString() public customerId?: string;\n    @IsOptional() @IsString() public phone?: string;\n    @IsOptional() @IsString() public senderAccount?: string;\n    @IsOptional() @IsString() public receiverAccount?: string;\n    @IsOptional() @IsString() public connector?: string;\n    @IsOptional() @IsString() public originalTransHisId?: string;\n    @IsOptional() @IsString() public serviceCode?: string;\n    @IsOptional() @IsString() public channelId?: string;\n    @IsOptional() @IsString() public sysTrans?: string;\n    @IsOptional() @IsString() public transIdRef?: string;\n    @IsOptional() @IsString() public info?: string; // JSON string for complex filtering\n    @IsOptional() @IsString() public walletPayOnly?: string;",
+    "flow": "InternalTransferExport.validate -> TransHisExportParams"
+  },
+  {
+    "id": "DG3-21-5",
+    "kind": "claim",
+    "claim": "In utils/constants.ts, TRANS_TYPE includes WALLET_UNMATCH_CASHIN, CASHOUT_MERCHANT, and WALLET_UNMATCH_REFUND alongside INTERNAL_BANK_TRANSFER and REFUND_CASHIN.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/utils/constants.ts:424-447\nexport const TRANS_TYPE = {\n\tPAY: \"PAY\",\n\tCASHIN: \"CASHIN\",\n\tWALLET_UNMATCH_CASHIN: \"WALLET_UNMATCH_CASHIN\",\n\tCASHOUT: \"CASHOUT\",\n\tCASHOUT_MERCHANT: \"CASHOUT_MERCHANT\",\n\tMERCHANT_WITHDRAW: \"MERCHANT_WITHDRAW\",\n\tTRANSFER: \"TRANSFER\",\n\tREFUND: \"REFUND\",\n\tREFUND_CASHIN: \"REFUND_CASHIN\",\n\tWALLET_UNMATCH_REFUND: \"WALLET_UNMATCH_REFUND\",\n\tTRANSFER_SENDER: \"TRANSFER_SENDER\",\n\tTRANSFER_RECEIVER: \"TRANSFER_RECEIVER\",\n\tMERCHANT_REVENUE: \"MERCHANT_REVENUE\",\n\tADJUST: \"ADJUST\",\n\tPAYOUT_WALLET: \"PAYOUT_WALLET\",\n\tPAYOUT_WALLET_SETTLE: \"PAYOUT_WALLET_SETTLE\",\n\tBILLING: \"BILLING\",\n\tTOPUP: \"TOPUP\",\n\tSOFTPIN: \"SOFTPIN\",\n\tDISBURSEMENT: \"DISBURSEMENT\",\n\tBANK_TRANSFER: \"BANK_TRANSFER\",\n\tINTERNAL_BANK_TRANSFER: \"INTERNAL_BANK_TRANSFER\"\n};",
+    "flow": "utils/constants.ts -> TRANS_TYPE"
+  },
+  {
+    "id": "CTRL-TRUE-21",
+    "kind": "control_true",
+    "claim": "In models/trans-his-pg/trans-his-pg.query.ts, TEXT_COLUMNS maps 'serviceCode', 'channelId', 'sender.customerId', 'receiver.customerId', 'sender.phone', 'receiver.phone', and 'info.partnerCode' to their corresponding core.* columns.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:84-97\nconst TEXT_COLUMNS: Readonly<Record<string, string>> = {\n\t\"transId\": \"core.trans_id\",\n\t\"transType\": \"core.trans_type\",\n\t\"status\": \"core.status\",\n\t\"originalTransHisId\": \"core.original_trans_his_id\",\n\t\"serviceCode\": \"core.service_code\",\n\t\"channelId\": \"core.channel_id\",\n\t\"sender.customerId\": \"core.sender_customer_id\",\n\t\"receiver.customerId\": \"core.receiver_customer_id\",\n\t\"sender.phone\": \"core.sender_phone\",\n\t\"receiver.phone\": \"core.receiver_phone\",\n\t\"receiver.credit\": \"core.receiver_credit\",\n\t\"info.partnerCode\": \"core.partner_code\"\n};",
+    "flow": "trans-his-pg.query.ts -> TEXT_COLUMNS"
+  },
+  {
+    "id": "CTRL-FALSE-21A",
+    "kind": "control_false",
+    "claim": "In internal-transfer-export.pure.ts, buildFilter filters partnerCode using a case-insensitive $regex on info.bankTransferResponse.partnerCode.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:46-48\n    if (params.partnerCode) {\n        filter[\"info.partnerCode\"] = params.partnerCode;\n    }",
+    "flow": "InternalTransferExport.buildFilter -> partnerCode"
+  },
+  {
+    "id": "CTRL-FALSE-21B",
+    "kind": "control_false",
+    "claim": "In core-trans-proxy-history-service/logics/transHis.manage.logic.ts, getList filters partnerCode using a case-insensitive $regex on info.bankTransferResponse.partnerCode.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/core-trans-proxy-history-service/logics/transHis.manage.logic.ts:74-76\n\t\tif (params.partnerCode) {\n\t\t\tfilter[\"info.partnerCode\"] = params.partnerCode;\n\t\t}",
+    "flow": "TransHisManageLogic.getList -> partnerCode"
+  }
+]

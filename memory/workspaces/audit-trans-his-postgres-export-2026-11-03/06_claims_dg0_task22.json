@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ-22",
+    "kind": "claim",
+    "claim": "In internal-transfer-export.pure.ts, buildSort computes order using sortType === 'asc' || sortType === 1 ? 1 : -1 on line 161, which evaluates to -1 when sortType is the string '1'.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:155-167\nconst buildSort = (params: any): object => {\n    let sort: any = {};\n    const sortBy = params.sortBy;\n    const sortType = params.sortType;\n\n    if (sortBy && sortType) {\n        const order = sortType === \"asc\" || sortType === 1 ? 1 : -1;\n        sort[sortBy] = order;\n    } else {\n        sort = { createdAt: -1 };\n    }\n    return sort;\n};",
+    "flow": "InternalTransferExport.getConfig -> buildSort"
+  },
+  {
+    "id": "C-REALITY-22",
+    "kind": "claim",
+    "claim": "In internal-transfer-export.pure.ts, transformRow looks up transType labels from TRANSACTION_TYPE_LIST and only has a manual fallback for INTERNAL_BANK_TRANSFER before falling back to raw history.transType.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:239-247\n    const TRANSACTION_TYPE_MAP = new Map(\n        TRANSACTION_TYPE_LIST.map((type: any) => [type.value, type])\n    );\n    const transTypeObj = TRANSACTION_TYPE_MAP.get(history.transType);\n    const INTERNAL_TRANSFER_LABEL: any = { vi: \"Chuyển khoản nội bộ\", en: \"Internal Bank Transfer\" };\n    const transTypeStr = transTypeObj?.label?.[langCode]\n        || (history.transType === TRANS_TYPE.INTERNAL_BANK_TRANSFER ? INTERNAL_TRANSFER_LABEL[langCode] : \"\")\n        || history.transType || \"\";",
+    "flow": "InternalTransferExport.transformRow -> transTypeStr"
+  },
+  {
+    "id": "C-CONTRA-22",
+    "kind": "claim",
+    "claim": "In trans-his-export.params.ts, TransHisExportParams declares senderAccount, receiverAccount, connector, and originalTransHisId directly inside TransHisExportParams on lines 47-50.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/trans-his/trans-his-export.params.ts:41-56\n    @IsOptional() @IsString() public transId?: string;\n    @IsOptional() @IsString() public transType?: string; // Ví dụ: \"PAY,CASHOUT\"\n    @IsOptional() @IsString() public status?: string; // Ví dụ: \"SUCCESS,FAILED\"\n    @IsOptional() @IsString() public partnerCode?: string;\n    @IsOptional() @IsString() public customerId?: string;\n    @IsOptional() @IsString() public phone?: string;\n    @IsOptional() @IsString() public senderAccount?: string;\n    @IsOptional() @IsString() public receiverAccount?: string;\n    @IsOptional() @IsString() public connector?: string;\n    @IsOptional() @IsString() public originalTransHisId?: string;\n    @IsOptional() @IsString() public serviceCode?: string;\n    @IsOptional() @IsString() public channelId?: string;\n    @IsOptional() @IsString() public sysTrans?: string;\n    @IsOptional() @IsString() public transIdRef?: string;\n    @IsOptional() @IsString() public info?: string; // JSON string for complex filtering\n    @IsOptional() @IsString() public walletPayOnly?: string;",
+    "flow": "TransHisExportParams DTO definition"
+  },
+  {
+    "id": "CTRL-TRUE-22",
+    "kind": "control_true",
+    "claim": "In models/trans-his-pg/trans-his-pg.query.ts, TEXT_COLUMNS maps 'serviceCode', 'channelId', 'sender.customerId', 'receiver.customerId', 'sender.phone', 'receiver.phone', and 'info.partnerCode' to their corresponding core.* columns.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:84-97\nconst TEXT_COLUMNS: Readonly<Record<string, string>> = {\n\t\"transId\": \"core.trans_id\",\n\t\"transType\": \"core.trans_type\",\n\t\"status\": \"core.status\",\n\t\"originalTransHisId\": \"core.original_trans_his_id\",\n\t\"serviceCode\": \"core.service_code\",\n\t\"channelId\": \"core.channel_id\",\n\t\"sender.customerId\": \"core.sender_customer_id\",\n\t\"receiver.customerId\": \"core.receiver_customer_id\",\n\t\"sender.phone\": \"core.sender_phone\",\n\t\"receiver.phone\": \"core.receiver_phone\",\n\t\"receiver.credit\": \"core.receiver_credit\",\n\t\"info.partnerCode\": \"core.partner_code\"\n};",
+    "flow": "trans-his-pg.query.ts -> TEXT_COLUMNS"
+  },
+  {
+    "id": "CTRL-FALSE-22A",
+    "kind": "control_false",
+    "claim": "In internal-transfer-export.pure.ts, buildFilter filters partnerCode using a case-insensitive $regex on info.bankTransferResponse.partnerCode.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/internal-transfer-export.pure.ts:46-48\n    if (params.partnerCode) {\n        filter[\"info.partnerCode\"] = params.partnerCode;\n    }",
+    "flow": "InternalTransferExport.buildFilter -> partnerCode"
+  },
+  {
+    "id": "CTRL-FALSE-22B",
+    "kind": "control_false",
+    "claim": "In core-trans-proxy-history-service/logics/transHis.manage.logic.ts, getList filters partnerCode using a case-insensitive $regex on info.bankTransferResponse.partnerCode.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/core-trans-proxy-history-service/logics/transHis.manage.logic.ts:74-76\n\t\tif (params.partnerCode) {\n\t\t\tfilter[\"info.partnerCode\"] = params.partnerCode;\n\t\t}",
+    "flow": "TransHisManageLogic.getList -> partnerCode"
+  }
+]
