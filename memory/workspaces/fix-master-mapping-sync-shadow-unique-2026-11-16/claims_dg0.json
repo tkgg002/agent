@@ -1,0 +1,47 @@
+{
+  "objective": "Phản biện nguyên nhân nổ lỗi SQLSTATE 23505 (vi phạm ràng buộc duy nhất) khi chạy Sync từ Shadow tại /masters/cdc_payment_bill/mappings?binding_id=61",
+  "claims": [
+    {
+      "id": "C-REQ-1",
+      "kind": "claim",
+      "claim": "In apiError.ts lines 53-57, SQLSTATE 23505 looks up the constraint name in CONSTRAINT_HUMAN and falls back to 'Bản ghi đã tồn tại (vi phạm ràng buộc duy nhất).' when ux_mapping_rule_master_target is absent.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/utils/apiError.ts",
+      "lines": "32-57"
+    },
+    {
+      "id": "C-REALITY-1",
+      "kind": "claim",
+      "claim": "In 078_master_allow_many_per_shadow_field.sql lines 19-23, ux_mapping_rule_master_v2 is dropped and ux_mapping_rule_master_target on (master_binding_id, target_column) is the unique index on cdc_system.mapping_rule_master.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/migrations/schema/cdc_system_model/078_master_allow_many_per_shadow_field.sql",
+      "lines": "8-25"
+    },
+    {
+      "id": "C-CONTRA-1",
+      "kind": "claim",
+      "claim": "In master_multi_shadow_repo_gorm.go lines 215-270, syncRulesFromAllShadowsTx checks NOT EXISTS by m.target_column = v2.target_column without ON CONFLICT and then executes UPDATE setting m.target_column = v2.target_column where m.mapping_v2_id = v2.id and m.target_column <> v2.target_column.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go",
+      "lines": "209-275"
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "kind": "control_true",
+      "claim": "In master_multi_shadow_repo_gorm.go lines 49-61, cloneAllShadowRulesTx checks NOT EXISTS by mm.mapping_v2_id = v2.id, inserts new rules with status 'pending', and uses ON CONFLICT (master_binding_id, target_column) DO NOTHING.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go",
+      "lines": "49-64"
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "kind": "control_false",
+      "claim": "In master_multi_shadow_repo_gorm.go lines 49-61, cloneAllShadowRulesTx deletes all existing rows from mapping_rule_master before inserting and never uses ON CONFLICT.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go",
+      "lines": "49-64"
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "kind": "control_false",
+      "claim": "In update_mapping_rule.go lines 21-29, UpdateMappingRuleCommand allows renaming target_column on mapping_rule_v2 directly from the API request.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_mapping_rule.go",
+      "lines": "21-35"
+    }
+  ]
+}

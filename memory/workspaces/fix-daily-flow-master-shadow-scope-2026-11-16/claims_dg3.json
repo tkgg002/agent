@@ -1,0 +1,60 @@
+[
+ {
+  "id": "A-F1",
+  "kind": "audit",
+  "basis": "code",
+  "flow": "GetDailyFlow transmute shadow scope",
+  "claim": "GetDailyFlow lọc dòng transmute theo shadow_schema từ details hoặc tm_sb và dùng NULLIF cho SPLIT_PART.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:199-215\n\t\t\tOR (\n\t\t\t\tal.operation IN ('transmute', 'transmute_sub', 'transmute_poison_pill')\n\t\t\t\tAND (?::text = '' OR COALESCE(tm.master_table, mb.master_table, NULLIF(SPLIT_PART(al.target_table, '.', 2), ''), al.target_table) = ? OR al.target_table = ? OR al.target_table LIKE ?)\n\t\t\t\tAND (\n\t\t\t\t\t?::text = ''\n\t\t\t\t\tOR COALESCE(NULLIF(al.details->>'shadow_schema', ''), tm_sb.shadow_schema, sb.shadow_schema) = ?\n\t\t\t\t\tOR (\n\t\t\t\t\t\tNULLIF(al.details->>'shadow_schema', '') IS NULL\n\t\t\t\t\t\tAND tm_sb.shadow_schema IS NULL\n\t\t\t\t\t\tAND sb.shadow_schema IS NULL\n\t\t\t\t\t\tAND (SELECT COUNT(*) FROM cdc_system.shadow_binding sb_u WHERE sb_u.shadow_table = ? AND sb_u.is_active = TRUE) = 1\n\t\t\t\t\t\tAND EXISTS (SELECT 1 FROM cdc_system.shadow_binding sb_m WHERE sb_m.shadow_table = ? AND sb_m.shadow_schema = ? AND sb_m.is_active = TRUE)\n\t\t\t\t\t)\n\t\t\t\t)\n\t\t\t\tAND COALESCE(NULLIF(al.details->>'shadow_table', ''), tm_sb.shadow_table, sb.shadow_table, ?) = ?\n\t\t\t)\n\t\t)"
+ },
+ {
+  "id": "A-F2",
+  "kind": "audit",
+  "basis": "code",
+  "flow": "withShadowScope helper",
+  "claim": "Hàm withShadowScope gắn shadow_schema và shadow_table vào details khi khác rỗng.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_shadow_scope.go:7-18\nfunc withShadowScope(req TransmuteRequest, details map[string]interface{}) map[string]interface{} {\n\tif details == nil {\n\t\tdetails = make(map[string]interface{})\n\t}\n\tif req.ShadowSchema != \"\" {\n\t\tdetails[\"shadow_schema\"] = req.ShadowSchema\n\t}\n\tif req.ShadowTable != \"\" {\n\t\tdetails[\"shadow_table\"] = req.ShadowTable\n\t}\n\treturn details\n}"
+ },
+ {
+  "id": "A-R1",
+  "kind": "audit",
+  "basis": "code",
+  "flow": "debounceRunKey shadow separation",
+  "claim": "Khóa gom nhóm debounceRunKey bao gồm shadowSchema và shadowTable.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_event_date_split.go:14-21\ntype debounceRunKey struct {\n\tmasterBindingID int64\n\tshadowSchema    string\n\tshadowTable     string\n\ttriggeredBy     string\n\teventDate       string\n}\n"
+ },
+ {
+  "id": "A-R2",
+  "kind": "audit",
+  "basis": "code",
+  "flow": "fanout request shadow propagation",
+  "claim": "Fan-out gán ShadowSchema và ShadowTable từ req vào TransmuteRequest.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:227-238\n\t\tfor _, target := range masterTargets {\n\t\t\ttReq := TransmuteRequest{\n\t\t\t\tMasterTable:     target.MasterFQN,\n\t\t\t\tMasterBindingID: target.ID,\n\t\t\t\tShadowSchema:    req.ShadowSchema,\n\t\t\t\tShadowTable:     req.ShadowTable,\n\t\t\t\tSourceIDs:       req.SourceIDs,\n\t\t\t\tEvents:          req.Events,\n\t\t\t\tTriggeredBy:     hookTrigger,\n\t\t\t\tCorrelationID:   req.CorrelationID,\n\t\t\t}\n\t\t\ttaskMsg := &nats.Msg{"
+ },
+ {
+  "id": "A-SCOPE",
+  "kind": "audit",
+  "basis": "code",
+  "flow": "3-tier lessons counter",
+  "claim": "verify_governance.py đếm dòng L0xx trong topics/*.summary.md khi idx_count bằng 0.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/verify_governance.py:160-171\n    idx_text = index_md.read_text(encoding=\"utf-8\")\n    idx_bytes = len(idx_text.encode(\"utf-8\"))\n    idx_count = sum(1 for ln in idx_text.splitlines() if re.match(r\"^-\\s+L\\d{3}\\b\", ln))\n    if idx_count == 0:\n        topics_dir = index_md.parent / \"topics\"\n        if topics_dir.is_dir():\n            idx_count = sum(\n                1\n                for sf in sorted(topics_dir.glob(\"*.summary.md\"))\n                for ln in sf.read_text(encoding=\"utf-8\").splitlines()\n                if re.match(r\"^\\|\\s*`L\\d{3}`\\s*\\|\", ln)\n            )"
+ },
+ {
+  "id": "K1",
+  "kind": "control_false",
+  "claim": "withShadowScope xóa bỏ khóa shadow_schema khỏi details.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_shadow_scope.go:7-18\nfunc withShadowScope(req TransmuteRequest, details map[string]interface{}) map[string]interface{} {\n\tif details == nil {\n\t\tdetails = make(map[string]interface{})\n\t}\n\tif req.ShadowSchema != \"\" {\n\t\tdetails[\"shadow_schema\"] = req.ShadowSchema\n\t}\n\tif req.ShadowTable != \"\" {\n\t\tdetails[\"shadow_table\"] = req.ShadowTable\n\t}\n\treturn details\n}"
+ },
+ {
+  "id": "K2",
+  "kind": "control_false",
+  "claim": "debounceRunKey không có trường shadowSchema.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_event_date_split.go:14-21\ntype debounceRunKey struct {\n\tmasterBindingID int64\n\tshadowSchema    string\n\tshadowTable     string\n\ttriggeredBy     string\n\teventDate       string\n}\n"
+ },
+ {
+  "id": "K3",
+  "kind": "control_true",
+  "claim": "withShadowScope kiểm tra if details == nil và tạo map mới.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_shadow_scope.go:7-18\nfunc withShadowScope(req TransmuteRequest, details map[string]interface{}) map[string]interface{} {\n\tif details == nil {\n\t\tdetails = make(map[string]interface{})\n\t}\n\tif req.ShadowSchema != \"\" {\n\t\tdetails[\"shadow_schema\"] = req.ShadowSchema\n\t}\n\tif req.ShadowTable != \"\" {\n\t\tdetails[\"shadow_table\"] = req.ShadowTable\n\t}\n\treturn details\n}"
+ }
+]

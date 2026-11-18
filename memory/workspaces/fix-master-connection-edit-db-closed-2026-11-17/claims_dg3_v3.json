@@ -1,0 +1,61 @@
+{
+  "objective": "Adversarial Final Audit (DG3) sau khi xử lý toàn bộ phát hiện từ H7 Stop-Audit và Laya dg3review (PeekDB 0-I/O, WaitGroup m.closed guard, kế thừa existing.SSLMode, merge existing.OptionsJSON, trả error từ syncMongoMasterBindingsDatabase)",
+  "claims": [
+    {
+      "id": "A-EVICT-1",
+      "kind": "claim",
+      "claim": "In multi.go lines 150-175, PeekDB reads r.gormDBs under RLock without opening new connections, and EvictRole protects RoleControlPlane, RoleShadow, and RoleDestination before deleting the dynamic role under r.mu.Lock().",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go",
+      "lines": "150-176"
+    },
+    {
+      "id": "A-DRAIN-2",
+      "kind": "claim",
+      "claim": "In connection_manager.go lines 451-555, InvalidatePool checks sharedDestDB via PeekDB, evicts 'master:'+key from m.reg, sets MaxIdleConns(0), and guards m.wg.Add(1) with m.closed under m.mu.Lock() before Close calls m.wg.Wait().",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go",
+      "lines": "451-556"
+    },
+    {
+      "id": "A-TRANSIENT-3",
+      "kind": "claim",
+      "claim": "In transmute_poison_pill_split.go lines 269-280, isTransientError matches 'database is closed' and 'failed to verify master table existence' so closed-pool or DDL-verification errors are not misclassified as poison pills.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_poison_pill_split.go",
+      "lines": "265-282"
+    },
+    {
+      "id": "A-CMS-SYNC-4",
+      "kind": "claim",
+      "claim": "In master_connection_repo_gorm.go lines 328-455, UpdateMasterConnection merges existing.OptionsJSON instead of overwriting custom keys, and syncMongoMasterBindingsDatabase returns error while updating only master_database for postgresql.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_connection_repo_gorm.go",
+      "lines": "328-455"
+    },
+    {
+      "id": "A-CMS-DSN-5",
+      "kind": "claim",
+      "claim": "In master_registry_handler_connections.go lines 219-282, UpdateConnection preserves existing.SSLMode when req.SSLMode is empty, inherits stored credentials via extractStoredMasterCredentials, and rebuilds dsn to keep options_json synchronized.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections.go",
+      "lines": "219-282"
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "kind": "control_true",
+      "claim": "In master_read_repo_gorm.go lines 39-43, ListEnriched selects mc.default_database when COALESCE(mc.default_database, '') is non-empty and falls back to mb.master_database otherwise.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_read_repo_gorm.go",
+      "lines": "39-44"
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "kind": "control_false",
+      "claim": "In binding.go lines 57-73, MasterConnectionItem serializes OptionsJSON and plaintext password directly into the JSON response.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/domain/master/binding.go",
+      "lines": "57-73"
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "kind": "control_false",
+      "claim": "In master_registry_handler_connections.go lines 219-226, UpdateConnection forcibly resets sslmode to disable even when existing.SSLMode is require.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections.go",
+      "lines": "219-227"
+    }
+  ]
+}

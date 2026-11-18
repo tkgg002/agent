@@ -1,0 +1,1 @@
+- [2026-11-18T11:11:11+07:00] [Agent:Claude Sonnet 5.5] START vega_fitfix: User APPROVE restart Vega + sửa sidecar. Backup *.bak_20261118T1100 (sidecar, ensure_vega_up.sh).

@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -84,6 +85,79 @@ class TestResolveGateUrl(unittest.TestCase):
         self.assertEqual(path, "/v1/predict")
         self.assertEqual(body["mode"], laya_gate.GATE_MODE)
         self.assertEqual(body["state"], {"claim": "x"})
+
+
+class _SlowSrv(BaseHTTPRequestHandler):
+    """Vega with a hung /v1/predict: /health 200 but POST does not answer within the fail-fast window."""
+    slow_posts = 0
+
+    def log_message(self, *a):
+        pass
+
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+
+    def do_POST(self):
+        _SlowSrv.slow_posts += 1
+        time.sleep(2.5)
+
+
+class TestFailFastFallback(unittest.TestCase):
+    def setUp(self):
+        _Srv.posts.clear()
+        _SlowSrv.slow_posts = 0
+        self.slow = ThreadingHTTPServer(("127.0.0.1", 0), _SlowSrv)
+        Thread(target=self.slow.serve_forever, daemon=True).start()
+        self.fast, self.fast_base = _start()
+        self.slow_url = f"http://127.0.0.1:{self.slow.server_address[1]}/v1/predict"
+        self.orig = (laya_gate.VEGA_URL, laya_gate.LAYA_FALLBACK_URL, laya_gate.VEGA_TIMEOUT,
+                     laya_gate.VEGA_COOLDOWN, laya_gate._vega_skip_until)
+        laya_gate.VEGA_URL = self.slow_url
+        laya_gate.LAYA_FALLBACK_URL = self.fast_base + "/v1/predict"
+        laya_gate.VEGA_TIMEOUT = 0.5
+        laya_gate.VEGA_COOLDOWN = 60.0
+        laya_gate._vega_skip_until = 0.0
+
+    def tearDown(self):
+        self.slow.shutdown()
+        self.fast.shutdown()
+        (laya_gate.VEGA_URL, laya_gate.LAYA_FALLBACK_URL, laya_gate.VEGA_TIMEOUT,
+         laya_gate.VEGA_COOLDOWN, laya_gate._vega_skip_until) = self.orig
+
+    def _post(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            t = time.monotonic()
+            raw = laya_gate.post_laya(self.slow_url, {"claim": "x"}, {"verdict": {"type": "choice"}}, retries=6, retry_wait=5.0)
+        return raw, time.monotonic() - t, err.getvalue()
+
+    def test_hung_vega_falls_to_laya_without_retry(self):
+        raw, took, err = self._post()
+        self.assertTrue(raw["ok"])
+        self.assertLess(took, 2.0)
+        self.assertEqual(_SlowSrv.slow_posts, 1)
+        self.assertIn("GATE_FALLBACK", err)
+        self.assertEqual(len(_Srv.posts), 1)
+
+    def test_cooldown_skips_vega_on_next_call(self):
+        self._post()
+        raw, took, _ = self._post()
+        self.assertTrue(raw["ok"])
+        self.assertLess(took, 0.4)
+        self.assertEqual(_SlowSrv.slow_posts, 1)
+
+    def test_healthy_vega_does_not_touch_laya(self):
+        laya_gate.VEGA_URL = self.fast_base + "/v1/predict"
+        laya_gate.LAYA_FALLBACK_URL = self.slow_url
+        raw = laya_gate.post_laya(laya_gate.VEGA_URL, {"claim": "x"}, {"verdict": {"type": "choice"}}, retries=0)
+        self.assertTrue(raw["ok"])
+        self.assertEqual(_SlowSrv.slow_posts, 0)
+
+    def test_explicit_url_keeps_old_timeout_path(self):
+        laya_gate.VEGA_URL = "http://127.0.0.1:1/v1/predict"
+        raw = laya_gate.post_laya(self.fast_base + "/v1/predict", {"claim": "x"}, {"verdict": {"type": "choice"}}, retries=0)
+        self.assertTrue(raw["ok"])
 
 
 class TestHardNegativeFeedback(unittest.TestCase):

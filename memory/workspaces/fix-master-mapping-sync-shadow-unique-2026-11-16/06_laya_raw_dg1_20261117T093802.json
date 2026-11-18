@@ -1,0 +1,1789 @@
+[
+  {
+    "id": "S-RC-1",
+    "kind": "claim",
+    "claim": "In master_multi_shadow_repo_gorm.go lines 215-272, syncRulesFromAllShadowsTx inserts duplicate mapping_v2_id rows when target_column was customized on Master and then attempts UPDATE setting m.target_column = v2.target_column, colliding on ux_mapping_rule_master_target.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go",
+    "lines": "209-275",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:209-275\nfunc syncRulesFromAllShadowsTx(ctx context.Context, db *gorm.DB, masterBindingID, shadowBindingID int64, updatedBy string) (int64, int64, error) {\n\tvar syncedNew, syncedRenamed int64\n\tshadowIDs := collectShadowIDsFromSpec(ctx, db, masterBindingID, shadowBindingID)\n\treservedCols := domainShadow.ReservedShadowSystemColumns()\n\terr := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {\n\t\tfor _, sbID := range shadowIDs {\n\t\t\tresInsert := tx.Exec(`\n\t\t\t\tINSERT INTO cdc_system.mapping_rule_master (\n\t\t\t\t\tmaster_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by, created_at, updated_at\n\t\t\t\t)\n\t\t\t\tSELECT ?, v2.id, v2.target_column, true, 'approved', 'shadow-sync', ?, NOW(), NOW()\n\t\t\t\tFROM cdc_system.mapping_rule_v2 v2\n\t\t\t\tWHERE v2.shadow_binding_id = ? \n\t\t\t\t  AND v2.status = 'approved' \n\t\t\t\t  AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\t\t  AND NOT EXISTS (\n\t\t\t\t\t  SELECT 1 FROM cdc_system.mapping_rule_master m \n\t\t\t\t\t  WHERE m.master_binding_id = ? AND m.target_column = v2.target_column\n\t\t\t\t  )`,\n\t\t\t\tmasterBindingID, updatedBy, sbID, reservedCols, masterBindingID,\n\t\t\t)\n\t\t\tif resInsert.Error != nil {\n\t\t\t\treturn resInsert.Error\n\t\t\t}\n\t\t\tsyncedNew += resInsert.RowsAffected\n\n\t\t\tresRenameNotInMaster := tx.Exec(`\n\t\t\t\tUPDATE cdc_system.mapping_rule_master m\n\t\t\t\tSET target_column = v2.target_column,\n\t\t\t\t    updated_by = ?,\n\t\t\t\t    updated_at = NOW()\n\t\t\t\tFROM cdc_system.mapping_rule_v2 v2\n\t\t\t\tWHERE m.mapping_v2_id = v2.id\n\t\t\t\t  AND m.master_binding_id = ?\n\t\t\t\t  AND m.in_master = false\n\t\t\t\t  AND m.target_column <> v2.target_column\n\t\t\t\t  AND (m.source_path IS NULL OR m.source_path = '')\n\t\t\t\t  AND v2.shadow_binding_id = ?`,\n\t\t\t\tupdatedBy, masterBindingID, sbID,\n\t\t\t)\n\t\t\tif resRenameNotInMaster.Error != nil {\n\t\t\t\treturn resRenameNotInMaster.Error\n\t\t\t}\n\n\t\t\tresRenameInMaster := tx.Exec(`\n\t\t\t\tUPDATE cdc_system.mapping_rule_master m\n\t\t\t\tSET pending_rename_from = COALESCE(m.pending_rename_from, m.target_column),\n\t\t\t\t    target_column = v2.target_column,\n\t\t\t\t    status = 'pending',\n\t\t\t\t    updated_by = ?,\n\t\t\t\t    updated_at = NOW()\n\t\t\t\tFROM cdc_system.mapping_rule_v2 v2\n\t\t\t\tWHERE m.mapping_v2_id = v2.id\n\t\t\t\t  AND m.master_binding_id = ?\n\t\t\t\t  AND m.in_master = true\n\t\t\t\t  AND m.target_column <> v2.target_column\n\t\t\t\t  AND (m.source_path IS NULL OR m.source_path = '')\n\t\t\t\t  AND v2.shadow_binding_id = ?`,\n\t\t\t\tupdatedBy, masterBindingID, sbID,\n\t\t\t)\n\t\t\tif resRenameInMaster.Error != nil {\n\t\t\t\treturn resRenameInMaster.Error\n\t\t\t}\n\n\t\t\tsyncedRenamed += resRenameNotInMaster.RowsAffected + resRenameInMaster.RowsAffected\n\t\t}\n\t\treturn nil",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4687244958949011,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.4687244958949011,
+            "probabilities": {
+              "CORRECT": 0.4687244958949011,
+              "INCORRECT": 0.13815380707368877,
+              "UNSUPPORTED": 0.3931216970314102
+            },
+            "probs": {
+              "CORRECT": 0.4687244958949011,
+              "INCORRECT": 0.13815380707368877,
+              "UNSUPPORTED": 0.3931216970314102
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.4687244958949011,
+              "probabilities": {
+                "CORRECT": 0.4687244958949011,
+                "INCORRECT": 0.13815380707368877,
+                "UNSUPPORTED": 0.3931216970314102
+              },
+              "probs": {
+                "CORRECT": 0.4687244958949011,
+                "INCORRECT": 0.13815380707368877,
+                "UNSUPPORTED": 0.3931216970314102
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 1215
+        },
+        "latency_ms": 47750.93,
+        "usage": {
+          "input_tokens": 1215,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In master_multi_shadow_repo_gorm.go lines 215-272, syncRulesFromAllShadowsTx inserts duplicate mapping_v2_id rows when target_column was customized on Master and then attempts UPDATE setting m.target_column = v2.target_column, colliding on ux_mapping_rule_master_target.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:209-275\nfunc syncRulesFromAllShadowsTx(ctx context.Context, db *gorm.DB, masterBindingID, shadowBindingID int64, updatedBy string) (int64, int64, error) {\n\tvar syncedNew, syncedRenamed int64\n\tshadowIDs := collectShadowIDsFromSpec(ctx, db, masterBindingID, shadowBindingID)\n\treservedCols := domainShadow.ReservedShadowSystemColumns()\n\terr := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {\n\t\tfor _, sbID := range shadowIDs {\n\t\t\tresInsert := tx.Exec(`\n\t\t\t\tINSERT INTO cdc_system.mapping_rule_master (\n\t\t\t\t\tmaster_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by, created_at, updated_at\n\t\t\t\t)\n\t\t\t\tSELECT ?, v2.id, v2.target_column, true, 'approved', 'shadow-sync', ?, NOW(), NOW()\n\t\t\t\tFROM cdc_system.mapping_rule_v2 v2\n\t\t\t\tWHERE v2.shadow_binding_id = ? \n\t\t\t\t  AND v2.status = 'approved' \n\t\t\t\t  AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\t\t  AND NOT EXISTS (\n\t\t\t\t\t  SELECT 1 FROM cdc_system.mapping_rule_master m \n\t\t\t\t\t  WHERE m.master_binding_id = ? AND m.target_column = v2.target_column\n\t\t\t\t  )`,\n\t\t\t\tmasterBindingID, updatedBy, sbID, reservedCols, masterBindingID,\n\t\t\t)\n\t\t\tif resInsert.Error != nil {\n\t\t\t\treturn resInsert.Error\n\t\t\t}\n\t\t\tsyncedNew += resInsert.RowsAffected\n\n\t\t\tresRenameNotInMaster := tx.Exec(`\n\t\t\t\tUPDATE cdc_system.mapping_rule_master m\n\t\t\t\tSET target_column = v2.target_column,\n\t\t\t\t    updated_by = ?,\n\t\t\t\t    updated_at = NOW()\n\t\t\t\tFROM cdc_system.mapping_rule_v2 v2\n\t\t\t\tWHERE m.mapping_v2_id = v2.id\n\t\t\t\t  AND m.master_binding_id = ?\n\t\t\t\t  AND m.in_master = false\n\t\t\t\t  AND m.target_column <> v2.target_column\n\t\t\t\t  AND (m.source_path IS NULL OR m.source_path = '')\n\t\t\t\t  AND v2.shadow_binding_id = ?`,\n\t\t\t\tupdatedBy, masterBindingID, sbID,\n\t\t\t)\n\t\t\tif resRenameNotInMaster.Error != nil {\n\t\t\t\treturn resRenameNotInMaster.Error\n\t\t\t}\n\n\t\t\tresRenameInMaster := tx.Exec(`\n\t\t\t\tUPDATE cdc_system.mapping_rule_master m\n\t\t\t\tSET pending_rename_from = COALESCE(m.pending_rename_from, m.target_column),\n\t\t\t\t    target_column = v2.target_column,\n\t\t\t\t    status = 'pending',\n\t\t\t\t    updated_by = ?,\n\t\t\t\t    updated_at = NOW()\n\t\t\t\tFROM cdc_system.mapping_rule_v2 v2\n\t\t\t\tWHERE m.mapping_v2_id = v2.id\n\t\t\t\t  AND m.master_binding_id = ?\n\t\t\t\t  AND m.in_master = true\n\t\t\t\t  AND m.target_column <> v2.target_column\n\t\t\t\t  AND (m.source_path IS NULL OR m.source_path = '')\n\t\t\t\t  AND v2.shadow_binding_id = ?`,\n\t\t\t\tupdatedBy, masterBindingID, sbID,\n\t\t\t)\n\t\t\tif resRenameInMaster.Error != nil {\n\t\t\t\treturn resRenameInMaster.Error\n\t\t\t}\n\n\t\t\tsyncedRenamed += resRenameNotInMaster.RowsAffected + resRenameInMaster.RowsAffected\n\t\t}\n\t\treturn nil",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4875668732685089,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.4875668732685089,
+            "probabilities": {
+              "CORRECT": 0.4875668732685089,
+              "INCORRECT": 0.19990252796520755,
+              "UNSUPPORTED": 0.3125305987662836
+            },
+            "probs": {
+              "CORRECT": 0.4875668732685089,
+              "INCORRECT": 0.19990252796520755,
+              "UNSUPPORTED": 0.3125305987662836
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.4875668732685089,
+              "probabilities": {
+                "CORRECT": 0.4875668732685089,
+                "INCORRECT": 0.19990252796520755,
+                "UNSUPPORTED": 0.3125305987662836
+              },
+              "probs": {
+                "CORRECT": 0.4875668732685089,
+                "INCORRECT": 0.19990252796520755,
+                "UNSUPPORTED": 0.3125305987662836
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 1196
+        },
+        "latency_ms": 37739.46,
+        "usage": {
+          "input_tokens": 1196,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:209-275\nfunc syncRulesFromAllShadowsTx(ctx context.Context, db *gorm.DB, masterBindingID, shadowBindingID int64, updatedBy string) (int64, int64, error) {\n\tvar syncedNew, syncedRenamed int64\n\tshadowIDs := collectShadowIDsFromSpec(ctx, db, masterBindingID, shadowBindingID)\n\treservedCols := domainShadow.ReservedShadowSystemColumns()\n\terr := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {\n\t\tfor _, sbID := range shadowIDs {\n\t\t\tresInsert := tx.Exec(`\n\t\t\t\tINSERT INTO cdc_system.mapping_rule_master (\n\t\t\t\t\tmaster_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by, created_at, updated_at\n\t\t\t\t)\n\t\t\t\tSELECT ?, v2.id, v2.target_column, true, 'approved', 'shadow-sync', ?, NOW(), NOW()\n\t\t\t\tFROM cdc_system.mapping_rule_v2 v2\n\t\t\t\tWHERE v2.shadow_binding_id = ? \n\t\t\t\t  AND v2.status = 'approved' \n\t\t\t\t  AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\t\t  AND NOT EXISTS (\n\t\t\t\t\t  SELECT 1 FROM cdc_system.mapping_rule_master m \n\t\t\t\t\t  WHERE m.master_binding_id = ? AND m.target_column = v2.target_column\n\t\t\t\t  )`,\n\t\t\t\tmasterBindingID, updatedBy, sbID, reservedCols, masterBindingID,\n\t\t\t)\n\t\t\tif resInsert.Error != nil {\n\t\t\t\treturn resInsert.Error\n\t\t\t}\n\t\t\tsyncedNew += resInsert.RowsAffected\n\n\t\t\tresRenameNotInMaster := tx.Exec(`\n\t\t\t\tUPDATE cdc_system.mapping_rule_master m\n\t\t\t\tSET target_column = v2.target_column,\n\t\t\t\t    updated_by = ?,\n\t\t\t\t    updated_at = NOW()\n\t\t\t\tFROM cdc_system.mapping_rule_v2 v2\n\t\t\t\tWHERE m.mapping_v2_id = v2.id\n\t\t\t\t  AND m.master_binding_id = ?\n\t\t\t\t  AND m.in_master = false\n\t\t\t\t  AND m.target_column <> v2.target_column\n\t\t\t\t  AND (m.source_path IS NULL OR m.source_path = '')\n\t\t\t\t  AND v2.shadow_binding_id = ?`,\n\t\t\t\tupdatedBy, masterBindingID, sbID,\n\t\t\t)\n\t\t\tif resRenameNotInMaster.Error != nil {\n\t\t\t\treturn resRenameNotInMaster.Error\n\t\t\t}\n\n\t\t\tresRenameInMaster := tx.Exec(`\n\t\t\t\tUPDATE cdc_system.mapping_rule_master m\n\t\t\t\tSET pending_rename_from = COALESCE(m.pending_rename_from, m.target_column),\n\t\t\t\t    target_column = v2.target_column,\n\t\t\t\t    status = 'pending',\n\t\t\t\t    updated_by = ?,\n\t\t\t\t    updated_at = NOW()\n\t\t\t\tFROM cdc_system.mapping_rule_v2 v2\n\t\t\t\tWHERE m.mapping_v2_id = v2.id\n\t\t\t\t  AND m.master_binding_id = ?\n\t\t\t\t  AND m.in_master = true\n\t\t\t\t  AND m.target_column <> v2.target_column\n\t\t\t\t  AND (m.source_path IS NULL OR m.source_path = '')\n\t\t\t\t  AND v2.shadow_binding_id = ?`,\n\t\t\t\tupdatedBy, masterBindingID, sbID,\n\t\t\t)\n\t\t\tif resRenameInMaster.Error != nil {\n\t\t\t\treturn resRenameInMaster.Error\n\t\t\t}\n\n\t\t\tsyncedRenamed += resRenameNotInMaster.RowsAffected + resRenameInMaster.RowsAffected\n\t\t}\n\t\treturn nil",
+          "claim": "In master_multi_shadow_repo_gorm.go lines 215-272, syncRulesFromAllShadowsTx inserts duplicate mapping_v2_id rows when target_column was customized on Master and then attempts UPDATE setting m.target_column = v2.target_column, colliding on ux_mapping_rule_master_target."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7828932745918068,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.7828932745918068,
+            "probabilities": {
+              "YES": 0.7828932745918068,
+              "NO": 0.2171067254081932
+            },
+            "probs": {
+              "YES": 0.7828932745918068,
+              "NO": 0.2171067254081932
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.7828932745918068,
+              "probabilities": {
+                "YES": 0.7828932745918068,
+                "NO": 0.2171067254081932
+              },
+              "probs": {
+                "YES": 0.7828932745918068,
+                "NO": 0.2171067254081932
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 1109
+        },
+        "latency_ms": 48543.6,
+        "usage": {
+          "input_tokens": 1109,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:209-275\nfunc syncRulesFromAllShadowsTx(ctx context.Context, db *gorm.DB, masterBindingID, shadowBindingID int64, updatedBy string) (int64, int64, error) {\n\tvar syncedNew, syncedRenamed int64\n\tshadowIDs := collectShadowIDsFromSpec(ctx, db, masterBindingID, shadowBindingID)\n\treservedCols := domainShadow.ReservedShadowSystemColumns()\n\terr := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {\n\t\tfor _, sbID := range shadowIDs {\n\t\t\tresInsert := tx.Exec(`\n\t\t\t\tINSERT INTO cdc_system.mapping_rule_master (\n\t\t\t\t\tmaster_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by, created_at, updated_at\n\t\t\t\t)\n\t\t\t\tSELECT ?, v2.id, v2.target_column, true, 'approved', 'shadow-sync', ?, NOW(), NOW()\n\t\t\t\tFROM cdc_system.mapping_rule_v2 v2\n\t\t\t\tWHERE v2.shadow_binding_id = ? \n\t\t\t\t  AND v2.status = 'approved' \n\t\t\t\t  AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\t\t  AND NOT EXISTS (\n\t\t\t\t\t  SELECT 1 FROM cdc_system.mapping_rule_master m \n\t\t\t\t\t  WHERE m.master_binding_id = ? AND m.target_column = v2.target_column\n\t\t\t\t  )`,\n\t\t\t\tmasterBindingID, updatedBy, sbID, reservedCols, masterBindingID,\n\t\t\t)\n\t\t\tif resInsert.Error != nil {\n\t\t\t\treturn resInsert.Error\n\t\t\t}\n\t\t\tsyncedNew += resInsert.RowsAffected\n\n\t\t\tresRenameNotInMaster := tx.Exec(`\n\t\t\t\tUPDATE cdc_system.mapping_rule_master m\n\t\t\t\tSET target_column = v2.target_column,\n\t\t\t\t    updated_by = ?,\n\t\t\t\t    updated_at = NOW()\n\t\t\t\tFROM cdc_system.mapping_rule_v2 v2\n\t\t\t\tWHERE m.mapping_v2_id = v2.id\n\t\t\t\t  AND m.master_binding_id = ?\n\t\t\t\t  AND m.in_master = false\n\t\t\t\t  AND m.target_column <> v2.target_column\n\t\t\t\t  AND (m.source_path IS NULL OR m.source_path = '')\n\t\t\t\t  AND v2.shadow_binding_id = ?`,\n\t\t\t\tupdatedBy, masterBindingID, sbID,\n\t\t\t)\n\t\t\tif resRenameNotInMaster.Error != nil {\n\t\t\t\treturn resRenameNotInMaster.Error\n\t\t\t}\n\n\t\t\tresRenameInMaster := tx.Exec(`\n\t\t\t\tUPDATE cdc_system.mapping_rule_master m\n\t\t\t\tSET pending_rename_from = COALESCE(m.pending_rename_from, m.target_column),\n\t\t\t\t    target_column = v2.target_column,\n\t\t\t\t    status = 'pending',\n\t\t\t\t    updated_by = ?,\n\t\t\t\t    updated_at = NOW()\n\t\t\t\tFROM cdc_system.mapping_rule_v2 v2\n\t\t\t\tWHERE m.mapping_v2_id = v2.id\n\t\t\t\t  AND m.master_binding_id = ?\n\t\t\t\t  AND m.in_master = true\n\t\t\t\t  AND m.target_column <> v2.target_column\n\t\t\t\t  AND (m.source_path IS NULL OR m.source_path = '')\n\t\t\t\t  AND v2.shadow_binding_id = ?`,\n\t\t\t\tupdatedBy, masterBindingID, sbID,\n\t\t\t)\n\t\t\tif resRenameInMaster.Error != nil {\n\t\t\t\treturn resRenameInMaster.Error\n\t\t\t}\n\n\t\t\tsyncedRenamed += resRenameNotInMaster.RowsAffected + resRenameInMaster.RowsAffected\n\t\t}\n\t\treturn nil",
+          "claim": "In master_multi_shadow_repo_gorm.go lines 215-272, syncRulesFromAllShadowsTx inserts duplicate mapping_v2_id rows when target_column was customized on Master and then attempts UPDATE setting m.target_column = v2.target_column, colliding on ux_mapping_rule_master_target."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "S-FIX-1",
+    "kind": "claim",
+    "claim": "In batch_update_rules.go lines 42-53, approving pending Master rules triggers PublishMasterCreate to create physical Master columns, matching inserting newly synced rules with status 'pending'.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/batch_update_rules.go",
+    "lines": "33-55",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/batch_update_rules.go:33-55\n\tvar bindingIDs []int64\n\tif cmd.Status == \"approved\" {\n\t\tbindingIDs, _ = h.repo.GetDistinctBindingIDsByRuleIDs(ctx, cmd.IDs)\n\t}\n\n\tif err := h.repo.BatchUpdateStatus(ctx, cmd.IDs, cmd.Status, cmd.IsActive, cmd.UpdatedBy); err != nil {\n\t\treturn 0, err\n\t}\n\n\tif cmd.Status == \"approved\" && len(bindingIDs) > 0 {\n\t\tusername := cmd.UpdatedBy\n\t\tif username == \"\" {\n\t\t\tusername = \"api-batch\"\n\t\t}\n\t\tfor _, bid := range bindingIDs {\n\t\t\tmasterTable, err := h.repo.GetMasterTableByBindingID(ctx, bid)\n\t\t\tif err == nil && masterTable != \"\" {\n\t\t\t\t_ = h.publisher.PublishMasterCreate(ctx, masterTable, username)\n\t\t\t}\n\t\t}\n\t}\n\n\treturn len(cmd.IDs), nil",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.4851967512779286,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.4851967512779286,
+            "probabilities": {
+              "CORRECT": 0.41712536951268125,
+              "INCORRECT": 0.09767787920939024,
+              "UNSUPPORTED": 0.4851967512779286
+            },
+            "probs": {
+              "CORRECT": 0.41712536951268125,
+              "INCORRECT": 0.09767787920939024,
+              "UNSUPPORTED": 0.4851967512779286
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.4851967512779286,
+              "probabilities": {
+                "CORRECT": 0.41712536951268125,
+                "INCORRECT": 0.09767787920939024,
+                "UNSUPPORTED": 0.4851967512779286
+              },
+              "probs": {
+                "CORRECT": 0.41712536951268125,
+                "INCORRECT": 0.09767787920939024,
+                "UNSUPPORTED": 0.4851967512779286
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 498
+        },
+        "latency_ms": 11093.06,
+        "usage": {
+          "input_tokens": 498,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In batch_update_rules.go lines 42-53, approving pending Master rules triggers PublishMasterCreate to create physical Master columns, matching inserting newly synced rules with status 'pending'.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/batch_update_rules.go:33-55\n\tvar bindingIDs []int64\n\tif cmd.Status == \"approved\" {\n\t\tbindingIDs, _ = h.repo.GetDistinctBindingIDsByRuleIDs(ctx, cmd.IDs)\n\t}\n\n\tif err := h.repo.BatchUpdateStatus(ctx, cmd.IDs, cmd.Status, cmd.IsActive, cmd.UpdatedBy); err != nil {\n\t\treturn 0, err\n\t}\n\n\tif cmd.Status == \"approved\" && len(bindingIDs) > 0 {\n\t\tusername := cmd.UpdatedBy\n\t\tif username == \"\" {\n\t\t\tusername = \"api-batch\"\n\t\t}\n\t\tfor _, bid := range bindingIDs {\n\t\t\tmasterTable, err := h.repo.GetMasterTableByBindingID(ctx, bid)\n\t\t\tif err == nil && masterTable != \"\" {\n\t\t\t\t_ = h.publisher.PublishMasterCreate(ctx, masterTable, username)\n\t\t\t}\n\t\t}\n\t}\n\n\treturn len(cmd.IDs), nil",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.46614850169974414,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.46614850169974414,
+            "probabilities": {
+              "CORRECT": 0.46614850169974414,
+              "INCORRECT": 0.16398557062811953,
+              "UNSUPPORTED": 0.36986592767213644
+            },
+            "probs": {
+              "CORRECT": 0.46614850169974414,
+              "INCORRECT": 0.16398557062811953,
+              "UNSUPPORTED": 0.36986592767213644
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.46614850169974414,
+              "probabilities": {
+                "CORRECT": 0.46614850169974414,
+                "INCORRECT": 0.16398557062811953,
+                "UNSUPPORTED": 0.36986592767213644
+              },
+              "probs": {
+                "CORRECT": 0.46614850169974414,
+                "INCORRECT": 0.16398557062811953,
+                "UNSUPPORTED": 0.36986592767213644
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 479
+        },
+        "latency_ms": 1440.7,
+        "usage": {
+          "input_tokens": 479,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/batch_update_rules.go:33-55\n\tvar bindingIDs []int64\n\tif cmd.Status == \"approved\" {\n\t\tbindingIDs, _ = h.repo.GetDistinctBindingIDsByRuleIDs(ctx, cmd.IDs)\n\t}\n\n\tif err := h.repo.BatchUpdateStatus(ctx, cmd.IDs, cmd.Status, cmd.IsActive, cmd.UpdatedBy); err != nil {\n\t\treturn 0, err\n\t}\n\n\tif cmd.Status == \"approved\" && len(bindingIDs) > 0 {\n\t\tusername := cmd.UpdatedBy\n\t\tif username == \"\" {\n\t\t\tusername = \"api-batch\"\n\t\t}\n\t\tfor _, bid := range bindingIDs {\n\t\t\tmasterTable, err := h.repo.GetMasterTableByBindingID(ctx, bid)\n\t\t\tif err == nil && masterTable != \"\" {\n\t\t\t\t_ = h.publisher.PublishMasterCreate(ctx, masterTable, username)\n\t\t\t}\n\t\t}\n\t}\n\n\treturn len(cmd.IDs), nil",
+          "claim": "In batch_update_rules.go lines 42-53, approving pending Master rules triggers PublishMasterCreate to create physical Master columns, matching inserting newly synced rules with status 'pending'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8329045610278608,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.8329045610278608,
+            "probabilities": {
+              "YES": 0.8329045610278608,
+              "NO": 0.16709543897213933
+            },
+            "probs": {
+              "YES": 0.8329045610278608,
+              "NO": 0.16709543897213933
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.8329045610278608,
+              "probabilities": {
+                "YES": 0.8329045610278608,
+                "NO": 0.16709543897213933
+              },
+              "probs": {
+                "YES": 0.8329045610278608,
+                "NO": 0.16709543897213933
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 392
+        },
+        "latency_ms": 1219.04,
+        "usage": {
+          "input_tokens": 392,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/batch_update_rules.go:33-55\n\tvar bindingIDs []int64\n\tif cmd.Status == \"approved\" {\n\t\tbindingIDs, _ = h.repo.GetDistinctBindingIDsByRuleIDs(ctx, cmd.IDs)\n\t}\n\n\tif err := h.repo.BatchUpdateStatus(ctx, cmd.IDs, cmd.Status, cmd.IsActive, cmd.UpdatedBy); err != nil {\n\t\treturn 0, err\n\t}\n\n\tif cmd.Status == \"approved\" && len(bindingIDs) > 0 {\n\t\tusername := cmd.UpdatedBy\n\t\tif username == \"\" {\n\t\t\tusername = \"api-batch\"\n\t\t}\n\t\tfor _, bid := range bindingIDs {\n\t\t\tmasterTable, err := h.repo.GetMasterTableByBindingID(ctx, bid)\n\t\t\tif err == nil && masterTable != \"\" {\n\t\t\t\t_ = h.publisher.PublishMasterCreate(ctx, masterTable, username)\n\t\t\t}\n\t\t}\n\t}\n\n\treturn len(cmd.IDs), nil",
+          "claim": "In batch_update_rules.go lines 42-53, approving pending Master rules triggers PublishMasterCreate to create physical Master columns, matching inserting newly synced rules with status 'pending'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "D-BEHAV-1",
+    "kind": "claim",
+    "claim": "In 09_tasks_solution_sync_shadow_unique.md lines 101-133, Code Demo 1 checks NOT EXISTS by m.mapping_v2_id = v2.id and LOWER(TRIM(m.target_column)) = LOWER(TRIM(v2.target_column)), inserts with status 'pending', and uses ON CONFLICT (master_binding_id, target_column) DO NOTHING without running reverse rename UPDATE queries.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-mapping-sync-shadow-unique-2026-11-16/09_tasks_solution_sync_shadow_unique.md",
+    "lines": "80-145",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-mapping-sync-shadow-unique-2026-11-16/09_tasks_solution_sync_shadow_unique.md:80-145\n```go\nfunc syncRulesFromAllShadowsTx(ctx context.Context, db *gorm.DB, masterBindingID, shadowBindingID int64, updatedBy string) (int64, int64, error) {\n\tvar syncedNew int64\n\tshadowIDs := collectShadowIDsFromSpec(ctx, db, masterBindingID, shadowBindingID)\n\tif len(shadowIDs) == 0 {\n\t\treturn 0, 0, nil\n\t}\n\n\tv2Table := \"cdc_system.mapping_rule_v2\"\n\tmasterRuleTable := \"cdc_system.mapping_rule_master\"\n\tif os.Getenv(\"GO_ENV\") == \"test\" {\n\t\tv2Table = \"mapping_rule_v2\"\n\t\tmasterRuleTable = \"mapping_rule_master\"\n\t}\n\n\treservedCols := domainShadow.ReservedShadowSystemColumns()\n\terr := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {\n\t\tfor _, sbID := range shadowIDs {\n\t\t\tif sbID <= 0 {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tresInsert := tx.Exec(`\n\t\t\t\tINSERT INTO `+masterRuleTable+` (\n\t\t\t\t\tmaster_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by, created_at, updated_at\n\t\t\t\t)\n\t\t\t\tSELECT ?, v2.id, TRIM(v2.target_column), true, 'pending', 'shadow-sync', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP\n\t\t\t\t  FROM `+v2Table+` v2\n\t\t\t\t WHERE v2.shadow_binding_id = ?\n\t\t\t\t   AND v2.status = 'approved'\n\t\t\t\t   AND COALESCE(v2.is_active, true) = true\n\t\t\t\t   AND TRIM(COALESCE(v2.target_column, '')) <> ''\n\t\t\t\t   AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\t\t   AND v2.id = (\n\t\t\t\t       SELECT MIN(v2d.id)\n\t\t\t\t         FROM `+v2Table+` v2d\n\t\t\t\t        WHERE v2d.shadow_binding_id = v2.shadow_binding_id\n\t\t\t\t          AND v2d.status = 'approved'\n\t\t\t\t          AND COALESCE(v2d.is_active, true) = true\n\t\t\t\t          AND LOWER(TRIM(v2d.target_column)) = LOWER(TRIM(v2.target_column))\n\t\t\t\t   )\n\t\t\t\t   AND NOT EXISTS (\n\t\t\t\t       SELECT 1 FROM `+masterRuleTable+` m\n\t\t\t\t        WHERE m.master_binding_id = ?\n\t\t\t\t          AND m.mapping_v2_id = v2.id\n\t\t\t\t   )\n\t\t\t\t   AND NOT EXISTS (\n\t\t\t\t       SELECT 1 FROM `+masterRuleTable+` m\n\t\t\t\t        WHERE m.master_binding_id = ?\n\t\t\t\t          AND LOWER(TRIM(m.target_column)) = LOWER(TRIM(v2.target_column))\n\t\t\t\t   )\n\t\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,\n\t\t\t\tmasterBindingID, updatedBy, sbID, reservedCols, masterBindingID, masterBindingID,\n\t\t\t)\n\t\t\tif resInsert.Error != nil {\n\t\t\t\treturn resInsert.Error\n\t\t\t}\n\t\t\tsyncedNew += resInsert.RowsAffected\n\t\t}\n\t\treturn nil\n\t})\n\tif err != nil {\n\t\treturn 0, 0, err\n\t}\n\treturn syncedNew, 0, nil\n}\n```",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.452927255337593,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.452927255337593,
+            "probabilities": {
+              "CORRECT": 0.452927255337593,
+              "INCORRECT": 0.12219679202559823,
+              "UNSUPPORTED": 0.42487595263680883
+            },
+            "probs": {
+              "CORRECT": 0.452927255337593,
+              "INCORRECT": 0.12219679202559823,
+              "UNSUPPORTED": 0.42487595263680883
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.452927255337593,
+              "probabilities": {
+                "CORRECT": 0.452927255337593,
+                "INCORRECT": 0.12219679202559823,
+                "UNSUPPORTED": 0.42487595263680883
+              },
+              "probs": {
+                "CORRECT": 0.452927255337593,
+                "INCORRECT": 0.12219679202559823,
+                "UNSUPPORTED": 0.42487595263680883
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 1182
+        },
+        "latency_ms": 1642.44,
+        "usage": {
+          "input_tokens": 1182,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_sync_shadow_unique.md lines 101-133, Code Demo 1 checks NOT EXISTS by m.mapping_v2_id = v2.id and LOWER(TRIM(m.target_column)) = LOWER(TRIM(v2.target_column)), inserts with status 'pending', and uses ON CONFLICT (master_binding_id, target_column) DO NOTHING without running reverse rename UPDATE queries.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-mapping-sync-shadow-unique-2026-11-16/09_tasks_solution_sync_shadow_unique.md:80-145\n```go\nfunc syncRulesFromAllShadowsTx(ctx context.Context, db *gorm.DB, masterBindingID, shadowBindingID int64, updatedBy string) (int64, int64, error) {\n\tvar syncedNew int64\n\tshadowIDs := collectShadowIDsFromSpec(ctx, db, masterBindingID, shadowBindingID)\n\tif len(shadowIDs) == 0 {\n\t\treturn 0, 0, nil\n\t}\n\n\tv2Table := \"cdc_system.mapping_rule_v2\"\n\tmasterRuleTable := \"cdc_system.mapping_rule_master\"\n\tif os.Getenv(\"GO_ENV\") == \"test\" {\n\t\tv2Table = \"mapping_rule_v2\"\n\t\tmasterRuleTable = \"mapping_rule_master\"\n\t}\n\n\treservedCols := domainShadow.ReservedShadowSystemColumns()\n\terr := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {\n\t\tfor _, sbID := range shadowIDs {\n\t\t\tif sbID <= 0 {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tresInsert := tx.Exec(`\n\t\t\t\tINSERT INTO `+masterRuleTable+` (\n\t\t\t\t\tmaster_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by, created_at, updated_at\n\t\t\t\t)\n\t\t\t\tSELECT ?, v2.id, TRIM(v2.target_column), true, 'pending', 'shadow-sync', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP\n\t\t\t\t  FROM `+v2Table+` v2\n\t\t\t\t WHERE v2.shadow_binding_id = ?\n\t\t\t\t   AND v2.status = 'approved'\n\t\t\t\t   AND COALESCE(v2.is_active, true) = true\n\t\t\t\t   AND TRIM(COALESCE(v2.target_column, '')) <> ''\n\t\t\t\t   AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\t\t   AND v2.id = (\n\t\t\t\t       SELECT MIN(v2d.id)\n\t\t\t\t         FROM `+v2Table+` v2d\n\t\t\t\t        WHERE v2d.shadow_binding_id = v2.shadow_binding_id\n\t\t\t\t          AND v2d.status = 'approved'\n\t\t\t\t          AND COALESCE(v2d.is_active, true) = true\n\t\t\t\t          AND LOWER(TRIM(v2d.target_column)) = LOWER(TRIM(v2.target_column))\n\t\t\t\t   )\n\t\t\t\t   AND NOT EXISTS (\n\t\t\t\t       SELECT 1 FROM `+masterRuleTable+` m\n\t\t\t\t        WHERE m.master_binding_id = ?\n\t\t\t\t          AND m.mapping_v2_id = v2.id\n\t\t\t\t   )\n\t\t\t\t   AND NOT EXISTS (\n\t\t\t\t       SELECT 1 FROM `+masterRuleTable+` m\n\t\t\t\t        WHERE m.master_binding_id = ?\n\t\t\t\t          AND LOWER(TRIM(m.target_column)) = LOWER(TRIM(v2.target_column))\n\t\t\t\t   )\n\t\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,\n\t\t\t\tmasterBindingID, updatedBy, sbID, reservedCols, masterBindingID, masterBindingID,\n\t\t\t)\n\t\t\tif resInsert.Error != nil {\n\t\t\t\treturn resInsert.Error\n\t\t\t}\n\t\t\tsyncedNew += resInsert.RowsAffected\n\t\t}\n\t\treturn nil\n\t})\n\tif err != nil {\n\t\treturn 0, 0, err\n\t}\n\treturn syncedNew, 0, nil\n}\n```",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5137056913760619,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.5137056913760619,
+            "probabilities": {
+              "CORRECT": 0.5137056913760619,
+              "INCORRECT": 0.1900843968162602,
+              "UNSUPPORTED": 0.29620991180767786
+            },
+            "probs": {
+              "CORRECT": 0.5137056913760619,
+              "INCORRECT": 0.1900843968162602,
+              "UNSUPPORTED": 0.29620991180767786
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.5137056913760619,
+              "probabilities": {
+                "CORRECT": 0.5137056913760619,
+                "INCORRECT": 0.1900843968162602,
+                "UNSUPPORTED": 0.29620991180767786
+              },
+              "probs": {
+                "CORRECT": 0.5137056913760619,
+                "INCORRECT": 0.1900843968162602,
+                "UNSUPPORTED": 0.29620991180767786
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 1163
+        },
+        "latency_ms": 2035.76,
+        "usage": {
+          "input_tokens": 1163,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-mapping-sync-shadow-unique-2026-11-16/09_tasks_solution_sync_shadow_unique.md:80-145\n```go\nfunc syncRulesFromAllShadowsTx(ctx context.Context, db *gorm.DB, masterBindingID, shadowBindingID int64, updatedBy string) (int64, int64, error) {\n\tvar syncedNew int64\n\tshadowIDs := collectShadowIDsFromSpec(ctx, db, masterBindingID, shadowBindingID)\n\tif len(shadowIDs) == 0 {\n\t\treturn 0, 0, nil\n\t}\n\n\tv2Table := \"cdc_system.mapping_rule_v2\"\n\tmasterRuleTable := \"cdc_system.mapping_rule_master\"\n\tif os.Getenv(\"GO_ENV\") == \"test\" {\n\t\tv2Table = \"mapping_rule_v2\"\n\t\tmasterRuleTable = \"mapping_rule_master\"\n\t}\n\n\treservedCols := domainShadow.ReservedShadowSystemColumns()\n\terr := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {\n\t\tfor _, sbID := range shadowIDs {\n\t\t\tif sbID <= 0 {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tresInsert := tx.Exec(`\n\t\t\t\tINSERT INTO `+masterRuleTable+` (\n\t\t\t\t\tmaster_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by, created_at, updated_at\n\t\t\t\t)\n\t\t\t\tSELECT ?, v2.id, TRIM(v2.target_column), true, 'pending', 'shadow-sync', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP\n\t\t\t\t  FROM `+v2Table+` v2\n\t\t\t\t WHERE v2.shadow_binding_id = ?\n\t\t\t\t   AND v2.status = 'approved'\n\t\t\t\t   AND COALESCE(v2.is_active, true) = true\n\t\t\t\t   AND TRIM(COALESCE(v2.target_column, '')) <> ''\n\t\t\t\t   AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\t\t   AND v2.id = (\n\t\t\t\t       SELECT MIN(v2d.id)\n\t\t\t\t         FROM `+v2Table+` v2d\n\t\t\t\t        WHERE v2d.shadow_binding_id = v2.shadow_binding_id\n\t\t\t\t          AND v2d.status = 'approved'\n\t\t\t\t          AND COALESCE(v2d.is_active, true) = true\n\t\t\t\t          AND LOWER(TRIM(v2d.target_column)) = LOWER(TRIM(v2.target_column))\n\t\t\t\t   )\n\t\t\t\t   AND NOT EXISTS (\n\t\t\t\t       SELECT 1 FROM `+masterRuleTable+` m\n\t\t\t\t        WHERE m.master_binding_id = ?\n\t\t\t\t          AND m.mapping_v2_id = v2.id\n\t\t\t\t   )\n\t\t\t\t   AND NOT EXISTS (\n\t\t\t\t       SELECT 1 FROM `+masterRuleTable+` m\n\t\t\t\t        WHERE m.master_binding_id = ?\n\t\t\t\t          AND LOWER(TRIM(m.target_column)) = LOWER(TRIM(v2.target_column))\n\t\t\t\t   )\n\t\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,\n\t\t\t\tmasterBindingID, updatedBy, sbID, reservedCols, masterBindingID, masterBindingID,\n\t\t\t)\n\t\t\tif resInsert.Error != nil {\n\t\t\t\treturn resInsert.Error\n\t\t\t}\n\t\t\tsyncedNew += resInsert.RowsAffected\n\t\t}\n\t\treturn nil\n\t})\n\tif err != nil {\n\t\treturn 0, 0, err\n\t}\n\treturn syncedNew, 0, nil\n}\n```",
+          "claim": "In 09_tasks_solution_sync_shadow_unique.md lines 101-133, Code Demo 1 checks NOT EXISTS by m.mapping_v2_id = v2.id and LOWER(TRIM(m.target_column)) = LOWER(TRIM(v2.target_column)), inserts with status 'pending', and uses ON CONFLICT (master_binding_id, target_column) DO NOTHING without running reverse rename UPDATE queries."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7661115965310706,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.7661115965310706,
+            "probabilities": {
+              "YES": 0.7661115965310706,
+              "NO": 0.23388840346892947
+            },
+            "probs": {
+              "YES": 0.7661115965310706,
+              "NO": 0.23388840346892947
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.7661115965310706,
+              "probabilities": {
+                "YES": 0.7661115965310706,
+                "NO": 0.23388840346892947
+              },
+              "probs": {
+                "YES": 0.7661115965310706,
+                "NO": 0.23388840346892947
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 1076
+        },
+        "latency_ms": 2132.16,
+        "usage": {
+          "input_tokens": 1076,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-mapping-sync-shadow-unique-2026-11-16/09_tasks_solution_sync_shadow_unique.md:80-145\n```go\nfunc syncRulesFromAllShadowsTx(ctx context.Context, db *gorm.DB, masterBindingID, shadowBindingID int64, updatedBy string) (int64, int64, error) {\n\tvar syncedNew int64\n\tshadowIDs := collectShadowIDsFromSpec(ctx, db, masterBindingID, shadowBindingID)\n\tif len(shadowIDs) == 0 {\n\t\treturn 0, 0, nil\n\t}\n\n\tv2Table := \"cdc_system.mapping_rule_v2\"\n\tmasterRuleTable := \"cdc_system.mapping_rule_master\"\n\tif os.Getenv(\"GO_ENV\") == \"test\" {\n\t\tv2Table = \"mapping_rule_v2\"\n\t\tmasterRuleTable = \"mapping_rule_master\"\n\t}\n\n\treservedCols := domainShadow.ReservedShadowSystemColumns()\n\terr := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {\n\t\tfor _, sbID := range shadowIDs {\n\t\t\tif sbID <= 0 {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tresInsert := tx.Exec(`\n\t\t\t\tINSERT INTO `+masterRuleTable+` (\n\t\t\t\t\tmaster_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by, created_at, updated_at\n\t\t\t\t)\n\t\t\t\tSELECT ?, v2.id, TRIM(v2.target_column), true, 'pending', 'shadow-sync', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP\n\t\t\t\t  FROM `+v2Table+` v2\n\t\t\t\t WHERE v2.shadow_binding_id = ?\n\t\t\t\t   AND v2.status = 'approved'\n\t\t\t\t   AND COALESCE(v2.is_active, true) = true\n\t\t\t\t   AND TRIM(COALESCE(v2.target_column, '')) <> ''\n\t\t\t\t   AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\t\t   AND v2.id = (\n\t\t\t\t       SELECT MIN(v2d.id)\n\t\t\t\t         FROM `+v2Table+` v2d\n\t\t\t\t        WHERE v2d.shadow_binding_id = v2.shadow_binding_id\n\t\t\t\t          AND v2d.status = 'approved'\n\t\t\t\t          AND COALESCE(v2d.is_active, true) = true\n\t\t\t\t          AND LOWER(TRIM(v2d.target_column)) = LOWER(TRIM(v2.target_column))\n\t\t\t\t   )\n\t\t\t\t   AND NOT EXISTS (\n\t\t\t\t       SELECT 1 FROM `+masterRuleTable+` m\n\t\t\t\t        WHERE m.master_binding_id = ?\n\t\t\t\t          AND m.mapping_v2_id = v2.id\n\t\t\t\t   )\n\t\t\t\t   AND NOT EXISTS (\n\t\t\t\t       SELECT 1 FROM `+masterRuleTable+` m\n\t\t\t\t        WHERE m.master_binding_id = ?\n\t\t\t\t          AND LOWER(TRIM(m.target_column)) = LOWER(TRIM(v2.target_column))\n\t\t\t\t   )\n\t\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,\n\t\t\t\tmasterBindingID, updatedBy, sbID, reservedCols, masterBindingID, masterBindingID,\n\t\t\t)\n\t\t\tif resInsert.Error != nil {\n\t\t\t\treturn resInsert.Error\n\t\t\t}\n\t\t\tsyncedNew += resInsert.RowsAffected\n\t\t}\n\t\treturn nil\n\t})\n\tif err != nil {\n\t\treturn 0, 0, err\n\t}\n\treturn syncedNew, 0, nil\n}\n```",
+          "claim": "In 09_tasks_solution_sync_shadow_unique.md lines 101-133, Code Demo 1 checks NOT EXISTS by m.mapping_v2_id = v2.id and LOWER(TRIM(m.target_column)) = LOWER(TRIM(v2.target_column)), inserts with status 'pending', and uses ON CONFLICT (master_binding_id, target_column) DO NOTHING without running reverse rename UPDATE queries."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "D-API-1",
+    "kind": "claim",
+    "claim": "In MasterMappingFieldsPage.tsx lines 373-384, handleSyncFromShadow reads res.synced_new and displays a message stating that newly synced rules have status pending.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx",
+    "lines": "369-390",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx:369-390\n  const handleSyncFromShadow = async () => {\n    if (!masterBindingID) return;\n    setSyncing(true);\n    try {\n      const { data: res } = await cmsApi.post<{ status: string; synced_new: number }>(\n        '/api/v1/master-mapping-rules/sync-from-shadow',\n        null,\n        { params: { master_binding_id: masterBindingID } }\n      );\n      const count = res.synced_new ?? 0;\n      if (count > 0) {\n        message.success(`Sync thành công: ${count} rule mới từ shadow (status pending, cần duyệt)`);\n      } else {\n        message.info('Không có rule mới — master đã đồng bộ với shadow');\n      }\n      fetchRules();\n    } catch (err) {\n      message.error(humanizeApiError(err, 'Sync từ shadow thất bại'));\n    } finally {\n      setSyncing(false);\n    }\n  };",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.491133648243016,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.491133648243016,
+            "probabilities": {
+              "CORRECT": 0.3547162058115375,
+              "INCORRECT": 0.15415014594544643,
+              "UNSUPPORTED": 0.491133648243016
+            },
+            "probs": {
+              "CORRECT": 0.3547162058115375,
+              "INCORRECT": 0.15415014594544643,
+              "UNSUPPORTED": 0.491133648243016
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.491133648243016,
+              "probabilities": {
+                "CORRECT": 0.3547162058115375,
+                "INCORRECT": 0.15415014594544643,
+                "UNSUPPORTED": 0.491133648243016
+              },
+              "probs": {
+                "CORRECT": 0.3547162058115375,
+                "INCORRECT": 0.15415014594544643,
+                "UNSUPPORTED": 0.491133648243016
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 494
+        },
+        "latency_ms": 1754.57,
+        "usage": {
+          "input_tokens": 494,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In MasterMappingFieldsPage.tsx lines 373-384, handleSyncFromShadow reads res.synced_new and displays a message stating that newly synced rules have status pending.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx:369-390\n  const handleSyncFromShadow = async () => {\n    if (!masterBindingID) return;\n    setSyncing(true);\n    try {\n      const { data: res } = await cmsApi.post<{ status: string; synced_new: number }>(\n        '/api/v1/master-mapping-rules/sync-from-shadow',\n        null,\n        { params: { master_binding_id: masterBindingID } }\n      );\n      const count = res.synced_new ?? 0;\n      if (count > 0) {\n        message.success(`Sync thành công: ${count} rule mới từ shadow (status pending, cần duyệt)`);\n      } else {\n        message.info('Không có rule mới — master đã đồng bộ với shadow');\n      }\n      fetchRules();\n    } catch (err) {\n      message.error(humanizeApiError(err, 'Sync từ shadow thất bại'));\n    } finally {\n      setSyncing(false);\n    }\n  };",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.49348981633503625,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.49348981633503625,
+            "probabilities": {
+              "CORRECT": 0.49348981633503625,
+              "INCORRECT": 0.22710896540989942,
+              "UNSUPPORTED": 0.2794012182550643
+            },
+            "probs": {
+              "CORRECT": 0.49348981633503625,
+              "INCORRECT": 0.22710896540989942,
+              "UNSUPPORTED": 0.2794012182550643
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.49348981633503625,
+              "probabilities": {
+                "CORRECT": 0.49348981633503625,
+                "INCORRECT": 0.22710896540989942,
+                "UNSUPPORTED": 0.2794012182550643
+              },
+              "probs": {
+                "CORRECT": 0.49348981633503625,
+                "INCORRECT": 0.22710896540989942,
+                "UNSUPPORTED": 0.2794012182550643
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 475
+        },
+        "latency_ms": 1367.89,
+        "usage": {
+          "input_tokens": 475,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx:369-390\n  const handleSyncFromShadow = async () => {\n    if (!masterBindingID) return;\n    setSyncing(true);\n    try {\n      const { data: res } = await cmsApi.post<{ status: string; synced_new: number }>(\n        '/api/v1/master-mapping-rules/sync-from-shadow',\n        null,\n        { params: { master_binding_id: masterBindingID } }\n      );\n      const count = res.synced_new ?? 0;\n      if (count > 0) {\n        message.success(`Sync thành công: ${count} rule mới từ shadow (status pending, cần duyệt)`);\n      } else {\n        message.info('Không có rule mới — master đã đồng bộ với shadow');\n      }\n      fetchRules();\n    } catch (err) {\n      message.error(humanizeApiError(err, 'Sync từ shadow thất bại'));\n    } finally {\n      setSyncing(false);\n    }\n  };",
+          "claim": "In MasterMappingFieldsPage.tsx lines 373-384, handleSyncFromShadow reads res.synced_new and displays a message stating that newly synced rules have status pending."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7844836422228384,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.7844836422228384,
+            "probabilities": {
+              "YES": 0.7844836422228384,
+              "NO": 0.21551635777716163
+            },
+            "probs": {
+              "YES": 0.7844836422228384,
+              "NO": 0.21551635777716163
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.7844836422228384,
+              "probabilities": {
+                "YES": 0.7844836422228384,
+                "NO": 0.21551635777716163
+              },
+              "probs": {
+                "YES": 0.7844836422228384,
+                "NO": 0.21551635777716163
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 388
+        },
+        "latency_ms": 986.76,
+        "usage": {
+          "input_tokens": 388,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx:369-390\n  const handleSyncFromShadow = async () => {\n    if (!masterBindingID) return;\n    setSyncing(true);\n    try {\n      const { data: res } = await cmsApi.post<{ status: string; synced_new: number }>(\n        '/api/v1/master-mapping-rules/sync-from-shadow',\n        null,\n        { params: { master_binding_id: masterBindingID } }\n      );\n      const count = res.synced_new ?? 0;\n      if (count > 0) {\n        message.success(`Sync thành công: ${count} rule mới từ shadow (status pending, cần duyệt)`);\n      } else {\n        message.info('Không có rule mới — master đã đồng bộ với shadow');\n      }\n      fetchRules();\n    } catch (err) {\n      message.error(humanizeApiError(err, 'Sync từ shadow thất bại'));\n    } finally {\n      setSyncing(false);\n    }\n  };",
+          "claim": "In MasterMappingFieldsPage.tsx lines 373-384, handleSyncFromShadow reads res.synced_new and displays a message stating that newly synced rules have status pending."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In sync_from_shadow.go lines 27-42, SyncFromShadowHandler resolves shadowBindingID via h.repo.GetShadowBindingID and returns SyncedNew and SyncedRenamed from h.repo.SyncRulesFromShadow.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/sync_from_shadow.go",
+    "lines": "27-43",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.5358515190985286,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.5358515190985286,
+            "probabilities": {
+              "CORRECT": 0.2225979566559881,
+              "INCORRECT": 0.2415505242454833,
+              "UNSUPPORTED": 0.5358515190985286
+            },
+            "probs": {
+              "CORRECT": 0.2225979566559881,
+              "INCORRECT": 0.2415505242454833,
+              "UNSUPPORTED": 0.5358515190985286
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.5358515190985286,
+              "probabilities": {
+                "CORRECT": 0.2225979566559881,
+                "INCORRECT": 0.2415505242454833,
+                "UNSUPPORTED": 0.5358515190985286
+              },
+              "probs": {
+                "CORRECT": 0.2225979566559881,
+                "INCORRECT": 0.2415505242454833,
+                "UNSUPPORTED": 0.5358515190985286
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 243
+        },
+        "latency_ms": 756.59,
+        "usage": {
+          "input_tokens": 243,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In sync_from_shadow.go lines 27-42, SyncFromShadowHandler resolves shadowBindingID via h.repo.GetShadowBindingID and returns SyncedNew and SyncedRenamed from h.repo.SyncRulesFromShadow.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.549234722061111,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.549234722061111,
+            "probabilities": {
+              "CORRECT": 0.2741047351191883,
+              "INCORRECT": 0.1766605428197008,
+              "UNSUPPORTED": 0.549234722061111
+            },
+            "probs": {
+              "CORRECT": 0.2741047351191883,
+              "INCORRECT": 0.1766605428197008,
+              "UNSUPPORTED": 0.549234722061111
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.549234722061111,
+              "probabilities": {
+                "CORRECT": 0.2741047351191883,
+                "INCORRECT": 0.1766605428197008,
+                "UNSUPPORTED": 0.549234722061111
+              },
+              "probs": {
+                "CORRECT": 0.2741047351191883,
+                "INCORRECT": 0.1766605428197008,
+                "UNSUPPORTED": 0.549234722061111
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 224
+        },
+        "latency_ms": 604.28,
+        "usage": {
+          "input_tokens": 224,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In sync_from_shadow.go lines 27-42, SyncFromShadowHandler resolves shadowBindingID via h.repo.GetShadowBindingID and returns SyncedNew and SyncedRenamed from h.repo.SyncRulesFromShadow."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6814356901346926,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.6814356901346926,
+            "probabilities": {
+              "YES": 0.6814356901346926,
+              "NO": 0.3185643098653075
+            },
+            "probs": {
+              "YES": 0.6814356901346926,
+              "NO": 0.3185643098653075
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES",
+              "NO"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.6814356901346926,
+              "probabilities": {
+                "YES": 0.6814356901346926,
+                "NO": 0.3185643098653075
+              },
+              "probs": {
+                "YES": 0.6814356901346926,
+                "NO": 0.3185643098653075
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES",
+                "NO"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 137
+        },
+        "latency_ms": 452.35,
+        "usage": {
+          "input_tokens": 137,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In sync_from_shadow.go lines 27-42, SyncFromShadowHandler resolves shadowBindingID via h.repo.GetShadowBindingID and returns SyncedNew and SyncedRenamed from h.repo.SyncRulesFromShadow."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In sync_from_shadow.go lines 27-42, SyncFromShadowHandler drops the Master table on PostgreSQL instead of calling SyncRulesFromShadow.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/sync_from_shadow.go",
+    "lines": "27-43",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.50995872859679,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.50995872859679,
+            "probabilities": {
+              "CORRECT": 0.22073495825924053,
+              "INCORRECT": 0.2693063131439695,
+              "UNSUPPORTED": 0.50995872859679
+            },
+            "probs": {
+              "CORRECT": 0.22073495825924053,
+              "INCORRECT": 0.2693063131439695,
+              "UNSUPPORTED": 0.50995872859679
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "INCORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.50995872859679,
+              "probabilities": {
+                "CORRECT": 0.22073495825924053,
+                "INCORRECT": 0.2693063131439695,
+                "UNSUPPORTED": 0.50995872859679
+              },
+              "probs": {
+                "CORRECT": 0.22073495825924053,
+                "INCORRECT": 0.2693063131439695,
+                "UNSUPPORTED": 0.50995872859679
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "INCORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 228
+        },
+        "latency_ms": 463.2,
+        "usage": {
+          "input_tokens": 228,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In sync_from_shadow.go lines 27-42, SyncFromShadowHandler drops the Master table on PostgreSQL instead of calling SyncRulesFromShadow.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.5624501436465034,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.5624501436465034,
+            "probabilities": {
+              "CORRECT": 0.24488733649935807,
+              "INCORRECT": 0.1926625198541386,
+              "UNSUPPORTED": 0.5624501436465034
+            },
+            "probs": {
+              "CORRECT": 0.24488733649935807,
+              "INCORRECT": 0.1926625198541386,
+              "UNSUPPORTED": 0.5624501436465034
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.5624501436465034,
+              "probabilities": {
+                "CORRECT": 0.24488733649935807,
+                "INCORRECT": 0.1926625198541386,
+                "UNSUPPORTED": 0.5624501436465034
+              },
+              "probs": {
+                "CORRECT": 0.24488733649935807,
+                "INCORRECT": 0.1926625198541386,
+                "UNSUPPORTED": 0.5624501436465034
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 209
+        },
+        "latency_ms": 450.47,
+        "usage": {
+          "input_tokens": 209,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In sync_from_shadow.go lines 27-42, SyncFromShadowHandler drops the Master table on PostgreSQL instead of calling SyncRulesFromShadow."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6085181684093701,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.6085181684093701,
+            "probabilities": {
+              "YES": 0.6085181684093701,
+              "NO": 0.3914818315906298
+            },
+            "probs": {
+              "YES": 0.6085181684093701,
+              "NO": 0.3914818315906298
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES",
+              "NO"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.6085181684093701,
+              "probabilities": {
+                "YES": 0.6085181684093701,
+                "NO": 0.3914818315906298
+              },
+              "probs": {
+                "YES": 0.6085181684093701,
+                "NO": 0.3914818315906298
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES",
+                "NO"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 122
+        },
+        "latency_ms": 456.37,
+        "usage": {
+          "input_tokens": 122,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In sync_from_shadow.go lines 27-42, SyncFromShadowHandler drops the Master table on PostgreSQL instead of calling SyncRulesFromShadow."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In 09_tasks_solution_sync_shadow_unique.md lines 101-133, Code Demo 1 executes ALTER TABLE DROP CONSTRAINT ux_mapping_rule_master_target at runtime.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-mapping-sync-shadow-unique-2026-11-16/09_tasks_solution_sync_shadow_unique.md",
+    "lines": "80-145",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.5903212858370259,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.5903212858370259,
+            "probabilities": {
+              "CORRECT": 0.23752897432383688,
+              "INCORRECT": 0.17214973983913717,
+              "UNSUPPORTED": 0.5903212858370259
+            },
+            "probs": {
+              "CORRECT": 0.23752897432383688,
+              "INCORRECT": 0.17214973983913717,
+              "UNSUPPORTED": 0.5903212858370259
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.5903212858370259,
+              "probabilities": {
+                "CORRECT": 0.23752897432383688,
+                "INCORRECT": 0.17214973983913717,
+                "UNSUPPORTED": 0.5903212858370259
+              },
+              "probs": {
+                "CORRECT": 0.23752897432383688,
+                "INCORRECT": 0.17214973983913717,
+                "UNSUPPORTED": 0.5903212858370259
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 234
+        },
+        "latency_ms": 564.33,
+        "usage": {
+          "input_tokens": 234,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_sync_shadow_unique.md lines 101-133, Code Demo 1 executes ALTER TABLE DROP CONSTRAINT ux_mapping_rule_master_target at runtime.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.6867622572281603,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.6867622572281603,
+            "probabilities": {
+              "CORRECT": 0.14532134605266836,
+              "INCORRECT": 0.1679163967191714,
+              "UNSUPPORTED": 0.6867622572281603
+            },
+            "probs": {
+              "CORRECT": 0.14532134605266836,
+              "INCORRECT": 0.1679163967191714,
+              "UNSUPPORTED": 0.6867622572281603
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": false,
+            "prediction_set": [
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.6867622572281603,
+              "probabilities": {
+                "CORRECT": 0.14532134605266836,
+                "INCORRECT": 0.1679163967191714,
+                "UNSUPPORTED": 0.6867622572281603
+              },
+              "probs": {
+                "CORRECT": 0.14532134605266836,
+                "INCORRECT": 0.1679163967191714,
+                "UNSUPPORTED": 0.6867622572281603
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": false,
+              "prediction_set": [
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 215
+        },
+        "latency_ms": 565.42,
+        "usage": {
+          "input_tokens": 215,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In 09_tasks_solution_sync_shadow_unique.md lines 101-133, Code Demo 1 executes ALTER TABLE DROP CONSTRAINT ux_mapping_rule_master_target at runtime."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7195947513024629,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.7195947513024629,
+            "probabilities": {
+              "YES": 0.7195947513024629,
+              "NO": 0.280405248697537
+            },
+            "probs": {
+              "YES": 0.7195947513024629,
+              "NO": 0.280405248697537
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES",
+              "NO"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.7195947513024629,
+              "probabilities": {
+                "YES": 0.7195947513024629,
+                "NO": 0.280405248697537
+              },
+              "probs": {
+                "YES": 0.7195947513024629,
+                "NO": 0.280405248697537
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES",
+                "NO"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 128
+        },
+        "latency_ms": 514.69,
+        "usage": {
+          "input_tokens": 128,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In 09_tasks_solution_sync_shadow_unique.md lines 101-133, Code Demo 1 executes ALTER TABLE DROP CONSTRAINT ux_mapping_rule_master_target at runtime."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

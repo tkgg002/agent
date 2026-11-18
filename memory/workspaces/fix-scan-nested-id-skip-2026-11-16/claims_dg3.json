@@ -1,0 +1,41 @@
+[
+ {
+  "id": "A-1",
+  "kind": "audit",
+  "basis": "code",
+  "claim": "Nhánh shadow bỏ qua relPath khi shouldSkipTopLevelScanField trả true hoặc rule v2 đã tồn tại.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:401-405\n\t\t} else if binding.ID > 0 && !isArrayExplode && !strings.Contains(relPath, \".\") {\n\t\t\t// Nhánh này ghi TargetColumn = relPath (không tiền tố) → áp luật top-level để không đè PK id/_id.\n\t\t\tif shouldSkipTopLevelScanField(relPath) || existingV2[relPath] {\n\t\t\t\tcontinue\n\t\t\t}"
+ },
+ {
+  "id": "A-2",
+  "kind": "audit",
+  "basis": "code",
+  "claim": "Migration 083 đổi kiểu cột source_field của cdc_system.mapping_rule_master sang TEXT.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/migrations/schema/cdc_system_model/083_mapping_rule_master_source_field_text.sql:1-9\n-- Migration 083: mapping_rule_master.source_field VARCHAR(255) -> TEXT.\n-- source_field có thể chứa biểu thức dài (Chế độ tạo: Subset / Value (JSON) / Type-Presence)\n-- vượt 255 ký tự. VARCHAR -> TEXT là binary-coercible trên PostgreSQL nên không rewrite bảng.\nBEGIN;\n\nALTER TABLE cdc_system.mapping_rule_master\n  ALTER COLUMN source_field TYPE TEXT;\n\nCOMMIT;"
+ },
+ {
+  "id": "A-3",
+  "kind": "audit",
+  "basis": "code",
+  "claim": "extraNestedScanSkipFields hiện vẫn còn chứa key \"id\".",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_field_filter.go:17-22\nvar extraNestedScanSkipFields = map[string]struct{}{\n\t\"_id\":               {},\n\t\"id\":                {},\n\t\"_parent_source_id\": {},\n\t\"_array_index\":      {},\n}"
+ },
+ {
+  "id": "K1",
+  "kind": "control_false",
+  "claim": "Migration 083 đổi source_field sang VARCHAR(100).",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/migrations/schema/cdc_system_model/083_mapping_rule_master_source_field_text.sql:1-9\n-- Migration 083: mapping_rule_master.source_field VARCHAR(255) -> TEXT.\n-- source_field có thể chứa biểu thức dài (Chế độ tạo: Subset / Value (JSON) / Type-Presence)\n-- vượt 255 ký tự. VARCHAR -> TEXT là binary-coercible trên PostgreSQL nên không rewrite bảng.\nBEGIN;\n\nALTER TABLE cdc_system.mapping_rule_master\n  ALTER COLUMN source_field TYPE TEXT;\n\nCOMMIT;"
+ },
+ {
+  "id": "K2",
+  "kind": "control_false",
+  "claim": "Nhánh shadow không còn kiểm tra existingV2.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:401-405\n\t\t} else if binding.ID > 0 && !isArrayExplode && !strings.Contains(relPath, \".\") {\n\t\t\t// Nhánh này ghi TargetColumn = relPath (không tiền tố) → áp luật top-level để không đè PK id/_id.\n\t\t\tif shouldSkipTopLevelScanField(relPath) || existingV2[relPath] {\n\t\t\t\tcontinue\n\t\t\t}"
+ },
+ {
+  "id": "K3",
+  "kind": "control_true",
+  "claim": "extraNestedScanSkipFields chứa key \"_parent_source_id\".",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_field_filter.go:17-22\nvar extraNestedScanSkipFields = map[string]struct{}{\n\t\"_id\":               {},\n\t\"id\":                {},\n\t\"_parent_source_id\": {},\n\t\"_array_index\":      {},\n}"
+ }
+]

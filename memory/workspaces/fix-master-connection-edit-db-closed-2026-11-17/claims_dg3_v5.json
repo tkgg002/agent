@@ -1,0 +1,68 @@
+{
+  "objective": "Final Post-Implementation Adversarial Audit (DG3) kiểm chứng toàn bộ mã nguồn sau khi thực thi T5 (A1..A6): Atomic Dual-Cache Eviction + 2s Grace Drain trong connection_manager_lifecycle.go, triệt tiêu race chunkEngine + nối RegisterOnStop(connectionManager.Close) trong server_config_reload.go & server_setup.go, chuẩn hóa Hexagonal Domain/Command/Persistence Transaction ở cdc-cms-service, tách masterConnectionForm.ts ở cdc-cms-web, và bổ sung 'does not exist on target database' ở transmute_poison_pill_split.go",
+  "claims": [
+    {
+      "id": "F-A1-ATOMIC-EVICT",
+      "kind": "claim",
+      "claim": "In connection_manager_lifecycle.go lines 29-43 and 61-112, InvalidatePool calls m.reg.EvictRole('master:'+key) inside m.masterPoolMu.Lock() for atomic dual-cache eviction, and retireGormPoolGracefully sets SetMaxIdleConns(0), SetConnMaxIdleTime(1ms), and waits on a 2s grace timer before draining InUse > 0.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager_lifecycle.go",
+      "lines": "25-115"
+    },
+    {
+      "id": "F-A2-SERVER-RELOAD",
+      "kind": "claim",
+      "claim": "In server_setup.go lines 147-149 and 496-507, connectionManager.Close() is registered via ws.RegisterOnStop at LIFO index 0 and registerConfigReloadSubscribers is called after chunkEngine is constructed.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go",
+      "lines": "146-151"
+    },
+    {
+      "id": "F-A4-CMS-HEXAGONAL",
+      "kind": "claim",
+      "claim": "In update_master_connection.go lines 34-50 and 159-225, UpdateMasterConnectionCommand marks Password with json:'-' so secrets never serialize, inherits SSLMode and credentials via ExtractMasterOptionsCredentials and GetMasterConnectionDSN, updates the repository, and publishes connection.config.changed.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_master_connection.go",
+      "lines": "32-52"
+    },
+    {
+      "id": "F-A4-CMS-TX",
+      "kind": "claim",
+      "claim": "In master_connection_options_sync.go lines 147-194, execUpdateConnectionAndSyncBindingsTx wraps both the connection_registry UPDATE and syncMasterBindingsDatabaseTx inside r.db.WithContext(ctx).Transaction, preserving master_schema and physical_table_fqn for postgresql.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_connection_options_sync.go",
+      "lines": "145-195"
+    },
+    {
+      "id": "F-A5-DOMAIN-DSN",
+      "kind": "claim",
+      "claim": "In connection_dsn.go lines 238-275, ExtractMasterOptionsCredentials reads fallback username and password from structured options_json while ignoring masked '***' and '__KEEP__' values.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/domain/master/connection_dsn.go",
+      "lines": "238-276"
+    },
+    {
+      "id": "F-A6-TRANSIENT-DDL",
+      "kind": "claim",
+      "claim": "In transmute_poison_pill_split.go lines 272-278, isTransientError matches 'database is closed', 'failed to verify master table existence', and 'does not exist on target database'.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_poison_pill_split.go",
+      "lines": "269-280"
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "kind": "control_true",
+      "claim": "In MasterRegistry.tsx lines 268-272, MasterConnectionItem is re-exported from ../components/master/masterConnectionForm so existing component imports remain backward-compatible.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx",
+      "lines": "266-273"
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "kind": "control_false",
+      "claim": "In connection_manager_lifecycle.go lines 29-43, InvalidatePool unlocks m.masterPoolMu before calling m.reg.EvictRole('master:'+key).",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager_lifecycle.go",
+      "lines": "28-44"
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "kind": "control_false",
+      "claim": "In update_master_connection.go lines 34-50, UpdateMasterConnectionCommand exports Password as json:'password' in serialized JSON.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_master_connection.go",
+      "lines": "32-50"
+    }
+  ]
+}

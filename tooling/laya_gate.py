@@ -45,6 +45,11 @@ DEFAULT_URL = "http://127.0.0.1:8200/v1/predict"  # Laya — kept as fallback en
 VEGA_URL = os.getenv("VEGA_GATE_URL", "http://127.0.0.1:8222/v1/predict")
 LAYA_FALLBACK_URL = os.getenv("LAYA_FALLBACK_URL", DEFAULT_URL)
 GATE_MODE = os.getenv("VEGA_GATE_MODE", "auto")
+# Fail-fast: a Vega predict slower than this (or failing) goes straight to Laya, no retry on Vega
+VEGA_TIMEOUT = float(os.getenv("VEGA_GATE_TIMEOUT", "3"))
+# After a Vega failure skip Vega for this many seconds so later calls do not each wait VEGA_TIMEOUT again
+VEGA_COOLDOWN = float(os.getenv("VEGA_GATE_COOLDOWN", "120"))
+_vega_skip_until = 0.0
 
 DECISIVE_CONF = 0.5
 BLOCK_CONF = 0.8
@@ -227,8 +232,21 @@ def post_laya(
 
     "mode" is honoured by VegaML (auto|engine|ttt); Laya's PredictRequest ignores unknown fields.
     """
+    global _vega_skip_until
     payload = {"state": state, "questions": questions, "mode": mode}
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    if url == VEGA_URL and LAYA_FALLBACK_URL != VEGA_URL:
+        if time.monotonic() < _vega_skip_until:
+            url = LAYA_FALLBACK_URL
+        else:
+            req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+            try:
+                with urllib.request.urlopen(req, timeout=VEGA_TIMEOUT) as resp:
+                    return json.loads(resp.read().decode("utf-8"))
+            except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
+                _vega_skip_until = time.monotonic() + VEGA_COOLDOWN
+                print(f"GATE_FALLBACK: {VEGA_URL} predict failed in <= {VEGA_TIMEOUT}s ({e}) -> using {LAYA_FALLBACK_URL}", file=sys.stderr)
+                url = LAYA_FALLBACK_URL
     last_err: Optional[Exception] = None
     for attempt in range(retries + 1):
         req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
@@ -464,7 +482,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         "stage": stage_norm,
         "workspace": args.workspace,
         "ts": ts,
-        "engine_url": args.url,
+        "engine_url": LAYA_FALLBACK_URL if (args.url == VEGA_URL and time.monotonic() < _vega_skip_until) else args.url,
         "engine_mode": GATE_MODE,
         "trusted_rounds": trusted_rounds,
         "raw_file": str(raw_file),

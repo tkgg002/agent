@@ -1,0 +1,44 @@
+[
+  {
+    "id": "C-REQ-1",
+    "kind": "claim",
+    "claim": "handleBatchUpdate on MasterMappingFieldsPage sends only ids and status to PUT /api/v1/master-mapping-rules/batch without updating target_column or data_type.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx:351-360\n  const handleBatchUpdate = async (status: string) => {\n    if (selectedRowKeys.length === 0) { message.warning('Chọn field trước'); return; }\n    setBatchLoading(true);\n    try {\n      await cmsApi.put('/api/v1/master-mapping-rules/batch', {\n        ids: selectedRowKeys.map(Number),\n        status,\n      });\n      message.success(`${selectedRowKeys.length} field đã ${status === 'approved' ? 'duyệt' : 'từ chối'}`);",
+    "flow": "MasterMappingFieldsPage.handleBatchUpdate updates status for selectedRowKeys."
+  },
+  {
+    "id": "C-REALITY-1",
+    "kind": "claim",
+    "claim": "BatchUpdateMasterRulesRequest in MasterMappingRuleHandler only accepts IDs, Status, IsActive, and UpdatedBy fields.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_mapping_rule_handler.go:313-318\ntype BatchUpdateMasterRulesRequest struct {\n\tIDs       []int64 `json:\"ids\"`\n\tStatus    string  `json:\"status\"`\n\tIsActive  *bool   `json:\"is_active,omitempty\"`\n\tUpdatedBy string  `json:\"updated_by,omitempty\"`\n}",
+    "flow": "MasterMappingRuleHandler.BatchUpdate parses BatchUpdateMasterRulesRequest."
+  },
+  {
+    "id": "C-CONTRA-1",
+    "kind": "claim",
+    "claim": "MasterDDLGenerator.Generate creates only four default system columns (_gpay_id, _source_ts, _deleted, _updated_at) and does not create a default _id column unless an approved rule explicitly maps target_column to _id.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator.go:148-153\n\tcols := []string{\n\t\t`\"_gpay_id\" BIGINT PRIMARY KEY`,\n\t\t`\"_source_ts\" BIGINT`,\n\t\t`\"_deleted\" BOOLEAN NOT NULL DEFAULT FALSE`,\n\t\t`\"_updated_at\" TIMESTAMPTZ NOT NULL DEFAULT NOW()`,\n\t}",
+    "flow": "MasterDDLGenerator.Generate builds default columns for PostgreSQL master tables."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "When existing.InMaster is true and oldCol differs from newCol, UpdateColumnMetadataHandler sets pending_rename_from to oldCol and ddl_pending to true.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_column_metadata.go:51-54\n\t\tif existing.InMaster && oldCol != newCol {\n\t\t\tupdates[\"pending_rename_from\"] = oldCol\n\t\t\tresult[\"ddl_pending\"] = true\n\t\t}",
+    "flow": "UpdateColumnMetadataHandler stages column renames for rules already in master."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "When existing.InMaster is true and oldCol differs from newCol, UpdateColumnMetadataHandler never sets pending_rename_from and keeps ddl_pending false.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_column_metadata.go:51-54\n\t\tif existing.InMaster && oldCol != newCol {\n\t\t\tupdates[\"pending_rename_from\"] = oldCol\n\t\t\tresult[\"ddl_pending\"] = true\n\t\t}",
+    "flow": "UpdateColumnMetadataHandler stages column renames for rules already in master."
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "MasterDDLGenerator.Generate hardcodes _id TEXT PRIMARY KEY into cols for every PostgreSQL master table regardless of rules.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/master_ddl_generator.go:148-153\n\tcols := []string{\n\t\t`\"_gpay_id\" BIGINT PRIMARY KEY`,\n\t\t`\"_source_ts\" BIGINT`,\n\t\t`\"_deleted\" BOOLEAN NOT NULL DEFAULT FALSE`,\n\t\t`\"_updated_at\" TIMESTAMPTZ NOT NULL DEFAULT NOW()`,\n\t}",
+    "flow": "MasterDDLGenerator.Generate initializes cols with four system columns."
+  }
+]

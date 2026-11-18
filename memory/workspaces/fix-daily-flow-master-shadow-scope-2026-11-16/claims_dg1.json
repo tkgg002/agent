@@ -1,0 +1,60 @@
+[
+ {
+  "id": "S-RC",
+  "kind": "solution",
+  "basis": "code",
+  "flow": "daily flow master filter",
+  "claim": "Khối master của Daily Flow gộp mọi log transmute có cùng tên master table vì điều kiện transmute chỉ so master_table.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:197-200\n\t\tWHERE (\n\t\t\t(al.operation = 'kafka-consumer' AND (?::text = '' OR COALESCE(tm_sb.shadow_schema, sb.shadow_schema) = ? OR al.details->>'shadow_schema' = ?))\n\t\t\tOR (al.operation IN ('transmute', 'transmute_sub', 'transmute_poison_pill') AND (?::text = '' OR COALESCE(tm.master_table, mb.master_table) = ?))\n\t\t)"
+ },
+ {
+  "id": "S-PATTERN",
+  "kind": "solution",
+  "basis": "code",
+  "flow": "multi shadow binding",
+  "claim": "Một master binding có thể nhận nhiều shadow qua mảng transform_spec.shadow_sources.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go:109-119\n\t\t   JOIN cdc_system.shadow_binding sb ON (\n\t\t     sb.id = mb.shadow_binding_id\n\t\t     OR EXISTS (\n\t\t       SELECT 1 FROM jsonb_array_elements(\n\t\t         CASE WHEN jsonb_typeof(mb.transform_spec->'shadow_sources') = 'array' THEN mb.transform_spec->'shadow_sources' ELSE '[]'::jsonb END\n\t\t       ) elem\n\t\t        WHERE (CASE WHEN (elem->>'shadow_binding_id') ~ '^[0-9]+$' THEN (elem->>'shadow_binding_id')::bigint END) = sb.id\n\t\t           OR (elem->>'shadow_table' = sb.shadow_table\n\t\t               AND COALESCE(NULLIF(elem->>'shadow_schema', ''), sb.shadow_schema) = sb.shadow_schema)\n\t\t     )\n\t\t   )"
+ },
+ {
+  "id": "S-FIX",
+  "kind": "solution",
+  "basis": "code",
+  "flow": "debounce grouping key",
+  "claim": "Khóa nhóm debounce hiện chỉ gồm master binding, trigger và event_date, chưa có shadow.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_event_date_split.go:14-18\ntype debounceRunKey struct {\n\tmasterBindingID int64\n\ttriggeredBy     string\n\teventDate       string\n}"
+ },
+ {
+  "id": "S-IMPACT",
+  "kind": "solution",
+  "basis": "code",
+  "flow": "debounce sequential",
+  "claim": "Các nhóm debounce được chạy tuần tự trong cùng goroutine nên thêm khóa shadow không tạo concurrency mới.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:615-619\n// runDebouncedTransmute chạy tuần tự từng nhóm trong CÙNG goroutine của debouncer\n// → giữ nguyên concurrency=1 trên 1 master table (tránh deadlock 40P01).\nfunc (h *TransmuteHandler) runDebouncedTransmute(ctx context.Context, batch []NatsMsgTask) {\n\tfor _, g := range groupDebouncedTasks(batch) {\n\t\th.runDebouncedGroup(ctx, g)"
+ },
+ {
+  "id": "D-API",
+  "kind": "demo",
+  "basis": "code",
+  "flow": "fanout request",
+  "claim": "Fan-out tạo TransmuteRequest với MasterTable và MasterBindingID nhưng chưa mang ShadowSchema.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:228-235\n\t\t\ttReq := TransmuteRequest{\n\t\t\t\tMasterTable:     target.MasterFQN,\n\t\t\t\tMasterBindingID: target.ID,\n\t\t\t\tSourceIDs:       req.SourceIDs,\n\t\t\t\tEvents:          req.Events,\n\t\t\t\tTriggeredBy:     hookTrigger,\n\t\t\t\tCorrelationID:   req.CorrelationID,\n\t\t\t}"
+ },
+ {
+  "id": "K1",
+  "kind": "control_false",
+  "claim": "Khóa nhóm debounce đã bao gồm shadow_schema.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_event_date_split.go:14-18\ntype debounceRunKey struct {\n\tmasterBindingID int64\n\ttriggeredBy     string\n\teventDate       string\n}"
+ },
+ {
+  "id": "K2",
+  "kind": "control_false",
+  "claim": "Các nhóm debounce được chạy song song bằng nhiều goroutine.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:615-619\n// runDebouncedTransmute chạy tuần tự từng nhóm trong CÙNG goroutine của debouncer\n// → giữ nguyên concurrency=1 trên 1 master table (tránh deadlock 40P01).\nfunc (h *TransmuteHandler) runDebouncedTransmute(ctx context.Context, batch []NatsMsgTask) {\n\tfor _, g := range groupDebouncedTasks(batch) {\n\t\th.runDebouncedGroup(ctx, g)"
+ },
+ {
+  "id": "K3",
+  "kind": "control_true",
+  "claim": "Fan-out gán MasterBindingID bằng target.ID.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:228-235\n\t\t\ttReq := TransmuteRequest{\n\t\t\t\tMasterTable:     target.MasterFQN,\n\t\t\t\tMasterBindingID: target.ID,\n\t\t\t\tSourceIDs:       req.SourceIDs,\n\t\t\t\tEvents:          req.Events,\n\t\t\t\tTriggeredBy:     hookTrigger,\n\t\t\t\tCorrelationID:   req.CorrelationID,\n\t\t\t}"
+ }
+]

@@ -160,6 +160,15 @@ def verify_global_lessons_integrity(
     idx_text = index_md.read_text(encoding="utf-8")
     idx_bytes = len(idx_text.encode("utf-8"))
     idx_count = sum(1 for ln in idx_text.splitlines() if re.match(r"^-\s+L\d{3}\b", ln))
+    if idx_count == 0:
+        topics_dir = index_md.parent / "topics"
+        if topics_dir.is_dir():
+            idx_count = sum(
+                1
+                for sf in sorted(topics_dir.glob("*.summary.md"))
+                for ln in sf.read_text(encoding="utf-8").splitlines()
+                if re.match(r"^\|\s*`L\d{3}`\s*\|", ln)
+            )
     if idx_count != len(entries):
         log_error(
             f"[Global Lessons Sync] Lệch số lượng bài học giữa lessons.md ({len(entries)}) "

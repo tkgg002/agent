@@ -1,0 +1,5 @@
+# 04 — Decisions (Append ONLY)
+
+- [2026-11-17T10:02:04+07:00] [Agent:laya_gate] DG3 A-F1 FLAG resolved: Đã kiểm chứng trực tiếp biểu thức COALESCE(NULLIF(al.details->>'shadow_schema', ''), tm_sb.shadow_schema, sb.shadow_schema) = ? và NULLIF(SPLIT_PART(al.target_table, '.', 2), '') tại REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:199-215
+- [2026-11-17T10:02:16+07:00] [Agent:laya_gate] DG3 A-R1 FLAG resolved: Đã kiểm chứng struct debounceRunKey chứa hai trường shadowSchema string và shadowTable string tại REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_event_date_split.go:14-21
+- [2026-11-17T10:02:16+07:00] [Agent:laya_gate] DG3 A-R2 FLAG resolved: Đã kiểm chứng phép gán ShadowSchema: req.ShadowSchema và ShadowTable: req.ShadowTable trong TransmuteRequest tại REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:227-238

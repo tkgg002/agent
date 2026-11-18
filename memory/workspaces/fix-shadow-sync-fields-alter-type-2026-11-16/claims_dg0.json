@@ -1,0 +1,61 @@
+{
+  "objective": "Phản biện giả định và xác minh nguyên nhân gốc rễ vì sao bấm Sync Fields trên MappingFieldsPage không chuyển đổi cột Shadow từ TEXT sang JSONB",
+  "claims": [
+    {
+      "id": "C-REQ-1",
+      "kind": "claim",
+      "claim": "In MappingFieldsPage.tsx lines 476-490, when normalizedCurrent differs from normalizedTarget, the tooltip renders 'Target: ${targetType} · Current: ${currentType} → Cần \"Sync Fields\" để ALTER COLUMN TYPE'.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MappingFieldsPage.tsx",
+      "lines": "470-491"
+    },
+    {
+      "id": "C-REQ-2",
+      "kind": "claim",
+      "claim": "In MappingFieldsPage.tsx lines 166-185, handleSyncFields posts to /api/v1/source-objects/${registry.id}/create-default-columns, shows a success message immediately, and never calls fetchShadowColumns or fetchRules.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MappingFieldsPage.tsx",
+      "lines": "165-185"
+    },
+    {
+      "id": "C-REALITY-1",
+      "kind": "claim",
+      "claim": "In schema_adapter.go lines 833-839, AlterColumn with action alter_type formats SQL using direct column cast USING \"columnName\"::dataType without reading _raw_data or guarding against non-JSON strings.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go",
+      "lines": "822-840"
+    },
+    {
+      "id": "C-REALITY-2",
+      "kind": "claim",
+      "claim": "In schema_adapter_coerce.go lines 31-38, CoerceValue converts non-string values for text, varchar, and character varying columns via fmt.Sprintf(\"%v\", val), which formats Go maps as map[...].",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter_coerce.go",
+      "lines": "21-39"
+    },
+    {
+      "id": "C-CONTRA-1",
+      "kind": "claim",
+      "claim": "In schema_ddl_handler.go lines 308-317, when h.schemaAdapter.AlterColumn returns an error during drift fix, HandleCreateDefaultColumns logs the error, increments columnsSkipped, and continues without aborting.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/schema_ddl_handler.go",
+      "lines": "302-321"
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "kind": "control_true",
+      "claim": "In dynamic_mapper.go lines 233-235, the default branch of convertType returns fmt.Sprintf(\"%v\", val) and a nil error.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/dynamic_mapper.go",
+      "lines": "218-236"
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "kind": "control_false",
+      "claim": "In schema_adapter.go lines 833-839, AlterColumn extracts JSON values from _raw_data instead of casting columnName directly.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go",
+      "lines": "822-840"
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "kind": "control_false",
+      "claim": "In schema_ddl_handler.go lines 308-317, HandleCreateDefaultColumns immediately publishes Status 'error' and returns whenever AlterColumn fails.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/schema_ddl_handler.go",
+      "lines": "302-321"
+    }
+  ]
+}

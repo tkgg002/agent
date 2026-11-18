@@ -1,0 +1,551 @@
+diff --git a/internal/handler/master/transmute_event_date_split.go b/internal/handler/master/transmute_event_date_split.go
+index ff31634..6f8af4c 100644
+--- a/internal/handler/master/transmute_event_date_split.go
++++ b/internal/handler/master/transmute_event_date_split.go
+@@ -1,45 +1,47 @@
+ package master
+ 
+ import (
+ 	"sync"
+ 	"sync/atomic"
+ 	"time"
+ 
+ 	shadowmodel "centralized-data-service/internal/model/shadow"
+ )
+ 
+ // debounceRunKey định danh 1 lần chạy transmute: debouncer key chỉ là master table,
+-// nên 1 mẻ có thể trộn nhiều master binding, nhiều nguồn trigger (CDC vs snapshot)
+-// hoặc các sự kiện vắt qua biên nửa đêm (eventDate khác nhau).
++// nên 1 mẻ có thể trộn nhiều master binding, nhiều shadow nguồn (multi_shadow),
++// nhiều nguồn trigger (CDC vs snapshot) hoặc sự kiện vắt qua biên nửa đêm.
+ type debounceRunKey struct {
+ 	masterBindingID int64
++	shadowSchema    string
++	shadowTable     string
+ 	triggeredBy     string
+ 	eventDate       string
+ }
+ 
+ func isSnapshotTrigger(triggeredBy string) bool {
+ 	return triggeredBy == "snapshot" || triggeredBy == "snapshot-hook"
+ }
+ 
+ func taskEventDate(t NatsMsgTask, fallback time.Time) string {
+ 	if isSnapshotTrigger(t.Req.TriggeredBy) {
+ 		return shadowmodel.ResolveEventDateHCM(0, fallback)
+ 	}
+ 	for _, ev := range t.Req.Events {
+ 		if ev.EventDate != "" {
+ 			return ev.EventDate
+ 		}
+ 		if ev.SourceTs > 0 {
+ 			return shadowmodel.ResolveEventDateHCM(ev.SourceTs, fallback)
+ 		}
+ 	}
+ 	return shadowmodel.ResolveEventDateHCM(0, fallback)
+ }
+ 
+ func splitTaskByEventDate(t NatsMsgTask, fallback time.Time) []NatsMsgTask {
+ 	if len(t.Req.Events) <= 1 || isSnapshotTrigger(t.Req.TriggeredBy) {
+ 		return []NatsMsgTask{t}
+ 	}
+ 	idx := make(map[string]int)
+ 	var dateOrder []string
+ 	var evGroups [][]shadowmodel.TransmuteEventItem
+@@ -86,56 +88,58 @@ func splitTaskByEventDate(t NatsMsgTask, fallback time.Time) []NatsMsgTask {
+ 	}
+ 
+ 	out := make([]NatsMsgTask, 0, len(evGroups))
+ 	for i, evs := range evGroups {
+ 		subReq := t.Req
+ 		subReq.Events = evs
+ 		srcIDs := make([]string, 0, len(evs))
+ 		for _, ev := range evs {
+ 			if ev.SourceID != "" {
+ 				srcIDs = append(srcIDs, ev.SourceID)
+ 			}
+ 		}
+ 		subReq.SourceIDs = srcIDs
+ 		var partOnce sync.Once
+ 		subTask := NatsMsgTask{
+ 			Req: subReq,
+ 			OnDone: func(err error) {
+ 				partOnce.Do(func() {
+ 					sharedComplete(err)
+ 				})
+ 			},
+ 		}
+ 		if i == len(evGroups)-1 {
+ 			subTask.Msg = t.Msg
+ 		}
+ 		out = append(out, subTask)
+ 	}
+ 	return out
+ }
+ 
+-// groupDebouncedTasks tách mẻ debounce theo (master_binding_id, triggered_by, event_date), giữ thứ tự xuất hiện.
++// groupDebouncedTasks tách mẻ debounce theo (master_binding_id, shadow_schema, shadow_table, triggered_by, event_date), giữ thứ tự xuất hiện.
+ func groupDebouncedTasks(batch []NatsMsgTask) [][]NatsMsgTask {
+ 	return groupDebouncedTasksAt(batch, time.Now())
+ }
+ 
+ func groupDebouncedTasksAt(batch []NatsMsgTask, now time.Time) [][]NatsMsgTask {
+ 	idx := make(map[debounceRunKey]int)
+ 	var groups [][]NatsMsgTask
+ 	for _, rawTask := range batch {
+ 		for _, t := range splitTaskByEventDate(rawTask, now) {
+ 			k := debounceRunKey{
+ 				masterBindingID: t.Req.MasterBindingID,
++				shadowSchema:    t.Req.ShadowSchema,
++				shadowTable:     t.Req.ShadowTable,
+ 				triggeredBy:     t.Req.TriggeredBy,
+ 				eventDate:       taskEventDate(t, now),
+ 			}
+ 			i, ok := idx[k]
+ 			if !ok {
+ 				i = len(groups)
+ 				idx[k] = i
+ 				groups = append(groups, nil)
+ 			}
+ 			groups[i] = append(groups[i], t)
+ 		}
+ 	}
+ 	return groups
+ }
+diff --git a/internal/handler/master/transmute_handler.go b/internal/handler/master/transmute_handler.go
+index 19d1a8e..019524b 100644
+--- a/internal/handler/master/transmute_handler.go
++++ b/internal/handler/master/transmute_handler.go
+@@ -201,126 +201,132 @@ func (h *TransmuteHandler) handleTransmuteShadowWithOutcome(parentCtx context.Co
+ 		req.ShadowTable,
+ 		req.ShadowSchema,
+ 		req.ShadowConnectionKey,
+ 		req.ShadowBindingCode,
+ 	)
+ 	if err != nil {
+ 		return fmt.Errorf("transmute-shadow master lookup failed for %s: %w", req.ShadowTable, err)
+ 	}
+ 
+ 	if len(masterTargets) == 0 {
+ 		return nil
+ 	}
+ 	hookTrigger := "kafka-consumer-hook"
+ 	switch req.TriggeredBy {
+ 	case "snapshot":
+ 		hookTrigger = "snapshot-hook"
+ 	case "bridge-oplog":
+ 		hookTrigger = "bridge-oplog"
+ 	}
+ 
+ 	if trackJetStreamAck {
+ 		if h.stopping.Load() || (h.svc != nil && h.svc.IsStopping()) {
+ 			return fmt.Errorf("transmute handler is stopping")
+ 		}
+ 		policy := deliveryPolicyFromContext(parentCtx, h.logger)
+ 		tracker := newShadowMsgTracker(msg, len(masterTargets), policy)
+ 		for _, target := range masterTargets {
+ 			tReq := TransmuteRequest{
+ 				MasterTable:     target.MasterFQN,
+ 				MasterBindingID: target.ID,
++				ShadowSchema:    req.ShadowSchema,
++				ShadowTable:     req.ShadowTable,
+ 				SourceIDs:       req.SourceIDs,
+ 				Events:          req.Events,
+ 				TriggeredBy:     hookTrigger,
+ 				CorrelationID:   req.CorrelationID,
+ 			}
+ 			taskMsg := &nats.Msg{
+ 				Subject: "cdc.cmd.transmute",
+ 				Header:  make(nats.Header),
+ 			}
+ 			observability.InjectNATSHeader(ctx, taskMsg.Header)
+ 
+ 			var taskOnce sync.Once
+ 			onDone := func(taskErr error) {
+ 				taskOnce.Do(func() {
+ 					tracker.completeTask(taskErr)
+ 				})
+ 			}
+ 
+ 			debouncerKey := tReq.MasterTable
+ 			if tReq.MasterBindingID > 0 {
+ 				debouncerKey = fmt.Sprintf("%s#%d", tReq.MasterTable, tReq.MasterBindingID)
+ 			}
+ 			td := h.getOrCreateDebouncer(debouncerKey)
+ 			if td == nil {
+ 				onDone(context.Canceled)
+ 				continue
+ 			}
+ 			td.AddTask(NatsMsgTask{
+ 				Msg:    taskMsg,
+ 				Req:    tReq,
+ 				OnDone: onDone,
+ 			})
+ 		}
+ 		return ErrAsyncAckPending
+ 	}
+ 
+ 	for _, target := range masterTargets {
+ 		out, _ := json.Marshal(map[string]any{
+ 			"master_table":      target.MasterFQN,
+ 			"master_binding_id": target.ID,
++			"shadow_schema":     req.ShadowSchema,
++			"shadow_table":      req.ShadowTable,
+ 			"_source_ids":       req.SourceIDs,
+ 			"events":            req.Events,
+ 			"triggered_by":      hookTrigger,
+ 			"correlation_id":    req.CorrelationID,
+ 		})
+ 		if h.natsConn != nil {
+ 			outMsg := &nats.Msg{
+ 				Subject: "cdc.cmd.transmute",
+ 				Data:    out,
+ 				Header:  make(nats.Header),
+ 			}
+ 			observability.InjectNATSHeader(ctx, outMsg.Header)
+ 			_ = h.natsConn.PublishMsg(outMsg)
+ 		}
+ 	}
+ 	return nil
+ }
+ 
+ // TransmuteRequest is the payload for cdc.cmd.transmute.
+ type TransmuteRequest struct {
+ 	ScheduleID      int64                            `json:"schedule_id,omitempty"` // P4 / D-39.A — only set by TransmuteScheduler
+ 	JobID           string                           `json:"job_id,omitempty"`      // Async job tracking ID (only present for manual Transmute Now)
+ 	MasterTable     string                           `json:"master_table"`
+ 	MasterBindingID int64                            `json:"master_binding_id,omitempty"`
+-	SourceIDs       []string                         `json:"_source_ids,omitempty"` // optional — incremental
+-	Events          []shadowmodel.TransmuteEventItem `json:"events,omitempty"`      // CDC 1:1 event stream
++	ShadowSchema    string                           `json:"shadow_schema,omitempty"` // Originating shadow schema for per-pipeline attribution
++	ShadowTable     string                           `json:"shadow_table,omitempty"`  // Originating shadow table for per-pipeline attribution
++	SourceIDs       []string                         `json:"_source_ids,omitempty"`  // optional — incremental
++	Events          []shadowmodel.TransmuteEventItem `json:"events,omitempty"`       // CDC 1:1 event stream
+ 	TriggeredBy     string                           `json:"triggered_by,omitempty"`
+ 	CorrelationID   string                           `json:"correlation_id,omitempty"`
+ 	TraceID         string                           `json:"trace_id,omitempty"`
+ 	RunType         string                           `json:"run_type,omitempty"` // "full" = resync từ đầu, "" = incremental (default)
+ }
+ 
+ // SubjectTransmuteCompleted is the close-loop event emitted by
+ // TransmuteHandler after every cdc.cmd.transmute completes (success or
+ // error). JobMonitor subscribes to this subject and updates
+ // cdc_system.transmute_schedule.last_status accordingly. Architect P4
+ // ruling (D-39.A): handler must NOT update schedule rows directly —
+ // keep command and schedule-state writes decoupled.
+ const (
+ 	SubjectTransmuteCompleted          = "cdc.evt.transmute.completed"
+ 	SubjectTransmuteShadowCoreFallback = "cdc.cmd.transmute-shadow.core-fallback"
+ 	SubjectTransmuteCancel             = "cdc.cmd.transmute-cancel"
+ )
+ 
+ // TransmuteResponse mirrors TransmuterModule.TransmuteResult + correlation.
+ type TransmuteResponse struct {
+ 	master.TransmuteResult
+ 	CorrelationID string `json:"correlation_id,omitempty"`
+ 	Err           string `json:"error,omitempty"`
+ 	TraceID       string `json:"trace_id,omitempty"`
+ }
+ 
+ // HandleTransmute consumes cdc.cmd.transmute. Runs the full Shadow → Master
+ // materialise cycle, writes a result to cdc.result.transmute.
+ func (h *TransmuteHandler) HandleTransmute(msg *nats.Msg) {
+ 	var req TransmuteRequest
+@@ -424,115 +430,115 @@ func (h *TransmuteHandler) HandleTransmute(msg *nats.Msg) {
+ 					wCancel()
+ 				}
+ 				metrics.TransmuteErrorTotal.WithLabelValues(req.MasterTable).Inc()
+ 				cancel() // Release DB resources
+ 			}
+ 		}()
+ 
+ 		// Activity log: ghi nhận trạng thái 'running'
+ 		if h.activity != nil {
+ 			logEntry = h.activity.Start("transmute", req.MasterTable, req.TriggeredBy)
+ 		}
+ 
+ 		var traceID string
+ 		if sc := span.SpanContext(); sc.IsValid() {
+ 			traceID = sc.TraceID().String()
+ 		}
+ 		if traceID == "" && req.TraceID != "" {
+ 			traceID = req.TraceID
+ 		}
+ 		if traceID == "" {
+ 			traceID = strings.ReplaceAll(uuid.NewString(), "-", "")
+ 		}
+ 
+ 		res, err := h.svc.Run(bgCtx, req.MasterTable, req.SourceIDs, req.JobID, req.RunType, req.MasterBindingID)
+ 		resp := TransmuteResponse{TransmuteResult: res, CorrelationID: req.CorrelationID, TraceID: traceID}
+ 
+ 		// Sửa R-P13-2: Khi job bị CANCELLED hoặc PAUSED ở ranh giới mẻ, thoát ngay lập tức,
+ 		// TUYỆT ĐỐI KHÔNG gọi publishCompleted (không ghi đè COMPLETED hay đóng schedule thành 'success')
+ 		if res.Cancelled {
+ 			if logEntry != nil {
+-				h.activity.FailWithDetails(logEntry, "cancelled by user", res.Inserted+res.Updated+res.Deleted, map[string]interface{}{
++				h.activity.FailWithDetails(logEntry, "cancelled by user", res.Inserted+res.Updated+res.Deleted, withShadowScope(req, map[string]interface{}{
+ 					"master_binding_id": req.MasterBindingID,
+ 					"job_id":            req.JobID,
+ 					"status":            "cancelled",
+-				})
++				}))
+ 			}
+ 			h.reply(msg, resp)
+ 			return
+ 		}
+ 		if res.Paused {
+ 			if logEntry != nil {
+-				h.activity.Complete(logEntry, res.Inserted+res.Updated+res.Deleted, map[string]interface{}{
++				h.activity.Complete(logEntry, res.Inserted+res.Updated+res.Deleted, withShadowScope(req, map[string]interface{}{
+ 					"master_binding_id": req.MasterBindingID,
+ 					"job_id":            req.JobID,
+ 					"status":            "paused",
+-				})
++				}))
+ 			}
+ 			h.reply(msg, resp)
+ 			return
+ 		}
+ 
+ 		// Xác định trigger_type cho metric
+ 		triggerType := req.TriggeredBy
+ 		if triggerType == "" {
+ 			triggerType = "unknown"
+ 		}
+ 
+ 		if err != nil {
+ 			resp.Err = err.Error()
+ 			if logEntry != nil {
+-				h.activity.FailWithDetails(logEntry, err.Error(), 0, map[string]interface{}{
++				h.activity.FailWithDetails(logEntry, err.Error(), 0, withShadowScope(req, map[string]interface{}{
+ 					"master_binding_id": req.MasterBindingID,
+-				})
++				}))
+ 			}
+ 			metrics.TransmuteErrorTotal.WithLabelValues(req.MasterTable).Inc()
+ 			observability.Ctx(bgCtx, h.logger).Warn("transmute failed",
+ 				zap.String("master", req.MasterTable),
+ 				zap.String("correlation_id", req.CorrelationID),
+ 				zap.Error(err))
+ 		} else {
+ 			if logEntry != nil {
+-				h.activity.Complete(logEntry, res.Inserted+res.Updated+res.Deleted, map[string]interface{}{
++				h.activity.Complete(logEntry, res.Inserted+res.Updated+res.Deleted, withShadowScope(req, map[string]interface{}{
+ 					"scanned":           res.Scanned,
+ 					"inserted":          res.Inserted,
+ 					"updated":           res.Updated,
+ 					"deleted":           res.Deleted,
+ 					"skipped":           res.Skipped,
+ 					"rule_misses":       res.RuleMisses,
+ 					"type_errors":       res.TypeErrors,
+ 					"active_gate":       res.ActiveGate,
+ 					"run_type":          req.RunType,
+ 					"correlation_id":    req.CorrelationID,
+ 					"trace_id":          traceID,
+ 					"master_binding_id": req.MasterBindingID,
+-				})
++				}))
+ 			}
+ 			observability.Ctx(bgCtx, h.logger).Info("transmute complete",
+ 				zap.String("master", req.MasterTable),
+ 				zap.Int64("scanned", res.Scanned),
+ 				zap.Int64("inserted", res.Inserted),
+ 				zap.Int64("updated", res.Updated),
+ 				zap.Int64("deleted", res.Deleted),
+ 				zap.Int64("skipped", res.Skipped),
+ 				zap.Int64("type_errors", res.TypeErrors),
+ 				zap.Int64("rule_misses", res.RuleMisses),
+ 				zap.String("active_gate", res.ActiveGate),
+ 				zap.Int64("duration_ms", res.DurationMs))
+ 
+ 			metrics.TransmuteOpsTotal.WithLabelValues(req.MasterTable, "inserted", triggerType).Add(float64(res.Inserted))
+ 			metrics.TransmuteOpsTotal.WithLabelValues(req.MasterTable, "updated", triggerType).Add(float64(res.Updated))
+ 			metrics.TransmuteOpsTotal.WithLabelValues(req.MasterTable, "deleted", triggerType).Add(float64(res.Deleted))
+ 			metrics.TransmuteOpsTotal.WithLabelValues(req.MasterTable, "skipped", triggerType).Add(float64(res.Skipped))
+ 			metrics.TransmuteOpsTotal.WithLabelValues(req.MasterTable, "type_error", triggerType).Add(float64(res.TypeErrors))
+ 			metrics.TransmuteOpsTotal.WithLabelValues(req.MasterTable, "rule_miss", triggerType).Add(float64(res.RuleMisses))
+ 			metrics.TransmuteDurationMs.WithLabelValues(req.MasterTable).Observe(float64(res.DurationMs))
+ 		}
+ 
+ 		h.publishCompleted(bgCtx, req, res, err, traceID)
+ 		h.reply(msg, resp)
+ 	}()
+ }
+ 
+ // publishCompleted emits cdc.evt.transmute.completed for JobMonitor.
+ // Independent from the existing cdc.result.transmute reply path so
+ // subscribers see the event regardless of whether the caller used
+@@ -689,99 +695,99 @@ func (h *TransmuteHandler) runDebouncedGroup(ctx context.Context, batch []NatsMs
+ 	if sc := span.SpanContext(); sc.IsValid() {
+ 		traceID = sc.TraceID().String()
+ 	}
+ 	runCtx, cancel := context.WithTimeout(runCtx, 30*time.Minute)
+ 	defer cancel()
+ 
+ 	var logEntry *system.ActivityLog
+ 	if h.activity != nil {
+ 		logEntry = h.activity.Start("transmute", masterTable, triggeredBy)
+ 	}
+ 
+ 	var res master.TransmuteResult
+ 	var err error
+ 	if len(allEvents) > 0 {
+ 		res, err = h.execRunEvents(runCtx, masterTable, allEvents, masterBindingID)
+ 	} else {
+ 		res, err = h.execRun(runCtx, masterTable, uniqueIDs, "", "", masterBindingID)
+ 	}
+ 	resp := TransmuteResponse{TransmuteResult: res, TraceID: traceID}
+ 
+ 	if err != nil {
+ 		resp.Err = err.Error()
+ 		metrics.TransmuteErrorTotal.WithLabelValues(masterTable).Inc()
+ 		observability.Ctx(runCtx, h.logger).Warn("debounced transmute failed",
+ 			zap.String("master", masterTable),
+ 			zap.Error(err))
+ 
+ 		// Nếu lỗi DB/network tạm thời -> trả lỗi transient về cho toàn bộ để retry sau
+ 		if isTransientError(err) {
+ 			if logEntry != nil {
+-				h.activity.FailWithDetails(logEntry, err.Error(), 0, map[string]interface{}{
++				h.activity.FailWithDetails(logEntry, err.Error(), 0, withShadowScope(batch[0].Req, map[string]interface{}{
+ 					"master_binding_id": masterBindingID,
+ 					"event_date":        eventDate,
+-				})
++				}))
+ 			}
+ 			for _, t := range batch {
+ 				h.replyErr(runCtx, t.Msg, t.Req.CorrelationID, "transient_db_error: "+err.Error())
+ 				t.complete(err)
+ 			}
+ 			return
+ 		}
+ 
+ 		// Nếu lỗi Poison Pill -> Ghi split_retry và Chia để trị đệ quy
+ 		if logEntry != nil {
+-			h.activity.FailWithDetails(logEntry, err.Error(), 0, map[string]interface{}{
++			h.activity.FailWithDetails(logEntry, err.Error(), 0, withShadowScope(batch[0].Req, map[string]interface{}{
+ 				"master_binding_id": masterBindingID,
+ 				"event_date":        eventDate,
+ 				"split_retry":       true,
+-			})
++			}))
+ 		}
+ 		observability.Ctx(runCtx, h.logger).Error("Poison pill detected in transmute batch. Initiating Binary Search Split...",
+ 			zap.String("master", masterTable),
+ 			zap.Error(err))
+ 		h.binarySearchSplit(ctx, masterTable, batch, err)
+ 	} else {
+ 		if logEntry != nil {
+ 			writtenRows := res.Written
+ 			if writtenRows <= 0 && len(allEvents) == 0 {
+ 				writtenRows = res.Inserted + res.Updated + res.Deleted
+ 			}
+-			h.activity.Complete(logEntry, writtenRows, map[string]interface{}{
++			h.activity.Complete(logEntry, writtenRows, withShadowScope(batch[0].Req, map[string]interface{}{
+ 				"scanned":           res.Scanned,
+ 				"written":           writtenRows,
+ 				"inserted":          res.Inserted,
+ 				"updated":           res.Updated,
+ 				"deleted":           res.Deleted,
+ 				"skipped":           res.Skipped,
+ 				"event_date":        eventDate,
+ 				"rule_misses":       res.RuleMisses,
+ 				"type_errors":       res.TypeErrors,
+ 				"active_gate":       res.ActiveGate,
+ 				"duration_ms":       res.DurationMs,
+ 				"trace_id":          traceID,
+ 				"master_binding_id": masterBindingID,
+-			})
++			}))
+ 		}
+ 
+ 		triggerType := triggeredBy
+ 		if triggerType == "" {
+ 			triggerType = "cdc-realtime"
+ 		}
+ 		metrics.TransmuteOpsTotal.WithLabelValues(masterTable, "inserted", triggerType).Add(float64(res.Inserted))
+ 		metrics.TransmuteOpsTotal.WithLabelValues(masterTable, "updated", triggerType).Add(float64(res.Updated))
+ 		metrics.TransmuteOpsTotal.WithLabelValues(masterTable, "deleted", triggerType).Add(float64(res.Deleted))
+ 		metrics.TransmuteOpsTotal.WithLabelValues(masterTable, "skipped", triggerType).Add(float64(res.Skipped))
+ 		metrics.TransmuteOpsTotal.WithLabelValues(masterTable, "type_error", triggerType).Add(float64(res.TypeErrors))
+ 		metrics.TransmuteOpsTotal.WithLabelValues(masterTable, "rule_miss", triggerType).Add(float64(res.RuleMisses))
+ 		metrics.TransmuteDurationMs.WithLabelValues(masterTable).Observe(float64(res.DurationMs))
+ 
+ 		// Phản hồi thành công cho toàn bộ tasks trong mẻ
+ 		for _, t := range batch {
+ 			resp.CorrelationID = t.Req.CorrelationID
+ 			h.reply(t.Msg, resp)
+ 			h.publishCompleted(runCtx, t.Req, res, nil, traceID)
+ 			t.complete(nil)
+ 		}
+ 	}
+ }
+ 
+diff --git a/internal/service/source/scan_service.go b/internal/service/source/scan_service.go
+index 46b71c6..3c8271b 100644
+--- a/internal/service/source/scan_service.go
++++ b/internal/service/source/scan_service.go
+@@ -372,61 +372,62 @@ func (s *ScanService) ScanArrayFields(ctx context.Context, targetTable, explodeP
+ 			existingV2[r.SourceField] = true
+ 		}
+ 	}
+ 
+ 	var newFields []string
+ 	var rulesToInsert []master.MappingRuleV2
+ 	type masterNestedRow struct{ target, srcField, srcPath, dataType string }
+ 	var masterRows []masterNestedRow
+ 	var newRules []CreatedRuleDTO
+ 
+ 	for relPath, pgType := range discoveredFields {
+ 		if shouldSkipNestedScanField(relPath) {
+ 			continue
+ 		}
+ 
+ 		if (isObject || isArrayExplode) && masterBindingID != nil {
+ 			objTarget := strings.ReplaceAll(basePath+"."+relPath, ".", "_")
+ 			objTarget = strings.ReplaceAll(objTarget, "[*]", "")
+ 
+ 			if existingMaster[objTarget] || existingMaster["after_"+objTarget] {
+ 				continue
+ 			}
+ 			newFields = append(newFields, relPath)
+ 			masterRows = append(masterRows, masterNestedRow{
+ 				target:   objTarget,
+ 				srcField: rootField,
+ 				srcPath:  basePath + "." + relPath,
+ 				dataType: pgType,
+ 			})
+ 		} else if binding.ID > 0 && !isArrayExplode && !strings.Contains(relPath, ".") {
+-			if existingV2[relPath] {
++			// Nhánh này ghi TargetColumn = relPath (không tiền tố) → áp luật top-level để không đè PK id/_id.
++			if shouldSkipTopLevelScanField(relPath) || existingV2[relPath] {
+ 				continue
+ 			}
+ 			newFields = append(newFields, relPath)
+ 			sys := "system-scan-array"
+ 			var srcPath *string
+ 			if isArrayExplode {
+ 				np := basePath + "[*]." + relPath
+ 				srcPath = &np
+ 			}
+ 			rulesToInsert = append(rulesToInsert, master.MappingRuleV2{
+ 				SourceObjectID:  binding.SourceObjectID,
+ 				ShadowBindingID: &binding.ID,
+ 				MasterBindingID: masterBindingID,
+ 				SourceField:     relPath,
+ 				TargetColumn:    strings.ReplaceAll(relPath, ".", "_"),
+ 				DataType:        pgType,
+ 				SourcePath:      srcPath,
+ 				SourceFormat:    "raw",
+ 				IsActive:        false,
+ 				Status:          "pending",
+ 				IsNullable:      true,
+ 				CreatedBy:       &sys,
+ 			})
+ 		}
+ 	}
+ 
+ 	errTx := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+ 		if len(rulesToInsert) > 0 {
+ 			if err := tx.Create(&rulesToInsert).Error; err != nil {
+ 				return err

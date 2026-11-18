@@ -1,0 +1,51 @@
+[
+  {
+    "id": "S-PATTERN-1",
+    "kind": "claim",
+    "claim": "Skills are registered by directory: .agents/skills.json has a single entries item pointing to the skills folder, so a new skill only needs its own SKILL.md with YAML frontmatter.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/.agents/skills.json:1-3\n{\n  \"entries\": [\n    { \"path\": \"/Users/trainguyen/Documents/work/agent/skills\" }",
+    "flow": "diff-review skill registration follows the existing folder-based registry."
+  },
+  {
+    "id": "S-PATTERN-2",
+    "kind": "claim",
+    "claim": "Existing skills use a YAML frontmatter with name and description fields before the body.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/skills/audit-propose-only/SKILL.md:1-7\n---\nname: audit-propose-only\ndescription: >-\n  Read-Only Architectural & Code Audit workflow — investigates codebase/runtime with\n  file:line evidence (S2), validates findings via Decision Gate DG3 (laya_gate.py),\n  and produces gap analysis or audit reports while strictly prohibiting any code edits\n  until explicit User APPROVE.",
+    "flow": "diff-review SKILL.md will reuse the same frontmatter shape."
+  },
+  {
+    "id": "S-FIX-1",
+    "kind": "claim",
+    "claim": "Mode A gate rejects a claims batch unless it has at least 2 control_false and at least 1 control_true entries.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:283-286\n    f_cnt = sum(1 for c in claims if str(c.get(\"kind\") or c.get(\"type\") or \"\").startswith(\"control_false\"))\n    t_cnt = sum(1 for c in claims if str(c.get(\"kind\") or c.get(\"type\") or \"\").startswith(\"control_true\"))\n    if f_cnt < 2 or t_cnt < 1:\n        return False, [], f\"Need >=2 control_false (got {f_cnt}) and >=1 control_true (got {t_cnt})\"",
+    "flow": "diff-review R5 step must build claims with the required control counts."
+  },
+  {
+    "id": "S-IMPACT-1",
+    "kind": "claim",
+    "claim": "evidence_run.py requires --workspace, --kind unit|integration|runtime and a -- separator before the command.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/evidence_run.py:5-6\nUsage:\n  python3 tooling/evidence_run.py --workspace <ws> --kind unit|integration|runtime [--cwd DIR] -- <cmd...>",
+    "flow": "diff-review evidence receipts are produced via evidence_run.py."
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "GEMINI.md Rule 3 forbids hardcoding technology keyword arrays, service names, ports or project language commands into the core.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/GEMINI.md:29-29\n- **Agnostic Core (ADR-07):** Core `agent/` phục vụ mọi dự án — **CẤM** hardcode mảng từ khóa công nghệ, tên service, port, hay lệnh ngôn ngữ dự án vào core. Dữ kiện dự án khai báo tại `<project-root>/.agent-project.json`.",
+    "flow": "scope.py must read keywords from manifest/pack, never hardcode."
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "Mode A gate accepts a claims batch with zero control_false entries as long as one control_true exists.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/tooling/laya_gate.py:283-286\n    f_cnt = sum(1 for c in claims if str(c.get(\"kind\") or c.get(\"type\") or \"\").startswith(\"control_false\"))\n    t_cnt = sum(1 for c in claims if str(c.get(\"kind\") or c.get(\"type\") or \"\").startswith(\"control_true\"))\n    if f_cnt < 2 or t_cnt < 1:\n        return False, [], f\"Need >=2 control_false (got {f_cnt}) and >=1 control_true (got {t_cnt})\"",
+    "flow": "control"
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": ".agents/skills.json lists each skill individually by name, so adding a skill requires editing this file.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/.agents/skills.json:1-3\n{\n  \"entries\": [\n    { \"path\": \"/Users/trainguyen/Documents/work/agent/skills\" }",
+    "flow": "control"
+  }
+]

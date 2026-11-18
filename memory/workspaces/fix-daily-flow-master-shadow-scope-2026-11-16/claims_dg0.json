@@ -1,0 +1,44 @@
+[
+ {
+  "id": "C-REQ",
+  "kind": "solution",
+  "basis": "code",
+  "flow": "daily flow master filter",
+  "claim": "Trong GetDailyFlow, dòng transmute chỉ được lọc theo master_table, không có điều kiện shadow_schema.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:197-200\n\t\tWHERE (\n\t\t\t(al.operation = 'kafka-consumer' AND (?::text = '' OR COALESCE(tm_sb.shadow_schema, sb.shadow_schema) = ? OR al.details->>'shadow_schema' = ?))\n\t\t\tOR (al.operation IN ('transmute', 'transmute_sub', 'transmute_poison_pill') AND (?::text = '' OR COALESCE(tm.master_table, mb.master_table) = ?))\n\t\t)"
+ },
+ {
+  "id": "C-REALITY",
+  "kind": "solution",
+  "basis": "code",
+  "flow": "web master param",
+  "claim": "Web bóc bỏ schema của master table trước khi gọi API, chỉ gửi tên bảng trần.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:475-476\n  const rawMaster = pipeline.rowB?.target_table || pipeline.masterName || null;\n  const historyMaster = rawMaster ? (rawMaster.split('.').pop() || null) : null;"
+ },
+ {
+  "id": "C-CONTRA",
+  "kind": "solution",
+  "basis": "code",
+  "flow": "list activity log scope",
+  "claim": "API list activity log đã lọc theo shadow_schema qua tm_sb hoặc sb, khác với daily flow.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_list_clear_gorm.go:116-117\n\t\tif f.ShadowSchema != \"\" {\n\t\t\tappendFilter(&mainQuery, &mainArgs, ` AND COALESCE(tm_sb.shadow_schema, sb.shadow_schema) = ?`, f.ShadowSchema)"
+ },
+ {
+  "id": "K1",
+  "kind": "control_false",
+  "claim": "GetDailyFlow lọc dòng transmute theo shadow_schema.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:197-200\n\t\tWHERE (\n\t\t\t(al.operation = 'kafka-consumer' AND (?::text = '' OR COALESCE(tm_sb.shadow_schema, sb.shadow_schema) = ? OR al.details->>'shadow_schema' = ?))\n\t\t\tOR (al.operation IN ('transmute', 'transmute_sub', 'transmute_poison_pill') AND (?::text = '' OR COALESCE(tm.master_table, mb.master_table) = ?))\n\t\t)"
+ },
+ {
+  "id": "K2",
+  "kind": "control_false",
+  "claim": "Web gửi master table kèm đầy đủ schema.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/ReconPipelineGrid.tsx:475-476\n  const rawMaster = pipeline.rowB?.target_table || pipeline.masterName || null;\n  const historyMaster = rawMaster ? (rawMaster.split('.').pop() || null) : null;"
+ },
+ {
+  "id": "K3",
+  "kind": "control_true",
+  "claim": "Dòng kafka-consumer trong GetDailyFlow được lọc theo shadow_schema.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/system/activity_log_read_repo_gorm.go:197-200\n\t\tWHERE (\n\t\t\t(al.operation = 'kafka-consumer' AND (?::text = '' OR COALESCE(tm_sb.shadow_schema, sb.shadow_schema) = ? OR al.details->>'shadow_schema' = ?))\n\t\t\tOR (al.operation IN ('transmute', 'transmute_sub', 'transmute_poison_pill') AND (?::text = '' OR COALESCE(tm.master_table, mb.master_table) = ?))\n\t\t)"
+ }
+]

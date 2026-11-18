@@ -1,0 +1,75 @@
+{
+  "objective": "Kiểm định S5 Adversarial Audit (DG3) cho bản cài đặt thực tế luồng Sync Fields ALTER COLUMN TYPE (Pure Forward Core, L097)",
+  "claims": [
+    {
+      "id": "A-F1",
+      "kind": "audit",
+      "claim": "In schema_adapter_coerce.go lines 31-43, CoerceValue serializes map[string]interface{} and []interface{} via json.Marshal(val) on character varying, text, and varchar columns before falling back to fmt.Sprintf.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter_coerce.go",
+      "lines": "31-43"
+    },
+    {
+      "id": "A-F1B",
+      "kind": "audit",
+      "claim": "In dynamic_mapper.go lines 233-241, convertType default branch serializes map[string]interface{} and []interface{} via json.Marshal(val) instead of fmt.Sprintf.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/dynamic_mapper.go",
+      "lines": "233-241"
+    },
+    {
+      "id": "A-F2",
+      "kind": "audit",
+      "claim": "In schema_adapter.go lines 822-862, AlterColumn validates IsSafeIdent and IsTypeWhitelisted, quotes table and column identifiers, sets SET LOCAL lock_timeout = '10s' in a transaction, uses NULLIF(btrim(col::text), '') for JSONB/JSON, and contains zero legacy _raw_data or map[ salvage workarounds.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go",
+      "lines": "822-862"
+    },
+    {
+      "id": "A-F3",
+      "kind": "audit",
+      "claim": "In schema_ddl_handler.go lines 275-358 and 453-466, HandleCreateDefaultColumns records ddlErrors on AlterColumn failure, invalidates schemaAdapter cache and publishes schema.config.reload when columnsAdded > 0 or columnsAlteredType > 0, includes columnsAlteredType in RowsAffected, and sets Status to error when ddlErrors is non-empty.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/schema_ddl_handler.go",
+      "lines": "275-358"
+    },
+    {
+      "id": "A-F4",
+      "kind": "audit",
+      "claim": "In sync_shadow_columns.go lines 37-70 and source_object_actions_handler.go lines 242-282, ?wait=true executes SyncShadowColumnsCommand synchronously over ports.RPCClient with a 30s timeout, returning error when worker status equals error or wrapping timeout with ErrWorkerSyncTimeout.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/sync_shadow_columns.go",
+      "lines": "37-70"
+    },
+    {
+      "id": "A-F5",
+      "kind": "audit",
+      "claim": "In MappingFieldsPage.tsx lines 166-190, handleSyncFields calls create-default-columns with wait=true, awaits fetchRules() and fetchShadowColumns(), and displays humanizeApiError on failure.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MappingFieldsPage.tsx",
+      "lines": "166-190"
+    },
+    {
+      "id": "A-TEST",
+      "kind": "audit",
+      "claim": "In shadow_alter_column_jsonb_test.go lines 71-106, defer DROP TABLE is registered after defer connMgr.Registry().Close() so LIFO teardown drops the temporary table while shadowDB is still open.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/test/internal/service/shadow_alter_column_jsonb_test.go",
+      "lines": "71-106"
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "kind": "control_true",
+      "claim": "In schema_adapter.go lines 856-861, AlterColumn executes SET LOCAL lock_timeout = '10s' before running tx.Exec(ddl) inside sa.db.WithContext(ctx).Transaction.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go",
+      "lines": "856-861"
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "kind": "control_false",
+      "claim": "In schema_adapter.go lines 822-862, AlterColumn drops the entire database using DROP DATABASE when action equals alter_type.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/shadow/schema_adapter.go",
+      "lines": "822-862"
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "kind": "control_false",
+      "claim": "In sync_shadow_columns.go lines 54-70, SyncShadowColumnsHandler ignores workerRes.Status == 'error' and always returns nil error.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/source/sync_shadow_columns.go",
+      "lines": "54-70"
+    }
+  ]
+}

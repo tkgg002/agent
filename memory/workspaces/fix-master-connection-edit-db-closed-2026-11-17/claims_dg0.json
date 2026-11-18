@@ -1,0 +1,61 @@
+{
+  "objective": "Phản biện giả định DB hardcode vs lỗi Double-Cache Pool đóng sql.DB trong Worker khi chỉnh sửa Tên Database của Master Connection PostgreSQL",
+  "claims": [
+    {
+      "id": "C-REQ-1",
+      "kind": "claim",
+      "claim": "In master_connection_repo_gorm.go lines 362-380, syncMongoMasterBindingsDatabase returns early when isDatabaseScopedRepoEngine(engineType) is false, which skips postgresql and leaves cdc_system.master_binding.master_database un-updated.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_connection_repo_gorm.go",
+      "lines": "362-380"
+    },
+    {
+      "id": "C-REQ-2",
+      "kind": "claim",
+      "claim": "In master_registry_handler_connections.go lines 225-273, UpdateConnection only rebuilds dsn for postgresql when username is non-empty and either password is provided or u.User.Password() returns hasPass true, leaving dsn empty otherwise.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/master/master_registry_handler_connections.go",
+      "lines": "225-274"
+    },
+    {
+      "id": "C-REALITY-1",
+      "kind": "claim",
+      "claim": "In connection_manager.go lines 445-474, InvalidatePool calls sqlDB.Close() and deletes m.masterDBPool[key], without removing the cached *gorm.DB stored under role 'master:'+key in m.reg.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go",
+      "lines": "445-474"
+    },
+    {
+      "id": "C-REALITY-2",
+      "kind": "claim",
+      "claim": "In multi_dialector.go lines 31-37, OpenGormWithEngine immediately returns the existing *gorm.DB from r.gormDBs[role] when non-nil instead of opening a new connection with the updated dsn.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi_dialector.go",
+      "lines": "31-38"
+    },
+    {
+      "id": "C-CONTRA-1",
+      "kind": "claim",
+      "claim": "In transmute_poison_pill_split.go lines 265-298, isTransientError checks for 'connection closed' and 'conn closed' but does not match 'database is closed', so sql: database is closed falls through to binarySearchSplit.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_poison_pill_split.go",
+      "lines": "265-298"
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "kind": "control_true",
+      "claim": "In master_read_repo_gorm.go lines 39-43, ListEnriched selects mc.default_database for mongodb, mysql, mariadb, and clickhouse, and falls back to COALESCE(mb.master_database, mc.default_database) in the ELSE branch.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_read_repo_gorm.go",
+      "lines": "39-44"
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "kind": "control_false",
+      "claim": "In multi_dialector.go lines 31-37, OpenGormWithEngine pings sqlDB and automatically reopens a new GORM pool whenever r.gormDBs[role] has been closed.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi_dialector.go",
+      "lines": "31-38"
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "kind": "control_false",
+      "claim": "In master_connection_repo_gorm.go lines 362-380, syncMongoMasterBindingsDatabase updates master_database on cdc_system.master_binding for postgresql connections as well as mongodb.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_connection_repo_gorm.go",
+      "lines": "362-380"
+    }
+  ]
+}

@@ -1,0 +1,1799 @@
+[
+  {
+    "id": "A-N1",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Audit N1: Missing isDelete filter prevents Postgres partial index usage and leaks soft-deleted rows",
+    "claim": "baseFilter in partner-collection-trans-export.pure.ts filters only cdFlow and bizType without isDelete, and fieldSql in trans-his-pg.query.ts does not map isDelete to core.is_delete.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/partner-collection-trans-export.pure.ts:35-38\nexport const baseFilter = (): Record<string, any> => ({\n    cdFlow: COLLECTION_FLOW,\n    bizType: { $nin: [...EXCLUDED_BIZ_TYPES] }\n});\nREF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:229-245\nfunction fieldSql(key: string, spec: unknown, bind: Bind): string[] {\n\tif (Object.prototype.hasOwnProperty.call(TEXT_COLUMNS, key)) { return [textSql(key, TEXT_COLUMNS[key], spec, bind)]; }\n\tif (Object.prototype.hasOwnProperty.call(JSON_STRING_PATHS, key)) {\n\t\tif (JSON_EXISTS_PATHS.includes(key) && isPlainObject(spec) && Object.prototype.hasOwnProperty.call(spec, \"$exists\")) {\n\t\t\treturn [jsonExistsSql(key, spec, bind)];\n\t\t}\n\t\treturn [jsonStringSql(key, spec, bind)];\n\t}\n\tif (Object.prototype.hasOwnProperty.call(JSON_MIXED_IN_PATHS, key)) { return [jsonMixedInSql(key, JSON_MIXED_IN_PATHS[key], spec, bind)]; }\n\tif (Object.prototype.hasOwnProperty.call(JSON_NUMBER_PATHS, key)) { return [jsonInSql(key, JSON_NUMBER_PATHS[key], spec, bind)]; }\n\tif (key === \"sysTrans\") { return [booleanSql(key, \"core.sys_trans\", spec)]; }\n\tif (key === \"createdAt\") { return dateSql(key, \"core.created_at\", spec, bind); }\n\t// a top-level name no stored document has (`transIdRef`, \"0\", \"1\"... the characters of the string `info` param): v1 strictQuery is off, so\n\t// Mongo sends it as is and nothing matches\n\tif (!STORED_FIELDS.includes(key.split(\".\")[0])) { return [absentSql(key, spec)]; }\n\treturn refuse(\"unsupported_key\", `filter key \"${shown(key)}\"`);\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.4332405518234476,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.4332405518234476,
+            "probabilities": {
+              "CORRECT": 0.3115039531432348,
+              "INCORRECT": 0.25525549503331757,
+              "UNSUPPORTED": 0.4332405518234476
+            },
+            "probs": {
+              "CORRECT": 0.3115039531432348,
+              "INCORRECT": 0.25525549503331757,
+              "UNSUPPORTED": 0.4332405518234476
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.4332405518234476,
+              "probabilities": {
+                "CORRECT": 0.3115039531432348,
+                "INCORRECT": 0.25525549503331757,
+                "UNSUPPORTED": 0.4332405518234476
+              },
+              "probs": {
+                "CORRECT": 0.3115039531432348,
+                "INCORRECT": 0.25525549503331757,
+                "UNSUPPORTED": 0.4332405518234476
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 728
+        },
+        "latency_ms": 1008.46,
+        "usage": {
+          "input_tokens": 728,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "baseFilter in partner-collection-trans-export.pure.ts filters only cdFlow and bizType without isDelete, and fieldSql in trans-his-pg.query.ts does not map isDelete to core.is_delete.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/partner-collection-trans-export.pure.ts:35-38\nexport const baseFilter = (): Record<string, any> => ({\n    cdFlow: COLLECTION_FLOW,\n    bizType: { $nin: [...EXCLUDED_BIZ_TYPES] }\n});\nREF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:229-245\nfunction fieldSql(key: string, spec: unknown, bind: Bind): string[] {\n\tif (Object.prototype.hasOwnProperty.call(TEXT_COLUMNS, key)) { return [textSql(key, TEXT_COLUMNS[key], spec, bind)]; }\n\tif (Object.prototype.hasOwnProperty.call(JSON_STRING_PATHS, key)) {\n\t\tif (JSON_EXISTS_PATHS.includes(key) && isPlainObject(spec) && Object.prototype.hasOwnProperty.call(spec, \"$exists\")) {\n\t\t\treturn [jsonExistsSql(key, spec, bind)];\n\t\t}\n\t\treturn [jsonStringSql(key, spec, bind)];\n\t}\n\tif (Object.prototype.hasOwnProperty.call(JSON_MIXED_IN_PATHS, key)) { return [jsonMixedInSql(key, JSON_MIXED_IN_PATHS[key], spec, bind)]; }\n\tif (Object.prototype.hasOwnProperty.call(JSON_NUMBER_PATHS, key)) { return [jsonInSql(key, JSON_NUMBER_PATHS[key], spec, bind)]; }\n\tif (key === \"sysTrans\") { return [booleanSql(key, \"core.sys_trans\", spec)]; }\n\tif (key === \"createdAt\") { return dateSql(key, \"core.created_at\", spec, bind); }\n\t// a top-level name no stored document has (`transIdRef`, \"0\", \"1\"... the characters of the string `info` param): v1 strictQuery is off, so\n\t// Mongo sends it as is and nothing matches\n\tif (!STORED_FIELDS.includes(key.split(\".\")[0])) { return [absentSql(key, spec)]; }\n\treturn refuse(\"unsupported_key\", `filter key \"${shown(key)}\"`);\n}",
+          "flow": "Audit N1: Missing isDelete filter prevents Postgres partial index usage and leaks soft-deleted rows"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.36376630205646177,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.36376630205646177,
+            "probabilities": {
+              "CORRECT": 0.33174136683809713,
+              "INCORRECT": 0.3044923311054411,
+              "UNSUPPORTED": 0.36376630205646177
+            },
+            "probs": {
+              "CORRECT": 0.33174136683809713,
+              "INCORRECT": 0.3044923311054411,
+              "UNSUPPORTED": 0.36376630205646177
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "INCORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.36376630205646177,
+              "probabilities": {
+                "CORRECT": 0.33174136683809713,
+                "INCORRECT": 0.3044923311054411,
+                "UNSUPPORTED": 0.36376630205646177
+              },
+              "probs": {
+                "CORRECT": 0.33174136683809713,
+                "INCORRECT": 0.3044923311054411,
+                "UNSUPPORTED": 0.36376630205646177
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "INCORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 729
+        },
+        "latency_ms": 1462.87,
+        "usage": {
+          "input_tokens": 729,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "DG3 Pass 2 audit verification of N1-N3 and F1-F6 fixes on feat/GP2-5081",
+          "function_workflow": "Audit N1: Missing isDelete filter prevents Postgres partial index usage and leaks soft-deleted rows",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/partner-collection-trans-export.pure.ts:35-38\nexport const baseFilter = (): Record<string, any> => ({\n    cdFlow: COLLECTION_FLOW,\n    bizType: { $nin: [...EXCLUDED_BIZ_TYPES] }\n});\nREF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:229-245\nfunction fieldSql(key: string, spec: unknown, bind: Bind): string[] {\n\tif (Object.prototype.hasOwnProperty.call(TEXT_COLUMNS, key)) { return [textSql(key, TEXT_COLUMNS[key], spec, bind)]; }\n\tif (Object.prototype.hasOwnProperty.call(JSON_STRING_PATHS, key)) {\n\t\tif (JSON_EXISTS_PATHS.includes(key) && isPlainObject(spec) && Object.prototype.hasOwnProperty.call(spec, \"$exists\")) {\n\t\t\treturn [jsonExistsSql(key, spec, bind)];\n\t\t}\n\t\treturn [jsonStringSql(key, spec, bind)];\n\t}\n\tif (Object.prototype.hasOwnProperty.call(JSON_MIXED_IN_PATHS, key)) { return [jsonMixedInSql(key, JSON_MIXED_IN_PATHS[key], spec, bind)]; }\n\tif (Object.prototype.hasOwnProperty.call(JSON_NUMBER_PATHS, key)) { return [jsonInSql(key, JSON_NUMBER_PATHS[key], spec, bind)]; }\n\tif (key === \"sysTrans\") { return [booleanSql(key, \"core.sys_trans\", spec)]; }\n\tif (key === \"createdAt\") { return dateSql(key, \"core.created_at\", spec, bind); }\n\t// a top-level name no stored document has (`transIdRef`, \"0\", \"1\"... the characters of the string `info` param): v1 strictQuery is off, so\n\t// Mongo sends it as is and nothing matches\n\tif (!STORED_FIELDS.includes(key.split(\".\")[0])) { return [absentSql(key, spec)]; }\n\treturn refuse(\"unsupported_key\", `filter key \"${shown(key)}\"`);\n}",
+          "claim": "baseFilter in partner-collection-trans-export.pure.ts filters only cdFlow and bizType without isDelete, and fieldSql in trans-his-pg.query.ts does not map isDelete to core.is_delete."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6866176404710258,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.6866176404710258,
+            "probabilities": {
+              "YES": 0.6866176404710258,
+              "NO": 0.3133823595289742
+            },
+            "probs": {
+              "YES": 0.6866176404710258,
+              "NO": 0.3133823595289742
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES",
+              "NO"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.6866176404710258,
+              "probabilities": {
+                "YES": 0.6866176404710258,
+                "NO": 0.3133823595289742
+              },
+              "probs": {
+                "YES": 0.6866176404710258,
+                "NO": 0.3133823595289742
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES",
+                "NO"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 602
+        },
+        "latency_ms": 1348.4,
+        "usage": {
+          "input_tokens": 602,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/partner-collection-trans-export.pure.ts:35-38\nexport const baseFilter = (): Record<string, any> => ({\n    cdFlow: COLLECTION_FLOW,\n    bizType: { $nin: [...EXCLUDED_BIZ_TYPES] }\n});\nREF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:229-245\nfunction fieldSql(key: string, spec: unknown, bind: Bind): string[] {\n\tif (Object.prototype.hasOwnProperty.call(TEXT_COLUMNS, key)) { return [textSql(key, TEXT_COLUMNS[key], spec, bind)]; }\n\tif (Object.prototype.hasOwnProperty.call(JSON_STRING_PATHS, key)) {\n\t\tif (JSON_EXISTS_PATHS.includes(key) && isPlainObject(spec) && Object.prototype.hasOwnProperty.call(spec, \"$exists\")) {\n\t\t\treturn [jsonExistsSql(key, spec, bind)];\n\t\t}\n\t\treturn [jsonStringSql(key, spec, bind)];\n\t}\n\tif (Object.prototype.hasOwnProperty.call(JSON_MIXED_IN_PATHS, key)) { return [jsonMixedInSql(key, JSON_MIXED_IN_PATHS[key], spec, bind)]; }\n\tif (Object.prototype.hasOwnProperty.call(JSON_NUMBER_PATHS, key)) { return [jsonInSql(key, JSON_NUMBER_PATHS[key], spec, bind)]; }\n\tif (key === \"sysTrans\") { return [booleanSql(key, \"core.sys_trans\", spec)]; }\n\tif (key === \"createdAt\") { return dateSql(key, \"core.created_at\", spec, bind); }\n\t// a top-level name no stored document has (`transIdRef`, \"0\", \"1\"... the characters of the string `info` param): v1 strictQuery is off, so\n\t// Mongo sends it as is and nothing matches\n\tif (!STORED_FIELDS.includes(key.split(\".\")[0])) { return [absentSql(key, spec)]; }\n\treturn refuse(\"unsupported_key\", `filter key \"${shown(key)}\"`);\n}",
+          "claim": "baseFilter in partner-collection-trans-export.pure.ts filters only cdFlow and bizType without isDelete, and fieldSql in trans-his-pg.query.ts does not map isDelete to core.is_delete."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-N2",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Audit N2: Direct SQL dependency on classification columns cd_flow and biz_type",
+    "claim": "TEXT_COLUMNS in trans-his-pg.query.ts maps cdFlow to core.cd_flow and bizType to core.biz_type directly without an information_schema column check.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:97-100\n\t// classification columns (migration 011 of core-trans-proxy-history-service-v2, CLASSIFICATION_COLUMNS): the screens of the CMS\n\t\"cdFlow\": \"core.cd_flow\",\n\t\"bizType\": \"core.biz_type\"\n};",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5051472299625408,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.5051472299625408,
+            "probabilities": {
+              "CORRECT": 0.5051472299625408,
+              "INCORRECT": 0.13315832877160835,
+              "UNSUPPORTED": 0.3616944412658509
+            },
+            "probs": {
+              "CORRECT": 0.5051472299625408,
+              "INCORRECT": 0.13315832877160835,
+              "UNSUPPORTED": 0.3616944412658509
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.5051472299625408,
+              "probabilities": {
+                "CORRECT": 0.5051472299625408,
+                "INCORRECT": 0.13315832877160835,
+                "UNSUPPORTED": 0.3616944412658509
+              },
+              "probs": {
+                "CORRECT": 0.5051472299625408,
+                "INCORRECT": 0.13315832877160835,
+                "UNSUPPORTED": 0.3616944412658509
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 333
+        },
+        "latency_ms": 1142.24,
+        "usage": {
+          "input_tokens": 333,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "TEXT_COLUMNS in trans-his-pg.query.ts maps cdFlow to core.cd_flow and bizType to core.biz_type directly without an information_schema column check.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:97-100\n\t// classification columns (migration 011 of core-trans-proxy-history-service-v2, CLASSIFICATION_COLUMNS): the screens of the CMS\n\t\"cdFlow\": \"core.cd_flow\",\n\t\"bizType\": \"core.biz_type\"\n};",
+          "flow": "Audit N2: Direct SQL dependency on classification columns cd_flow and biz_type"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.38599057008519166,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.38599057008519166,
+            "probabilities": {
+              "CORRECT": 0.3704416314755885,
+              "INCORRECT": 0.2435677984392199,
+              "UNSUPPORTED": 0.38599057008519166
+            },
+            "probs": {
+              "CORRECT": 0.3704416314755885,
+              "INCORRECT": 0.2435677984392199,
+              "UNSUPPORTED": 0.38599057008519166
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.38599057008519166,
+              "probabilities": {
+                "CORRECT": 0.3704416314755885,
+                "INCORRECT": 0.2435677984392199,
+                "UNSUPPORTED": 0.38599057008519166
+              },
+              "probs": {
+                "CORRECT": 0.3704416314755885,
+                "INCORRECT": 0.2435677984392199,
+                "UNSUPPORTED": 0.38599057008519166
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 334
+        },
+        "latency_ms": 976.61,
+        "usage": {
+          "input_tokens": 334,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "DG3 Pass 2 audit verification of N1-N3 and F1-F6 fixes on feat/GP2-5081",
+          "function_workflow": "Audit N2: Direct SQL dependency on classification columns cd_flow and biz_type",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:97-100\n\t// classification columns (migration 011 of core-trans-proxy-history-service-v2, CLASSIFICATION_COLUMNS): the screens of the CMS\n\t\"cdFlow\": \"core.cd_flow\",\n\t\"bizType\": \"core.biz_type\"\n};",
+          "claim": "TEXT_COLUMNS in trans-his-pg.query.ts maps cdFlow to core.cd_flow and bizType to core.biz_type directly without an information_schema column check."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7931107178080974,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.7931107178080974,
+            "probabilities": {
+              "YES": 0.7931107178080974,
+              "NO": 0.2068892821919026
+            },
+            "probs": {
+              "YES": 0.7931107178080974,
+              "NO": 0.2068892821919026
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": false,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.7931107178080974,
+              "probabilities": {
+                "YES": 0.7931107178080974,
+                "NO": 0.2068892821919026
+              },
+              "probs": {
+                "YES": 0.7931107178080974,
+                "NO": 0.2068892821919026
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": false,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 212
+        },
+        "latency_ms": 907.24,
+        "usage": {
+          "input_tokens": 212,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts:97-100\n\t// classification columns (migration 011 of core-trans-proxy-history-service-v2, CLASSIFICATION_COLUMNS): the screens of the CMS\n\t\"cdFlow\": \"core.cd_flow\",\n\t\"bizType\": \"core.biz_type\"\n};",
+          "claim": "TEXT_COLUMNS in trans-his-pg.query.ts maps cdFlow to core.cd_flow and bizType to core.biz_type directly without an information_schema column check."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-N3",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Audit N3: failedReason fallback formatting and non-ASCII regex in approvedRegex",
+    "claim": "transformRow formats `err: ${error.code}` when error is truthy and message is absent, and approvedRegex throws Invalid transaction history regex on non-ASCII characters like Nguyễn.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/partner-collection-trans-export.pure.ts:139-141\n    const error = item.error;\n    const failedReason = error ? item.info?.failedReason || error.message?.[lang] || `err: ${error.code}` : item.info?.failedReason;\nREF: /Users/trainguyen/Documents/work/centralized-export-service/test/unit/trans-his-pg/trans-his-pg.query.test.ts:463-466\n  it(\"throws for what it cannot translate\", () => {\n    for (const bad of [\"(unterminated\", \"(?<=a)b\", \"(?=a)\", \"(?!a)\", \"a{300}\", \"a}\", \"[]\", \"[^]\", \"[a[b]\", \"[\\\\D]\", \"a+?\", \"\\\\1\", \"\\\\x41\", \"\\\\u0041\", \"\\\\p{L}\", \"Nguyễn\", \"tab\\u0000\", \"[abc\"]) {\n      expect(() => approvedRegex(bad), bad).toThrow(\"Invalid transaction history regex\");\n    }",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5764282429753201,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.5764282429753201,
+            "probabilities": {
+              "CORRECT": 0.5764282429753201,
+              "INCORRECT": 0.1252440319176909,
+              "UNSUPPORTED": 0.29832772510698896
+            },
+            "probs": {
+              "CORRECT": 0.5764282429753201,
+              "INCORRECT": 0.1252440319176909,
+              "UNSUPPORTED": 0.29832772510698896
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.5764282429753201,
+              "probabilities": {
+                "CORRECT": 0.5764282429753201,
+                "INCORRECT": 0.1252440319176909,
+                "UNSUPPORTED": 0.29832772510698896
+              },
+              "probs": {
+                "CORRECT": 0.5764282429753201,
+                "INCORRECT": 0.1252440319176909,
+                "UNSUPPORTED": 0.29832772510698896
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 517
+        },
+        "latency_ms": 1284.45,
+        "usage": {
+          "input_tokens": 517,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "transformRow formats `err: ${error.code}` when error is truthy and message is absent, and approvedRegex throws Invalid transaction history regex on non-ASCII characters like Nguyễn.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/partner-collection-trans-export.pure.ts:139-141\n    const error = item.error;\n    const failedReason = error ? item.info?.failedReason || error.message?.[lang] || `err: ${error.code}` : item.info?.failedReason;\nREF: /Users/trainguyen/Documents/work/centralized-export-service/test/unit/trans-his-pg/trans-his-pg.query.test.ts:463-466\n  it(\"throws for what it cannot translate\", () => {\n    for (const bad of [\"(unterminated\", \"(?<=a)b\", \"(?=a)\", \"(?!a)\", \"a{300}\", \"a}\", \"[]\", \"[^]\", \"[a[b]\", \"[\\\\D]\", \"a+?\", \"\\\\1\", \"\\\\x41\", \"\\\\u0041\", \"\\\\p{L}\", \"Nguyễn\", \"tab\\u0000\", \"[abc\"]) {\n      expect(() => approvedRegex(bad), bad).toThrow(\"Invalid transaction history regex\");\n    }",
+          "flow": "Audit N3: failedReason fallback formatting and non-ASCII regex in approvedRegex"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.44200197314623463,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.44200197314623463,
+            "probabilities": {
+              "CORRECT": 0.44200197314623463,
+              "INCORRECT": 0.2260872190072805,
+              "UNSUPPORTED": 0.3319108078464849
+            },
+            "probs": {
+              "CORRECT": 0.44200197314623463,
+              "INCORRECT": 0.2260872190072805,
+              "UNSUPPORTED": 0.3319108078464849
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.44200197314623463,
+              "probabilities": {
+                "CORRECT": 0.44200197314623463,
+                "INCORRECT": 0.2260872190072805,
+                "UNSUPPORTED": 0.3319108078464849
+              },
+              "probs": {
+                "CORRECT": 0.44200197314623463,
+                "INCORRECT": 0.2260872190072805,
+                "UNSUPPORTED": 0.3319108078464849
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 518
+        },
+        "latency_ms": 1518.06,
+        "usage": {
+          "input_tokens": 518,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "DG3 Pass 2 audit verification of N1-N3 and F1-F6 fixes on feat/GP2-5081",
+          "function_workflow": "Audit N3: failedReason fallback formatting and non-ASCII regex in approvedRegex",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/partner-collection-trans-export.pure.ts:139-141\n    const error = item.error;\n    const failedReason = error ? item.info?.failedReason || error.message?.[lang] || `err: ${error.code}` : item.info?.failedReason;\nREF: /Users/trainguyen/Documents/work/centralized-export-service/test/unit/trans-his-pg/trans-his-pg.query.test.ts:463-466\n  it(\"throws for what it cannot translate\", () => {\n    for (const bad of [\"(unterminated\", \"(?<=a)b\", \"(?=a)\", \"(?!a)\", \"a{300}\", \"a}\", \"[]\", \"[^]\", \"[a[b]\", \"[\\\\D]\", \"a+?\", \"\\\\1\", \"\\\\x41\", \"\\\\u0041\", \"\\\\p{L}\", \"Nguyễn\", \"tab\\u0000\", \"[abc\"]) {\n      expect(() => approvedRegex(bad), bad).toThrow(\"Invalid transaction history regex\");\n    }",
+          "claim": "transformRow formats `err: ${error.code}` when error is truthy and message is absent, and approvedRegex throws Invalid transaction history regex on non-ASCII characters like Nguyễn."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8011200584813076,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.8011200584813076,
+            "probabilities": {
+              "YES": 0.8011200584813076,
+              "NO": 0.19887994151869232
+            },
+            "probs": {
+              "YES": 0.8011200584813076,
+              "NO": 0.19887994151869232
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.8011200584813076,
+              "probabilities": {
+                "YES": 0.8011200584813076,
+                "NO": 0.19887994151869232
+              },
+              "probs": {
+                "YES": 0.8011200584813076,
+                "NO": 0.19887994151869232
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 395
+        },
+        "latency_ms": 1276.01,
+        "usage": {
+          "input_tokens": 395,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/partner-collection-trans-export.pure.ts:139-141\n    const error = item.error;\n    const failedReason = error ? item.info?.failedReason || error.message?.[lang] || `err: ${error.code}` : item.info?.failedReason;\nREF: /Users/trainguyen/Documents/work/centralized-export-service/test/unit/trans-his-pg/trans-his-pg.query.test.ts:463-466\n  it(\"throws for what it cannot translate\", () => {\n    for (const bad of [\"(unterminated\", \"(?<=a)b\", \"(?=a)\", \"(?!a)\", \"a{300}\", \"a}\", \"[]\", \"[^]\", \"[a[b]\", \"[\\\\D]\", \"a+?\", \"\\\\1\", \"\\\\x41\", \"\\\\u0041\", \"\\\\p{L}\", \"Nguyễn\", \"tab\\u0000\", \"[abc\"]) {\n      expect(() => approvedRegex(bad), bad).toThrow(\"Invalid transaction history regex\");\n    }",
+          "claim": "transformRow formats `err: ${error.code}` when error is truthy and message is absent, and approvedRegex throws Invalid transaction history regex on non-ASCII characters like Nguyễn."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-R1",
+    "kind": "audit",
+    "basis": "code",
+    "flow": "Verified fixes from Pass 1 (MinLength, dateDiff >= 0, safeText \\n, _id tie-breaker, real validateParams test)",
+    "claim": "PartnerCollectionTransExportParams enforces MinLength(3) on merchantTransId, merchantEmail, and payeeCode, and safeText matches /^[=+\\-@\\t\\r\\n]/.",
+    "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/trans-his/partner-collection-trans-export.params.ts:45-56\n    // At least 3 characters: a shorter pattern scans too much of payment-bills / trans-his (same as the orders export)\n    @IsOptional() @IsString() @MinLength(3, { message: \"ERR_MIN_LENGTH_3\" }) public merchantTransId?: string;\n    @IsOptional() @IsString() @MinLength(3, { message: \"ERR_MIN_LENGTH_3\" }) public merchantEmail?: string;\n    @IsOptional() @IsString() public status?: string; // e.g. \"SUCCESS,FAILED\"\n\n    @IsOptional()\n    @IsString()\n    @IsIn([\"MERCHANT\", \"USER\"], { message: \"PARAMS_INVALID_FORMAT\" })\n    public payeeType?: string;\n\n    @IsOptional() @IsString() @MinLength(3, { message: \"ERR_MIN_LENGTH_3\" }) public payeeCode?: string;\n    @IsOptional() @IsString() public serviceCode?: string;\nREF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/partner-collection-trans-export.pure.ts:82-85\nexport const safeText = (value: any): string => {\n    const text = value === undefined || value === null ? \"\" : String(value);\n    return /^[=+\\-@\\t\\r\\n]/.test(text) ? `'${text}` : text;\n};",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4735132929135249,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.4735132929135249,
+            "probabilities": {
+              "CORRECT": 0.4735132929135249,
+              "INCORRECT": 0.12973994974007425,
+              "UNSUPPORTED": 0.39674675734640086
+            },
+            "probs": {
+              "CORRECT": 0.4735132929135249,
+              "INCORRECT": 0.12973994974007425,
+              "UNSUPPORTED": 0.39674675734640086
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.4735132929135249,
+              "probabilities": {
+                "CORRECT": 0.4735132929135249,
+                "INCORRECT": 0.12973994974007425,
+                "UNSUPPORTED": 0.39674675734640086
+              },
+              "probs": {
+                "CORRECT": 0.4735132929135249,
+                "INCORRECT": 0.12973994974007425,
+                "UNSUPPORTED": 0.39674675734640086
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 627
+        },
+        "latency_ms": 1316.53,
+        "usage": {
+          "input_tokens": 627,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "PartnerCollectionTransExportParams enforces MinLength(3) on merchantTransId, merchantEmail, and payeeCode, and safeText matches /^[=+\\-@\\t\\r\\n]/.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/trans-his/partner-collection-trans-export.params.ts:45-56\n    // At least 3 characters: a shorter pattern scans too much of payment-bills / trans-his (same as the orders export)\n    @IsOptional() @IsString() @MinLength(3, { message: \"ERR_MIN_LENGTH_3\" }) public merchantTransId?: string;\n    @IsOptional() @IsString() @MinLength(3, { message: \"ERR_MIN_LENGTH_3\" }) public merchantEmail?: string;\n    @IsOptional() @IsString() public status?: string; // e.g. \"SUCCESS,FAILED\"\n\n    @IsOptional()\n    @IsString()\n    @IsIn([\"MERCHANT\", \"USER\"], { message: \"PARAMS_INVALID_FORMAT\" })\n    public payeeType?: string;\n\n    @IsOptional() @IsString() @MinLength(3, { message: \"ERR_MIN_LENGTH_3\" }) public payeeCode?: string;\n    @IsOptional() @IsString() public serviceCode?: string;\nREF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/partner-collection-trans-export.pure.ts:82-85\nexport const safeText = (value: any): string => {\n    const text = value === undefined || value === null ? \"\" : String(value);\n    return /^[=+\\-@\\t\\r\\n]/.test(text) ? `'${text}` : text;\n};",
+          "flow": "Verified fixes from Pass 1 (MinLength, dateDiff >= 0, safeText \\n, _id tie-breaker, real validateParams test)"
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5005668277667688,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.5005668277667688,
+            "probabilities": {
+              "CORRECT": 0.5005668277667688,
+              "INCORRECT": 0.16555641112321476,
+              "UNSUPPORTED": 0.3338767611100165
+            },
+            "probs": {
+              "CORRECT": 0.5005668277667688,
+              "INCORRECT": 0.16555641112321476,
+              "UNSUPPORTED": 0.3338767611100165
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.5005668277667688,
+              "probabilities": {
+                "CORRECT": 0.5005668277667688,
+                "INCORRECT": 0.16555641112321476,
+                "UNSUPPORTED": 0.3338767611100165
+              },
+              "probs": {
+                "CORRECT": 0.5005668277667688,
+                "INCORRECT": 0.16555641112321476,
+                "UNSUPPORTED": 0.3338767611100165
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 627
+        },
+        "latency_ms": 1163.13,
+        "usage": {
+          "input_tokens": 627,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "DG3 Pass 2 audit verification of N1-N3 and F1-F6 fixes on feat/GP2-5081",
+          "function_workflow": "Verified fixes from Pass 1 (MinLength, dateDiff >= 0, safeText \\n, _id tie-breaker, real validateParams test)",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/trans-his/partner-collection-trans-export.params.ts:45-56\n    // At least 3 characters: a shorter pattern scans too much of payment-bills / trans-his (same as the orders export)\n    @IsOptional() @IsString() @MinLength(3, { message: \"ERR_MIN_LENGTH_3\" }) public merchantTransId?: string;\n    @IsOptional() @IsString() @MinLength(3, { message: \"ERR_MIN_LENGTH_3\" }) public merchantEmail?: string;\n    @IsOptional() @IsString() public status?: string; // e.g. \"SUCCESS,FAILED\"\n\n    @IsOptional()\n    @IsString()\n    @IsIn([\"MERCHANT\", \"USER\"], { message: \"PARAMS_INVALID_FORMAT\" })\n    public payeeType?: string;\n\n    @IsOptional() @IsString() @MinLength(3, { message: \"ERR_MIN_LENGTH_3\" }) public payeeCode?: string;\n    @IsOptional() @IsString() public serviceCode?: string;\nREF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/partner-collection-trans-export.pure.ts:82-85\nexport const safeText = (value: any): string => {\n    const text = value === undefined || value === null ? \"\" : String(value);\n    return /^[=+\\-@\\t\\r\\n]/.test(text) ? `'${text}` : text;\n};",
+          "claim": "PartnerCollectionTransExportParams enforces MinLength(3) on merchantTransId, merchantEmail, and payeeCode, and safeText matches /^[=+\\-@\\t\\r\\n]/."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.9086448361825373,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.9086448361825373,
+            "probabilities": {
+              "YES": 0.9086448361825373,
+              "NO": 0.09135516381746267
+            },
+            "probs": {
+              "YES": 0.9086448361825373,
+              "NO": 0.09135516381746267
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.9086448361825373,
+              "probabilities": {
+                "YES": 0.9086448361825373,
+                "NO": 0.09135516381746267
+              },
+              "probs": {
+                "YES": 0.9086448361825373,
+                "NO": 0.09135516381746267
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 489
+        },
+        "latency_ms": 1091.93,
+        "usage": {
+          "input_tokens": 489,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/trans-his/partner-collection-trans-export.params.ts:45-56\n    // At least 3 characters: a shorter pattern scans too much of payment-bills / trans-his (same as the orders export)\n    @IsOptional() @IsString() @MinLength(3, { message: \"ERR_MIN_LENGTH_3\" }) public merchantTransId?: string;\n    @IsOptional() @IsString() @MinLength(3, { message: \"ERR_MIN_LENGTH_3\" }) public merchantEmail?: string;\n    @IsOptional() @IsString() public status?: string; // e.g. \"SUCCESS,FAILED\"\n\n    @IsOptional()\n    @IsString()\n    @IsIn([\"MERCHANT\", \"USER\"], { message: \"PARAMS_INVALID_FORMAT\" })\n    public payeeType?: string;\n\n    @IsOptional() @IsString() @MinLength(3, { message: \"ERR_MIN_LENGTH_3\" }) public payeeCode?: string;\n    @IsOptional() @IsString() public serviceCode?: string;\nREF: /Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/partner-collection-trans-export.pure.ts:82-85\nexport const safeText = (value: any): string => {\n    const text = value === undefined || value === null ? \"\" : String(value);\n    return /^[=+\\-@\\t\\r\\n]/.test(text) ? `'${text}` : text;\n};",
+          "claim": "PartnerCollectionTransExportParams enforces MinLength(3) on merchantTransId, merchantEmail, and payeeCode, and safeText matches /^[=+\\-@\\t\\r\\n]/."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "K-F1",
+    "kind": "control_false",
+    "claim": "TEXT_COLUMNS in trans-his-pg.query.ts maps cdFlow to payload.info.",
+    "evidence": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts', 'lines': '97-100'}]",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3988617303449557,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.3988617303449557,
+            "probabilities": {
+              "CORRECT": 0.3988617303449557,
+              "INCORRECT": 0.22662280905718998,
+              "UNSUPPORTED": 0.37451546059785434
+            },
+            "probs": {
+              "CORRECT": 0.3988617303449557,
+              "INCORRECT": 0.22662280905718998,
+              "UNSUPPORTED": 0.37451546059785434
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.3988617303449557,
+              "probabilities": {
+                "CORRECT": 0.3988617303449557,
+                "INCORRECT": 0.22662280905718998,
+                "UNSUPPORTED": 0.37451546059785434
+              },
+              "probs": {
+                "CORRECT": 0.3988617303449557,
+                "INCORRECT": 0.22662280905718998,
+                "UNSUPPORTED": 0.37451546059785434
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 256
+        },
+        "latency_ms": 901.54,
+        "usage": {
+          "input_tokens": 256,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "TEXT_COLUMNS in trans-his-pg.query.ts maps cdFlow to payload.info.",
+          "evidence": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts', 'lines': '97-100'}]",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.4067785985370509,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.4067785985370509,
+            "probabilities": {
+              "CORRECT": 0.30036548932722823,
+              "INCORRECT": 0.2928559121357209,
+              "UNSUPPORTED": 0.4067785985370509
+            },
+            "probs": {
+              "CORRECT": 0.30036548932722823,
+              "INCORRECT": 0.2928559121357209,
+              "UNSUPPORTED": 0.4067785985370509
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "INCORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.4067785985370509,
+              "probabilities": {
+                "CORRECT": 0.30036548932722823,
+                "INCORRECT": 0.2928559121357209,
+                "UNSUPPORTED": 0.4067785985370509
+              },
+              "probs": {
+                "CORRECT": 0.30036548932722823,
+                "INCORRECT": 0.2928559121357209,
+                "UNSUPPORTED": 0.4067785985370509
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "INCORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 256
+        },
+        "latency_ms": 696.15,
+        "usage": {
+          "input_tokens": 256,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "DG3 Pass 2 audit verification of N1-N3 and F1-F6 fixes on feat/GP2-5081",
+          "function_workflow": "",
+          "diff_lines": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts', 'lines': '97-100'}]",
+          "claim": "TEXT_COLUMNS in trans-his-pg.query.ts maps cdFlow to payload.info."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7318523692828027,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.7318523692828027,
+            "probabilities": {
+              "YES": 0.7318523692828027,
+              "NO": 0.2681476307171973
+            },
+            "probs": {
+              "YES": 0.7318523692828027,
+              "NO": 0.2681476307171973
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES",
+              "NO"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.7318523692828027,
+              "probabilities": {
+                "YES": 0.7318523692828027,
+                "NO": 0.2681476307171973
+              },
+              "probs": {
+                "YES": 0.7318523692828027,
+                "NO": 0.2681476307171973
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES",
+                "NO"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 150
+        },
+        "latency_ms": 721.96,
+        "usage": {
+          "input_tokens": 150,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/models/trans-his-pg/trans-his-pg.query.ts', 'lines': '97-100'}]",
+          "claim": "TEXT_COLUMNS in trans-his-pg.query.ts maps cdFlow to payload.info."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "K-F2",
+    "kind": "control_false",
+    "claim": "PartnerCollectionTransExportParams has no MinLength decorator on merchantTransId.",
+    "evidence": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/trans-his/partner-collection-trans-export.params.ts', 'lines': '45-48'}]",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.504859905624202,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.504859905624202,
+            "probabilities": {
+              "CORRECT": 0.504859905624202,
+              "INCORRECT": 0.1775871517319399,
+              "UNSUPPORTED": 0.31755294264385814
+            },
+            "probs": {
+              "CORRECT": 0.504859905624202,
+              "INCORRECT": 0.1775871517319399,
+              "UNSUPPORTED": 0.31755294264385814
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.504859905624202,
+              "probabilities": {
+                "CORRECT": 0.504859905624202,
+                "INCORRECT": 0.1775871517319399,
+                "UNSUPPORTED": 0.31755294264385814
+              },
+              "probs": {
+                "CORRECT": 0.504859905624202,
+                "INCORRECT": 0.1775871517319399,
+                "UNSUPPORTED": 0.31755294264385814
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 255
+        },
+        "latency_ms": 727.95,
+        "usage": {
+          "input_tokens": 255,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "PartnerCollectionTransExportParams has no MinLength decorator on merchantTransId.",
+          "evidence": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/trans-his/partner-collection-trans-export.params.ts', 'lines': '45-48'}]",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.391911347325584,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.391911347325584,
+            "probabilities": {
+              "CORRECT": 0.33217878571148446,
+              "INCORRECT": 0.2759098669629316,
+              "UNSUPPORTED": 0.391911347325584
+            },
+            "probs": {
+              "CORRECT": 0.33217878571148446,
+              "INCORRECT": 0.2759098669629316,
+              "UNSUPPORTED": 0.391911347325584
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "INCORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.391911347325584,
+              "probabilities": {
+                "CORRECT": 0.33217878571148446,
+                "INCORRECT": 0.2759098669629316,
+                "UNSUPPORTED": 0.391911347325584
+              },
+              "probs": {
+                "CORRECT": 0.33217878571148446,
+                "INCORRECT": 0.2759098669629316,
+                "UNSUPPORTED": 0.391911347325584
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "INCORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 255
+        },
+        "latency_ms": 726.34,
+        "usage": {
+          "input_tokens": 255,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "DG3 Pass 2 audit verification of N1-N3 and F1-F6 fixes on feat/GP2-5081",
+          "function_workflow": "",
+          "diff_lines": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/trans-his/partner-collection-trans-export.params.ts', 'lines': '45-48'}]",
+          "claim": "PartnerCollectionTransExportParams has no MinLength decorator on merchantTransId."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8298439465027745,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.8298439465027745,
+            "probabilities": {
+              "YES": 0.8298439465027745,
+              "NO": 0.1701560534972255
+            },
+            "probs": {
+              "YES": 0.8298439465027745,
+              "NO": 0.1701560534972255
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.8298439465027745,
+              "probabilities": {
+                "YES": 0.8298439465027745,
+                "NO": 0.1701560534972255
+              },
+              "probs": {
+                "YES": 0.8298439465027745,
+                "NO": 0.1701560534972255
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 149
+        },
+        "latency_ms": 731.25,
+        "usage": {
+          "input_tokens": 149,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/data-transfers/params/trans-his/partner-collection-trans-export.params.ts', 'lines': '45-48'}]",
+          "claim": "PartnerCollectionTransExportParams has no MinLength decorator on merchantTransId."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "K-T1",
+    "kind": "control_true",
+    "claim": "EXCLUDED_BIZ_TYPES contains \"COLLATERAL_DEPOSIT\" and \"DEPOSIT_EWALLET\".",
+    "evidence": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/partner-collection-trans-export.pure.ts', 'lines': '12-14'}]",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.44636220912088936,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.44636220912088936,
+            "probabilities": {
+              "CORRECT": 0.44636220912088936,
+              "INCORRECT": 0.177324276026728,
+              "UNSUPPORTED": 0.3763135148523826
+            },
+            "probs": {
+              "CORRECT": 0.44636220912088936,
+              "INCORRECT": 0.177324276026728,
+              "UNSUPPORTED": 0.3763135148523826
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.44636220912088936,
+              "probabilities": {
+                "CORRECT": 0.44636220912088936,
+                "INCORRECT": 0.177324276026728,
+                "UNSUPPORTED": 0.3763135148523826
+              },
+              "probs": {
+                "CORRECT": 0.44636220912088936,
+                "INCORRECT": 0.177324276026728,
+                "UNSUPPORTED": 0.3763135148523826
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 263
+        },
+        "latency_ms": 448.06,
+        "usage": {
+          "input_tokens": 263,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "EXCLUDED_BIZ_TYPES contains \"COLLATERAL_DEPOSIT\" and \"DEPOSIT_EWALLET\".",
+          "evidence": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/partner-collection-trans-export.pure.ts', 'lines': '12-14'}]",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.4051873628145087,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.4051873628145087,
+            "probabilities": {
+              "CORRECT": 0.2913180415802803,
+              "INCORRECT": 0.30349459560521114,
+              "UNSUPPORTED": 0.4051873628145087
+            },
+            "probs": {
+              "CORRECT": 0.2913180415802803,
+              "INCORRECT": 0.30349459560521114,
+              "UNSUPPORTED": 0.4051873628145087
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "INCORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.4051873628145087,
+              "probabilities": {
+                "CORRECT": 0.2913180415802803,
+                "INCORRECT": 0.30349459560521114,
+                "UNSUPPORTED": 0.4051873628145087
+              },
+              "probs": {
+                "CORRECT": 0.2913180415802803,
+                "INCORRECT": 0.30349459560521114,
+                "UNSUPPORTED": 0.4051873628145087
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "INCORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 263
+        },
+        "latency_ms": 543.9,
+        "usage": {
+          "input_tokens": 263,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "DG3 Pass 2 audit verification of N1-N3 and F1-F6 fixes on feat/GP2-5081",
+          "function_workflow": "",
+          "diff_lines": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/partner-collection-trans-export.pure.ts', 'lines': '12-14'}]",
+          "claim": "EXCLUDED_BIZ_TYPES contains \"COLLATERAL_DEPOSIT\" and \"DEPOSIT_EWALLET\"."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7302361125084025,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.7302361125084025,
+            "probabilities": {
+              "YES": 0.7302361125084025,
+              "NO": 0.2697638874915975
+            },
+            "probs": {
+              "YES": 0.7302361125084025,
+              "NO": 0.2697638874915975
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES",
+              "NO"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.7302361125084025,
+              "probabilities": {
+                "YES": 0.7302361125084025,
+                "NO": 0.2697638874915975
+              },
+              "probs": {
+                "YES": 0.7302361125084025,
+                "NO": 0.2697638874915975
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES",
+                "NO"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 157
+        },
+        "latency_ms": 532.24,
+        "usage": {
+          "input_tokens": 157,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "[{'file': '/Users/trainguyen/Documents/work/centralized-export-service/logics/export/trans-his/partner-collection-trans-export.pure.ts', 'lines': '12-14'}]",
+          "claim": "EXCLUDED_BIZ_TYPES contains \"COLLATERAL_DEPOSIT\" and \"DEPOSIT_EWALLET\"."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

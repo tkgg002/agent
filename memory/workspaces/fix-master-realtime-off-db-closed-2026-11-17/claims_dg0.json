@@ -1,0 +1,68 @@
+{
+  "objective": "Phản biện toàn trình nguyên nhân vẫn phát sinh log lỗi transmute / transmute_sub / transmute_poison_pill (sql: database is closed) sau khi User tắt Sync Realtime ở Master",
+  "claims": [
+    {
+      "id": "C-REQ-1",
+      "kind": "claim",
+      "claim": "In master_binding_repo.go lines 78-139, ListMasterTargetsByShadowTable and ListMasterTargetsByShadowIdentity filter by mb.is_active = true and mb.schema_status = 'approved' without checking cdc_system.transmute_schedule mode = 'post_ingest' and is_enabled = true.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go",
+      "lines": "78-139"
+    },
+    {
+      "id": "C-REQ-2",
+      "kind": "claim",
+      "claim": "In batch_buffer_lifecycle.go lines 47-53, FlushSchemaCache flushes bb.adapters and bb.schemaAdapter without clearing bb.piCache.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go",
+      "lines": "47-53"
+    },
+    {
+      "id": "C-REALITY-1",
+      "kind": "claim",
+      "claim": "In MasterRegistry.tsx lines 879-896, the Sync modal useEffect filters /api/v1/schedules by s.master_table === syncRow.master_name and s.master_schema === syncRow.master_schema without matching s.master_binding_id === syncRow.id.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx",
+      "lines": "879-896"
+    },
+    {
+      "id": "C-REALITY-2",
+      "kind": "claim",
+      "claim": "In transmute_schedule_handler.go lines 94-99, Create validates masterSchema against schedNameRe unconditionally even when req.MasterBindingID > 0, whereas masterTable validation is skipped when req.MasterBindingID > 0.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go",
+      "lines": "94-99"
+    },
+    {
+      "id": "C-REALITY-3",
+      "kind": "claim",
+      "claim": "In batch_buffer_utils.go lines 52-77, resolveDB calls GetMasterDB when role is 'master' and resolveSchemaAdapter caches NewSchemaAdapter(db, bb.logger) in bb.adapters under 'master:'+key.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go",
+      "lines": "52-77"
+    },
+    {
+      "id": "C-CONTRA-1",
+      "kind": "claim",
+      "claim": "In transmute_poison_pill_split.go lines 265-280, isTransientError already returns true when err.Error() contains 'database is closed' or 'failed to verify master table existence'.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_poison_pill_split.go",
+      "lines": "265-280"
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "kind": "control_true",
+      "claim": "In batch_buffer_fanout.go lines 212-235, resolvePostIngestSchedule queries cdc_system.transmute_schedule joined with master_binding and shadow_binding where ts.mode = 'post_ingest' and ts.is_enabled = true.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go",
+      "lines": "212-235"
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "kind": "control_false",
+      "claim": "In master_binding_repo.go lines 102-139, ListMasterTargetsByShadowIdentity joins cdc_system.transmute_schedule and filters for ts.mode = 'post_ingest' and ts.is_enabled = true.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go",
+      "lines": "102-139"
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "kind": "control_false",
+      "claim": "In batch_buffer_lifecycle.go lines 47-53, FlushSchemaCache deletes all entries from bb.piCache.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go",
+      "lines": "47-53"
+    }
+  ]
+}

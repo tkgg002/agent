@@ -276,6 +276,33 @@ class TestVerifyGovernance(unittest.TestCase):
             )
         )
 
+    def test_verify_global_lessons_integrity_3tier_summary(self) -> None:
+        lessons_md = self.ws_root / "lessons.md"
+        lessons_md.write_text(
+            "## 1. Governance\n\n"
+            "### [2026-11-16] Tách Biệt Dữ Liệu Theo Nguồn (Per-Pipeline Scope Isolation)\n"
+            "- **Global Pattern:** Khi báo cáo [A] trên hệ thống [B] gộp [X] -> [Y].\n"
+            "- **Bối cảnh (Trigger):** Nhiều nguồn cùng tên bảng.\n"
+            "- **Root Cause:** Lọc thiếu lược đồ nguồn.\n"
+            "- **Fix/Correct Flow:** Bổ sung khóa lược đồ nguồn.\n"
+            "- **Tags:** #cdc #scope\n",
+            encoding="utf-8",
+        )
+        lessons_dir = self.ws_root / "lessons"
+        topics_dir = lessons_dir / "topics"
+        topics_dir.mkdir(parents=True)
+        index_md = lessons_dir / "INDEX.md"
+        index_md.write_text("# INDEX\n| Mã | File |\n|---|---|\n", encoding="utf-8")
+        (topics_dir / "01_governance.summary.md").write_text(
+            "| ID | Bài học |\n|---|---|\n| `L001` | Per-Pipeline Scope Isolation |\n",
+            encoding="utf-8",
+        )
+        self.assertTrue(
+            verify_governance.verify_global_lessons_integrity(
+                lessons_md=lessons_md, index_md=index_md
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

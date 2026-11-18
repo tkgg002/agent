@@ -1,0 +1,19 @@
+# T3 SUMMARY: Database, PostgreSQL, MongoDB & SQL
+> **13** bài học, mỗi dòng 1 bài. Đọc file này TRƯỚC; chỉ mở bài đầy đủ khi cần:
+> `grep -A12 'ID: L0xx' memory/global/lessons/topics/03_database_and_sql.md`
+
+| ID | Bài học | Khi nào trúng (Global Pattern) | Tags |
+| :--- | :--- | :--- | :--- |
+| `L008` | Zero Table-Specific Hardcoding In Generic Sync Engine & Strict Servic… | Khi đánh giá mức độ đáp ứng hoặc thiết kế giải pháp mở rộng cho nền tảng đồng bộ dữ liệu dùng chung [A] phục vụ tài liệu thiết kế lược đồ nghiệp vụ m… | #governance #pipeline-cdc #zero-table-hardcoding #metadata-… |
+| `L011` | Live Schema Verification, Stale-Timestamp Preservation & Rollback-Iso… | Khi triển khai cơ chế yêu cầu hủy tác vụ chạy nền, dọn tác vụ treo và kiểm thử tích hợp cơ sở dữ liệu [A] trên hệ thống phân tán [B], nếu Agent: (1)… | #governance #sql-schema-check #stale-timestamp-preservation… |
+| `L044` | No SQL Keywords or Chained Commands in Gate CLI Args | Khi gọi công cụ CLI kiểm định nội bộ [A] trong môi trường IDE có bộ lọc sandbox [B], nếu Agent nối nhiều lệnh bằng toán tử chuỗi hoặc nhúng các từ kh… | #governance #no-db-cheat #cli-sandbox-safety #clean-cli-arg… |
+| `L045` | Re-Calibrate Swapped Decision Engines & Isolate Live Learning Stores | Khi bổ sung/thay engine quyết định [A] vào cổng kiểm định hoặc vòng học trực tuyến [B], nếu Agent (1) tự định tuyến cổng sang engine mới khi health-c… | #governance #audit-phase #engine-swap-calibration #live-lea… |
+| `L047` | Subprocess-Parser SRP Split & Unbounded Batch Tripwire Guard | Khi xây dựng tầng cầu nối Kernel [A] cho hệ thống điều phối [B], nếu gộp chung bộ gọi subprocess với bộ giải mã schema vào cùng một file lớn hoặc giớ… | #governance #audit-phase #single-responsibility #unbounded-… |
+| `L076` | Zero DB CLI Or Container Exec When DB Access Forbidden | Khi User [A] đã ra chỉ thị "không can thiệp DB / không cheat DB" trên hệ thống [B], nếu Agent vẫn tự ý gọi docker exec ... psql, client CLI kết nối v… | #postgres #sql #no-cheat-db #zero-db-cli #no-docker-exec-ps… |
+| `L077` | No Write-Shaped SQL Even Via EXPLAIN Or Rollback | Khi User [A] đã ra nguyên tắc "không can thiệp DB / không cheat DB" trên hệ thống [B], nếu Agent tự biện minh "chỉ là EXPLAIN không ANALYZE" hoặc "ch… | #postgres #sql #no-cheat-db #read-only #user-principle #exp… |
+| `L078` | Zero Runtime DDL & No Full-Table Scans on Large Databases | Trên cơ sở dữ liệu PostgreSQL / MongoDB quy mô lớn (hàng trăm bảng, hàng trăm triệu bản ghi) [A], nếu Agent: (1) viết code tự động chạy lệnh DDL (ALT… | #postgres #postgresql #mongodb #sql #sqlstate #ddl #index #… |
+| `L079` | Full Multi-Tenant Identity Tuple & 1-N-M Lineage SQL Resolution | Trong cơ sở dữ liệu đa nguồn và đa đích (1 Source | #postgres #postgresql #mongodb #sql #sqlstate #unique #inde… |
+| `L080` | Schema Verification & ANSI SQL Type Normalization | Khi viết câu lệnh SQL thô hoặc kiểm tra cấu trúc bảng trên PostgreSQL [A], nếu Agent: (1) tự suy diễn tên cột không tồn tại trên bảng (mb.shadow_conn… | #postgres #postgresql #sql #sqlstate #schema #migration #in… |
+| `L081` | Transaction Aborted Isolation & GORM SQL Quirks | Khi thao tác cơ sở dữ liệu với PostgreSQL và GORM [A] trong luồng xử lý dữ liệu [B], nếu: (1) bọc cả lệnh ghi theo lô (batch upsert) lẫn vòng lặp ghi… | #postgres #postgresql #sql #sqlstate #transaction #isolatio… |
+| `L082` | Immutable Raw Data, BSON Coercion & UTC Timezone | Trong cơ sở dữ liệu PostgreSQL và MongoDB [A] lưu trữ và biến đổi dữ liệu BSON / Extended JSON [B], nếu: (1) tự ý can thiệp làm phẳng/biến dạng trực… | #postgres #postgresql #mongodb #mongo #bson #sql #sqlstate… |
+| `L083` | MongoDB OCC Pipeline Update & SQL Lateral Join | Khi ghi dữ liệu theo lô vào MongoDB đích hoặc truy vấn SQL kết nối nhiều bảng quan hệ $1:N$ trên PostgreSQL [A], nếu: (1) trên MongoDB đích, đặt điều… | #postgres #postgresql #mongodb #mongo #bson #sql #upsert #t… |

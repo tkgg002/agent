@@ -1,0 +1,1529 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 16-23, F1 shows that BatchBuffer checks post_ingest only at the shadow table level while TransmuteHandler and MasterBindingRepo filter only by mb.is_active and mb.schema_status without checking cdc_system.transmute_schedule.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+    "lines": "16-23",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:16-23\n### `F1` (`VERIFIED`) — Chiều Consumer `TransmuteHandler` & `MasterBindingRepo` BỎ QUA HOÀN TOÀN cờ `post_ingest` (`transmute_schedule.is_enabled = true`)\n- **REF:** `/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:80-112`, `199-290`, `630-713` và `/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go:78-139`.\n- Ở chiều phát (`BatchBuffer.resolvePostIngestSchedule`, `batch_buffer_fanout.go:212-235`), cổng `post_ingest` chỉ đếm gộp ở mức **bảng Shadow** (`SELECT COUNT(*) ... WHERE ts.mode = 'post_ingest' AND ts.is_enabled = true AND sb.shadow_table = ?`).\n- Nhưng ở chiều nhận (`cdc.cmd.transmute-shadow` $\\rightarrow$ `handleTransmuteShadowWithOutcome` $\\rightarrow$ `resolveMasterTargets` $\\rightarrow$ `ListMasterTargetsByShadowIdentity` / `ListMasterTargetsByShadowTable`), câu SQL chỉ lọc `WHERE mb.is_active = true AND mb.schema_status = 'approved'`, **hoàn toàn không kiểm tra `cdc_system.transmute_schedule` (`mode = 'post_ingest' AND is_enabled = true`)**!\n- **Hệ quả thực tế trên hệ thống của anh:**\n  1. **Rò rỉ chéo `1 Shadow -> M Masters`:** Cả 2 cụm trong log đều là quan hệ `1 Shadow -> 2 Masters` (`shadow_payment_bill_service.payment_bills` $\\rightarrow$ `public.cdc_payment_bill` + `public.cdc_payment_bill_payload`; `shadow_payment_service.payments` $\\rightarrow$ `public.cdc_payment` + `public.cdc_payment_payload`). Hễ 1 bảng Master còn bật `post_ingest`, `BatchBuffer` vẫn bắn `cdc.cmd.transmute-shadow`, và `TransmuteHandler` fan-out ép chạy `kafka-consumer-hook` cho **cả bảng Master đã tắt Realtime**!\n  2. **Bão phát lại từ NATS JetStream `CDC_TRANSMUTE` & `TableDebouncer`:** Kể cả khi đã tắt Realtime trên toàn bộ các bảng Master, những bản tin `cdc.cmd.transmute-shadow` đã nằm sẵn trong stream `CDC_TRANSMUTE` (`AckWait = 30s`, `MaxDeliver = 5`, `server_setup.go:311-317`) hoặc đang gom trong `TableDebouncer` khi gặp lỗi DB bị `NakWithDelay` phát lại liên tục (`15:40:28` $\\rightarrow$ `15:40:29` $\\rightarrow$ `15:40:35`) vẫn tiếp tục bị `TransmuteHandler` đưa thẳng vào `execRunEvents` thay vì `Ack` bỏ qua ngay!",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3461,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6938,
+                "INCORRECT": 0.2743,
+                "UNSUPPORTED": 0.0319
+              },
+              "confidence": 0.3461,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1004,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 16-23, F1 shows that BatchBuffer checks post_ingest only at the shadow table level while TransmuteHandler and MasterBindingRepo filter only by mb.is_active and mb.schema_status without checking cdc_system.transmute_schedule.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:16-23\n### `F1` (`VERIFIED`) — Chiều Consumer `TransmuteHandler` & `MasterBindingRepo` BỎ QUA HOÀN TOÀN cờ `post_ingest` (`transmute_schedule.is_enabled = true`)\n- **REF:** `/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:80-112`, `199-290`, `630-713` và `/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go:78-139`.\n- Ở chiều phát (`BatchBuffer.resolvePostIngestSchedule`, `batch_buffer_fanout.go:212-235`), cổng `post_ingest` chỉ đếm gộp ở mức **bảng Shadow** (`SELECT COUNT(*) ... WHERE ts.mode = 'post_ingest' AND ts.is_enabled = true AND sb.shadow_table = ?`).\n- Nhưng ở chiều nhận (`cdc.cmd.transmute-shadow` $\\rightarrow$ `handleTransmuteShadowWithOutcome` $\\rightarrow$ `resolveMasterTargets` $\\rightarrow$ `ListMasterTargetsByShadowIdentity` / `ListMasterTargetsByShadowTable`), câu SQL chỉ lọc `WHERE mb.is_active = true AND mb.schema_status = 'approved'`, **hoàn toàn không kiểm tra `cdc_system.transmute_schedule` (`mode = 'post_ingest' AND is_enabled = true`)**!\n- **Hệ quả thực tế trên hệ thống của anh:**\n  1. **Rò rỉ chéo `1 Shadow -> M Masters`:** Cả 2 cụm trong log đều là quan hệ `1 Shadow -> 2 Masters` (`shadow_payment_bill_service.payment_bills` $\\rightarrow$ `public.cdc_payment_bill` + `public.cdc_payment_bill_payload`; `shadow_payment_service.payments` $\\rightarrow$ `public.cdc_payment` + `public.cdc_payment_payload`). Hễ 1 bảng Master còn bật `post_ingest`, `BatchBuffer` vẫn bắn `cdc.cmd.transmute-shadow`, và `TransmuteHandler` fan-out ép chạy `kafka-consumer-hook` cho **cả bảng Master đã tắt Realtime**!\n  2. **Bão phát lại từ NATS JetStream `CDC_TRANSMUTE` & `TableDebouncer`:** Kể cả khi đã tắt Realtime trên toàn bộ các bảng Master, những bản tin `cdc.cmd.transmute-shadow` đã nằm sẵn trong stream `CDC_TRANSMUTE` (`AckWait = 30s`, `MaxDeliver = 5`, `server_setup.go:311-317`) hoặc đang gom trong `TableDebouncer` khi gặp lỗi DB bị `NakWithDelay` phát lại liên tục (`15:40:28` $\\rightarrow$ `15:40:29` $\\rightarrow$ `15:40:35`) vẫn tiếp tục bị `TransmuteHandler` đưa thẳng vào `execRunEvents` thay vì `Ack` bỏ qua ngay!",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1175,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.445,
+                "INCORRECT": 0.4405,
+                "UNSUPPORTED": 0.1144
+              },
+              "confidence": 0.1175,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1010,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:16-23\n### `F1` (`VERIFIED`) — Chiều Consumer `TransmuteHandler` & `MasterBindingRepo` BỎ QUA HOÀN TOÀN cờ `post_ingest` (`transmute_schedule.is_enabled = true`)\n- **REF:** `/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:80-112`, `199-290`, `630-713` và `/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go:78-139`.\n- Ở chiều phát (`BatchBuffer.resolvePostIngestSchedule`, `batch_buffer_fanout.go:212-235`), cổng `post_ingest` chỉ đếm gộp ở mức **bảng Shadow** (`SELECT COUNT(*) ... WHERE ts.mode = 'post_ingest' AND ts.is_enabled = true AND sb.shadow_table = ?`).\n- Nhưng ở chiều nhận (`cdc.cmd.transmute-shadow` $\\rightarrow$ `handleTransmuteShadowWithOutcome` $\\rightarrow$ `resolveMasterTargets` $\\rightarrow$ `ListMasterTargetsByShadowIdentity` / `ListMasterTargetsByShadowTable`), câu SQL chỉ lọc `WHERE mb.is_active = true AND mb.schema_status = 'approved'`, **hoàn toàn không kiểm tra `cdc_system.transmute_schedule` (`mode = 'post_ingest' AND is_enabled = true`)**!\n- **Hệ quả thực tế trên hệ thống của anh:**\n  1. **Rò rỉ chéo `1 Shadow -> M Masters`:** Cả 2 cụm trong log đều là quan hệ `1 Shadow -> 2 Masters` (`shadow_payment_bill_service.payment_bills` $\\rightarrow$ `public.cdc_payment_bill` + `public.cdc_payment_bill_payload`; `shadow_payment_service.payments` $\\rightarrow$ `public.cdc_payment` + `public.cdc_payment_payload`). Hễ 1 bảng Master còn bật `post_ingest`, `BatchBuffer` vẫn bắn `cdc.cmd.transmute-shadow`, và `TransmuteHandler` fan-out ép chạy `kafka-consumer-hook` cho **cả bảng Master đã tắt Realtime**!\n  2. **Bão phát lại từ NATS JetStream `CDC_TRANSMUTE` & `TableDebouncer`:** Kể cả khi đã tắt Realtime trên toàn bộ các bảng Master, những bản tin `cdc.cmd.transmute-shadow` đã nằm sẵn trong stream `CDC_TRANSMUTE` (`AckWait = 30s`, `MaxDeliver = 5`, `server_setup.go:311-317`) hoặc đang gom trong `TableDebouncer` khi gặp lỗi DB bị `NakWithDelay` phát lại liên tục (`15:40:28` $\\rightarrow$ `15:40:29` $\\rightarrow$ `15:40:35`) vẫn tiếp tục bị `TransmuteHandler` đưa thẳng vào `execRunEvents` thay vì `Ack` bỏ qua ngay!",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 16-23, F1 shows that BatchBuffer checks post_ingest only at the shadow table level while TransmuteHandler and MasterBindingRepo filter only by mb.is_active and mb.schema_status without checking cdc_system.transmute_schedule."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7818,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9651,
+                "NO": 0.0349
+              },
+              "confidence": 0.7818,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 943,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:16-23\n### `F1` (`VERIFIED`) — Chiều Consumer `TransmuteHandler` & `MasterBindingRepo` BỎ QUA HOÀN TOÀN cờ `post_ingest` (`transmute_schedule.is_enabled = true`)\n- **REF:** `/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:80-112`, `199-290`, `630-713` và `/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go:78-139`.\n- Ở chiều phát (`BatchBuffer.resolvePostIngestSchedule`, `batch_buffer_fanout.go:212-235`), cổng `post_ingest` chỉ đếm gộp ở mức **bảng Shadow** (`SELECT COUNT(*) ... WHERE ts.mode = 'post_ingest' AND ts.is_enabled = true AND sb.shadow_table = ?`).\n- Nhưng ở chiều nhận (`cdc.cmd.transmute-shadow` $\\rightarrow$ `handleTransmuteShadowWithOutcome` $\\rightarrow$ `resolveMasterTargets` $\\rightarrow$ `ListMasterTargetsByShadowIdentity` / `ListMasterTargetsByShadowTable`), câu SQL chỉ lọc `WHERE mb.is_active = true AND mb.schema_status = 'approved'`, **hoàn toàn không kiểm tra `cdc_system.transmute_schedule` (`mode = 'post_ingest' AND is_enabled = true`)**!\n- **Hệ quả thực tế trên hệ thống của anh:**\n  1. **Rò rỉ chéo `1 Shadow -> M Masters`:** Cả 2 cụm trong log đều là quan hệ `1 Shadow -> 2 Masters` (`shadow_payment_bill_service.payment_bills` $\\rightarrow$ `public.cdc_payment_bill` + `public.cdc_payment_bill_payload`; `shadow_payment_service.payments` $\\rightarrow$ `public.cdc_payment` + `public.cdc_payment_payload`). Hễ 1 bảng Master còn bật `post_ingest`, `BatchBuffer` vẫn bắn `cdc.cmd.transmute-shadow`, và `TransmuteHandler` fan-out ép chạy `kafka-consumer-hook` cho **cả bảng Master đã tắt Realtime**!\n  2. **Bão phát lại từ NATS JetStream `CDC_TRANSMUTE` & `TableDebouncer`:** Kể cả khi đã tắt Realtime trên toàn bộ các bảng Master, những bản tin `cdc.cmd.transmute-shadow` đã nằm sẵn trong stream `CDC_TRANSMUTE` (`AckWait = 30s`, `MaxDeliver = 5`, `server_setup.go:311-317`) hoặc đang gom trong `TableDebouncer` khi gặp lỗi DB bị `NakWithDelay` phát lại liên tục (`15:40:28` $\\rightarrow$ `15:40:29` $\\rightarrow$ `15:40:35`) vẫn tiếp tục bị `TransmuteHandler` đưa thẳng vào `execRunEvents` thay vì `Ack` bỏ qua ngay!",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 16-23, F1 shows that BatchBuffer checks post_ingest only at the shadow table level while TransmuteHandler and MasterBindingRepo filter only by mb.is_active and mb.schema_status without checking cdc_system.transmute_schedule."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 46-52, F1 through F4 map 1-to-1 onto FilterPostIngestEnabledIDs and IsPostIngestExplicitlyDisabled, NATS transmute.schedule.changed cache invalidation, masterScheduleUtils binding_id matching, and InvalidateConnectionAdapter.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+    "lines": "46-52",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:46-52\n| Phát hiện | Tệp sửa / tách mới | Thiết kế chi tiết & Cam kết Line Budget (`NOW <= HEAD`) |\n| :--- | :--- | :--- |\n| **`F1`** | 1. `centralized-data-service/internal/repository/master/master_binding_repo.go`<br/>2. **Tạo mới** `centralized-data-service/internal/handler/master/transmute_realtime_gate.go`<br/>3. `centralized-data-service/internal/handler/master/transmute_handler.go` | - Giữ nguyên 100% hành vi của `ListMasterTargetsByShadowIdentity` và `ListMasterTargetsByShadowTable` cho các luồng `bridge-oplog`, `heal`, `orphan_prune`, `batch-transform` và test cũ.<br/>- Bổ sung `FilterPostIngestEnabledIDs(ctx, bindingIDs)` và `IsPostIngestExplicitlyDisabled(ctx, bindingID)` vào `MasterBindingRepo`.<br/>- Tách `resolveMasterTargets` từ `transmute_handler.go` sang `transmute_realtime_gate.go` (**giúp `transmute_handler.go` giảm từ `793` xuống `~769` dòng, đạt `NOW <= HEAD`!**) kèm 2 cổng bảo vệ:<br/>  1) Tại `handleTransmuteShadowWithOutcome`: khi `isRealtimePostIngestTrigger(req.TriggeredBy)` (`\"batch-buffer\"`, `\"sinkworker\"`, `\"snapshot\"`, `\"kafka-consumer-hook\"`, `\"snapshot-hook\"`), chỉ giữ lại các `masterTargets` có `post_ingest` đang `is_enabled = true`. Nếu rỗng $\\rightarrow$ trả `nil` để JetStream `Ack()` ngay lập tức, dập tắt 100% bão redelivery.<br/>  2) Tại `runDebouncedGroup`: trước khi mở log `transmute` hay chạm `GetMasterDB`, nếu `triggeredBy` là `\"kafka-consumer-hook\"`/`\"snapshot-hook\"` và `IsPostIngestExplicitlyDisabled` trả `true` $\\rightarrow$ hoàn tất êm (`t.complete(nil)`), `0` lỗi DB!<br/>  3) Giữ nguyên nhãn `\"batch-transform\"` trong `switch req.TriggeredBy` (`CP-4`). |\n| **`F2`** | 1. `cdc-cms-service/internal/app/commands/scheduler/{create_schedule,toggle_schedule,delete_schedule}.go` & `internal/app/commands/master/toggle_master_active.go`<br/>2. `cdc-cms-service/internal/server/server.go`<br/>3. `centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go` & `batch_buffer_fanout_cache.go`<br/>4. `centralized-data-service/internal/server/server_setup_buffers.go` & `server_config_reload.go`<br/>5. `centralized-data-service/internal/sinkworker/worker.go` | - Bổ sung builder tương thích ngược `.WithPublisher(natsPublisher)` cho 4 command handlers (`Create/Toggle/DeleteTransmuteScheduleHandler` & `ToggleMasterActiveHandler`) để bắn tín hiệu NATS Core `\"transmute.schedule.changed\"` ngay sau khi lưu DB.<br/>- Bổ sung `FlushPostIngestCache()` trên `BatchBuffer` (và gọi luôn trong `FlushSchemaCache()`), đăng ký subscriber `\"transmute.schedule.changed\"` trong `registerConfigReloadSubscribers` và trong `sinkworker.New` (kèm đồng bộ điều kiện `multi_shadow` cho `SinkWorker`).<br/>- Giới hạn thời gian sống của stale cache khi query lỗi trong `postIngestEntryOnLookupError` ở mức `postIngestFailOpenTTL` (`5s`) thay vì gia hạn vô tận `30s`. |\n| **`F3`** | 1. `cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go`<br/>2. **Tạo mới** `cdc-cms-web/src/components/master/masterScheduleUtils.ts`<br/>3. `cdc-cms-web/src/pages/MasterRegistry.tsx` & `src/components/ReconPipelineGrid.tsx` | - Tại `transmute_schedule_handler.go:94`: chỉ kiểm tra regex `schedNameRe` cho `masterSchema` khi `req.MasterBindingID <= 0` (đồng bộ với `masterTable` ở dòng `97`), cho phép tạo/tắt schedule bình thường với DB có dấu `-` như `payment-service-v2`.<br/>- Tạo helper thuần `matchScheduleForMasterBinding` tại `src/components/master/masterScheduleUtils.ts` ưu tiên khớp tuyệt đối `s.master_binding_id === bindingId`, fallback chuẩn hóa `(schema || 'public') + table` khi `master_binding_id` rỗng; áp dụng tại `MasterRegistry.tsx` (`0` `if/else` mới, giảm dòng `1775 -> ~1771`) và `ReconPipelineGrid.tsx` (giữ `<= 1730` dòng). |\n| **`F4`** | `centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go`, `internal/server/server_setup_buffers.go`, `internal/server/server_config_reload.go` | - Bổ sung `InvalidateConnectionAdapter(connKey)` xóa `\"master:\" + connKey` và `\"shadow:\" + connKey` khỏi `bb.adapters`, gọi ngay trong subscriber `\"connection.config.changed\"` để không bao giờ giữ lại `*SchemaAdapter` bọc `*gorm.DB` đã đóng.<br/>- Hướng dẫn vận hành rõ ràng: rollout/restart binary mới cho `centralized-data-service` trên Testing và `cdc-cms-service` (PID `79300` trên local). |",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1981,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5688,
+                "INCORRECT": 0.3574,
+                "UNSUPPORTED": 0.0738
+              },
+              "confidence": 0.1981,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 46-52, F1 through F4 map 1-to-1 onto FilterPostIngestEnabledIDs and IsPostIngestExplicitlyDisabled, NATS transmute.schedule.changed cache invalidation, masterScheduleUtils binding_id matching, and InvalidateConnectionAdapter.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:46-52\n| Phát hiện | Tệp sửa / tách mới | Thiết kế chi tiết & Cam kết Line Budget (`NOW <= HEAD`) |\n| :--- | :--- | :--- |\n| **`F1`** | 1. `centralized-data-service/internal/repository/master/master_binding_repo.go`<br/>2. **Tạo mới** `centralized-data-service/internal/handler/master/transmute_realtime_gate.go`<br/>3. `centralized-data-service/internal/handler/master/transmute_handler.go` | - Giữ nguyên 100% hành vi của `ListMasterTargetsByShadowIdentity` và `ListMasterTargetsByShadowTable` cho các luồng `bridge-oplog`, `heal`, `orphan_prune`, `batch-transform` và test cũ.<br/>- Bổ sung `FilterPostIngestEnabledIDs(ctx, bindingIDs)` và `IsPostIngestExplicitlyDisabled(ctx, bindingID)` vào `MasterBindingRepo`.<br/>- Tách `resolveMasterTargets` từ `transmute_handler.go` sang `transmute_realtime_gate.go` (**giúp `transmute_handler.go` giảm từ `793` xuống `~769` dòng, đạt `NOW <= HEAD`!**) kèm 2 cổng bảo vệ:<br/>  1) Tại `handleTransmuteShadowWithOutcome`: khi `isRealtimePostIngestTrigger(req.TriggeredBy)` (`\"batch-buffer\"`, `\"sinkworker\"`, `\"snapshot\"`, `\"kafka-consumer-hook\"`, `\"snapshot-hook\"`), chỉ giữ lại các `masterTargets` có `post_ingest` đang `is_enabled = true`. Nếu rỗng $\\rightarrow$ trả `nil` để JetStream `Ack()` ngay lập tức, dập tắt 100% bão redelivery.<br/>  2) Tại `runDebouncedGroup`: trước khi mở log `transmute` hay chạm `GetMasterDB`, nếu `triggeredBy` là `\"kafka-consumer-hook\"`/`\"snapshot-hook\"` và `IsPostIngestExplicitlyDisabled` trả `true` $\\rightarrow$ hoàn tất êm (`t.complete(nil)`), `0` lỗi DB!<br/>  3) Giữ nguyên nhãn `\"batch-transform\"` trong `switch req.TriggeredBy` (`CP-4`). |\n| **`F2`** | 1. `cdc-cms-service/internal/app/commands/scheduler/{create_schedule,toggle_schedule,delete_schedule}.go` & `internal/app/commands/master/toggle_master_active.go`<br/>2. `cdc-cms-service/internal/server/server.go`<br/>3. `centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go` & `batch_buffer_fanout_cache.go`<br/>4. `centralized-data-service/internal/server/server_setup_buffers.go` & `server_config_reload.go`<br/>5. `centralized-data-service/internal/sinkworker/worker.go` | - Bổ sung builder tương thích ngược `.WithPublisher(natsPublisher)` cho 4 command handlers (`Create/Toggle/DeleteTransmuteScheduleHandler` & `ToggleMasterActiveHandler`) để bắn tín hiệu NATS Core `\"transmute.schedule.changed\"` ngay sau khi lưu DB.<br/>- Bổ sung `FlushPostIngestCache()` trên `BatchBuffer` (và gọi luôn trong `FlushSchemaCache()`), đăng ký subscriber `\"transmute.schedule.changed\"` trong `registerConfigReloadSubscribers` và trong `sinkworker.New` (kèm đồng bộ điều kiện `multi_shadow` cho `SinkWorker`).<br/>- Giới hạn thời gian sống của stale cache khi query lỗi trong `postIngestEntryOnLookupError` ở mức `postIngestFailOpenTTL` (`5s`) thay vì gia hạn vô tận `30s`. |\n| **`F3`** | 1. `cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go`<br/>2. **Tạo mới** `cdc-cms-web/src/components/master/masterScheduleUtils.ts`<br/>3. `cdc-cms-web/src/pages/MasterRegistry.tsx` & `src/components/ReconPipelineGrid.tsx` | - Tại `transmute_schedule_handler.go:94`: chỉ kiểm tra regex `schedNameRe` cho `masterSchema` khi `req.MasterBindingID <= 0` (đồng bộ với `masterTable` ở dòng `97`), cho phép tạo/tắt schedule bình thường với DB có dấu `-` như `payment-service-v2`.<br/>- Tạo helper thuần `matchScheduleForMasterBinding` tại `src/components/master/masterScheduleUtils.ts` ưu tiên khớp tuyệt đối `s.master_binding_id === bindingId`, fallback chuẩn hóa `(schema || 'public') + table` khi `master_binding_id` rỗng; áp dụng tại `MasterRegistry.tsx` (`0` `if/else` mới, giảm dòng `1775 -> ~1771`) và `ReconPipelineGrid.tsx` (giữ `<= 1730` dòng). |\n| **`F4`** | `centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go`, `internal/server/server_setup_buffers.go`, `internal/server/server_config_reload.go` | - Bổ sung `InvalidateConnectionAdapter(connKey)` xóa `\"master:\" + connKey` và `\"shadow:\" + connKey` khỏi `bb.adapters`, gọi ngay trong subscriber `\"connection.config.changed\"` để không bao giờ giữ lại `*SchemaAdapter` bọc `*gorm.DB` đã đóng.<br/>- Hướng dẫn vận hành rõ ràng: rollout/restart binary mới cho `centralized-data-service` trên Testing và `cdc-cms-service` (PID `79300` trên local). |",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1054,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4645,
+                "INCORRECT": 0.4095,
+                "UNSUPPORTED": 0.126
+              },
+              "confidence": 0.1054,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:46-52\n| Phát hiện | Tệp sửa / tách mới | Thiết kế chi tiết & Cam kết Line Budget (`NOW <= HEAD`) |\n| :--- | :--- | :--- |\n| **`F1`** | 1. `centralized-data-service/internal/repository/master/master_binding_repo.go`<br/>2. **Tạo mới** `centralized-data-service/internal/handler/master/transmute_realtime_gate.go`<br/>3. `centralized-data-service/internal/handler/master/transmute_handler.go` | - Giữ nguyên 100% hành vi của `ListMasterTargetsByShadowIdentity` và `ListMasterTargetsByShadowTable` cho các luồng `bridge-oplog`, `heal`, `orphan_prune`, `batch-transform` và test cũ.<br/>- Bổ sung `FilterPostIngestEnabledIDs(ctx, bindingIDs)` và `IsPostIngestExplicitlyDisabled(ctx, bindingID)` vào `MasterBindingRepo`.<br/>- Tách `resolveMasterTargets` từ `transmute_handler.go` sang `transmute_realtime_gate.go` (**giúp `transmute_handler.go` giảm từ `793` xuống `~769` dòng, đạt `NOW <= HEAD`!**) kèm 2 cổng bảo vệ:<br/>  1) Tại `handleTransmuteShadowWithOutcome`: khi `isRealtimePostIngestTrigger(req.TriggeredBy)` (`\"batch-buffer\"`, `\"sinkworker\"`, `\"snapshot\"`, `\"kafka-consumer-hook\"`, `\"snapshot-hook\"`), chỉ giữ lại các `masterTargets` có `post_ingest` đang `is_enabled = true`. Nếu rỗng $\\rightarrow$ trả `nil` để JetStream `Ack()` ngay lập tức, dập tắt 100% bão redelivery.<br/>  2) Tại `runDebouncedGroup`: trước khi mở log `transmute` hay chạm `GetMasterDB`, nếu `triggeredBy` là `\"kafka-consumer-hook\"`/`\"snapshot-hook\"` và `IsPostIngestExplicitlyDisabled` trả `true` $\\rightarrow$ hoàn tất êm (`t.complete(nil)`), `0` lỗi DB!<br/>  3) Giữ nguyên nhãn `\"batch-transform\"` trong `switch req.TriggeredBy` (`CP-4`). |\n| **`F2`** | 1. `cdc-cms-service/internal/app/commands/scheduler/{create_schedule,toggle_schedule,delete_schedule}.go` & `internal/app/commands/master/toggle_master_active.go`<br/>2. `cdc-cms-service/internal/server/server.go`<br/>3. `centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go` & `batch_buffer_fanout_cache.go`<br/>4. `centralized-data-service/internal/server/server_setup_buffers.go` & `server_config_reload.go`<br/>5. `centralized-data-service/internal/sinkworker/worker.go` | - Bổ sung builder tương thích ngược `.WithPublisher(natsPublisher)` cho 4 command handlers (`Create/Toggle/DeleteTransmuteScheduleHandler` & `ToggleMasterActiveHandler`) để bắn tín hiệu NATS Core `\"transmute.schedule.changed\"` ngay sau khi lưu DB.<br/>- Bổ sung `FlushPostIngestCache()` trên `BatchBuffer` (và gọi luôn trong `FlushSchemaCache()`), đăng ký subscriber `\"transmute.schedule.changed\"` trong `registerConfigReloadSubscribers` và trong `sinkworker.New` (kèm đồng bộ điều kiện `multi_shadow` cho `SinkWorker`).<br/>- Giới hạn thời gian sống của stale cache khi query lỗi trong `postIngestEntryOnLookupError` ở mức `postIngestFailOpenTTL` (`5s`) thay vì gia hạn vô tận `30s`. |\n| **`F3`** | 1. `cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go`<br/>2. **Tạo mới** `cdc-cms-web/src/components/master/masterScheduleUtils.ts`<br/>3. `cdc-cms-web/src/pages/MasterRegistry.tsx` & `src/components/ReconPipelineGrid.tsx` | - Tại `transmute_schedule_handler.go:94`: chỉ kiểm tra regex `schedNameRe` cho `masterSchema` khi `req.MasterBindingID <= 0` (đồng bộ với `masterTable` ở dòng `97`), cho phép tạo/tắt schedule bình thường với DB có dấu `-` như `payment-service-v2`.<br/>- Tạo helper thuần `matchScheduleForMasterBinding` tại `src/components/master/masterScheduleUtils.ts` ưu tiên khớp tuyệt đối `s.master_binding_id === bindingId`, fallback chuẩn hóa `(schema || 'public') + table` khi `master_binding_id` rỗng; áp dụng tại `MasterRegistry.tsx` (`0` `if/else` mới, giảm dòng `1775 -> ~1771`) và `ReconPipelineGrid.tsx` (giữ `<= 1730` dòng). |\n| **`F4`** | `centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go`, `internal/server/server_setup_buffers.go`, `internal/server/server_config_reload.go` | - Bổ sung `InvalidateConnectionAdapter(connKey)` xóa `\"master:\" + connKey` và `\"shadow:\" + connKey` khỏi `bb.adapters`, gọi ngay trong subscriber `\"connection.config.changed\"` để không bao giờ giữ lại `*SchemaAdapter` bọc `*gorm.DB` đã đóng.<br/>- Hướng dẫn vận hành rõ ràng: rollout/restart binary mới cho `centralized-data-service` trên Testing và `cdc-cms-service` (PID `79300` trên local). |",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 46-52, F1 through F4 map 1-to-1 onto FilterPostIngestEnabledIDs and IsPostIngestExplicitlyDisabled, NATS transmute.schedule.changed cache invalidation, masterScheduleUtils binding_id matching, and InvalidateConnectionAdapter."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4225,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8625,
+                "NO": 0.1375
+              },
+              "confidence": 0.4225,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:46-52\n| Phát hiện | Tệp sửa / tách mới | Thiết kế chi tiết & Cam kết Line Budget (`NOW <= HEAD`) |\n| :--- | :--- | :--- |\n| **`F1`** | 1. `centralized-data-service/internal/repository/master/master_binding_repo.go`<br/>2. **Tạo mới** `centralized-data-service/internal/handler/master/transmute_realtime_gate.go`<br/>3. `centralized-data-service/internal/handler/master/transmute_handler.go` | - Giữ nguyên 100% hành vi của `ListMasterTargetsByShadowIdentity` và `ListMasterTargetsByShadowTable` cho các luồng `bridge-oplog`, `heal`, `orphan_prune`, `batch-transform` và test cũ.<br/>- Bổ sung `FilterPostIngestEnabledIDs(ctx, bindingIDs)` và `IsPostIngestExplicitlyDisabled(ctx, bindingID)` vào `MasterBindingRepo`.<br/>- Tách `resolveMasterTargets` từ `transmute_handler.go` sang `transmute_realtime_gate.go` (**giúp `transmute_handler.go` giảm từ `793` xuống `~769` dòng, đạt `NOW <= HEAD`!**) kèm 2 cổng bảo vệ:<br/>  1) Tại `handleTransmuteShadowWithOutcome`: khi `isRealtimePostIngestTrigger(req.TriggeredBy)` (`\"batch-buffer\"`, `\"sinkworker\"`, `\"snapshot\"`, `\"kafka-consumer-hook\"`, `\"snapshot-hook\"`), chỉ giữ lại các `masterTargets` có `post_ingest` đang `is_enabled = true`. Nếu rỗng $\\rightarrow$ trả `nil` để JetStream `Ack()` ngay lập tức, dập tắt 100% bão redelivery.<br/>  2) Tại `runDebouncedGroup`: trước khi mở log `transmute` hay chạm `GetMasterDB`, nếu `triggeredBy` là `\"kafka-consumer-hook\"`/`\"snapshot-hook\"` và `IsPostIngestExplicitlyDisabled` trả `true` $\\rightarrow$ hoàn tất êm (`t.complete(nil)`), `0` lỗi DB!<br/>  3) Giữ nguyên nhãn `\"batch-transform\"` trong `switch req.TriggeredBy` (`CP-4`). |\n| **`F2`** | 1. `cdc-cms-service/internal/app/commands/scheduler/{create_schedule,toggle_schedule,delete_schedule}.go` & `internal/app/commands/master/toggle_master_active.go`<br/>2. `cdc-cms-service/internal/server/server.go`<br/>3. `centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go` & `batch_buffer_fanout_cache.go`<br/>4. `centralized-data-service/internal/server/server_setup_buffers.go` & `server_config_reload.go`<br/>5. `centralized-data-service/internal/sinkworker/worker.go` | - Bổ sung builder tương thích ngược `.WithPublisher(natsPublisher)` cho 4 command handlers (`Create/Toggle/DeleteTransmuteScheduleHandler` & `ToggleMasterActiveHandler`) để bắn tín hiệu NATS Core `\"transmute.schedule.changed\"` ngay sau khi lưu DB.<br/>- Bổ sung `FlushPostIngestCache()` trên `BatchBuffer` (và gọi luôn trong `FlushSchemaCache()`), đăng ký subscriber `\"transmute.schedule.changed\"` trong `registerConfigReloadSubscribers` và trong `sinkworker.New` (kèm đồng bộ điều kiện `multi_shadow` cho `SinkWorker`).<br/>- Giới hạn thời gian sống của stale cache khi query lỗi trong `postIngestEntryOnLookupError` ở mức `postIngestFailOpenTTL` (`5s`) thay vì gia hạn vô tận `30s`. |\n| **`F3`** | 1. `cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go`<br/>2. **Tạo mới** `cdc-cms-web/src/components/master/masterScheduleUtils.ts`<br/>3. `cdc-cms-web/src/pages/MasterRegistry.tsx` & `src/components/ReconPipelineGrid.tsx` | - Tại `transmute_schedule_handler.go:94`: chỉ kiểm tra regex `schedNameRe` cho `masterSchema` khi `req.MasterBindingID <= 0` (đồng bộ với `masterTable` ở dòng `97`), cho phép tạo/tắt schedule bình thường với DB có dấu `-` như `payment-service-v2`.<br/>- Tạo helper thuần `matchScheduleForMasterBinding` tại `src/components/master/masterScheduleUtils.ts` ưu tiên khớp tuyệt đối `s.master_binding_id === bindingId`, fallback chuẩn hóa `(schema || 'public') + table` khi `master_binding_id` rỗng; áp dụng tại `MasterRegistry.tsx` (`0` `if/else` mới, giảm dòng `1775 -> ~1771`) và `ReconPipelineGrid.tsx` (giữ `<= 1730` dòng). |\n| **`F4`** | `centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go`, `internal/server/server_setup_buffers.go`, `internal/server/server_config_reload.go` | - Bổ sung `InvalidateConnectionAdapter(connKey)` xóa `\"master:\" + connKey` và `\"shadow:\" + connKey` khỏi `bb.adapters`, gọi ngay trong subscriber `\"connection.config.changed\"` để không bao giờ giữ lại `*SchemaAdapter` bọc `*gorm.DB` đã đóng.<br/>- Hướng dẫn vận hành rõ ràng: rollout/restart binary mới cho `centralized-data-service` trên Testing và `cdc-cms-service` (PID `79300` trên local). |",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 46-52, F1 through F4 map 1-to-1 onto FilterPostIngestEnabledIDs and IsPostIngestExplicitlyDisabled, NATS transmute.schedule.changed cache invalidation, masterScheduleUtils binding_id matching, and InvalidateConnectionAdapter."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 48-50, existing ListMasterTargetsByShadowIdentity and ListMasterTargetsByShadowTable methods are kept intact for bridge-oplog and heal while oversized files transmute_handler.go, MasterRegistry.tsx, and ReconPipelineGrid.tsx keep NOW <= HEAD.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+    "lines": "48-51",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:48-51\n| **`F1`** | 1. `centralized-data-service/internal/repository/master/master_binding_repo.go`<br/>2. **Tạo mới** `centralized-data-service/internal/handler/master/transmute_realtime_gate.go`<br/>3. `centralized-data-service/internal/handler/master/transmute_handler.go` | - Giữ nguyên 100% hành vi của `ListMasterTargetsByShadowIdentity` và `ListMasterTargetsByShadowTable` cho các luồng `bridge-oplog`, `heal`, `orphan_prune`, `batch-transform` và test cũ.<br/>- Bổ sung `FilterPostIngestEnabledIDs(ctx, bindingIDs)` và `IsPostIngestExplicitlyDisabled(ctx, bindingID)` vào `MasterBindingRepo`.<br/>- Tách `resolveMasterTargets` từ `transmute_handler.go` sang `transmute_realtime_gate.go` (**giúp `transmute_handler.go` giảm từ `793` xuống `~769` dòng, đạt `NOW <= HEAD`!**) kèm 2 cổng bảo vệ:<br/>  1) Tại `handleTransmuteShadowWithOutcome`: khi `isRealtimePostIngestTrigger(req.TriggeredBy)` (`\"batch-buffer\"`, `\"sinkworker\"`, `\"snapshot\"`, `\"kafka-consumer-hook\"`, `\"snapshot-hook\"`), chỉ giữ lại các `masterTargets` có `post_ingest` đang `is_enabled = true`. Nếu rỗng $\\rightarrow$ trả `nil` để JetStream `Ack()` ngay lập tức, dập tắt 100% bão redelivery.<br/>  2) Tại `runDebouncedGroup`: trước khi mở log `transmute` hay chạm `GetMasterDB`, nếu `triggeredBy` là `\"kafka-consumer-hook\"`/`\"snapshot-hook\"` và `IsPostIngestExplicitlyDisabled` trả `true` $\\rightarrow$ hoàn tất êm (`t.complete(nil)`), `0` lỗi DB!<br/>  3) Giữ nguyên nhãn `\"batch-transform\"` trong `switch req.TriggeredBy` (`CP-4`). |\n| **`F2`** | 1. `cdc-cms-service/internal/app/commands/scheduler/{create_schedule,toggle_schedule,delete_schedule}.go` & `internal/app/commands/master/toggle_master_active.go`<br/>2. `cdc-cms-service/internal/server/server.go`<br/>3. `centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go` & `batch_buffer_fanout_cache.go`<br/>4. `centralized-data-service/internal/server/server_setup_buffers.go` & `server_config_reload.go`<br/>5. `centralized-data-service/internal/sinkworker/worker.go` | - Bổ sung builder tương thích ngược `.WithPublisher(natsPublisher)` cho 4 command handlers (`Create/Toggle/DeleteTransmuteScheduleHandler` & `ToggleMasterActiveHandler`) để bắn tín hiệu NATS Core `\"transmute.schedule.changed\"` ngay sau khi lưu DB.<br/>- Bổ sung `FlushPostIngestCache()` trên `BatchBuffer` (và gọi luôn trong `FlushSchemaCache()`), đăng ký subscriber `\"transmute.schedule.changed\"` trong `registerConfigReloadSubscribers` và trong `sinkworker.New` (kèm đồng bộ điều kiện `multi_shadow` cho `SinkWorker`).<br/>- Giới hạn thời gian sống của stale cache khi query lỗi trong `postIngestEntryOnLookupError` ở mức `postIngestFailOpenTTL` (`5s`) thay vì gia hạn vô tận `30s`. |\n| **`F3`** | 1. `cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go`<br/>2. **Tạo mới** `cdc-cms-web/src/components/master/masterScheduleUtils.ts`<br/>3. `cdc-cms-web/src/pages/MasterRegistry.tsx` & `src/components/ReconPipelineGrid.tsx` | - Tại `transmute_schedule_handler.go:94`: chỉ kiểm tra regex `schedNameRe` cho `masterSchema` khi `req.MasterBindingID <= 0` (đồng bộ với `masterTable` ở dòng `97`), cho phép tạo/tắt schedule bình thường với DB có dấu `-` như `payment-service-v2`.<br/>- Tạo helper thuần `matchScheduleForMasterBinding` tại `src/components/master/masterScheduleUtils.ts` ưu tiên khớp tuyệt đối `s.master_binding_id === bindingId`, fallback chuẩn hóa `(schema || 'public') + table` khi `master_binding_id` rỗng; áp dụng tại `MasterRegistry.tsx` (`0` `if/else` mới, giảm dòng `1775 -> ~1771`) và `ReconPipelineGrid.tsx` (giữ `<= 1730` dòng). |\n| **`F4`** | `centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go`, `internal/server/server_setup_buffers.go`, `internal/server/server_config_reload.go` | - Bổ sung `InvalidateConnectionAdapter(connKey)` xóa `\"master:\" + connKey` và `\"shadow:\" + connKey` khỏi `bb.adapters`, gọi ngay trong subscriber `\"connection.config.changed\"` để không bao giờ giữ lại `*SchemaAdapter` bọc `*gorm.DB` đã đóng.<br/>- Hướng dẫn vận hành rõ ràng: rollout/restart binary mới cho `centralized-data-service` trên Testing và `cdc-cms-service` (PID `79300` trên local). |",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3471,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7495,
+                "INCORRECT": 0.1736,
+                "UNSUPPORTED": 0.0769
+              },
+              "confidence": 0.3471,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 48-50, existing ListMasterTargetsByShadowIdentity and ListMasterTargetsByShadowTable methods are kept intact for bridge-oplog and heal while oversized files transmute_handler.go, MasterRegistry.tsx, and ReconPipelineGrid.tsx keep NOW <= HEAD.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:48-51\n| **`F1`** | 1. `centralized-data-service/internal/repository/master/master_binding_repo.go`<br/>2. **Tạo mới** `centralized-data-service/internal/handler/master/transmute_realtime_gate.go`<br/>3. `centralized-data-service/internal/handler/master/transmute_handler.go` | - Giữ nguyên 100% hành vi của `ListMasterTargetsByShadowIdentity` và `ListMasterTargetsByShadowTable` cho các luồng `bridge-oplog`, `heal`, `orphan_prune`, `batch-transform` và test cũ.<br/>- Bổ sung `FilterPostIngestEnabledIDs(ctx, bindingIDs)` và `IsPostIngestExplicitlyDisabled(ctx, bindingID)` vào `MasterBindingRepo`.<br/>- Tách `resolveMasterTargets` từ `transmute_handler.go` sang `transmute_realtime_gate.go` (**giúp `transmute_handler.go` giảm từ `793` xuống `~769` dòng, đạt `NOW <= HEAD`!**) kèm 2 cổng bảo vệ:<br/>  1) Tại `handleTransmuteShadowWithOutcome`: khi `isRealtimePostIngestTrigger(req.TriggeredBy)` (`\"batch-buffer\"`, `\"sinkworker\"`, `\"snapshot\"`, `\"kafka-consumer-hook\"`, `\"snapshot-hook\"`), chỉ giữ lại các `masterTargets` có `post_ingest` đang `is_enabled = true`. Nếu rỗng $\\rightarrow$ trả `nil` để JetStream `Ack()` ngay lập tức, dập tắt 100% bão redelivery.<br/>  2) Tại `runDebouncedGroup`: trước khi mở log `transmute` hay chạm `GetMasterDB`, nếu `triggeredBy` là `\"kafka-consumer-hook\"`/`\"snapshot-hook\"` và `IsPostIngestExplicitlyDisabled` trả `true` $\\rightarrow$ hoàn tất êm (`t.complete(nil)`), `0` lỗi DB!<br/>  3) Giữ nguyên nhãn `\"batch-transform\"` trong `switch req.TriggeredBy` (`CP-4`). |\n| **`F2`** | 1. `cdc-cms-service/internal/app/commands/scheduler/{create_schedule,toggle_schedule,delete_schedule}.go` & `internal/app/commands/master/toggle_master_active.go`<br/>2. `cdc-cms-service/internal/server/server.go`<br/>3. `centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go` & `batch_buffer_fanout_cache.go`<br/>4. `centralized-data-service/internal/server/server_setup_buffers.go` & `server_config_reload.go`<br/>5. `centralized-data-service/internal/sinkworker/worker.go` | - Bổ sung builder tương thích ngược `.WithPublisher(natsPublisher)` cho 4 command handlers (`Create/Toggle/DeleteTransmuteScheduleHandler` & `ToggleMasterActiveHandler`) để bắn tín hiệu NATS Core `\"transmute.schedule.changed\"` ngay sau khi lưu DB.<br/>- Bổ sung `FlushPostIngestCache()` trên `BatchBuffer` (và gọi luôn trong `FlushSchemaCache()`), đăng ký subscriber `\"transmute.schedule.changed\"` trong `registerConfigReloadSubscribers` và trong `sinkworker.New` (kèm đồng bộ điều kiện `multi_shadow` cho `SinkWorker`).<br/>- Giới hạn thời gian sống của stale cache khi query lỗi trong `postIngestEntryOnLookupError` ở mức `postIngestFailOpenTTL` (`5s`) thay vì gia hạn vô tận `30s`. |\n| **`F3`** | 1. `cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go`<br/>2. **Tạo mới** `cdc-cms-web/src/components/master/masterScheduleUtils.ts`<br/>3. `cdc-cms-web/src/pages/MasterRegistry.tsx` & `src/components/ReconPipelineGrid.tsx` | - Tại `transmute_schedule_handler.go:94`: chỉ kiểm tra regex `schedNameRe` cho `masterSchema` khi `req.MasterBindingID <= 0` (đồng bộ với `masterTable` ở dòng `97`), cho phép tạo/tắt schedule bình thường với DB có dấu `-` như `payment-service-v2`.<br/>- Tạo helper thuần `matchScheduleForMasterBinding` tại `src/components/master/masterScheduleUtils.ts` ưu tiên khớp tuyệt đối `s.master_binding_id === bindingId`, fallback chuẩn hóa `(schema || 'public') + table` khi `master_binding_id` rỗng; áp dụng tại `MasterRegistry.tsx` (`0` `if/else` mới, giảm dòng `1775 -> ~1771`) và `ReconPipelineGrid.tsx` (giữ `<= 1730` dòng). |\n| **`F4`** | `centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go`, `internal/server/server_setup_buffers.go`, `internal/server/server_config_reload.go` | - Bổ sung `InvalidateConnectionAdapter(connKey)` xóa `\"master:\" + connKey` và `\"shadow:\" + connKey` khỏi `bb.adapters`, gọi ngay trong subscriber `\"connection.config.changed\"` để không bao giờ giữ lại `*SchemaAdapter` bọc `*gorm.DB` đã đóng.<br/>- Hướng dẫn vận hành rõ ràng: rollout/restart binary mới cho `centralized-data-service` trên Testing và `cdc-cms-service` (PID `79300` trên local). |",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0641,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4964,
+                "INCORRECT": 0.3109,
+                "UNSUPPORTED": 0.1927
+              },
+              "confidence": 0.0641,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:48-51\n| **`F1`** | 1. `centralized-data-service/internal/repository/master/master_binding_repo.go`<br/>2. **Tạo mới** `centralized-data-service/internal/handler/master/transmute_realtime_gate.go`<br/>3. `centralized-data-service/internal/handler/master/transmute_handler.go` | - Giữ nguyên 100% hành vi của `ListMasterTargetsByShadowIdentity` và `ListMasterTargetsByShadowTable` cho các luồng `bridge-oplog`, `heal`, `orphan_prune`, `batch-transform` và test cũ.<br/>- Bổ sung `FilterPostIngestEnabledIDs(ctx, bindingIDs)` và `IsPostIngestExplicitlyDisabled(ctx, bindingID)` vào `MasterBindingRepo`.<br/>- Tách `resolveMasterTargets` từ `transmute_handler.go` sang `transmute_realtime_gate.go` (**giúp `transmute_handler.go` giảm từ `793` xuống `~769` dòng, đạt `NOW <= HEAD`!**) kèm 2 cổng bảo vệ:<br/>  1) Tại `handleTransmuteShadowWithOutcome`: khi `isRealtimePostIngestTrigger(req.TriggeredBy)` (`\"batch-buffer\"`, `\"sinkworker\"`, `\"snapshot\"`, `\"kafka-consumer-hook\"`, `\"snapshot-hook\"`), chỉ giữ lại các `masterTargets` có `post_ingest` đang `is_enabled = true`. Nếu rỗng $\\rightarrow$ trả `nil` để JetStream `Ack()` ngay lập tức, dập tắt 100% bão redelivery.<br/>  2) Tại `runDebouncedGroup`: trước khi mở log `transmute` hay chạm `GetMasterDB`, nếu `triggeredBy` là `\"kafka-consumer-hook\"`/`\"snapshot-hook\"` và `IsPostIngestExplicitlyDisabled` trả `true` $\\rightarrow$ hoàn tất êm (`t.complete(nil)`), `0` lỗi DB!<br/>  3) Giữ nguyên nhãn `\"batch-transform\"` trong `switch req.TriggeredBy` (`CP-4`). |\n| **`F2`** | 1. `cdc-cms-service/internal/app/commands/scheduler/{create_schedule,toggle_schedule,delete_schedule}.go` & `internal/app/commands/master/toggle_master_active.go`<br/>2. `cdc-cms-service/internal/server/server.go`<br/>3. `centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go` & `batch_buffer_fanout_cache.go`<br/>4. `centralized-data-service/internal/server/server_setup_buffers.go` & `server_config_reload.go`<br/>5. `centralized-data-service/internal/sinkworker/worker.go` | - Bổ sung builder tương thích ngược `.WithPublisher(natsPublisher)` cho 4 command handlers (`Create/Toggle/DeleteTransmuteScheduleHandler` & `ToggleMasterActiveHandler`) để bắn tín hiệu NATS Core `\"transmute.schedule.changed\"` ngay sau khi lưu DB.<br/>- Bổ sung `FlushPostIngestCache()` trên `BatchBuffer` (và gọi luôn trong `FlushSchemaCache()`), đăng ký subscriber `\"transmute.schedule.changed\"` trong `registerConfigReloadSubscribers` và trong `sinkworker.New` (kèm đồng bộ điều kiện `multi_shadow` cho `SinkWorker`).<br/>- Giới hạn thời gian sống của stale cache khi query lỗi trong `postIngestEntryOnLookupError` ở mức `postIngestFailOpenTTL` (`5s`) thay vì gia hạn vô tận `30s`. |\n| **`F3`** | 1. `cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go`<br/>2. **Tạo mới** `cdc-cms-web/src/components/master/masterScheduleUtils.ts`<br/>3. `cdc-cms-web/src/pages/MasterRegistry.tsx` & `src/components/ReconPipelineGrid.tsx` | - Tại `transmute_schedule_handler.go:94`: chỉ kiểm tra regex `schedNameRe` cho `masterSchema` khi `req.MasterBindingID <= 0` (đồng bộ với `masterTable` ở dòng `97`), cho phép tạo/tắt schedule bình thường với DB có dấu `-` như `payment-service-v2`.<br/>- Tạo helper thuần `matchScheduleForMasterBinding` tại `src/components/master/masterScheduleUtils.ts` ưu tiên khớp tuyệt đối `s.master_binding_id === bindingId`, fallback chuẩn hóa `(schema || 'public') + table` khi `master_binding_id` rỗng; áp dụng tại `MasterRegistry.tsx` (`0` `if/else` mới, giảm dòng `1775 -> ~1771`) và `ReconPipelineGrid.tsx` (giữ `<= 1730` dòng). |\n| **`F4`** | `centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go`, `internal/server/server_setup_buffers.go`, `internal/server/server_config_reload.go` | - Bổ sung `InvalidateConnectionAdapter(connKey)` xóa `\"master:\" + connKey` và `\"shadow:\" + connKey` khỏi `bb.adapters`, gọi ngay trong subscriber `\"connection.config.changed\"` để không bao giờ giữ lại `*SchemaAdapter` bọc `*gorm.DB` đã đóng.<br/>- Hướng dẫn vận hành rõ ràng: rollout/restart binary mới cho `centralized-data-service` trên Testing và `cdc-cms-service` (PID `79300` trên local). |",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 48-50, existing ListMasterTargetsByShadowIdentity and ListMasterTargetsByShadowTable methods are kept intact for bridge-oplog and heal while oversized files transmute_handler.go, MasterRegistry.tsx, and ReconPipelineGrid.tsx keep NOW <= HEAD."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.408,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.857,
+                "NO": 0.143
+              },
+              "confidence": 0.408,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:48-51\n| **`F1`** | 1. `centralized-data-service/internal/repository/master/master_binding_repo.go`<br/>2. **Tạo mới** `centralized-data-service/internal/handler/master/transmute_realtime_gate.go`<br/>3. `centralized-data-service/internal/handler/master/transmute_handler.go` | - Giữ nguyên 100% hành vi của `ListMasterTargetsByShadowIdentity` và `ListMasterTargetsByShadowTable` cho các luồng `bridge-oplog`, `heal`, `orphan_prune`, `batch-transform` và test cũ.<br/>- Bổ sung `FilterPostIngestEnabledIDs(ctx, bindingIDs)` và `IsPostIngestExplicitlyDisabled(ctx, bindingID)` vào `MasterBindingRepo`.<br/>- Tách `resolveMasterTargets` từ `transmute_handler.go` sang `transmute_realtime_gate.go` (**giúp `transmute_handler.go` giảm từ `793` xuống `~769` dòng, đạt `NOW <= HEAD`!**) kèm 2 cổng bảo vệ:<br/>  1) Tại `handleTransmuteShadowWithOutcome`: khi `isRealtimePostIngestTrigger(req.TriggeredBy)` (`\"batch-buffer\"`, `\"sinkworker\"`, `\"snapshot\"`, `\"kafka-consumer-hook\"`, `\"snapshot-hook\"`), chỉ giữ lại các `masterTargets` có `post_ingest` đang `is_enabled = true`. Nếu rỗng $\\rightarrow$ trả `nil` để JetStream `Ack()` ngay lập tức, dập tắt 100% bão redelivery.<br/>  2) Tại `runDebouncedGroup`: trước khi mở log `transmute` hay chạm `GetMasterDB`, nếu `triggeredBy` là `\"kafka-consumer-hook\"`/`\"snapshot-hook\"` và `IsPostIngestExplicitlyDisabled` trả `true` $\\rightarrow$ hoàn tất êm (`t.complete(nil)`), `0` lỗi DB!<br/>  3) Giữ nguyên nhãn `\"batch-transform\"` trong `switch req.TriggeredBy` (`CP-4`). |\n| **`F2`** | 1. `cdc-cms-service/internal/app/commands/scheduler/{create_schedule,toggle_schedule,delete_schedule}.go` & `internal/app/commands/master/toggle_master_active.go`<br/>2. `cdc-cms-service/internal/server/server.go`<br/>3. `centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go` & `batch_buffer_fanout_cache.go`<br/>4. `centralized-data-service/internal/server/server_setup_buffers.go` & `server_config_reload.go`<br/>5. `centralized-data-service/internal/sinkworker/worker.go` | - Bổ sung builder tương thích ngược `.WithPublisher(natsPublisher)` cho 4 command handlers (`Create/Toggle/DeleteTransmuteScheduleHandler` & `ToggleMasterActiveHandler`) để bắn tín hiệu NATS Core `\"transmute.schedule.changed\"` ngay sau khi lưu DB.<br/>- Bổ sung `FlushPostIngestCache()` trên `BatchBuffer` (và gọi luôn trong `FlushSchemaCache()`), đăng ký subscriber `\"transmute.schedule.changed\"` trong `registerConfigReloadSubscribers` và trong `sinkworker.New` (kèm đồng bộ điều kiện `multi_shadow` cho `SinkWorker`).<br/>- Giới hạn thời gian sống của stale cache khi query lỗi trong `postIngestEntryOnLookupError` ở mức `postIngestFailOpenTTL` (`5s`) thay vì gia hạn vô tận `30s`. |\n| **`F3`** | 1. `cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go`<br/>2. **Tạo mới** `cdc-cms-web/src/components/master/masterScheduleUtils.ts`<br/>3. `cdc-cms-web/src/pages/MasterRegistry.tsx` & `src/components/ReconPipelineGrid.tsx` | - Tại `transmute_schedule_handler.go:94`: chỉ kiểm tra regex `schedNameRe` cho `masterSchema` khi `req.MasterBindingID <= 0` (đồng bộ với `masterTable` ở dòng `97`), cho phép tạo/tắt schedule bình thường với DB có dấu `-` như `payment-service-v2`.<br/>- Tạo helper thuần `matchScheduleForMasterBinding` tại `src/components/master/masterScheduleUtils.ts` ưu tiên khớp tuyệt đối `s.master_binding_id === bindingId`, fallback chuẩn hóa `(schema || 'public') + table` khi `master_binding_id` rỗng; áp dụng tại `MasterRegistry.tsx` (`0` `if/else` mới, giảm dòng `1775 -> ~1771`) và `ReconPipelineGrid.tsx` (giữ `<= 1730` dòng). |\n| **`F4`** | `centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go`, `internal/server/server_setup_buffers.go`, `internal/server/server_config_reload.go` | - Bổ sung `InvalidateConnectionAdapter(connKey)` xóa `\"master:\" + connKey` và `\"shadow:\" + connKey` khỏi `bb.adapters`, gọi ngay trong subscriber `\"connection.config.changed\"` để không bao giờ giữ lại `*SchemaAdapter` bọc `*gorm.DB` đã đóng.<br/>- Hướng dẫn vận hành rõ ràng: rollout/restart binary mới cho `centralized-data-service` trên Testing và `cdc-cms-service` (PID `79300` trên local). |",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 48-50, existing ListMasterTargetsByShadowIdentity and ListMasterTargetsByShadowTable methods are kept intact for bridge-oplog and heal while oversized files transmute_handler.go, MasterRegistry.tsx, and ReconPipelineGrid.tsx keep NOW <= HEAD."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 313-323, CreateTransmuteScheduleHandler preserves its existing constructor signature and adds a WithPublisher builder to publish transmute.schedule.changed.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+    "lines": "312-324",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:312-324\n```go\n// internal/app/commands/scheduler/{create_schedule,toggle_schedule,delete_schedule}.go & master/toggle_master_active.go\n// Giữ nguyên hàm khởi tạo New*Handler(repo) để tương thích ngược 100%, bổ sung builder WithPublisher:\nfunc (h *CreateTransmuteScheduleHandler) WithPublisher(pub ports.Publisher) *CreateTransmuteScheduleHandler {\n\th.pub = pub\n\treturn h\n}\n// Sau khi lưu/toggle/xóa schedule thành công:\nif h.pub != nil {\n\t_ = h.pub.Publish(ctx, \"transmute.schedule.changed\", body)\n}\n```",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.2099,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3119,
+                "INCORRECT": 0.6081,
+                "UNSUPPORTED": 0.08
+              },
+              "confidence": 0.2099,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 405,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 313-323, CreateTransmuteScheduleHandler preserves its existing constructor signature and adds a WithPublisher builder to publish transmute.schedule.changed.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:312-324\n```go\n// internal/app/commands/scheduler/{create_schedule,toggle_schedule,delete_schedule}.go & master/toggle_master_active.go\n// Giữ nguyên hàm khởi tạo New*Handler(repo) để tương thích ngược 100%, bổ sung builder WithPublisher:\nfunc (h *CreateTransmuteScheduleHandler) WithPublisher(pub ports.Publisher) *CreateTransmuteScheduleHandler {\n\th.pub = pub\n\treturn h\n}\n// Sau khi lưu/toggle/xóa schedule thành công:\nif h.pub != nil {\n\t_ = h.pub.Publish(ctx, \"transmute.schedule.changed\", body)\n}\n```",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0758,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5292,
+                "INCORRECT": 0.2118,
+                "UNSUPPORTED": 0.259
+              },
+              "confidence": 0.0758,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 411,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:312-324\n```go\n// internal/app/commands/scheduler/{create_schedule,toggle_schedule,delete_schedule}.go & master/toggle_master_active.go\n// Giữ nguyên hàm khởi tạo New*Handler(repo) để tương thích ngược 100%, bổ sung builder WithPublisher:\nfunc (h *CreateTransmuteScheduleHandler) WithPublisher(pub ports.Publisher) *CreateTransmuteScheduleHandler {\n\th.pub = pub\n\treturn h\n}\n// Sau khi lưu/toggle/xóa schedule thành công:\nif h.pub != nil {\n\t_ = h.pub.Publish(ctx, \"transmute.schedule.changed\", body)\n}\n```",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 313-323, CreateTransmuteScheduleHandler preserves its existing constructor signature and adds a WithPublisher builder to publish transmute.schedule.changed."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8631,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9808,
+                "NO": 0.0192
+              },
+              "confidence": 0.8631,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 344,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:312-324\n```go\n// internal/app/commands/scheduler/{create_schedule,toggle_schedule,delete_schedule}.go & master/toggle_master_active.go\n// Giữ nguyên hàm khởi tạo New*Handler(repo) để tương thích ngược 100%, bổ sung builder WithPublisher:\nfunc (h *CreateTransmuteScheduleHandler) WithPublisher(pub ports.Publisher) *CreateTransmuteScheduleHandler {\n\th.pub = pub\n\treturn h\n}\n// Sau khi lưu/toggle/xóa schedule thành công:\nif h.pub != nil {\n\t_ = h.pub.Publish(ctx, \"transmute.schedule.changed\", body)\n}\n```",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 313-323, CreateTransmuteScheduleHandler preserves its existing constructor signature and adds a WithPublisher builder to publish transmute.schedule.changed."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 83-90 and 212-220, isRealtimePostIngestTrigger matches batch-buffer, sinkworker, snapshot, kafka-consumer-hook, and snapshot-hook, and handleTransmuteShadowWithOutcome returns nil when filtered masterTargets is empty.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+    "lines": "83-91",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:83-91\nfunc isRealtimePostIngestTrigger(triggeredBy string) bool {\n\tswitch strings.TrimSpace(triggeredBy) {\n\tcase \"batch-buffer\", \"sinkworker\", \"snapshot\", \"kafka-consumer-hook\", \"snapshot-hook\":\n\t\treturn true\n\tdefault:\n\t\treturn false\n\t}\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.0366,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4628,
+                "INCORRECT": 0.2344,
+                "UNSUPPORTED": 0.3028
+              },
+              "confidence": 0.0366,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 354,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 83-90 and 212-220, isRealtimePostIngestTrigger matches batch-buffer, sinkworker, snapshot, kafka-consumer-hook, and snapshot-hook, and handleTransmuteShadowWithOutcome returns nil when filtered masterTargets is empty.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:83-91\nfunc isRealtimePostIngestTrigger(triggeredBy string) bool {\n\tswitch strings.TrimSpace(triggeredBy) {\n\tcase \"batch-buffer\", \"sinkworker\", \"snapshot\", \"kafka-consumer-hook\", \"snapshot-hook\":\n\t\treturn true\n\tdefault:\n\t\treturn false\n\t}\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5669,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8571,
+                "INCORRECT": 0.1184,
+                "UNSUPPORTED": 0.0245
+              },
+              "confidence": 0.5669,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 360,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:83-91\nfunc isRealtimePostIngestTrigger(triggeredBy string) bool {\n\tswitch strings.TrimSpace(triggeredBy) {\n\tcase \"batch-buffer\", \"sinkworker\", \"snapshot\", \"kafka-consumer-hook\", \"snapshot-hook\":\n\t\treturn true\n\tdefault:\n\t\treturn false\n\t}\n}",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 83-90 and 212-220, isRealtimePostIngestTrigger matches batch-buffer, sinkworker, snapshot, kafka-consumer-hook, and snapshot-hook, and handleTransmuteShadowWithOutcome returns nil when filtered masterTargets is empty."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.9104,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9887,
+                "NO": 0.0113
+              },
+              "confidence": 0.9104,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 293,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:83-91\nfunc isRealtimePostIngestTrigger(triggeredBy string) bool {\n\tswitch strings.TrimSpace(triggeredBy) {\n\tcase \"batch-buffer\", \"sinkworker\", \"snapshot\", \"kafka-consumer-hook\", \"snapshot-hook\":\n\t\treturn true\n\tdefault:\n\t\treturn false\n\t}\n}",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 83-90 and 212-220, isRealtimePostIngestTrigger matches batch-buffer, sinkworker, snapshot, kafka-consumer-hook, and snapshot-hook, and handleTransmuteShadowWithOutcome returns nil when filtered masterTargets is empty."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 245-280, FlushPostIngestCache clears bb.piCache, InvalidateConnectionAdapter deletes 'master:' and 'shadow:' adapter entries, and postIngestEntryOnLookupError bounds stale.at using postIngestFailOpenTTL - postIngestCacheTTL.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+    "lines": "244-281",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:244-281\n// internal/handler/shadow/batch_buffer_lifecycle.go & batch_buffer_fanout_cache.go (F2 + F4)\nfunc (bb *BatchBuffer) FlushPostIngestCache() {\n\tbb.piCache.Range(func(k, _ any) bool {\n\t\tbb.piCache.Delete(k)\n\t\treturn true\n\t})\n}\n\nfunc (bb *BatchBuffer) InvalidateConnectionAdapter(connKey string) {\n\tconnKey = strings.TrimSpace(connKey)\n\tif connKey == \"\" {\n\t\treturn\n\t}\n\tfor _, prefix := range []string{\"master:\", \"shadow:\"} {\n\t\tif v, ok := bb.adapters.LoadAndDelete(prefix + connKey); ok {\n\t\t\tif adapter, ok := v.(*serviceshadow.SchemaAdapter); ok && adapter != nil {\n\t\t\t\tadapter.FlushAll()\n\t\t\t}\n\t\t}\n\t}\n}\n\nfunc (bb *BatchBuffer) FlushSchemaCache() {\n\tbb.adapters.Range(func(_, v any) bool {\n\t\tv.(*serviceshadow.SchemaAdapter).FlushAll()\n\t\treturn true\n\t})\n\tbb.schemaAdapter.FlushAll()\n\tbb.FlushPostIngestCache()\n}\n\n// Trong postIngestEntryOnLookupError (batch_buffer_fanout_cache.go):\n\tif hasStale {\n\t\tstale.at = now.Add(postIngestFailOpenTTL - postIngestCacheTTL)\n\t\tbb.piCache.Store(key, stale)\n\t\treturn stale\n\t}\n```",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6689,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9038,
+                "INCORRECT": 0.0778,
+                "UNSUPPORTED": 0.0184
+              },
+              "confidence": 0.6689,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 696,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 245-280, FlushPostIngestCache clears bb.piCache, InvalidateConnectionAdapter deletes 'master:' and 'shadow:' adapter entries, and postIngestEntryOnLookupError bounds stale.at using postIngestFailOpenTTL - postIngestCacheTTL.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:244-281\n// internal/handler/shadow/batch_buffer_lifecycle.go & batch_buffer_fanout_cache.go (F2 + F4)\nfunc (bb *BatchBuffer) FlushPostIngestCache() {\n\tbb.piCache.Range(func(k, _ any) bool {\n\t\tbb.piCache.Delete(k)\n\t\treturn true\n\t})\n}\n\nfunc (bb *BatchBuffer) InvalidateConnectionAdapter(connKey string) {\n\tconnKey = strings.TrimSpace(connKey)\n\tif connKey == \"\" {\n\t\treturn\n\t}\n\tfor _, prefix := range []string{\"master:\", \"shadow:\"} {\n\t\tif v, ok := bb.adapters.LoadAndDelete(prefix + connKey); ok {\n\t\t\tif adapter, ok := v.(*serviceshadow.SchemaAdapter); ok && adapter != nil {\n\t\t\t\tadapter.FlushAll()\n\t\t\t}\n\t\t}\n\t}\n}\n\nfunc (bb *BatchBuffer) FlushSchemaCache() {\n\tbb.adapters.Range(func(_, v any) bool {\n\t\tv.(*serviceshadow.SchemaAdapter).FlushAll()\n\t\treturn true\n\t})\n\tbb.schemaAdapter.FlushAll()\n\tbb.FlushPostIngestCache()\n}\n\n// Trong postIngestEntryOnLookupError (batch_buffer_fanout_cache.go):\n\tif hasStale {\n\t\tstale.at = now.Add(postIngestFailOpenTTL - postIngestCacheTTL)\n\t\tbb.piCache.Store(key, stale)\n\t\treturn stale\n\t}\n```",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.268,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7027,
+                "INCORRECT": 0.1879,
+                "UNSUPPORTED": 0.1094
+              },
+              "confidence": 0.268,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 702,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:244-281\n// internal/handler/shadow/batch_buffer_lifecycle.go & batch_buffer_fanout_cache.go (F2 + F4)\nfunc (bb *BatchBuffer) FlushPostIngestCache() {\n\tbb.piCache.Range(func(k, _ any) bool {\n\t\tbb.piCache.Delete(k)\n\t\treturn true\n\t})\n}\n\nfunc (bb *BatchBuffer) InvalidateConnectionAdapter(connKey string) {\n\tconnKey = strings.TrimSpace(connKey)\n\tif connKey == \"\" {\n\t\treturn\n\t}\n\tfor _, prefix := range []string{\"master:\", \"shadow:\"} {\n\t\tif v, ok := bb.adapters.LoadAndDelete(prefix + connKey); ok {\n\t\t\tif adapter, ok := v.(*serviceshadow.SchemaAdapter); ok && adapter != nil {\n\t\t\t\tadapter.FlushAll()\n\t\t\t}\n\t\t}\n\t}\n}\n\nfunc (bb *BatchBuffer) FlushSchemaCache() {\n\tbb.adapters.Range(func(_, v any) bool {\n\t\tv.(*serviceshadow.SchemaAdapter).FlushAll()\n\t\treturn true\n\t})\n\tbb.schemaAdapter.FlushAll()\n\tbb.FlushPostIngestCache()\n}\n\n// Trong postIngestEntryOnLookupError (batch_buffer_fanout_cache.go):\n\tif hasStale {\n\t\tstale.at = now.Add(postIngestFailOpenTTL - postIngestCacheTTL)\n\t\tbb.piCache.Store(key, stale)\n\t\treturn stale\n\t}\n```",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 245-280, FlushPostIngestCache clears bb.piCache, InvalidateConnectionAdapter deletes 'master:' and 'shadow:' adapter entries, and postIngestEntryOnLookupError bounds stale.at using postIngestFailOpenTTL - postIngestCacheTTL."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7227,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9521,
+                "NO": 0.0479
+              },
+              "confidence": 0.7227,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 635,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:244-281\n// internal/handler/shadow/batch_buffer_lifecycle.go & batch_buffer_fanout_cache.go (F2 + F4)\nfunc (bb *BatchBuffer) FlushPostIngestCache() {\n\tbb.piCache.Range(func(k, _ any) bool {\n\t\tbb.piCache.Delete(k)\n\t\treturn true\n\t})\n}\n\nfunc (bb *BatchBuffer) InvalidateConnectionAdapter(connKey string) {\n\tconnKey = strings.TrimSpace(connKey)\n\tif connKey == \"\" {\n\t\treturn\n\t}\n\tfor _, prefix := range []string{\"master:\", \"shadow:\"} {\n\t\tif v, ok := bb.adapters.LoadAndDelete(prefix + connKey); ok {\n\t\t\tif adapter, ok := v.(*serviceshadow.SchemaAdapter); ok && adapter != nil {\n\t\t\t\tadapter.FlushAll()\n\t\t\t}\n\t\t}\n\t}\n}\n\nfunc (bb *BatchBuffer) FlushSchemaCache() {\n\tbb.adapters.Range(func(_, v any) bool {\n\t\tv.(*serviceshadow.SchemaAdapter).FlushAll()\n\t\treturn true\n\t})\n\tbb.schemaAdapter.FlushAll()\n\tbb.FlushPostIngestCache()\n}\n\n// Trong postIngestEntryOnLookupError (batch_buffer_fanout_cache.go):\n\tif hasStale {\n\t\tstale.at = now.Add(postIngestFailOpenTTL - postIngestCacheTTL)\n\t\tbb.piCache.Store(key, stale)\n\t\treturn stale\n\t}\n```",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 245-280, FlushPostIngestCache clears bb.piCache, InvalidateConnectionAdapter deletes 'master:' and 'shadow:' adapter entries, and postIngestEntryOnLookupError bounds stale.at using postIngestFailOpenTTL - postIngestCacheTTL."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 326-369, transmute_schedule_handler skips schedNameRe validation on masterSchema when req.MasterBindingID > 0 and matchScheduleForMasterBinding filters by s.master_binding_id === bindingId when bindingId > 0.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+    "lines": "326-369",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:326-369\n// internal/api/scheduler/transmute_schedule_handler.go:94-99\n\tif req.MasterBindingID <= 0 && masterSchema != \"\" && !schedNameRe.MatchString(masterSchema) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_schema\"})\n\t}\n\tif req.MasterBindingID <= 0 && !schedNameRe.MatchString(masterTable) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_table\"})\n\t}\n```\n\n### 4.3. `cdc-cms-web` — Khớp Schedule chuẩn xác theo `master_binding_id` (`F3`)\n\n```ts\n// [MỚI] src/components/master/masterScheduleUtils.ts\nexport interface MasterScheduleMatchCandidate {\n  id?: number;\n  mode: string;\n  master_binding_id?: number | null;\n  master_table?: string | null;\n  master_schema?: string | null;\n  is_enabled?: boolean;\n  cron_expr?: string | null;\n}\n\nexport function matchScheduleForMasterBinding<T extends MasterScheduleMatchCandidate>(\n  schedules: T[] | undefined | null,\n  bindingId: number | undefined | null,\n  masterName: string,\n  masterSchema?: string | null,\n): T[] {\n  const list = schedules || [];\n  if (bindingId && bindingId > 0) {\n    const byId = list.filter((s) => s.master_binding_id === bindingId);\n    if (byId.length > 0 || list.some((s) => !!s.master_binding_id)) {\n      return byId;\n    }\n  }\n  const normSchema = (masterSchema || '').trim() || 'public';\n  return list.filter((s) => {\n    if (s.master_table !== masterName) return false;\n    const sSchema = (s.master_schema || '').trim() || 'public';\n    return !masterSchema || sSchema === normSchema;\n  });\n}\n```",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1807,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5808,
+                "INCORRECT": 0.3276,
+                "UNSUPPORTED": 0.0916
+              },
+              "confidence": 0.1807,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 803,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 326-369, transmute_schedule_handler skips schedNameRe validation on masterSchema when req.MasterBindingID > 0 and matchScheduleForMasterBinding filters by s.master_binding_id === bindingId when bindingId > 0.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:326-369\n// internal/api/scheduler/transmute_schedule_handler.go:94-99\n\tif req.MasterBindingID <= 0 && masterSchema != \"\" && !schedNameRe.MatchString(masterSchema) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_schema\"})\n\t}\n\tif req.MasterBindingID <= 0 && !schedNameRe.MatchString(masterTable) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_table\"})\n\t}\n```\n\n### 4.3. `cdc-cms-web` — Khớp Schedule chuẩn xác theo `master_binding_id` (`F3`)\n\n```ts\n// [MỚI] src/components/master/masterScheduleUtils.ts\nexport interface MasterScheduleMatchCandidate {\n  id?: number;\n  mode: string;\n  master_binding_id?: number | null;\n  master_table?: string | null;\n  master_schema?: string | null;\n  is_enabled?: boolean;\n  cron_expr?: string | null;\n}\n\nexport function matchScheduleForMasterBinding<T extends MasterScheduleMatchCandidate>(\n  schedules: T[] | undefined | null,\n  bindingId: number | undefined | null,\n  masterName: string,\n  masterSchema?: string | null,\n): T[] {\n  const list = schedules || [];\n  if (bindingId && bindingId > 0) {\n    const byId = list.filter((s) => s.master_binding_id === bindingId);\n    if (byId.length > 0 || list.some((s) => !!s.master_binding_id)) {\n      return byId;\n    }\n  }\n  const normSchema = (masterSchema || '').trim() || 'public';\n  return list.filter((s) => {\n    if (s.master_table !== masterName) return false;\n    const sSchema = (s.master_schema || '').trim() || 'public';\n    return !masterSchema || sSchema === normSchema;\n  });\n}\n```",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1612,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5536,
+                "INCORRECT": 0.349,
+                "UNSUPPORTED": 0.0974
+              },
+              "confidence": 0.1612,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 809,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:326-369\n// internal/api/scheduler/transmute_schedule_handler.go:94-99\n\tif req.MasterBindingID <= 0 && masterSchema != \"\" && !schedNameRe.MatchString(masterSchema) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_schema\"})\n\t}\n\tif req.MasterBindingID <= 0 && !schedNameRe.MatchString(masterTable) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_table\"})\n\t}\n```\n\n### 4.3. `cdc-cms-web` — Khớp Schedule chuẩn xác theo `master_binding_id` (`F3`)\n\n```ts\n// [MỚI] src/components/master/masterScheduleUtils.ts\nexport interface MasterScheduleMatchCandidate {\n  id?: number;\n  mode: string;\n  master_binding_id?: number | null;\n  master_table?: string | null;\n  master_schema?: string | null;\n  is_enabled?: boolean;\n  cron_expr?: string | null;\n}\n\nexport function matchScheduleForMasterBinding<T extends MasterScheduleMatchCandidate>(\n  schedules: T[] | undefined | null,\n  bindingId: number | undefined | null,\n  masterName: string,\n  masterSchema?: string | null,\n): T[] {\n  const list = schedules || [];\n  if (bindingId && bindingId > 0) {\n    const byId = list.filter((s) => s.master_binding_id === bindingId);\n    if (byId.length > 0 || list.some((s) => !!s.master_binding_id)) {\n      return byId;\n    }\n  }\n  const normSchema = (masterSchema || '').trim() || 'public';\n  return list.filter((s) => {\n    if (s.master_table !== masterName) return false;\n    const sSchema = (s.master_schema || '').trim() || 'public';\n    return !masterSchema || sSchema === normSchema;\n  });\n}\n```",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 326-369, transmute_schedule_handler skips schedNameRe validation on masterSchema when req.MasterBindingID > 0 and matchScheduleForMasterBinding filters by s.master_binding_id === bindingId when bindingId > 0."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4428,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8701,
+                "NO": 0.1299
+              },
+              "confidence": 0.4428,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 742,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md:326-369\n// internal/api/scheduler/transmute_schedule_handler.go:94-99\n\tif req.MasterBindingID <= 0 && masterSchema != \"\" && !schedNameRe.MatchString(masterSchema) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_schema\"})\n\t}\n\tif req.MasterBindingID <= 0 && !schedNameRe.MatchString(masterTable) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_table\"})\n\t}\n```\n\n### 4.3. `cdc-cms-web` — Khớp Schedule chuẩn xác theo `master_binding_id` (`F3`)\n\n```ts\n// [MỚI] src/components/master/masterScheduleUtils.ts\nexport interface MasterScheduleMatchCandidate {\n  id?: number;\n  mode: string;\n  master_binding_id?: number | null;\n  master_table?: string | null;\n  master_schema?: string | null;\n  is_enabled?: boolean;\n  cron_expr?: string | null;\n}\n\nexport function matchScheduleForMasterBinding<T extends MasterScheduleMatchCandidate>(\n  schedules: T[] | undefined | null,\n  bindingId: number | undefined | null,\n  masterName: string,\n  masterSchema?: string | null,\n): T[] {\n  const list = schedules || [];\n  if (bindingId && bindingId > 0) {\n    const byId = list.filter((s) => s.master_binding_id === bindingId);\n    if (byId.length > 0 || list.some((s) => !!s.master_binding_id)) {\n      return byId;\n    }\n  }\n  const normSchema = (masterSchema || '').trim() || 'public';\n  return list.filter((s) => {\n    if (s.master_table !== masterName) return false;\n    const sSchema = (s.master_schema || '').trim() || 'public';\n    return !masterSchema || sSchema === normSchema;\n  });\n}\n```",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 326-369, transmute_schedule_handler skips schedNameRe validation on masterSchema when req.MasterBindingID > 0 and matchScheduleForMasterBinding filters by s.master_binding_id === bindingId when bindingId > 0."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In transmute_consumer_pool.go lines 347-353, when p.handler returns an error that is not ErrAsyncAckPending, finalizeJetStreamMessage is called with msg, hErr, and policy.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_consumer_pool.go",
+    "lines": "347-353",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.3029,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.282,
+                "INCORRECT": 0.672,
+                "UNSUPPORTED": 0.046
+              },
+              "confidence": 0.3029,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 171,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmute_consumer_pool.go lines 347-353, when p.handler returns an error that is not ErrAsyncAckPending, finalizeJetStreamMessage is called with msg, hErr, and policy.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.0315,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2307,
+                "INCORRECT": 0.4446,
+                "UNSUPPORTED": 0.3247
+              },
+              "confidence": 0.0315,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 177,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In transmute_consumer_pool.go lines 347-353, when p.handler returns an error that is not ErrAsyncAckPending, finalizeJetStreamMessage is called with msg, hErr, and policy."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.1918,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.752,
+                "NO": 0.248
+              },
+              "confidence": 0.1918,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 110,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In transmute_consumer_pool.go lines 347-353, when p.handler returns an error that is not ErrAsyncAckPending, finalizeJetStreamMessage is called with msg, hErr, and policy."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 83-90, isRealtimePostIngestTrigger returns true for bridge-oplog and heal triggers so manual oplog healing is blocked when post_ingest is disabled.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+    "lines": "83-91",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.367,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7541,
+                "INCORRECT": 0.1849,
+                "UNSUPPORTED": 0.0609
+              },
+              "confidence": 0.367,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 181,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 83-90, isRealtimePostIngestTrigger returns true for bridge-oplog and heal triggers so manual oplog healing is blocked when post_ingest is disabled.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.009,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.3965,
+                "INCORRECT": 0.2831,
+                "UNSUPPORTED": 0.3204
+              },
+              "confidence": 0.009,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 187,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 83-90, isRealtimePostIngestTrigger returns true for bridge-oplog and heal triggers so manual oplog healing is blocked when post_ingest is disabled."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.0008,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.5162,
+                "NO": 0.4838
+              },
+              "confidence": 0.0008,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 120,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 83-90, isRealtimePostIngestTrigger returns true for bridge-oplog and heal triggers so manual oplog healing is blocked when post_ingest is disabled."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 326-333, transmute_schedule_handler rejects every request with 400 invalid_master_schema whenever req.MasterBindingID is greater than 0.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+    "lines": "326-333",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.061,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3662,
+                "INCORRECT": 0.4576,
+                "UNSUPPORTED": 0.1763
+              },
+              "confidence": 0.061,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 183,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 326-333, transmute_schedule_handler rejects every request with 400 invalid_master_schema whenever req.MasterBindingID is greater than 0.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0141,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4107,
+                "INCORRECT": 0.2678,
+                "UNSUPPORTED": 0.3215
+              },
+              "confidence": 0.0141,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 189,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 326-333, transmute_schedule_handler rejects every request with 400 invalid_master_schema whenever req.MasterBindingID is greater than 0."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.82,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9728,
+                "NO": 0.0272
+              },
+              "confidence": 0.82,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 122,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 326-333, transmute_schedule_handler rejects every request with 400 invalid_master_schema whenever req.MasterBindingID is greater than 0."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

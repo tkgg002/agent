@@ -1,0 +1,60 @@
+[
+ {
+  "id": "S-RC1",
+  "kind": "solution",
+  "basis": "code",
+  "flow": "IntrospectCollection merge",
+  "claim": "IntrospectCollection gán fieldMap[k] = v cho mọi key của mỗi doc nên doc sau ghi đè giá trị của doc trước.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/mongo_introspection.go:137-148\n\tfor cursor.Next(ctx) {\n\t\tvar doc bson.M\n\t\tif err := cursor.Decode(&doc); err != nil {\n\t\t\tcontinue\n\t\t}\n\t\tfor k, v := range doc {\n\t\t\t// KHÔNG skip `_id` — coi nó như field NGUỒN bình thường để scan HIỆN RA\n\t\t\t// và map được (Mongo PK). Doc Mongo gốc không có field hệ thống nội bộ\n\t\t\t// (_raw_data/_synced_at/_gpay_id...) nên không cần lọc ở introspect.\n\t\t\tfieldMap[k] = v\n\t\t}\n\t}"
+ },
+ {
+  "id": "S-RC2",
+  "kind": "solution",
+  "basis": "code",
+  "flow": "scanFieldsMongoSource",
+  "claim": "scanFieldsMongoSource marshal toàn bộ fieldMap thành đúng một row rồi gọi processDiscoveryRows.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_mongo.go:63-68\n\trows := []string{}\n\tif b, err := json.Marshal(fieldMap); err == nil {\n\t\trows = append(rows, string(b))\n\t}\n\n\treturn h.processDiscoveryRows(ctx, registryID, shadowBindingID, sourceTable, rows, autoApprove)"
+ },
+ {
+  "id": "S-RC3",
+  "kind": "solution",
+  "basis": "code",
+  "flow": "InferTypeFromRawData",
+  "claim": "InferTypeFromRawData trả về TEXT khi giá trị là nil.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/source_router.go:37-40\nfunc InferTypeFromRawData(jsonValue interface{}) string {\n\tif jsonValue == nil {\n\t\treturn \"TEXT\"\n\t}"
+ },
+ {
+  "id": "S-FIX",
+  "kind": "solution",
+  "basis": "code",
+  "flow": "processDiscoveryRows",
+  "claim": "processDiscoveryRows thêm kết quả InferTypeFromRawData(v) vào set kiểu của từng field kể cả khi v là nil.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_utils.go:28-39\n\t\tfor k, v := range targetMap {\n\t\t\tif modelshadow.IsReservedSystemColumn(k) {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tt := servicesource.InferTypeFromRawData(v)\n\t\t\tset, ok := perField[k]\n\t\t\tif !ok {\n\t\t\t\tset = map[string]struct{}{}\n\t\t\t\tperField[k] = set\n\t\t\t}\n\t\t\tset[t] = struct{}{}\n\t\t}"
+ },
+ {
+  "id": "S-IMPACT",
+  "kind": "solution",
+  "basis": "code",
+  "flow": "resolve",
+  "claim": "discoverResolveMongoSampledType trả JSONB khi normalizedSet có nhiều kiểu và chứa JSONB.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_mongo.go:123-131\n\tif len(normalizedSet) == 1 {\n\t\tfor t := range normalizedSet {\n\t\t\treturn t\n\t\t}\n\t}\n\n\tif _, ok := normalizedSet[\"JSONB\"]; ok {\n\t\treturn \"JSONB\"\n\t}"
+ },
+ {
+  "id": "K1",
+  "kind": "control_false",
+  "claim": "IntrospectCollection bỏ qua key _id khi gộp field.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/mongo_introspection.go:137-148\n\tfor cursor.Next(ctx) {\n\t\tvar doc bson.M\n\t\tif err := cursor.Decode(&doc); err != nil {\n\t\t\tcontinue\n\t\t}\n\t\tfor k, v := range doc {\n\t\t\t// KHÔNG skip `_id` — coi nó như field NGUỒN bình thường để scan HIỆN RA\n\t\t\t// và map được (Mongo PK). Doc Mongo gốc không có field hệ thống nội bộ\n\t\t\t// (_raw_data/_synced_at/_gpay_id...) nên không cần lọc ở introspect.\n\t\t\tfieldMap[k] = v\n\t\t}\n\t}"
+ },
+ {
+  "id": "K2",
+  "kind": "control_false",
+  "claim": "InferTypeFromRawData trả về JSONB khi giá trị là nil.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/source_router.go:37-40\nfunc InferTypeFromRawData(jsonValue interface{}) string {\n\tif jsonValue == nil {\n\t\treturn \"TEXT\"\n\t}"
+ },
+ {
+  "id": "K3",
+  "kind": "control_true",
+  "claim": "scanFieldsMongoSource gọi h.processDiscoveryRows với biến rows.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_mongo.go:63-68\n\trows := []string{}\n\tif b, err := json.Marshal(fieldMap); err == nil {\n\t\trows = append(rows, string(b))\n\t}\n\n\treturn h.processDiscoveryRows(ctx, registryID, shadowBindingID, sourceTable, rows, autoApprove)"
+ }
+]

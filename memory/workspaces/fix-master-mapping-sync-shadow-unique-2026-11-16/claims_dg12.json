@@ -1,0 +1,54 @@
+{
+  "objective": "Xác minh giải pháp S3 (DG1) và Code Demo (DG2) khắc phục lỗi SQLSTATE 23505 khi Sync từ Shadow tại /masters/cdc_payment_bill/mappings?binding_id=61",
+  "claims": [
+    {
+      "id": "S-RC-1",
+      "kind": "claim",
+      "claim": "In master_multi_shadow_repo_gorm.go lines 215-272, syncRulesFromAllShadowsTx inserts duplicate mapping_v2_id rows when target_column was customized on Master and then attempts UPDATE setting m.target_column = v2.target_column, colliding on ux_mapping_rule_master_target.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go",
+      "lines": "209-275"
+    },
+    {
+      "id": "S-FIX-1",
+      "kind": "claim",
+      "claim": "In batch_update_rules.go lines 42-53, approving pending Master rules triggers PublishMasterCreate to create physical Master columns, matching inserting newly synced rules with status 'pending'.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/batch_update_rules.go",
+      "lines": "33-55"
+    },
+    {
+      "id": "D-BEHAV-1",
+      "kind": "claim",
+      "claim": "In 09_tasks_solution_sync_shadow_unique.md lines 101-133, Code Demo 1 checks NOT EXISTS by m.mapping_v2_id = v2.id and LOWER(TRIM(m.target_column)) = LOWER(TRIM(v2.target_column)), inserts with status 'pending', and uses ON CONFLICT (master_binding_id, target_column) DO NOTHING without running reverse rename UPDATE queries.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-mapping-sync-shadow-unique-2026-11-16/09_tasks_solution_sync_shadow_unique.md",
+      "lines": "80-145"
+    },
+    {
+      "id": "D-API-1",
+      "kind": "claim",
+      "claim": "In MasterMappingFieldsPage.tsx lines 373-384, handleSyncFromShadow reads res.synced_new and displays a message stating that newly synced rules have status pending.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterMappingFieldsPage.tsx",
+      "lines": "369-390"
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "kind": "control_true",
+      "claim": "In sync_from_shadow.go lines 27-42, SyncFromShadowHandler resolves shadowBindingID via h.repo.GetShadowBindingID and returns SyncedNew and SyncedRenamed from h.repo.SyncRulesFromShadow.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/sync_from_shadow.go",
+      "lines": "27-43"
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "kind": "control_false",
+      "claim": "In sync_from_shadow.go lines 27-42, SyncFromShadowHandler drops the Master table on PostgreSQL instead of calling SyncRulesFromShadow.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/sync_from_shadow.go",
+      "lines": "27-43"
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "kind": "control_false",
+      "claim": "In 09_tasks_solution_sync_shadow_unique.md lines 101-133, Code Demo 1 executes ALTER TABLE DROP CONSTRAINT ux_mapping_rule_master_target at runtime.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-mapping-sync-shadow-unique-2026-11-16/09_tasks_solution_sync_shadow_unique.md",
+      "lines": "80-145"
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+- [2026-11-18T10:12:30+07:00] [Agent:Claude Sonnet 5.5] START vega-failfast: User APPROVE (1) restart Vega tách riêng, (3) Vega predict >3s -> chuyển Laya ngay, không retry; bỏ (2). Sửa agent/tooling/laya_gate.py (restore-point .bak). Không sửa ai-orchestrator.
+- [2026-11-18T10:17:05+07:00] [Agent:Claude Sonnet 5.5] DONE vega-failfast: laya_gate.py fail-fast VEGA_TIMEOUT=3s + cooldown 120s + fallback Laya; Vega restart pid 97783; EV-20261118T101412-2f6f 13/13; bak laya_gate.py.bak_20261118T1020

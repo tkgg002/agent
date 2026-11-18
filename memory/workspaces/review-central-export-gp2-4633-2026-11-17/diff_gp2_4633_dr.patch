@@ -1,0 +1,384 @@
+diff --git a/data-transfers/params/trans-his/partner-user-reserve-export.params.ts b/data-transfers/params/trans-his/partner-user-reserve-export.params.ts
+new file mode 100644
+index 0000000..5d1992e
+--- /dev/null
++++ b/data-transfers/params/trans-his/partner-user-reserve-export.params.ts
+@@ -0,0 +1,60 @@
++// data-transfers/params/trans-his/partner-user-reserve-export.params.ts
++import {
++    IsDateString,
++    IsNotEmpty,
++    IsOptional,
++    IsString,
++    Validate,
++    ValidatorConstraint,
++    ValidatorConstraintInterface,
++    ValidationArguments
++} from "class-validator";
++import moment from "moment";
++import { MAX_DAYS_EXPORT } from "../../../utils/constants";
++
++@ValidatorConstraint({ name: "ExceedDateRangePartnerUserReserve", async: false })
++class ExceedDateRangeValidator implements ValidatorConstraintInterface {
++    public validate(value: any, args: ValidationArguments) {
++        const params = args.object as any;
++        if (!params.dateFr || !params.dateTo) {
++            return true;
++        }
++        const dateDiff = moment.duration(moment(new Date(params.dateTo)).diff(moment(new Date(params.dateFr)))).asDays();
++        return dateDiff <= MAX_DAYS_EXPORT;
++    }
++
++    public defaultMessage() {
++        return "EXCEED_DATE_RANGE_EXPORT";
++    }
++}
++
++/** Filters of UC04.R03 (Biến động khoản đảm bảo user), same names as GET /ops/collection-disbursement/reserve-movements */
++export class PartnerUserReserveExportParams {
++    @IsNotEmpty({ message: "ERR_DATE_FR_REQUIRED" })
++    @IsDateString({}, { message: "ERR_INVALID_DATE" })
++    public dateFr: string;
++
++    @IsNotEmpty({ message: "ERR_DATE_TO_REQUIRED" })
++    @IsDateString({}, { message: "ERR_INVALID_DATE" })
++    public dateTo: string;
++
++    /** Mã bản ghi: info.extData.reserveId */
++    @IsOptional() @IsString() public reserveId?: string;
++    /** Mã user liên kết: info.extData.partnerUserId */
++    @IsOptional() @IsString() public partnerUserId?: string;
++    /** Mã merchant: info.extData.merchantCode */
++    @IsOptional() @IsString() public merchantCode?: string;
++    /** Transaction status, e.g. "SUCCESS,FAILED" */
++    @IsOptional() @IsString() public status?: string;
++    /** Reserve profile status after the movement (PENDING, AUTHORIZED, TERMINATED), several values separated by commas: info.extData.statusAfter */
++    @IsOptional() @IsString() public statusAfter?: string;
++
++    @IsOptional() @IsString() public sortBy?: string;
++    @IsOptional() @IsString() public sortType?: string;
++
++    @IsOptional()
++    @Validate(ExceedDateRangeValidator)
++    public get dateRangeCheck(): boolean {
++        return true;
++    }
++}
+diff --git a/domain/QueryHandlerFactory.ts b/domain/QueryHandlerFactory.ts
+index 9cfcecd..55cd905 100644
+--- a/domain/QueryHandlerFactory.ts
++++ b/domain/QueryHandlerFactory.ts
+@@ -55,40 +55,41 @@ import { GetAllRefundRequestForCurrentMerchantExportHandler } from "./handlers/p
+ // PROFILE
+ import { GetListProfileByListIdRefHandler } from "./handlers/profile/GetListProfileByListIdRefHandler";
+ import { GetAllIDExpiredNotificationLogExportHandler } from "./handlers/profile/GetAllIDExpiredNotificationLogExportHandler";
+ import { GetListIDExpiredHandler } from "./handlers/profile/GetListIDExpiredHandler";
+ 
+ // PROMOTION
+ import { GetAllCampaignExportHandler } from "./handlers/promotion/GetAllCampaignExportHandler";
+ import { GetAllPromotionLaunchingSeriesExportHandler } from "./handlers/promotion/GetAllPromotionLaunchingSeriesExportHandler";
+ import { GetPromotionCodeCountHandler } from "./handlers/promotion/GetPromotionCodeCountHandler";
+ 
+ // RECONCILE
+ import { GetAllCentralReconExportHandler } from "./handlers/reconcile/GetAllCentralReconExportHandler";
+ 
+ // TICKET
+ import { GetAllTicketHistoryExportHandler } from "./handlers/ticket/GetAllTicketHistoryExportHandler";
+ import { GetListCategoryByIdsHandler } from "./handlers/ticket/GetListCategoryByIdsHandler";
+ 
+ // TRANS-HIS
+ import { GetAllTransHisExportHandler } from "./handlers/trans-his/GetAllTransHisExportHandler";
+ import { GetListTransHisByTransIdHandler } from "./handlers/trans-his/GetListTransHisByTransIdHandler";
++import { GetAllPartnerUserReserveExportHandler } from "./handlers/trans-his/GetAllPartnerUserReserveExportHandler";
+ import { GetAllTransHisExportPgHandler } from "./handlers/trans-his/GetAllTransHisExportPgHandler";
+ import { GetListTransHisByTransIdPgHandler } from "./handlers/trans-his/GetListTransHisByTransIdPgHandler";
+ 
+ export default class QueryHandlerFactory {
+   private readonly handlers: Map<string, IQueryHandler> = new Map();
+ 
+   public getHandler(queryName: string): IQueryHandler | undefined {
+     return this.handlers.get(queryName);
+   }
+ 
+   public registerHandlers(mainProcess: MainProcess): void {
+     // booking-ticket
+     this.handlers.set("GetAllTicketReportExportQuery", new GetAllTicketReportExportHandler(mainProcess));
+     this.handlers.set("GetAllOrderExportQuery", new GetAllOrderExportHandler(mainProcess));
+     this.handlers.set("GetAllOrderReportExportQuery", new GetAllOrderReportExportHandler(mainProcess));
+     this.handlers.set("GetAllSalesRevenueReportExportQuery", new GetAllSalesRevenueReportExportHandler(mainProcess));
+     this.handlers.set("GetAllStatisticTicketReportExportQuery", new GetAllStatisticTicketReportExportHandler(mainProcess));
+ 
+     // config
+     this.handlers.set("GetAllConsentPolicyExportQuery", new GetAllConsentPolicyExportHandler(mainProcess));
+@@ -134,29 +135,31 @@ export default class QueryHandlerFactory {
+     this.handlers.set("GetAllRefundRequestForCurrentMerchantExportQuery", new GetAllRefundRequestForCurrentMerchantExportHandler(mainProcess));
+ 
+     // profile
+     this.handlers.set("GetListProfileByListIdRefQuery", new GetListProfileByListIdRefHandler(mainProcess));
+     this.handlers.set("GetAllIDExpiredNotificationLogExportQuery", new GetAllIDExpiredNotificationLogExportHandler(mainProcess));
+     this.handlers.set("GetListIDExpiredQuery", new GetListIDExpiredHandler(mainProcess));
+ 
+     // promotion
+     this.handlers.set("GetAllCampaignExportQuery", new GetAllCampaignExportHandler(mainProcess));
+     this.handlers.set("GetAllPromotionLaunchingSeriesExportQuery", new GetAllPromotionLaunchingSeriesExportHandler(mainProcess));
+     this.handlers.set("GetPromotionCodeCountQuery", new GetPromotionCodeCountHandler(mainProcess));
+ 
+     // reconcile
+     this.handlers.set("GetAllCentralReconExportQuery", new GetAllCentralReconExportHandler(mainProcess));
+ 
+     // ticket
+     this.handlers.set("GetAllTicketHistoryExportQuery", new GetAllTicketHistoryExportHandler(mainProcess));
+     this.handlers.set("GetListCategoryByIdsQuery", new GetListCategoryByIdsHandler(mainProcess));
+ 
+     // trans-his
++    // UC04 export reads the trans-his Mongo collection (the Postgres source does not take these filters yet)
++    this.handlers.set("GetAllPartnerUserReserveExportQuery", new GetAllPartnerUserReserveExportHandler(mainProcess));
+     if (getTransHisExportSource() === "postgres") {
+       this.handlers.set("GetAllTransHisExportQuery", new GetAllTransHisExportPgHandler(mainProcess));
+       this.handlers.set("GetListTransHisByTransIdQuery", new GetListTransHisByTransIdPgHandler(mainProcess));
+     } else {
+       this.handlers.set("GetAllTransHisExportQuery", new GetAllTransHisExportHandler(mainProcess));
+       this.handlers.set("GetListTransHisByTransIdQuery", new GetListTransHisByTransIdHandler(mainProcess));
+     }
+   }
+ }
+diff --git a/domain/handlers/trans-his/GetAllPartnerUserReserveExportHandler.ts b/domain/handlers/trans-his/GetAllPartnerUserReserveExportHandler.ts
+new file mode 100644
+index 0000000..bf7d2e4
+--- /dev/null
++++ b/domain/handlers/trans-his/GetAllPartnerUserReserveExportHandler.ts
+@@ -0,0 +1,78 @@
++// Export of UC04 "Biến động khoản đảm bảo user": trans-his rows + email / name of the merchant
++import * as _ from "lodash";
++import { IQueryHandler } from "../../IQueryHandler";
++import { GetAllPartnerUserReserveExportQuery } from "../../queries";
++import MainProcess from "../../../data-transfers/main-process";
++
++const SELECT_FIELDS = {
++    transId: 1,
++    transType: 1,
++    status: 1,
++    value: 1,
++    noted: 1,
++    sender: 1,
++    info: 1,
++    createdAt: 1
++};
++
++export class GetAllPartnerUserReserveExportHandler implements IQueryHandler {
++    private mainProcess: MainProcess;
++
++    public constructor(mainProcess: MainProcess) {
++        this.mainProcess = mainProcess;
++    }
++
++    public async execute(query: GetAllPartnerUserReserveExportQuery, context: any, options: any): Promise<any> {
++        const { filter, sort } = query;
++        const { cursor, limit } = options?.params || {};
++        const TransHis = this.mainProcess.models.TransHisModel;
++        const Merchant = this.mainProcess.models.MerchantModel;
++
++        let findQuery = TransHis.find(filter).sort(sort).select(SELECT_FIELDS).limit(limit);
++        if (cursor && cursor > 0) {
++            findQuery = findQuery.skip(cursor);
++        }
++
++        const [rawData, total] = await Promise.all([
++            findQuery.lean().exec(),
++            cursor ? Promise.resolve(0) : TransHis.countDocuments(filter)
++        ]);
++
++        const merchantCodes = _.uniq(
++            (rawData || []).map((d: any) => d?.info?.extData?.merchantCode).filter((v: any) => !_.isEmpty(v))
++        );
++
++        const merchantMap = new Map<string, any>();
++        if (merchantCodes.length > 0) {
++            try {
++                const merchants = await Merchant.find({ merchantCode: { $in: merchantCodes } })
++                    .select({ merchantCode: 1, merchantEmail: 1, name: 1 })
++                    .lean()
++                    .exec();
++                for (const m of merchants || []) {
++                    merchantMap.set(String(m.merchantCode), m);
++                }
++            } catch (err) {
++                // A missing merchant must not break the export
++                this.mainProcess.logger?.warn(
++                    `[GetAllPartnerUserReserveExportHandler] merchant lookup failed: ${(err as Error)?.message}`
++                );
++            }
++        }
++
++        const data = (rawData || []).map((doc: any) => {
++            const merchant = merchantMap.get(String(doc?.info?.extData?.merchantCode));
++            return {
++                ...doc,
++                merchantEmail: merchant?.merchantEmail || doc?.info?.extData?.merchant?.email || "",
++                merchantName: merchant?.name || doc?.info?.extData?.merchant?.name || ""
++            };
++        });
++
++        return {
++            data,
++            nextCursor: Array.isArray(data) && data.length === limit ? (cursor || 0) + limit : null,
++            total
++        };
++    }
++}
+diff --git a/logics/export/trans-his/partner-user-reserve-export.pure.ts b/logics/export/trans-his/partner-user-reserve-export.pure.ts
+new file mode 100644
+index 0000000..8c1fd23
+--- /dev/null
++++ b/logics/export/trans-his/partner-user-reserve-export.pure.ts
+@@ -0,0 +1,150 @@
++// Pure functions of PartnerUserReserveExport (UC04 - Biến động khoản đảm bảo user)
++import moment from "moment";
++import * as _ from "lodash";
++import { ExportConfig } from "../../processors/BaseExportProcessor";
++import { GetAllPartnerUserReserveExportQuery } from "../../../domain/queries";
++import { PartnerUserReserveExportParams } from "../../../data-transfers/params";
++import { validateParams } from "../../../utils/validator";
++import { TRANSACTION_STATUS_LIST } from "../../../utils/constants";
++
++export const TRANS_TYPE_RESERVE = "PARTNER_RESERVE";
++export const TRANS_TYPE_RELEASE = "PARTNER_RESERVE_RELEASE";
++const STATUS_SUCCESS = "SUCCESS";
++
++/** Trạng thái sau biến động (UC04.R02) */
++export const RESERVE_STATUS_LABELS: Record<string, { vi: string; en: string }> = {
++    PENDING: { vi: "Chờ kích hoạt", en: "Pending" },
++    AUTHORIZED: { vi: "Đang hiệu lực", en: "Authorized" },
++    TERMINATED: { vi: "Đã chấm dứt", en: "Terminated" }
++};
++
++const isEmptyValue = (v: any): boolean => v === undefined || v === null || v === "";
++
++/** Conditions of the screen (same as the list API: the gateway adds trans_type IN (PARTNER_RESERVE, PARTNER_RESERVE_RELEASE)) */
++export const baseFilter = (): Record<string, any> => ({
++    transType: { $in: [TRANS_TYPE_RESERVE, TRANS_TYPE_RELEASE] }
++});
++
++/** UC04.R03 filters, mirroring buildFilter of GET /ops/collection-disbursement/reserve-movements (exact match, trimmed) */
++export const buildFilter = (params: any): Record<string, any> => {
++    const filter: Record<string, any> = baseFilter();
++    if (!isEmptyValue(params.reserveId)) { filter["info.extData.reserveId"] = String(params.reserveId).trim(); }
++    if (!isEmptyValue(params.merchantCode)) { filter["info.extData.merchantCode"] = String(params.merchantCode).trim(); }
++    if (!isEmptyValue(params.partnerUserId)) { filter["info.extData.partnerUserId"] = String(params.partnerUserId).trim(); }
++    let statuses: string[] | null = isEmptyValue(params.status) ? null : String(params.status).split(",");
++    if (!isEmptyValue(params.statusAfter)) {
++        filter["info.extData.statusAfter"] = { $in: String(params.statusAfter).split(",").map((s: string) => s.trim()) };
++        // statusAfter is only known for a successful transfer and is shown for those rows only, so the filter must not return the others
++        statuses = (statuses ?? [STATUS_SUCCESS]).filter((s) => s === STATUS_SUCCESS);
++    }
++    if (statuses) { filter.status = { $in: statuses }; }
++    if (params.dateFr || params.dateTo) {
++        filter.createdAt = {};
++        if (params.dateFr) { filter.createdAt.$gte = new Date(params.dateFr); }
++        if (params.dateTo) { filter.createdAt.$lte = new Date(params.dateTo); }
++    }
++    return filter;
++};
++
++const SORTABLE: Record<string, string> = { createdAt: "createdAt", value: "value", status: "status", transId: "transId" };
++
++export const buildSort = (params: any): object => {
++    const field = params?.sortBy ? SORTABLE[params.sortBy] : undefined;
++    if (field && !isEmptyValue(params?.sortType)) {
++        const asc = params.sortType === "asc" || params.sortType === "1" || params.sortType === 1;
++        return { [field]: asc ? 1 : -1 };
++    }
++    return { createdAt: -1 };
++};
++
++/** Neutralize a text cell that a spreadsheet would run as a formula (starts with = + - @, tab or CR) */
++export const safeText = (value: any): string => {
++    const text = value === undefined || value === null ? "" : String(value);
++    return /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
++};
++
++/** Balances come as numbers, numeric strings or Extended JSON wrappers such as {"$numberInt": "10"} */
++export const toNumber = (value: unknown): number | null => {
++    const raw = _.isPlainObject(value) ? Object.values(value as object)[0] : value;
++    if (raw === null || raw === undefined || raw === "") { return null; }
++    const parsed = Number(raw);
++    return Number.isFinite(parsed) ? parsed : null;
++};
++
++/**
++ * Reserve wallet balance before / after the transfer, as the list API computes it: info.senderBalance and info.receiverBalance are the
++ * balances of the two wallets before the transfer, so the reserve wallet balance before is the receiver balance for a reserve and the
++ * sender balance for a release. The balance after is only known for a successful transfer.
++ */
++export const reserveBalance = (item: any): { before: number | null; after: number | null } => {
++    const release = item.transType === TRANS_TYPE_RELEASE;
++    const before = toNumber(release ? item.info?.senderBalance : item.info?.receiverBalance);
++    const amount = toNumber(item.value);
++    if (before === null || amount === null || item.status !== STATUS_SUCCESS) {
++        return { before, after: null };
++    }
++    return { before, after: release ? before - amount : before + amount };
++};
++
++export const validate = (params: any, langCode: string = "vi"): PartnerUserReserveExportParams =>
++    validateParams<PartnerUserReserveExportParams>(PartnerUserReserveExportParams, params || {}, langCode);
++
++export const getConfig = (params: any, langCode: string = "vi"): ExportConfig => {
++    const validated = validate(params, langCode);
++    return {
++        query: new GetAllPartnerUserReserveExportQuery(buildFilter(validated), buildSort(validated)),
++        // Columns in the order of Template-bien-dong-khoan-dam-bao-user.xlsx
++        columns: [
++            { vi: "Ngày tạo", en: "Created At" },
++            { vi: "Mã người dùng GooPay", en: "GooPay User ID" },
++            { vi: "Mã user liên kết", en: "Linked User ID" },
++            { vi: "Số điện thoại", en: "Phone" },
++            { vi: "Tên người dùng", en: "User Name" },
++            { vi: "Mã merchant", en: "Merchant Code" },
++            { vi: "Tài khoản merchant", en: "Merchant Account" },
++            { vi: "Tên merchant", en: "Merchant Name" },
++            { vi: "Trạng thái sau biến động", en: "Status After Change" },
++            { vi: "Hạn mức khoản đảm bảo", en: "Reserve Limit" },
++            { vi: "Số dư trước biến động", en: "Balance Before" },
++            { vi: "Số dư sau biến động", en: "Balance After" },
++            { vi: "Trạng thái giao dịch", en: "Transaction Status" },
++            { vi: "Ghi chú", en: "Note" }
++        ],
++        fileName: {
++            // The file name is also the sheet name, and Excel allows at most 31 characters in a sheet name
++            vi: moment().format("DD-MM-YYYY") + "_Bien_dong_dam_bao",
++            en: moment().format("DD-MM-YYYY") + "_Reserve_movements"
++        },
++        maxRecords: 2_000_000
++    };
++};
++
++export const transformRow = (item: any, rowIndex: number, langCode: string = "vi"): any[] => {
++    const lang: "vi" | "en" = langCode === "en" ? "en" : "vi";
++    const extData = item.info?.extData ?? {};
++    const createdAt = item.createdAt ? moment(item.createdAt).utcOffset(7).format("DD/MM/YYYY HH:mm:ss") : "";
++    const { before, after } = reserveBalance(item);
++    // partner-service writes the profile outcome of a successful transfer into extData (GP2-4632); it holds only for a successful transfer
++    const succeeded = item.status === STATUS_SUCCESS;
++    const statusAfter = succeeded ? extData.statusAfter : undefined;
++    const reserveLimit = succeeded ? toNumber(extData.reserveLimit) : null;
++    const txStatus = TRANSACTION_STATUS_LIST.find((s: any) => s.value === item.status);
++
++    return [
++        createdAt,
++        safeText(item.sender?.customerId),
++        safeText(extData.partnerUserId),
++        safeText(item.sender?.phone),
++        safeText(item.sender?.fullName),
++        safeText(extData.merchantCode),
++        safeText(item.merchantEmail),
++        safeText(item.merchantName),
++        // Filled only when the record carries it (rows made before GP2-4632 do not)
++        safeText(RESERVE_STATUS_LABELS[statusAfter]?.[lang] || statusAfter),
++        reserveLimit ?? "",
++        before ?? "",
++        after ?? "",
++        safeText(txStatus?.label?.[lang] || item.status),
++        safeText(item.noted || extData.remark)
++    ];
++};

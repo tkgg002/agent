@@ -1,0 +1,52 @@
+[
+ {
+  "id": "S-RC1",
+  "kind": "solution",
+  "basis": "code",
+  "flow": "nested skip list",
+  "claim": "extraNestedScanSkipFields chứa key \"id\" và \"_id\".",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_field_filter.go:17-22\nvar extraNestedScanSkipFields = map[string]struct{}{\n\t\"_id\":               {},\n\t\"id\":                {},\n\t\"_parent_source_id\": {},\n\t\"_array_index\":      {},\n}"
+ },
+ {
+  "id": "S-RC2",
+  "kind": "solution",
+  "basis": "code",
+  "flow": "scan loop",
+  "claim": "Vòng lặp discoveredFields bỏ qua (continue) relPath khi shouldSkipNestedScanField trả true.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:382-385\n\tfor relPath, pgType := range discoveredFields {\n\t\tif shouldSkipNestedScanField(relPath) {\n\t\t\tcontinue\n\t\t}"
+ },
+ {
+  "id": "S-FIX",
+  "kind": "solution",
+  "basis": "code",
+  "flow": "master nested target",
+  "claim": "Ở nhánh có masterBindingID, cột đích được ghép basePath với relPath và thay dấu chấm bằng gạch dưới nên relPath id thành merchantInfo_id.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:387-389\n\t\tif (isObject || isArrayExplode) && masterBindingID != nil {\n\t\t\tobjTarget := strings.ReplaceAll(basePath+\".\"+relPath, \".\", \"_\")\n\t\t\tobjTarget = strings.ReplaceAll(objTarget, \"[*]\", \"\")"
+ },
+ {
+  "id": "S-IMPACT",
+  "kind": "solution",
+  "basis": "code",
+  "flow": "shadow branch",
+  "claim": "Nhánh shadow đặt TargetColumn bằng relPath không có tiền tố basePath và đã chặn qua shouldSkipTopLevelScanField.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:401-421\n\t\t} else if binding.ID > 0 && !isArrayExplode && !strings.Contains(relPath, \".\") {\n\t\t\t// Nhánh này ghi TargetColumn = relPath (không tiền tố) → áp luật top-level để không đè PK id/_id.\n\t\t\tif shouldSkipTopLevelScanField(relPath) || existingV2[relPath] {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tnewFields = append(newFields, relPath)\n\t\t\tsys := \"system-scan-array\"\n\t\t\tvar srcPath *string\n\t\t\tif isArrayExplode {\n\t\t\t\tnp := basePath + \"[*].\" + relPath\n\t\t\t\tsrcPath = &np\n\t\t\t}\n\t\t\trulesToInsert = append(rulesToInsert, master.MappingRuleV2{\n\t\t\t\tSourceObjectID:  binding.SourceObjectID,\n\t\t\t\tShadowBindingID: &binding.ID,\n\t\t\t\tMasterBindingID: masterBindingID,\n\t\t\t\tSourceField:     relPath,\n\t\t\t\tTargetColumn:    strings.ReplaceAll(relPath, \".\", \"_\"),\n\t\t\t\tDataType:        pgType,\n\t\t\t\tSourcePath:      srcPath,\n\t\t\t\tSourceFormat:    \"raw\","
+ },
+ {
+  "id": "K1",
+  "kind": "control_false",
+  "claim": "extraNestedScanSkipFields không chứa key \"id\".",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_field_filter.go:17-22\nvar extraNestedScanSkipFields = map[string]struct{}{\n\t\"_id\":               {},\n\t\"id\":                {},\n\t\"_parent_source_id\": {},\n\t\"_array_index\":      {},\n}"
+ },
+ {
+  "id": "K2",
+  "kind": "control_false",
+  "claim": "Nhánh shadow đặt TargetColumn bằng basePath cộng relPath.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_service.go:401-421\n\t\t} else if binding.ID > 0 && !isArrayExplode && !strings.Contains(relPath, \".\") {\n\t\t\t// Nhánh này ghi TargetColumn = relPath (không tiền tố) → áp luật top-level để không đè PK id/_id.\n\t\t\tif shouldSkipTopLevelScanField(relPath) || existingV2[relPath] {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tnewFields = append(newFields, relPath)\n\t\t\tsys := \"system-scan-array\"\n\t\t\tvar srcPath *string\n\t\t\tif isArrayExplode {\n\t\t\t\tnp := basePath + \"[*].\" + relPath\n\t\t\t\tsrcPath = &np\n\t\t\t}\n\t\t\trulesToInsert = append(rulesToInsert, master.MappingRuleV2{\n\t\t\t\tSourceObjectID:  binding.SourceObjectID,\n\t\t\t\tShadowBindingID: &binding.ID,\n\t\t\t\tMasterBindingID: masterBindingID,\n\t\t\t\tSourceField:     relPath,\n\t\t\t\tTargetColumn:    strings.ReplaceAll(relPath, \".\", \"_\"),\n\t\t\t\tDataType:        pgType,\n\t\t\t\tSourcePath:      srcPath,\n\t\t\t\tSourceFormat:    \"raw\","
+ },
+ {
+  "id": "K3",
+  "kind": "control_true",
+  "claim": "extraNestedScanSkipFields chứa key \"_array_index\".",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/scan_field_filter.go:17-22\nvar extraNestedScanSkipFields = map[string]struct{}{\n\t\"_id\":               {},\n\t\"id\":                {},\n\t\"_parent_source_id\": {},\n\t\"_array_index\":      {},\n}"
+ }
+]

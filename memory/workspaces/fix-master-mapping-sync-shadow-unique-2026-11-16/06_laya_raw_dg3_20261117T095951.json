@@ -1,0 +1,917 @@
+[
+  {
+    "id": "A-DIFF-1",
+    "kind": "claim",
+    "claim": "In master_multi_shadow_repo_gorm.go lines 231-262, syncRulesFromAllShadowsTx inserts approved active v2 rules with status 'pending', checks NOT EXISTS on mapping_v2_id and LOWER(TRIM(target_column)), and uses ON CONFLICT (master_binding_id, target_column) DO NOTHING.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go",
+    "lines": "229-265",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:229-265\n\t\t\tresInsert := tx.Exec(`\n\t\t\t\tINSERT INTO `+masterRuleTable+` (\n\t\t\t\t\tmaster_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by, created_at, updated_at\n\t\t\t\t)\n\t\t\t\tSELECT ?, v2.id, TRIM(v2.target_column), true, 'pending', 'shadow-sync', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP\n\t\t\t\t  FROM `+v2Table+` v2\n\t\t\t\t WHERE v2.shadow_binding_id = ?\n\t\t\t\t   AND v2.status = 'approved'\n\t\t\t\t   AND COALESCE(v2.is_active, true) = true\n\t\t\t\t   AND TRIM(COALESCE(v2.target_column, '')) <> ''\n\t\t\t\t   AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\t\t   AND v2.id = (\n\t\t\t\t       SELECT MIN(v2d.id)\n\t\t\t\t         FROM `+v2Table+` v2d\n\t\t\t\t        WHERE v2d.shadow_binding_id = v2.shadow_binding_id\n\t\t\t\t          AND v2d.status = 'approved'\n\t\t\t\t          AND COALESCE(v2d.is_active, true) = true\n\t\t\t\t          AND LOWER(TRIM(v2d.target_column)) = LOWER(TRIM(v2.target_column))\n\t\t\t\t   )\n\t\t\t\t   AND NOT EXISTS (\n\t\t\t\t       SELECT 1 FROM `+masterRuleTable+` m\n\t\t\t\t        WHERE m.master_binding_id = ?\n\t\t\t\t          AND m.mapping_v2_id = v2.id\n\t\t\t\t   )\n\t\t\t\t   AND NOT EXISTS (\n\t\t\t\t       SELECT 1 FROM `+masterRuleTable+` m\n\t\t\t\t        WHERE m.master_binding_id = ?\n\t\t\t\t          AND LOWER(TRIM(m.target_column)) = LOWER(TRIM(v2.target_column))\n\t\t\t\t   )\n\t\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,\n\t\t\t\tmasterBindingID, updatedBy, sbID, reservedCols, masterBindingID, masterBindingID,\n\t\t\t)\n\t\t\tif resInsert.Error != nil {\n\t\t\t\treturn resInsert.Error\n\t\t\t}\n\t\t\tsyncedNew += resInsert.RowsAffected\n\t\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4142,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7909,
+                "INCORRECT": 0.1423,
+                "UNSUPPORTED": 0.0667
+              },
+              "confidence": 0.4142,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In master_multi_shadow_repo_gorm.go lines 231-262, syncRulesFromAllShadowsTx inserts approved active v2 rules with status 'pending', checks NOT EXISTS on mapping_v2_id and LOWER(TRIM(target_column)), and uses ON CONFLICT (master_binding_id, target_column) DO NOTHING.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:229-265\n\t\t\tresInsert := tx.Exec(`\n\t\t\t\tINSERT INTO `+masterRuleTable+` (\n\t\t\t\t\tmaster_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by, created_at, updated_at\n\t\t\t\t)\n\t\t\t\tSELECT ?, v2.id, TRIM(v2.target_column), true, 'pending', 'shadow-sync', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP\n\t\t\t\t  FROM `+v2Table+` v2\n\t\t\t\t WHERE v2.shadow_binding_id = ?\n\t\t\t\t   AND v2.status = 'approved'\n\t\t\t\t   AND COALESCE(v2.is_active, true) = true\n\t\t\t\t   AND TRIM(COALESCE(v2.target_column, '')) <> ''\n\t\t\t\t   AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\t\t   AND v2.id = (\n\t\t\t\t       SELECT MIN(v2d.id)\n\t\t\t\t         FROM `+v2Table+` v2d\n\t\t\t\t        WHERE v2d.shadow_binding_id = v2.shadow_binding_id\n\t\t\t\t          AND v2d.status = 'approved'\n\t\t\t\t          AND COALESCE(v2d.is_active, true) = true\n\t\t\t\t          AND LOWER(TRIM(v2d.target_column)) = LOWER(TRIM(v2.target_column))\n\t\t\t\t   )\n\t\t\t\t   AND NOT EXISTS (\n\t\t\t\t       SELECT 1 FROM `+masterRuleTable+` m\n\t\t\t\t        WHERE m.master_binding_id = ?\n\t\t\t\t          AND m.mapping_v2_id = v2.id\n\t\t\t\t   )\n\t\t\t\t   AND NOT EXISTS (\n\t\t\t\t       SELECT 1 FROM `+masterRuleTable+` m\n\t\t\t\t        WHERE m.master_binding_id = ?\n\t\t\t\t          AND LOWER(TRIM(m.target_column)) = LOWER(TRIM(v2.target_column))\n\t\t\t\t   )\n\t\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,\n\t\t\t\tmasterBindingID, updatedBy, sbID, reservedCols, masterBindingID, masterBindingID,\n\t\t\t)\n\t\t\tif resInsert.Error != nil {\n\t\t\t\treturn resInsert.Error\n\t\t\t}\n\t\t\tsyncedNew += resInsert.RowsAffected\n\t\t}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0268,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4453,
+                "INCORRECT": 0.3037,
+                "UNSUPPORTED": 0.251
+              },
+              "confidence": 0.0268,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:229-265\n\t\t\tresInsert := tx.Exec(`\n\t\t\t\tINSERT INTO `+masterRuleTable+` (\n\t\t\t\t\tmaster_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by, created_at, updated_at\n\t\t\t\t)\n\t\t\t\tSELECT ?, v2.id, TRIM(v2.target_column), true, 'pending', 'shadow-sync', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP\n\t\t\t\t  FROM `+v2Table+` v2\n\t\t\t\t WHERE v2.shadow_binding_id = ?\n\t\t\t\t   AND v2.status = 'approved'\n\t\t\t\t   AND COALESCE(v2.is_active, true) = true\n\t\t\t\t   AND TRIM(COALESCE(v2.target_column, '')) <> ''\n\t\t\t\t   AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\t\t   AND v2.id = (\n\t\t\t\t       SELECT MIN(v2d.id)\n\t\t\t\t         FROM `+v2Table+` v2d\n\t\t\t\t        WHERE v2d.shadow_binding_id = v2.shadow_binding_id\n\t\t\t\t          AND v2d.status = 'approved'\n\t\t\t\t          AND COALESCE(v2d.is_active, true) = true\n\t\t\t\t          AND LOWER(TRIM(v2d.target_column)) = LOWER(TRIM(v2.target_column))\n\t\t\t\t   )\n\t\t\t\t   AND NOT EXISTS (\n\t\t\t\t       SELECT 1 FROM `+masterRuleTable+` m\n\t\t\t\t        WHERE m.master_binding_id = ?\n\t\t\t\t          AND m.mapping_v2_id = v2.id\n\t\t\t\t   )\n\t\t\t\t   AND NOT EXISTS (\n\t\t\t\t       SELECT 1 FROM `+masterRuleTable+` m\n\t\t\t\t        WHERE m.master_binding_id = ?\n\t\t\t\t          AND LOWER(TRIM(m.target_column)) = LOWER(TRIM(v2.target_column))\n\t\t\t\t   )\n\t\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,\n\t\t\t\tmasterBindingID, updatedBy, sbID, reservedCols, masterBindingID, masterBindingID,\n\t\t\t)\n\t\t\tif resInsert.Error != nil {\n\t\t\t\treturn resInsert.Error\n\t\t\t}\n\t\t\tsyncedNew += resInsert.RowsAffected\n\t\t}",
+          "claim": "In master_multi_shadow_repo_gorm.go lines 231-262, syncRulesFromAllShadowsTx inserts approved active v2 rules with status 'pending', checks NOT EXISTS on mapping_v2_id and LOWER(TRIM(target_column)), and uses ON CONFLICT (master_binding_id, target_column) DO NOTHING."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.568,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9113,
+                "NO": 0.0887
+              },
+              "confidence": 0.568,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go:229-265\n\t\t\tresInsert := tx.Exec(`\n\t\t\t\tINSERT INTO `+masterRuleTable+` (\n\t\t\t\t\tmaster_binding_id, mapping_v2_id, target_column, is_active, status, created_by, updated_by, created_at, updated_at\n\t\t\t\t)\n\t\t\t\tSELECT ?, v2.id, TRIM(v2.target_column), true, 'pending', 'shadow-sync', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP\n\t\t\t\t  FROM `+v2Table+` v2\n\t\t\t\t WHERE v2.shadow_binding_id = ?\n\t\t\t\t   AND v2.status = 'approved'\n\t\t\t\t   AND COALESCE(v2.is_active, true) = true\n\t\t\t\t   AND TRIM(COALESCE(v2.target_column, '')) <> ''\n\t\t\t\t   AND LOWER(TRIM(v2.target_column)) NOT IN (?)\n\t\t\t\t   AND v2.id = (\n\t\t\t\t       SELECT MIN(v2d.id)\n\t\t\t\t         FROM `+v2Table+` v2d\n\t\t\t\t        WHERE v2d.shadow_binding_id = v2.shadow_binding_id\n\t\t\t\t          AND v2d.status = 'approved'\n\t\t\t\t          AND COALESCE(v2d.is_active, true) = true\n\t\t\t\t          AND LOWER(TRIM(v2d.target_column)) = LOWER(TRIM(v2.target_column))\n\t\t\t\t   )\n\t\t\t\t   AND NOT EXISTS (\n\t\t\t\t       SELECT 1 FROM `+masterRuleTable+` m\n\t\t\t\t        WHERE m.master_binding_id = ?\n\t\t\t\t          AND m.mapping_v2_id = v2.id\n\t\t\t\t   )\n\t\t\t\t   AND NOT EXISTS (\n\t\t\t\t       SELECT 1 FROM `+masterRuleTable+` m\n\t\t\t\t        WHERE m.master_binding_id = ?\n\t\t\t\t          AND LOWER(TRIM(m.target_column)) = LOWER(TRIM(v2.target_column))\n\t\t\t\t   )\n\t\t\t\tON CONFLICT (master_binding_id, target_column) DO NOTHING`,\n\t\t\t\tmasterBindingID, updatedBy, sbID, reservedCols, masterBindingID, masterBindingID,\n\t\t\t)\n\t\t\tif resInsert.Error != nil {\n\t\t\t\treturn resInsert.Error\n\t\t\t}\n\t\t\tsyncedNew += resInsert.RowsAffected\n\t\t}",
+          "claim": "In master_multi_shadow_repo_gorm.go lines 231-262, syncRulesFromAllShadowsTx inserts approved active v2 rules with status 'pending', checks NOT EXISTS on mapping_v2_id and LOWER(TRIM(target_column)), and uses ON CONFLICT (master_binding_id, target_column) DO NOTHING."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-TEST-1",
+    "kind": "claim",
+    "claim": "In master_repo_gorm_test.go lines 284-312, TestSyncRulesFromShadow_PreservesCustomizedColumnsAndAvoidsUniqueConflict asserts syncedNew == 2, syncedRenamed == 0, bill_id preserved for mapping_v2_id 101, and status == 'pending' for paymentMethod.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_repo_gorm_test.go",
+    "lines": "284-315",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_repo_gorm_test.go:284-315\n\tctx := context.Background()\n\n\tsyncedNew, syncedRenamed, err := repo.SyncRulesFromShadow(ctx, 61, 222, \"tester\")\n\tif err != nil {\n\t\tt.Fatalf(\"SyncRulesFromShadow failed: %v\", err)\n\t}\n\tif syncedNew != 2 || syncedRenamed != 0 {\n\t\tt.Fatalf(\"expected syncedNew=2 (paymentMethod + extraPayload), syncedRenamed=0; got new=%d renamed=%d\", syncedNew, syncedRenamed)\n\t}\n\n\t// Verify customized snake_case columns were NOT overwritten or duplicated\n\tvar billCols []string\n\tif err := db.Raw(`SELECT target_column FROM mapping_rule_master WHERE master_binding_id = 61 AND mapping_v2_id = 101 ORDER BY id`).Scan(&billCols).Error; err != nil {\n\t\tt.Fatalf(\"query bill_id rules: %v\", err)\n\t}\n\tif len(billCols) != 1 || billCols[0] != \"bill_id\" {\n\t\tt.Fatalf(\"expected [bill_id] preserved for mapping_v2_id=101, got %+v\", billCols)\n\t}\n\n\t// Verify newly synced rules have status='pending' and deterministic MIN(id)\n\tvar newRow struct {\n\t\tMappingV2ID int64  `gorm:\"column:mapping_v2_id\"`\n\t\tStatus      string `gorm:\"column:status\"`\n\t\tCreatedBy   string `gorm:\"column:created_by\"`\n\t}\n\tif err := db.Raw(`SELECT mapping_v2_id, status, created_by FROM mapping_rule_master WHERE master_binding_id = 61 AND target_column = 'paymentMethod'`).Scan(&newRow).Error; err != nil {\n\t\tt.Fatalf(\"query paymentMethod rule: %v\", err)\n\t}\n\tif newRow.MappingV2ID != 103 || newRow.Status != \"pending\" || newRow.CreatedBy != \"shadow-sync\" {\n\t\tt.Fatalf(\"expected paymentMethod v2_id=103 status='pending' created_by='shadow-sync', got %+v\", newRow)\n\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6244,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8828,
+                "INCORRECT": 0.0986,
+                "UNSUPPORTED": 0.0186
+              },
+              "confidence": 0.6244,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 812,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In master_repo_gorm_test.go lines 284-312, TestSyncRulesFromShadow_PreservesCustomizedColumnsAndAvoidsUniqueConflict asserts syncedNew == 2, syncedRenamed == 0, bill_id preserved for mapping_v2_id 101, and status == 'pending' for paymentMethod.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_repo_gorm_test.go:284-315\n\tctx := context.Background()\n\n\tsyncedNew, syncedRenamed, err := repo.SyncRulesFromShadow(ctx, 61, 222, \"tester\")\n\tif err != nil {\n\t\tt.Fatalf(\"SyncRulesFromShadow failed: %v\", err)\n\t}\n\tif syncedNew != 2 || syncedRenamed != 0 {\n\t\tt.Fatalf(\"expected syncedNew=2 (paymentMethod + extraPayload), syncedRenamed=0; got new=%d renamed=%d\", syncedNew, syncedRenamed)\n\t}\n\n\t// Verify customized snake_case columns were NOT overwritten or duplicated\n\tvar billCols []string\n\tif err := db.Raw(`SELECT target_column FROM mapping_rule_master WHERE master_binding_id = 61 AND mapping_v2_id = 101 ORDER BY id`).Scan(&billCols).Error; err != nil {\n\t\tt.Fatalf(\"query bill_id rules: %v\", err)\n\t}\n\tif len(billCols) != 1 || billCols[0] != \"bill_id\" {\n\t\tt.Fatalf(\"expected [bill_id] preserved for mapping_v2_id=101, got %+v\", billCols)\n\t}\n\n\t// Verify newly synced rules have status='pending' and deterministic MIN(id)\n\tvar newRow struct {\n\t\tMappingV2ID int64  `gorm:\"column:mapping_v2_id\"`\n\t\tStatus      string `gorm:\"column:status\"`\n\t\tCreatedBy   string `gorm:\"column:created_by\"`\n\t}\n\tif err := db.Raw(`SELECT mapping_v2_id, status, created_by FROM mapping_rule_master WHERE master_binding_id = 61 AND target_column = 'paymentMethod'`).Scan(&newRow).Error; err != nil {\n\t\tt.Fatalf(\"query paymentMethod rule: %v\", err)\n\t}\n\tif newRow.MappingV2ID != 103 || newRow.Status != \"pending\" || newRow.CreatedBy != \"shadow-sync\" {\n\t\tt.Fatalf(\"expected paymentMethod v2_id=103 status='pending' created_by='shadow-sync', got %+v\", newRow)\n\t}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4857,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8299,
+                "INCORRECT": 0.1122,
+                "UNSUPPORTED": 0.0579
+              },
+              "confidence": 0.4857,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 818,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_repo_gorm_test.go:284-315\n\tctx := context.Background()\n\n\tsyncedNew, syncedRenamed, err := repo.SyncRulesFromShadow(ctx, 61, 222, \"tester\")\n\tif err != nil {\n\t\tt.Fatalf(\"SyncRulesFromShadow failed: %v\", err)\n\t}\n\tif syncedNew != 2 || syncedRenamed != 0 {\n\t\tt.Fatalf(\"expected syncedNew=2 (paymentMethod + extraPayload), syncedRenamed=0; got new=%d renamed=%d\", syncedNew, syncedRenamed)\n\t}\n\n\t// Verify customized snake_case columns were NOT overwritten or duplicated\n\tvar billCols []string\n\tif err := db.Raw(`SELECT target_column FROM mapping_rule_master WHERE master_binding_id = 61 AND mapping_v2_id = 101 ORDER BY id`).Scan(&billCols).Error; err != nil {\n\t\tt.Fatalf(\"query bill_id rules: %v\", err)\n\t}\n\tif len(billCols) != 1 || billCols[0] != \"bill_id\" {\n\t\tt.Fatalf(\"expected [bill_id] preserved for mapping_v2_id=101, got %+v\", billCols)\n\t}\n\n\t// Verify newly synced rules have status='pending' and deterministic MIN(id)\n\tvar newRow struct {\n\t\tMappingV2ID int64  `gorm:\"column:mapping_v2_id\"`\n\t\tStatus      string `gorm:\"column:status\"`\n\t\tCreatedBy   string `gorm:\"column:created_by\"`\n\t}\n\tif err := db.Raw(`SELECT mapping_v2_id, status, created_by FROM mapping_rule_master WHERE master_binding_id = 61 AND target_column = 'paymentMethod'`).Scan(&newRow).Error; err != nil {\n\t\tt.Fatalf(\"query paymentMethod rule: %v\", err)\n\t}\n\tif newRow.MappingV2ID != 103 || newRow.Status != \"pending\" || newRow.CreatedBy != \"shadow-sync\" {\n\t\tt.Fatalf(\"expected paymentMethod v2_id=103 status='pending' created_by='shadow-sync', got %+v\", newRow)\n\t}",
+          "claim": "In master_repo_gorm_test.go lines 284-312, TestSyncRulesFromShadow_PreservesCustomizedColumnsAndAvoidsUniqueConflict asserts syncedNew == 2, syncedRenamed == 0, bill_id preserved for mapping_v2_id 101, and status == 'pending' for paymentMethod."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7964,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9682,
+                "NO": 0.0318
+              },
+              "confidence": 0.7964,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 751,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_repo_gorm_test.go:284-315\n\tctx := context.Background()\n\n\tsyncedNew, syncedRenamed, err := repo.SyncRulesFromShadow(ctx, 61, 222, \"tester\")\n\tif err != nil {\n\t\tt.Fatalf(\"SyncRulesFromShadow failed: %v\", err)\n\t}\n\tif syncedNew != 2 || syncedRenamed != 0 {\n\t\tt.Fatalf(\"expected syncedNew=2 (paymentMethod + extraPayload), syncedRenamed=0; got new=%d renamed=%d\", syncedNew, syncedRenamed)\n\t}\n\n\t// Verify customized snake_case columns were NOT overwritten or duplicated\n\tvar billCols []string\n\tif err := db.Raw(`SELECT target_column FROM mapping_rule_master WHERE master_binding_id = 61 AND mapping_v2_id = 101 ORDER BY id`).Scan(&billCols).Error; err != nil {\n\t\tt.Fatalf(\"query bill_id rules: %v\", err)\n\t}\n\tif len(billCols) != 1 || billCols[0] != \"bill_id\" {\n\t\tt.Fatalf(\"expected [bill_id] preserved for mapping_v2_id=101, got %+v\", billCols)\n\t}\n\n\t// Verify newly synced rules have status='pending' and deterministic MIN(id)\n\tvar newRow struct {\n\t\tMappingV2ID int64  `gorm:\"column:mapping_v2_id\"`\n\t\tStatus      string `gorm:\"column:status\"`\n\t\tCreatedBy   string `gorm:\"column:created_by\"`\n\t}\n\tif err := db.Raw(`SELECT mapping_v2_id, status, created_by FROM mapping_rule_master WHERE master_binding_id = 61 AND target_column = 'paymentMethod'`).Scan(&newRow).Error; err != nil {\n\t\tt.Fatalf(\"query paymentMethod rule: %v\", err)\n\t}\n\tif newRow.MappingV2ID != 103 || newRow.Status != \"pending\" || newRow.CreatedBy != \"shadow-sync\" {\n\t\tt.Fatalf(\"expected paymentMethod v2_id=103 status='pending' created_by='shadow-sync', got %+v\", newRow)\n\t}",
+          "claim": "In master_repo_gorm_test.go lines 284-312, TestSyncRulesFromShadow_PreservesCustomizedColumnsAndAvoidsUniqueConflict asserts syncedNew == 2, syncedRenamed == 0, bill_id preserved for mapping_v2_id 101, and status == 'pending' for paymentMethod."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-FE-1",
+    "kind": "claim",
+    "claim": "In apiError.ts lines 41-45, CONSTRAINT_HUMAN maps ux_mapping_rule_master_target to a clear Vietnamese message for duplicate target_column.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/utils/apiError.ts",
+    "lines": "39-47",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/utils/apiError.ts:39-47\n  shadow_binding_unique_target:\n    'Đã có shadow binding cho target table này.',\n  mapping_rule_target_column_key:\n    'Cột target trong rule này đã được mapping rồi.',\n  ux_mapping_rule_master_target:\n    'Tên cột đích (target_column) này đã tồn tại trong Master Binding hiện tại.',\n  connection_registry_connection_code_key:\n    'Connection code đã tồn tại.',\n  uq_worker_schedule_source_count_scope:",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2247,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5011,
+                "INCORRECT": 0.4506,
+                "UNSUPPORTED": 0.0483
+              },
+              "confidence": 0.2247,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 328,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In apiError.ts lines 41-45, CONSTRAINT_HUMAN maps ux_mapping_rule_master_target to a clear Vietnamese message for duplicate target_column.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/utils/apiError.ts:39-47\n  shadow_binding_unique_target:\n    'Đã có shadow binding cho target table này.',\n  mapping_rule_target_column_key:\n    'Cột target trong rule này đã được mapping rồi.',\n  ux_mapping_rule_master_target:\n    'Tên cột đích (target_column) này đã tồn tại trong Master Binding hiện tại.',\n  connection_registry_connection_code_key:\n    'Connection code đã tồn tại.',\n  uq_worker_schedule_source_count_scope:",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.5922,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.0033,
+                "INCORRECT": 0.8447,
+                "UNSUPPORTED": 0.152
+              },
+              "confidence": 0.5922,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 334,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/utils/apiError.ts:39-47\n  shadow_binding_unique_target:\n    'Đã có shadow binding cho target table này.',\n  mapping_rule_target_column_key:\n    'Cột target trong rule này đã được mapping rồi.',\n  ux_mapping_rule_master_target:\n    'Tên cột đích (target_column) này đã tồn tại trong Master Binding hiện tại.',\n  connection_registry_connection_code_key:\n    'Connection code đã tồn tại.',\n  uq_worker_schedule_source_count_scope:",
+          "claim": "In apiError.ts lines 41-45, CONSTRAINT_HUMAN maps ux_mapping_rule_master_target to a clear Vietnamese message for duplicate target_column."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.9908,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.0008,
+                "NO": 0.9992
+              },
+              "confidence": 0.9908,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 267,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/utils/apiError.ts:39-47\n  shadow_binding_unique_target:\n    'Đã có shadow binding cho target table này.',\n  mapping_rule_target_column_key:\n    'Cột target trong rule này đã được mapping rồi.',\n  ux_mapping_rule_master_target:\n    'Tên cột đích (target_column) này đã tồn tại trong Master Binding hiện tại.',\n  connection_registry_connection_code_key:\n    'Connection code đã tồn tại.',\n  uq_worker_schedule_source_count_scope:",
+          "claim": "In apiError.ts lines 41-45, CONSTRAINT_HUMAN maps ux_mapping_rule_master_target to a clear Vietnamese message for duplicate target_column."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In master_multi_shadow_repo_gorm.go lines 216-222, when GO_ENV equals 'test', syncRulesFromAllShadowsTx switches v2Table to 'mapping_rule_v2' and masterRuleTable to 'mapping_rule_master'.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go",
+    "lines": "214-224",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.1542,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3261,
+                "INCORRECT": 0.5651,
+                "UNSUPPORTED": 0.1088
+              },
+              "confidence": 0.1542,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 184,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In master_multi_shadow_repo_gorm.go lines 216-222, when GO_ENV equals 'test', syncRulesFromAllShadowsTx switches v2Table to 'mapping_rule_v2' and masterRuleTable to 'mapping_rule_master'.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0798,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5235,
+                "INCORRECT": 0.2902,
+                "UNSUPPORTED": 0.1863
+              },
+              "confidence": 0.0798,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 189,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In master_multi_shadow_repo_gorm.go lines 216-222, when GO_ENV equals 'test', syncRulesFromAllShadowsTx switches v2Table to 'mapping_rule_v2' and masterRuleTable to 'mapping_rule_master'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7102,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9492,
+                "NO": 0.0508
+              },
+              "confidence": 0.7102,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 122,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In master_multi_shadow_repo_gorm.go lines 216-222, when GO_ENV equals 'test', syncRulesFromAllShadowsTx switches v2Table to 'mapping_rule_v2' and masterRuleTable to 'mapping_rule_master'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In master_multi_shadow_repo_gorm.go lines 250-272, syncRulesFromAllShadowsTx executes UPDATE setting m.target_column = v2.target_column where m.in_master is true.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_multi_shadow_repo_gorm.go",
+    "lines": "250-272",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.204,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3673,
+                "INCORRECT": 0.5642,
+                "UNSUPPORTED": 0.0685
+              },
+              "confidence": 0.204,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 174,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In master_multi_shadow_repo_gorm.go lines 250-272, syncRulesFromAllShadowsTx executes UPDATE setting m.target_column = v2.target_column where m.in_master is true.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.1926,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.1293,
+                "INCORRECT": 0.2293,
+                "UNSUPPORTED": 0.6415
+              },
+              "confidence": 0.1926,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 180,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In master_multi_shadow_repo_gorm.go lines 250-272, syncRulesFromAllShadowsTx executes UPDATE setting m.target_column = v2.target_column where m.in_master is true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8779,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9834,
+                "NO": 0.0166
+              },
+              "confidence": 0.8779,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 113,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In master_multi_shadow_repo_gorm.go lines 250-272, syncRulesFromAllShadowsTx executes UPDATE setting m.target_column = v2.target_column where m.in_master is true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In apiError.ts lines 39-47, CONSTRAINT_HUMAN deletes mapping_rule_target_column_key and throws an exception.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/utils/apiError.ts",
+    "lines": "39-47",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1701,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5229,
+                "INCORRECT": 0.3947,
+                "UNSUPPORTED": 0.0825
+              },
+              "confidence": 0.1701,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 154,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In apiError.ts lines 39-47, CONSTRAINT_HUMAN deletes mapping_rule_target_column_key and throws an exception.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.6723,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0119,
+                "INCORRECT": 0.0875,
+                "UNSUPPORTED": 0.9007
+              },
+              "confidence": 0.6723,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 160,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In apiError.ts lines 39-47, CONSTRAINT_HUMAN deletes mapping_rule_target_column_key and throws an exception."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.3047,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8129,
+                "NO": 0.1871
+              },
+              "confidence": 0.3047,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 93,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In apiError.ts lines 39-47, CONSTRAINT_HUMAN deletes mapping_rule_target_column_key and throws an exception."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

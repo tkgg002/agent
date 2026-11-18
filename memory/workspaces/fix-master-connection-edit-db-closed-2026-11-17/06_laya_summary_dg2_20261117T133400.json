@@ -1,0 +1,175 @@
+{
+  "mode": "claim",
+  "stage": "dg2",
+  "workspace": "fix-master-connection-edit-db-closed-2026-11-17",
+  "ts": "20261117T133400",
+  "engine_url": "http://127.0.0.1:8200/v1/predict",
+  "engine_mode": "auto",
+  "trusted_rounds": [],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/06_laya_raw_dg1_20261117T133400.json",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In connection_manager.go lines 463-476, InvalidatePool unlocks m.masterPoolMu before calling m.reg.EvictRole('master:'+key), leaving a race window where a concurrent GetMasterDB can retrieve the stale *gorm.DB from r.gormDBs['master:'+key] right before sqlDB.Close() closes it.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6214
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.0442
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.1392
+        }
+      }
+    },
+    {
+      "id": "S-FIX",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 515-555, InvalidatePool calls m.reg.EvictRole('master:'+key) inside m.masterPoolMu.Lock() following the exact lock hierarchy m.masterPoolMu -> r.mu with zero network I/O under lock.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.6259
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3975
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.904
+        }
+      }
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 496-506, splitting lifecycle, config-reload, recon-cache, persistence-options-sync, and frontend connection-form modules keeps every large file at or below its HEAD line count while preserving 100% backward compatibility.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2387
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.0526
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.0424
+        }
+      }
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "solution",
+      "basis": "code",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 610-656, registerConfigReloadSubscribers is extracted to server_config_reload.go and registered after chunkEngine is constructed, while ws.RegisterOnStop(connectionManager.Close) is registered at LIFO index 0.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3016
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.0353
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.4981
+        }
+      }
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 560-606, Close sets m.closed = true, closes m.stopCh, waits on m.wg.Wait(), and evicts all dynamic master roles under m.masterPoolMu.Lock() before closing sqlDB handles.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.5322
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.2647
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.5933
+        }
+      }
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 665-720, ExtractMasterOptionsCredentials reads fallback username and password from structured options_json while ignoring masked '***' and '__KEEP__' placeholders.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.2758
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3016
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7032
+        }
+      }
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "basis": "code",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 735-799, execUpdateConnectionAndSyncBindingsTx wraps connection_registry and master_binding updates in a single GORM transaction, and MasterRegistry.tsx re-exports MasterConnectionItem for backward compatibility.",
+      "decision": "UNVALIDATED",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.3131
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.1468
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.3545
+        }
+      }
+    }
+  ],
+  "gate": "PASS",
+  "summary_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/06_laya_summary_dg1_20261117T133400.json"
+}

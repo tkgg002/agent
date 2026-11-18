@@ -1,0 +1,75 @@
+{
+  "objective": "Kiểm định phương án chuẩn hóa duy nhất sau Post-Done Adversarial Audit (A1..A6): Atomic Dual-Cache Eviction trong m.masterPoolMu.Lock(), triệt tiêu race chunkEngine + nối RegisterOnStop(connectionManager.Close), tách file SRP NOW <= HEAD, chuẩn hóa Hexagonal Domain + CQRS Command + DB Transaction, fallback structured options_json credentials, và bổ sung 'does not exist on target database' vào isTransientError",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "solution",
+      "claim": "In connection_manager.go lines 463-476, InvalidatePool unlocks m.masterPoolMu before calling m.reg.EvictRole('master:'+key), leaving a race window where a concurrent GetMasterDB can retrieve the stale *gorm.DB from r.gormDBs['master:'+key] right before sqlDB.Close() closes it.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager.go",
+      "lines": "463-483"
+    },
+    {
+      "id": "S-FIX",
+      "kind": "solution",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 515-555, InvalidatePool calls m.reg.EvictRole('master:'+key) inside m.masterPoolMu.Lock() following the exact lock hierarchy m.masterPoolMu -> r.mu with zero network I/O under lock.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/09_tasks_solution_master_conn_edit_db_closed.md",
+      "lines": "515-560"
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "solution",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 496-506, splitting lifecycle, config-reload, recon-cache, persistence-options-sync, and frontend connection-form modules keeps every large file at or below its HEAD line count while preserving 100% backward compatibility.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/09_tasks_solution_master_conn_edit_db_closed.md",
+      "lines": "495-507"
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "solution",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 610-656, registerConfigReloadSubscribers is extracted to server_config_reload.go and registered after chunkEngine is constructed, while ws.RegisterOnStop(connectionManager.Close) is registered at LIFO index 0.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/09_tasks_solution_master_conn_edit_db_closed.md",
+      "lines": "609-657"
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 560-606, Close sets m.closed = true, closes m.stopCh, waits on m.wg.Wait(), and evicts all dynamic master roles under m.masterPoolMu.Lock() before closing sqlDB handles.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/09_tasks_solution_master_conn_edit_db_closed.md",
+      "lines": "560-607"
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 665-720, ExtractMasterOptionsCredentials reads fallback username and password from structured options_json while ignoring masked '***' and '__KEEP__' placeholders.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/09_tasks_solution_master_conn_edit_db_closed.md",
+      "lines": "660-725"
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 735-799, execUpdateConnectionAndSyncBindingsTx wraps connection_registry and master_binding updates in a single GORM transaction, and MasterRegistry.tsx re-exports MasterConnectionItem for backward compatibility.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/09_tasks_solution_master_conn_edit_db_closed.md",
+      "lines": "735-799"
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "kind": "control_true",
+      "claim": "In multi.go lines 151-175, PeekDB reads r.gormDBs under r.mu.RLock() and EvictRole never deletes RoleControlPlane, RoleShadow, or RoleDestination.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go",
+      "lines": "150-176"
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "kind": "control_false",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 515-555, InvalidatePool performs network SQL ping and sqlDB.Close() while holding m.masterPoolMu.Lock().",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/09_tasks_solution_master_conn_edit_db_closed.md",
+      "lines": "515-558"
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "kind": "control_false",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 665-715, ExtractMasterOptionsCredentials accepts '***' and '__KEEP__' as valid plaintext database passwords.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/09_tasks_solution_master_conn_edit_db_closed.md",
+      "lines": "665-715"
+    }
+  ]
+}

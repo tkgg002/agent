@@ -1,0 +1,75 @@
+{
+  "objective": "Kiểm định giải pháp S3 + Code Demo xử lý triệt để F1..F4: chặn fanout/debouncer realtime khi post_ingest tắt, xóa tức thì piCache + adapter qua NATS, khớp master_binding_id trên UI và mở khóa master_schema chứa dấu gạch ngang",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "solution",
+      "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 16-23, F1 shows that BatchBuffer checks post_ingest only at the shadow table level while TransmuteHandler and MasterBindingRepo filter only by mb.is_active and mb.schema_status without checking cdc_system.transmute_schedule.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+      "lines": "16-23"
+    },
+    {
+      "id": "S-FIX",
+      "kind": "solution",
+      "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 46-52, F1 through F4 map 1-to-1 onto FilterPostIngestEnabledIDs and IsPostIngestExplicitlyDisabled, NATS transmute.schedule.changed cache invalidation, masterScheduleUtils binding_id matching, and InvalidateConnectionAdapter.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+      "lines": "46-52"
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "solution",
+      "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 48-50, existing ListMasterTargetsByShadowIdentity and ListMasterTargetsByShadowTable methods are kept intact for bridge-oplog and heal while oversized files transmute_handler.go, MasterRegistry.tsx, and ReconPipelineGrid.tsx keep NOW <= HEAD.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+      "lines": "48-51"
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "solution",
+      "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 313-323, CreateTransmuteScheduleHandler preserves its existing constructor signature and adds a WithPublisher builder to publish transmute.schedule.changed.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+      "lines": "312-324"
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 83-90 and 212-220, isRealtimePostIngestTrigger matches batch-buffer, sinkworker, snapshot, kafka-consumer-hook, and snapshot-hook, and handleTransmuteShadowWithOutcome returns nil when filtered masterTargets is empty.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+      "lines": "83-91"
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 245-280, FlushPostIngestCache clears bb.piCache, InvalidateConnectionAdapter deletes 'master:' and 'shadow:' adapter entries, and postIngestEntryOnLookupError bounds stale.at using postIngestFailOpenTTL - postIngestCacheTTL.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+      "lines": "244-281"
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 326-369, transmute_schedule_handler skips schedNameRe validation on masterSchema when req.MasterBindingID > 0 and matchScheduleForMasterBinding filters by s.master_binding_id === bindingId when bindingId > 0.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+      "lines": "326-369"
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "kind": "control_true",
+      "claim": "In transmute_consumer_pool.go lines 347-353, when p.handler returns an error that is not ErrAsyncAckPending, finalizeJetStreamMessage is called with msg, hErr, and policy.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_consumer_pool.go",
+      "lines": "347-353"
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "kind": "control_false",
+      "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 83-90, isRealtimePostIngestTrigger returns true for bridge-oplog and heal triggers so manual oplog healing is blocked when post_ingest is disabled.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+      "lines": "83-91"
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "kind": "control_false",
+      "claim": "In 09_tasks_solution_master_realtime_off_db_closed.md lines 326-333, transmute_schedule_handler rejects every request with 400 invalid_master_schema whenever req.MasterBindingID is greater than 0.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-realtime-off-db-closed-2026-11-17/09_tasks_solution_master_realtime_off_db_closed.md",
+      "lines": "326-333"
+    }
+  ]
+}

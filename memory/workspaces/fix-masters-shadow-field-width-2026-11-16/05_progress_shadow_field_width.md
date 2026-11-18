@@ -1,0 +1,3 @@
+- [2026-11-16T16:06:21+07:00] [Agent:Claude Opus] START T1 fix Shadow Field column max-width (user direct order = APPROVE)
+- [2026-11-16T16:09:10+07:00] [Agent:Claude Opus] DG1 gate=PASS (S-RC1/S-FIX/S-IMPACT UNVALIDATED → kết luận bằng code đã grep/sed; lần 1 BLOCK do REF lệch dòng, đã sửa REF). START edit MasterMappingFieldsPage.tsx:723.
+- [2026-11-16T16:42:00+07:00] [Agent:Claude Opus] Edited +3 lines (width 260 + onCell maxWidth/break-all). tsc -b EV-20261116T164030-6c90 exit=0. DG3 PASS. DONE (visual check pending user).

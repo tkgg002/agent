@@ -1,0 +1,75 @@
+{
+  "objective": "Kiểm định giải pháp cập nhật sau Self-Healing S5d (bảo vệ m.closed mutex cho WaitGroup) và đồng bộ toàn trình Master Connection PostgreSQL",
+  "claims": [
+    {
+      "id": "S-RC",
+      "kind": "solution",
+      "claim": "In multi_dialector.go lines 31-37, OpenGormWithEngine returns the cached *gorm.DB from r.gormDBs[role] when non-nil, while InvalidatePool previously closed sqlDB without evicting r.gormDBs['master:'+key].",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi_dialector.go",
+      "lines": "31-38"
+    },
+    {
+      "id": "S-FIX",
+      "kind": "solution",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 52-64 and 107-120, EvictRole removes role from r.gormDBs while protecting RoleControlPlane, RoleShadow, and RoleDestination, and InvalidatePool calls m.reg.EvictRole('master:'+key).",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/09_tasks_solution_master_conn_edit_db_closed.md",
+      "lines": "51-127"
+    },
+    {
+      "id": "S-IMPACT",
+      "kind": "solution",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 295-327, syncMongoMasterBindingsDatabase updates only master_database for postgresql while preserving master_schema and physical_table_fqn.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/09_tasks_solution_master_conn_edit_db_closed.md",
+      "lines": "295-328"
+    },
+    {
+      "id": "S-PATTERN",
+      "kind": "solution",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 234-271, ReconCore and ChunkStreamBucketEngine expose InvalidateMasterAgent and are invoked inside the NATS connection.config.changed subscriber.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/09_tasks_solution_master_conn_edit_db_closed.md",
+      "lines": "234-272"
+    },
+    {
+      "id": "D-BEHAV",
+      "kind": "demo",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 129-185, retireGormPoolGracefully sets MaxIdleConns(0), guards m.wg.Add(1) with m.closed under m.mu.Lock(), and Close sets m.closed before calling m.wg.Wait().",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/09_tasks_solution_master_conn_edit_db_closed.md",
+      "lines": "129-186"
+    },
+    {
+      "id": "D-EDGE",
+      "kind": "demo",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 280-285, isTransientError matches 'database is closed' and 'failed to verify master table existence' to prevent false-positive poison pill splitting.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/09_tasks_solution_master_conn_edit_db_closed.md",
+      "lines": "279-286"
+    },
+    {
+      "id": "D-API",
+      "kind": "demo",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 350-432, MasterConnectionItem adds optional Username without exposing password, and UpdateConnection merges stored credentials via extractStoredMasterCredentials to always rebuild dsn.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/09_tasks_solution_master_conn_edit_db_closed.md",
+      "lines": "350-432"
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "kind": "control_true",
+      "claim": "In multi.go lines 19-23, RoleControlPlane equals 'cdc', RoleShadow equals 'shadow', and RoleDestination equals 'dest'.",
+      "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/pkgs/database/multi.go",
+      "lines": "19-23"
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "kind": "control_false",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 295-327, syncMongoMasterBindingsDatabase overwrites master_schema and physical_table_fqn with dbName for postgresql connections.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/09_tasks_solution_master_conn_edit_db_closed.md",
+      "lines": "295-328"
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "kind": "control_false",
+      "claim": "In 09_tasks_solution_master_conn_edit_db_closed.md lines 52-64, EvictRole deletes RoleControlPlane and RoleShadow from r.gormDBs.",
+      "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-master-connection-edit-db-closed-2026-11-17/09_tasks_solution_master_conn_edit_db_closed.md",
+      "lines": "51-65"
+    }
+  ]
+}

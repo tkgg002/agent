@@ -1,0 +1,2043 @@
+[
+  {
+    "id": "A-F1-RECON-SUBDOC-ONLY",
+    "kind": "claim",
+    "claim": "In recon_multi_shadow_b.go lines 158-217, shouldSkipMongoRowDiffRule calls isDenormalizedInMongoNestedSubDoc(mrow, col) so only columns whose normalized name matches a child or parent+child key inside a nested map[string]any sub-document are skipped.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go",
+    "lines": "158-217",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go:158-217\nfunc isDenormalizedInMongoNestedSubDoc(mrow map[string]any, targetCol string) bool {\n\tnormCol := normReconAlphaNum(targetCol)\n\tif normCol == \"\" {\n\t\treturn false\n\t}\n\tfor mk, mv := range mrow {\n\t\tif mk == \"_id\" || strings.HasPrefix(mk, \"_\") || mv == nil {\n\t\t\tcontinue\n\t\t}\n\t\tsubMap, ok := mv.(map[string]any)\n\t\tif !ok || len(subMap) == 0 {\n\t\t\tcontinue\n\t\t}\n\t\tnormParent := normReconAlphaNum(mk)\n\t\tfor ck, cv := range subMap {\n\t\t\tnormChild := normReconAlphaNum(ck)\n\t\t\tif normCol == normChild || (normParent != \"\" && normCol == normParent+normChild) {\n\t\t\t\treturn true\n\t\t\t}\n\t\t\tif subSub, okSub := cv.(map[string]any); okSub && len(subSub) > 0 {\n\t\t\t\tfor sck := range subSub {\n\t\t\t\t\tnormSubChild := normReconAlphaNum(sck)\n\t\t\t\t\tif normCol == normSubChild || normCol == normChild+normSubChild || (normParent != \"\" && normCol == normParent+normChild+normSubChild) {\n\t\t\t\t\t\treturn true\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\treturn false\n}\n\nfunc shouldSkipMongoRowDiffRule(isMongoMaster bool, mrow map[string]any, sourceField, targetCol string, expected any) bool {\n\tif !isMongoMaster {\n\t\treturn false\n\t}\n\tif master.IsJSONSubsetRule(sourceField) {\n\t\treturn true\n\t}\n\tif mrow == nil {\n\t\treturn false\n\t}\n\tcol := strings.TrimSpace(targetCol)\n\tif resolveMasterRowDiffVal(mrow, col) != nil {\n\t\treturn false\n\t}\n\tif expected == nil {\n\t\treturn true\n\t}\n\tif s, ok := expected.(string); ok && strings.TrimSpace(s) == \"\" {\n\t\treturn true\n\t}\n\tif b, ok := expected.(bool); ok && !b {\n\t\treturn true\n\t}\n\tif idVal, hasID := mrow[\"_id\"]; hasID && idVal != nil && fmt.Sprint(expected) == fmt.Sprint(idVal) {\n\t\treturn true\n\t}\n\treturn isDenormalizedInMongoNestedSubDoc(mrow, col)\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5070856364282204,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.5070856364282204,
+            "probabilities": {
+              "CORRECT": 0.5070856364282204,
+              "INCORRECT": 0.11741005757061873,
+              "UNSUPPORTED": 0.37550430600116086
+            },
+            "probs": {
+              "CORRECT": 0.5070856364282204,
+              "INCORRECT": 0.11741005757061873,
+              "UNSUPPORTED": 0.37550430600116086
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.5070856364282204,
+              "probabilities": {
+                "CORRECT": 0.5070856364282204,
+                "INCORRECT": 0.11741005757061873,
+                "UNSUPPORTED": 0.37550430600116086
+              },
+              "probs": {
+                "CORRECT": 0.5070856364282204,
+                "INCORRECT": 0.11741005757061873,
+                "UNSUPPORTED": 0.37550430600116086
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 914
+        },
+        "latency_ms": 53427.91,
+        "usage": {
+          "input_tokens": 914,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In recon_multi_shadow_b.go lines 158-217, shouldSkipMongoRowDiffRule calls isDenormalizedInMongoNestedSubDoc(mrow, col) so only columns whose normalized name matches a child or parent+child key inside a nested map[string]any sub-document are skipped.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go:158-217\nfunc isDenormalizedInMongoNestedSubDoc(mrow map[string]any, targetCol string) bool {\n\tnormCol := normReconAlphaNum(targetCol)\n\tif normCol == \"\" {\n\t\treturn false\n\t}\n\tfor mk, mv := range mrow {\n\t\tif mk == \"_id\" || strings.HasPrefix(mk, \"_\") || mv == nil {\n\t\t\tcontinue\n\t\t}\n\t\tsubMap, ok := mv.(map[string]any)\n\t\tif !ok || len(subMap) == 0 {\n\t\t\tcontinue\n\t\t}\n\t\tnormParent := normReconAlphaNum(mk)\n\t\tfor ck, cv := range subMap {\n\t\t\tnormChild := normReconAlphaNum(ck)\n\t\t\tif normCol == normChild || (normParent != \"\" && normCol == normParent+normChild) {\n\t\t\t\treturn true\n\t\t\t}\n\t\t\tif subSub, okSub := cv.(map[string]any); okSub && len(subSub) > 0 {\n\t\t\t\tfor sck := range subSub {\n\t\t\t\t\tnormSubChild := normReconAlphaNum(sck)\n\t\t\t\t\tif normCol == normSubChild || normCol == normChild+normSubChild || (normParent != \"\" && normCol == normParent+normChild+normSubChild) {\n\t\t\t\t\t\treturn true\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\treturn false\n}\n\nfunc shouldSkipMongoRowDiffRule(isMongoMaster bool, mrow map[string]any, sourceField, targetCol string, expected any) bool {\n\tif !isMongoMaster {\n\t\treturn false\n\t}\n\tif master.IsJSONSubsetRule(sourceField) {\n\t\treturn true\n\t}\n\tif mrow == nil {\n\t\treturn false\n\t}\n\tcol := strings.TrimSpace(targetCol)\n\tif resolveMasterRowDiffVal(mrow, col) != nil {\n\t\treturn false\n\t}\n\tif expected == nil {\n\t\treturn true\n\t}\n\tif s, ok := expected.(string); ok && strings.TrimSpace(s) == \"\" {\n\t\treturn true\n\t}\n\tif b, ok := expected.(bool); ok && !b {\n\t\treturn true\n\t}\n\tif idVal, hasID := mrow[\"_id\"]; hasID && idVal != nil && fmt.Sprint(expected) == fmt.Sprint(idVal) {\n\t\treturn true\n\t}\n\treturn isDenormalizedInMongoNestedSubDoc(mrow, col)\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5667726683554511,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.5667726683554511,
+            "probabilities": {
+              "CORRECT": 0.5667726683554511,
+              "INCORRECT": 0.15578894320234585,
+              "UNSUPPORTED": 0.2774383884422031
+            },
+            "probs": {
+              "CORRECT": 0.5667726683554511,
+              "INCORRECT": 0.15578894320234585,
+              "UNSUPPORTED": 0.2774383884422031
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.5667726683554511,
+              "probabilities": {
+                "CORRECT": 0.5667726683554511,
+                "INCORRECT": 0.15578894320234585,
+                "UNSUPPORTED": 0.2774383884422031
+              },
+              "probs": {
+                "CORRECT": 0.5667726683554511,
+                "INCORRECT": 0.15578894320234585,
+                "UNSUPPORTED": 0.2774383884422031
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 895
+        },
+        "latency_ms": 84098.23,
+        "usage": {
+          "input_tokens": 895,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go:158-217\nfunc isDenormalizedInMongoNestedSubDoc(mrow map[string]any, targetCol string) bool {\n\tnormCol := normReconAlphaNum(targetCol)\n\tif normCol == \"\" {\n\t\treturn false\n\t}\n\tfor mk, mv := range mrow {\n\t\tif mk == \"_id\" || strings.HasPrefix(mk, \"_\") || mv == nil {\n\t\t\tcontinue\n\t\t}\n\t\tsubMap, ok := mv.(map[string]any)\n\t\tif !ok || len(subMap) == 0 {\n\t\t\tcontinue\n\t\t}\n\t\tnormParent := normReconAlphaNum(mk)\n\t\tfor ck, cv := range subMap {\n\t\t\tnormChild := normReconAlphaNum(ck)\n\t\t\tif normCol == normChild || (normParent != \"\" && normCol == normParent+normChild) {\n\t\t\t\treturn true\n\t\t\t}\n\t\t\tif subSub, okSub := cv.(map[string]any); okSub && len(subSub) > 0 {\n\t\t\t\tfor sck := range subSub {\n\t\t\t\t\tnormSubChild := normReconAlphaNum(sck)\n\t\t\t\t\tif normCol == normSubChild || normCol == normChild+normSubChild || (normParent != \"\" && normCol == normParent+normChild+normSubChild) {\n\t\t\t\t\t\treturn true\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\treturn false\n}\n\nfunc shouldSkipMongoRowDiffRule(isMongoMaster bool, mrow map[string]any, sourceField, targetCol string, expected any) bool {\n\tif !isMongoMaster {\n\t\treturn false\n\t}\n\tif master.IsJSONSubsetRule(sourceField) {\n\t\treturn true\n\t}\n\tif mrow == nil {\n\t\treturn false\n\t}\n\tcol := strings.TrimSpace(targetCol)\n\tif resolveMasterRowDiffVal(mrow, col) != nil {\n\t\treturn false\n\t}\n\tif expected == nil {\n\t\treturn true\n\t}\n\tif s, ok := expected.(string); ok && strings.TrimSpace(s) == \"\" {\n\t\treturn true\n\t}\n\tif b, ok := expected.(bool); ok && !b {\n\t\treturn true\n\t}\n\tif idVal, hasID := mrow[\"_id\"]; hasID && idVal != nil && fmt.Sprint(expected) == fmt.Sprint(idVal) {\n\t\treturn true\n\t}\n\treturn isDenormalizedInMongoNestedSubDoc(mrow, col)\n}",
+          "claim": "In recon_multi_shadow_b.go lines 158-217, shouldSkipMongoRowDiffRule calls isDenormalizedInMongoNestedSubDoc(mrow, col) so only columns whose normalized name matches a child or parent+child key inside a nested map[string]any sub-document are skipped."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8186552073309695,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.8186552073309695,
+            "probabilities": {
+              "YES": 0.8186552073309695,
+              "NO": 0.18134479266903045
+            },
+            "probs": {
+              "YES": 0.8186552073309695,
+              "NO": 0.18134479266903045
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.8186552073309695,
+              "probabilities": {
+                "YES": 0.8186552073309695,
+                "NO": 0.18134479266903045
+              },
+              "probs": {
+                "YES": 0.8186552073309695,
+                "NO": 0.18134479266903045
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 808
+        },
+        "latency_ms": 85275.07,
+        "usage": {
+          "input_tokens": 808,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go:158-217\nfunc isDenormalizedInMongoNestedSubDoc(mrow map[string]any, targetCol string) bool {\n\tnormCol := normReconAlphaNum(targetCol)\n\tif normCol == \"\" {\n\t\treturn false\n\t}\n\tfor mk, mv := range mrow {\n\t\tif mk == \"_id\" || strings.HasPrefix(mk, \"_\") || mv == nil {\n\t\t\tcontinue\n\t\t}\n\t\tsubMap, ok := mv.(map[string]any)\n\t\tif !ok || len(subMap) == 0 {\n\t\t\tcontinue\n\t\t}\n\t\tnormParent := normReconAlphaNum(mk)\n\t\tfor ck, cv := range subMap {\n\t\t\tnormChild := normReconAlphaNum(ck)\n\t\t\tif normCol == normChild || (normParent != \"\" && normCol == normParent+normChild) {\n\t\t\t\treturn true\n\t\t\t}\n\t\t\tif subSub, okSub := cv.(map[string]any); okSub && len(subSub) > 0 {\n\t\t\t\tfor sck := range subSub {\n\t\t\t\t\tnormSubChild := normReconAlphaNum(sck)\n\t\t\t\t\tif normCol == normSubChild || normCol == normChild+normSubChild || (normParent != \"\" && normCol == normParent+normChild+normSubChild) {\n\t\t\t\t\t\treturn true\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\treturn false\n}\n\nfunc shouldSkipMongoRowDiffRule(isMongoMaster bool, mrow map[string]any, sourceField, targetCol string, expected any) bool {\n\tif !isMongoMaster {\n\t\treturn false\n\t}\n\tif master.IsJSONSubsetRule(sourceField) {\n\t\treturn true\n\t}\n\tif mrow == nil {\n\t\treturn false\n\t}\n\tcol := strings.TrimSpace(targetCol)\n\tif resolveMasterRowDiffVal(mrow, col) != nil {\n\t\treturn false\n\t}\n\tif expected == nil {\n\t\treturn true\n\t}\n\tif s, ok := expected.(string); ok && strings.TrimSpace(s) == \"\" {\n\t\treturn true\n\t}\n\tif b, ok := expected.(bool); ok && !b {\n\t\treturn true\n\t}\n\tif idVal, hasID := mrow[\"_id\"]; hasID && idVal != nil && fmt.Sprint(expected) == fmt.Sprint(idVal) {\n\t\treturn true\n\t}\n\treturn isDenormalizedInMongoNestedSubDoc(mrow, col)\n}",
+          "claim": "In recon_multi_shadow_b.go lines 158-217, shouldSkipMongoRowDiffRule calls isDenormalizedInMongoNestedSubDoc(mrow, col) so only columns whose normalized name matches a child or parent+child key inside a nested map[string]any sub-document are skipped."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-F2-BSON-DETERMINISTIC-ID",
+    "kind": "claim",
+    "claim": "In mongo_bson_restorer.go lines 97-125, promoteMongoDocumentID collects candidate *_id/*Id keys (excluding original_/sender_/receiver_/parent_ prefixes), sorts them deterministically prioritizing transaction_history_id, and promotes the first valid ObjectID.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go",
+    "lines": "97-125",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:97-125\n\tvar candKeys []string\n\tfor k, rawID := range doc {\n\t\tif strings.HasPrefix(k, \"_\") || rawID == nil {\n\t\t\tcontinue\n\t\t}\n\t\tlk := strings.ToLower(k)\n\t\tif strings.HasPrefix(lk, \"original_\") || strings.HasPrefix(lk, \"original\") ||\n\t\t\tstrings.HasPrefix(lk, \"sender_\") || strings.HasPrefix(lk, \"receiver_\") ||\n\t\t\tstrings.HasPrefix(lk, \"parent_\") {\n\t\t\tcontinue\n\t\t}\n\t\tif strings.HasSuffix(lk, \"_id\") || strings.HasSuffix(k, \"Id\") {\n\t\t\tcandKeys = append(candKeys, k)\n\t\t}\n\t}\n\tsort.Slice(candKeys, func(i, j int) bool {\n\t\tli, lj := strings.ToLower(candKeys[i]), strings.ToLower(candKeys[j])\n\t\tif (li == \"transaction_history_id\" || li == \"transactionhistoryid\") != (lj == \"transaction_history_id\" || lj == \"transactionhistoryid\") {\n\t\t\treturn li == \"transaction_history_id\" || li == \"transactionhistoryid\"\n\t\t}\n\t\treturn candKeys[i] < candKeys[j]\n\t})\n\tfor _, k := range candKeys {\n\t\tif oid, err := coerceObjectID(doc[k]); err == nil && !oid.IsZero() {\n\t\t\tdoc[\"_id\"] = oid\n\t\t\treturn\n\t\t}\n\t}\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4574681513471428,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.4574681513471428,
+            "probabilities": {
+              "CORRECT": 0.4574681513471428,
+              "INCORRECT": 0.11497901197486894,
+              "UNSUPPORTED": 0.4275528366779884
+            },
+            "probs": {
+              "CORRECT": 0.4574681513471428,
+              "INCORRECT": 0.11497901197486894,
+              "UNSUPPORTED": 0.4275528366779884
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.4574681513471428,
+              "probabilities": {
+                "CORRECT": 0.4574681513471428,
+                "INCORRECT": 0.11497901197486894,
+                "UNSUPPORTED": 0.4275528366779884
+              },
+              "probs": {
+                "CORRECT": 0.4574681513471428,
+                "INCORRECT": 0.11497901197486894,
+                "UNSUPPORTED": 0.4275528366779884
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 639
+        },
+        "latency_ms": 32298.27,
+        "usage": {
+          "input_tokens": 639,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In mongo_bson_restorer.go lines 97-125, promoteMongoDocumentID collects candidate *_id/*Id keys (excluding original_/sender_/receiver_/parent_ prefixes), sorts them deterministically prioritizing transaction_history_id, and promotes the first valid ObjectID.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:97-125\n\tvar candKeys []string\n\tfor k, rawID := range doc {\n\t\tif strings.HasPrefix(k, \"_\") || rawID == nil {\n\t\t\tcontinue\n\t\t}\n\t\tlk := strings.ToLower(k)\n\t\tif strings.HasPrefix(lk, \"original_\") || strings.HasPrefix(lk, \"original\") ||\n\t\t\tstrings.HasPrefix(lk, \"sender_\") || strings.HasPrefix(lk, \"receiver_\") ||\n\t\t\tstrings.HasPrefix(lk, \"parent_\") {\n\t\t\tcontinue\n\t\t}\n\t\tif strings.HasSuffix(lk, \"_id\") || strings.HasSuffix(k, \"Id\") {\n\t\t\tcandKeys = append(candKeys, k)\n\t\t}\n\t}\n\tsort.Slice(candKeys, func(i, j int) bool {\n\t\tli, lj := strings.ToLower(candKeys[i]), strings.ToLower(candKeys[j])\n\t\tif (li == \"transaction_history_id\" || li == \"transactionhistoryid\") != (lj == \"transaction_history_id\" || lj == \"transactionhistoryid\") {\n\t\t\treturn li == \"transaction_history_id\" || li == \"transactionhistoryid\"\n\t\t}\n\t\treturn candKeys[i] < candKeys[j]\n\t})\n\tfor _, k := range candKeys {\n\t\tif oid, err := coerceObjectID(doc[k]); err == nil && !oid.IsZero() {\n\t\t\tdoc[\"_id\"] = oid\n\t\t\treturn\n\t\t}\n\t}\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.51206311654329,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.51206311654329,
+            "probabilities": {
+              "CORRECT": 0.51206311654329,
+              "INCORRECT": 0.1590550030031966,
+              "UNSUPPORTED": 0.32888188045351346
+            },
+            "probs": {
+              "CORRECT": 0.51206311654329,
+              "INCORRECT": 0.1590550030031966,
+              "UNSUPPORTED": 0.32888188045351346
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.51206311654329,
+              "probabilities": {
+                "CORRECT": 0.51206311654329,
+                "INCORRECT": 0.1590550030031966,
+                "UNSUPPORTED": 0.32888188045351346
+              },
+              "probs": {
+                "CORRECT": 0.51206311654329,
+                "INCORRECT": 0.1590550030031966,
+                "UNSUPPORTED": 0.32888188045351346
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 620
+        },
+        "latency_ms": 2045.89,
+        "usage": {
+          "input_tokens": 620,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:97-125\n\tvar candKeys []string\n\tfor k, rawID := range doc {\n\t\tif strings.HasPrefix(k, \"_\") || rawID == nil {\n\t\t\tcontinue\n\t\t}\n\t\tlk := strings.ToLower(k)\n\t\tif strings.HasPrefix(lk, \"original_\") || strings.HasPrefix(lk, \"original\") ||\n\t\t\tstrings.HasPrefix(lk, \"sender_\") || strings.HasPrefix(lk, \"receiver_\") ||\n\t\t\tstrings.HasPrefix(lk, \"parent_\") {\n\t\t\tcontinue\n\t\t}\n\t\tif strings.HasSuffix(lk, \"_id\") || strings.HasSuffix(k, \"Id\") {\n\t\t\tcandKeys = append(candKeys, k)\n\t\t}\n\t}\n\tsort.Slice(candKeys, func(i, j int) bool {\n\t\tli, lj := strings.ToLower(candKeys[i]), strings.ToLower(candKeys[j])\n\t\tif (li == \"transaction_history_id\" || li == \"transactionhistoryid\") != (lj == \"transaction_history_id\" || lj == \"transactionhistoryid\") {\n\t\t\treturn li == \"transaction_history_id\" || li == \"transactionhistoryid\"\n\t\t}\n\t\treturn candKeys[i] < candKeys[j]\n\t})\n\tfor _, k := range candKeys {\n\t\tif oid, err := coerceObjectID(doc[k]); err == nil && !oid.IsZero() {\n\t\t\tdoc[\"_id\"] = oid\n\t\t\treturn\n\t\t}\n\t}\n}",
+          "claim": "In mongo_bson_restorer.go lines 97-125, promoteMongoDocumentID collects candidate *_id/*Id keys (excluding original_/sender_/receiver_/parent_ prefixes), sorts them deterministically prioritizing transaction_history_id, and promotes the first valid ObjectID."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8298567529675113,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.8298567529675113,
+            "probabilities": {
+              "YES": 0.8298567529675113,
+              "NO": 0.17014324703248876
+            },
+            "probs": {
+              "YES": 0.8298567529675113,
+              "NO": 0.17014324703248876
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.8298567529675113,
+              "probabilities": {
+                "YES": 0.8298567529675113,
+                "NO": 0.17014324703248876
+              },
+              "probs": {
+                "YES": 0.8298567529675113,
+                "NO": 0.17014324703248876
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 533
+        },
+        "latency_ms": 1293.17,
+        "usage": {
+          "input_tokens": 533,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/mongo_bson_restorer.go:97-125\n\tvar candKeys []string\n\tfor k, rawID := range doc {\n\t\tif strings.HasPrefix(k, \"_\") || rawID == nil {\n\t\t\tcontinue\n\t\t}\n\t\tlk := strings.ToLower(k)\n\t\tif strings.HasPrefix(lk, \"original_\") || strings.HasPrefix(lk, \"original\") ||\n\t\t\tstrings.HasPrefix(lk, \"sender_\") || strings.HasPrefix(lk, \"receiver_\") ||\n\t\t\tstrings.HasPrefix(lk, \"parent_\") {\n\t\t\tcontinue\n\t\t}\n\t\tif strings.HasSuffix(lk, \"_id\") || strings.HasSuffix(k, \"Id\") {\n\t\t\tcandKeys = append(candKeys, k)\n\t\t}\n\t}\n\tsort.Slice(candKeys, func(i, j int) bool {\n\t\tli, lj := strings.ToLower(candKeys[i]), strings.ToLower(candKeys[j])\n\t\tif (li == \"transaction_history_id\" || li == \"transactionhistoryid\") != (lj == \"transaction_history_id\" || lj == \"transactionhistoryid\") {\n\t\t\treturn li == \"transaction_history_id\" || li == \"transactionhistoryid\"\n\t\t}\n\t\treturn candKeys[i] < candKeys[j]\n\t})\n\tfor _, k := range candKeys {\n\t\tif oid, err := coerceObjectID(doc[k]); err == nil && !oid.IsZero() {\n\t\t\tdoc[\"_id\"] = oid\n\t\t\treturn\n\t\t}\n\t}\n}",
+          "claim": "In mongo_bson_restorer.go lines 97-125, promoteMongoDocumentID collects candidate *_id/*Id keys (excluding original_/sender_/receiver_/parent_ prefixes), sorts them deterministically prioritizing transaction_history_id, and promotes the first valid ObjectID."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-F2-SUBSET-CARRIER-DOCID-MATCH",
+    "kind": "claim",
+    "claim": "In transmuter_subset_array_utils.go lines 274-296, isValueSubsetCarrierMap requires normalizeMongoKeyString(rawSubID) == normalizeMongoKeyString(docID) when doc['_id'] is present so embedded business sub-documents with their own _id are preserved.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_subset_array_utils.go",
+    "lines": "274-296",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_subset_array_utils.go:274-296\nfunc isValueSubsetCarrierMap(doc bson.M, key string, raw any) bool {\n\tif key == \"\" || key == \"_id\" || strings.HasPrefix(key, \"_\") || raw == nil {\n\t\treturn false\n\t}\n\tm := decodeRawSubsetMap(raw)\n\tif len(m) < 2 {\n\t\treturn false\n\t}\n\trawSubID, hasID := m[\"_id\"]\n\tif !hasID || rawSubID == nil {\n\t\treturn false\n\t}\n\tif key == \"source_field_values\" || key == \"sourceFieldValues\" {\n\t\treturn true\n\t}\n\tif doc == nil {\n\t\treturn true\n\t}\n\tif docID, ok := doc[\"_id\"]; ok && docID != nil {\n\t\treturn normalizeMongoKeyString(rawSubID) == normalizeMongoKeyString(docID)\n\t}\n\treturn true\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4628972972093309,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.4628972972093309,
+            "probabilities": {
+              "CORRECT": 0.4628972972093309,
+              "INCORRECT": 0.13215322532233148,
+              "UNSUPPORTED": 0.4049494774683376
+            },
+            "probs": {
+              "CORRECT": 0.4628972972093309,
+              "INCORRECT": 0.13215322532233148,
+              "UNSUPPORTED": 0.4049494774683376
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.4628972972093309,
+              "probabilities": {
+                "CORRECT": 0.4628972972093309,
+                "INCORRECT": 0.13215322532233148,
+                "UNSUPPORTED": 0.4049494774683376
+              },
+              "probs": {
+                "CORRECT": 0.4628972972093309,
+                "INCORRECT": 0.13215322532233148,
+                "UNSUPPORTED": 0.4049494774683376
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 507
+        },
+        "latency_ms": 1194.76,
+        "usage": {
+          "input_tokens": 507,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In transmuter_subset_array_utils.go lines 274-296, isValueSubsetCarrierMap requires normalizeMongoKeyString(rawSubID) == normalizeMongoKeyString(docID) when doc['_id'] is present so embedded business sub-documents with their own _id are preserved.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_subset_array_utils.go:274-296\nfunc isValueSubsetCarrierMap(doc bson.M, key string, raw any) bool {\n\tif key == \"\" || key == \"_id\" || strings.HasPrefix(key, \"_\") || raw == nil {\n\t\treturn false\n\t}\n\tm := decodeRawSubsetMap(raw)\n\tif len(m) < 2 {\n\t\treturn false\n\t}\n\trawSubID, hasID := m[\"_id\"]\n\tif !hasID || rawSubID == nil {\n\t\treturn false\n\t}\n\tif key == \"source_field_values\" || key == \"sourceFieldValues\" {\n\t\treturn true\n\t}\n\tif doc == nil {\n\t\treturn true\n\t}\n\tif docID, ok := doc[\"_id\"]; ok && docID != nil {\n\t\treturn normalizeMongoKeyString(rawSubID) == normalizeMongoKeyString(docID)\n\t}\n\treturn true\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5022958607704483,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.5022958607704483,
+            "probabilities": {
+              "CORRECT": 0.5022958607704483,
+              "INCORRECT": 0.15207884121066337,
+              "UNSUPPORTED": 0.34562529801888836
+            },
+            "probs": {
+              "CORRECT": 0.5022958607704483,
+              "INCORRECT": 0.15207884121066337,
+              "UNSUPPORTED": 0.34562529801888836
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.5022958607704483,
+              "probabilities": {
+                "CORRECT": 0.5022958607704483,
+                "INCORRECT": 0.15207884121066337,
+                "UNSUPPORTED": 0.34562529801888836
+              },
+              "probs": {
+                "CORRECT": 0.5022958607704483,
+                "INCORRECT": 0.15207884121066337,
+                "UNSUPPORTED": 0.34562529801888836
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 488
+        },
+        "latency_ms": 1185.85,
+        "usage": {
+          "input_tokens": 488,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_subset_array_utils.go:274-296\nfunc isValueSubsetCarrierMap(doc bson.M, key string, raw any) bool {\n\tif key == \"\" || key == \"_id\" || strings.HasPrefix(key, \"_\") || raw == nil {\n\t\treturn false\n\t}\n\tm := decodeRawSubsetMap(raw)\n\tif len(m) < 2 {\n\t\treturn false\n\t}\n\trawSubID, hasID := m[\"_id\"]\n\tif !hasID || rawSubID == nil {\n\t\treturn false\n\t}\n\tif key == \"source_field_values\" || key == \"sourceFieldValues\" {\n\t\treturn true\n\t}\n\tif doc == nil {\n\t\treturn true\n\t}\n\tif docID, ok := doc[\"_id\"]; ok && docID != nil {\n\t\treturn normalizeMongoKeyString(rawSubID) == normalizeMongoKeyString(docID)\n\t}\n\treturn true\n}",
+          "claim": "In transmuter_subset_array_utils.go lines 274-296, isValueSubsetCarrierMap requires normalizeMongoKeyString(rawSubID) == normalizeMongoKeyString(docID) when doc['_id'] is present so embedded business sub-documents with their own _id are preserved."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8059999844223729,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.8059999844223729,
+            "probabilities": {
+              "YES": 0.8059999844223729,
+              "NO": 0.19400001557762714
+            },
+            "probs": {
+              "YES": 0.8059999844223729,
+              "NO": 0.19400001557762714
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.8059999844223729,
+              "probabilities": {
+                "YES": 0.8059999844223729,
+                "NO": 0.19400001557762714
+              },
+              "probs": {
+                "YES": 0.8059999844223729,
+                "NO": 0.19400001557762714
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 401
+        },
+        "latency_ms": 1127.14,
+        "usage": {
+          "input_tokens": 401,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/master/transmuter_subset_array_utils.go:274-296\nfunc isValueSubsetCarrierMap(doc bson.M, key string, raw any) bool {\n\tif key == \"\" || key == \"_id\" || strings.HasPrefix(key, \"_\") || raw == nil {\n\t\treturn false\n\t}\n\tm := decodeRawSubsetMap(raw)\n\tif len(m) < 2 {\n\t\treturn false\n\t}\n\trawSubID, hasID := m[\"_id\"]\n\tif !hasID || rawSubID == nil {\n\t\treturn false\n\t}\n\tif key == \"source_field_values\" || key == \"sourceFieldValues\" {\n\t\treturn true\n\t}\n\tif doc == nil {\n\t\treturn true\n\t}\n\tif docID, ok := doc[\"_id\"]; ok && docID != nil {\n\t\treturn normalizeMongoKeyString(rawSubID) == normalizeMongoKeyString(docID)\n\t}\n\treturn true\n}",
+          "claim": "In transmuter_subset_array_utils.go lines 274-296, isValueSubsetCarrierMap requires normalizeMongoKeyString(rawSubID) == normalizeMongoKeyString(docID) when doc['_id'] is present so embedded business sub-documents with their own _id are preserved."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-F3-ORPHAN-SKIP-LOCKED-AND-MAX-RETRY",
+    "kind": "claim",
+    "claim": "In snapshot_runner_lifecycle.go lines 240-310, recoverOrphanedSnapshots uses FOR UPDATE SKIP LOCKED and increments [auto-resume #N] up to repository.MaxOrphanAutoResumeAttempts (3) before transitioning poison-pill orphans to status = 'error'.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go",
+    "lines": "240-310",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:240-310\n\terr := r.db.WithContext(ctx).Raw(`\n\t\tSELECT id, source_object_id, shadow_binding_id, trace_id, status, COALESCE(error_msg, '') AS error_msg\n\t\tFROM cdc_system.snapshot_progress\n\t\tWHERE (\n\t\t\tstatus = 'running'\n\t\t\tAND updated_at < NOW() - INTERVAL '45 seconds'\n\t\t) OR (\n\t\t\tstatus = 'paused'\n\t\t\tAND error_msg LIKE 'paused by worker shutdown%'\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t) OR (\n\t\t\tstatus IN ('paused', 'error')\n\t\t\tAND error_msg LIKE '%Heartbeat timeout:%'\n\t\t\tAND last_seen_id IS NOT NULL\n\t\t\tAND last_seen_id <> ''\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t)\n\t\tORDER BY id ASC\n\t\tLIMIT 10\n\t\tFOR UPDATE SKIP LOCKED\n\t`).Scan(&rows).Error\n\tif err != nil || len(rows) == 0 {\n\t\treturn\n\t}\n\n\tfor _, row := range rows {\n\t\tif ctx.Err() != nil || r.stopping.Load() {\n\t\t\treturn\n\t\t}\n\t\tif r.isProgressActiveInMemory(row.ID) {\n\t\t\tcontinue\n\t\t}\n\t\tattempts := repository.ParseAutoResumeCount(row.ErrorMsg)\n\t\tisUngracefulOrphan := row.Status == \"running\" || strings.Contains(row.ErrorMsg, \"Heartbeat timeout:\")\n\t\tif isUngracefulOrphan {\n\t\t\tif attempts >= repository.MaxOrphanAutoResumeAttempts {\n\t\t\t\tfailMsg := fmt.Sprintf(\"FAILED: max orphan auto-resume attempts (%d) exceeded\", repository.MaxOrphanAutoResumeAttempts)\n\t\t\t\tif r.logger != nil {\n\t\t\t\t\tr.logger.Error(\"snapshot.v2 skipping poison-pill orphaned snapshot after max auto-resume attempts\",\n\t\t\t\t\t\tzap.Int64(\"progress_id\", row.ID),\n\t\t\t\t\t\tzap.Int64(\"source_object_id\", row.SourceObjectID),\n\t\t\t\t\t\tzap.Int(\"attempts\", attempts))\n\t\t\t\t}\n\t\t\t\t_ = r.db.WithContext(ctx).Exec(`\n\t\t\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\t\t\tSET status = 'error',\n\t\t\t\t\t    error_msg = ?,\n\t\t\t\t\t    finished_at = COALESCE(finished_at, NOW()),\n\t\t\t\t\t    updated_at = NOW()\n\t\t\t\t\tWHERE id = ? AND status IN ('running', 'paused', 'error')\n\t\t\t\t`, failMsg, row.ID).Error\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tattempts++\n\t\t}\n\t\tvar resumeNote interface{}\n\t\tif attempts > 0 {\n\t\t\tresumeNote = fmt.Sprintf(\"[auto-resume #%d]\", attempts)\n\t\t}\n\t\tres := r.db.WithContext(ctx).Exec(`\n\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\tSET status = 'paused',\n\t\t\t    error_msg = ?,\n\t\t\t    finished_at = NULL,\n\t\t\t    updated_at = NOW()\n\t\t\tWHERE id = ?\n\t\t\t  AND (\n\t\t\t      (status = 'running' AND updated_at < NOW() - INTERVAL '45 seconds')\n\t\t\t      OR (status = 'paused' AND error_msg LIKE 'paused by worker shutdown%')",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.525556311543231,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.525556311543231,
+            "probabilities": {
+              "CORRECT": 0.525556311543231,
+              "INCORRECT": 0.12059359423090212,
+              "UNSUPPORTED": 0.35385009422586694
+            },
+            "probs": {
+              "CORRECT": 0.525556311543231,
+              "INCORRECT": 0.12059359423090212,
+              "UNSUPPORTED": 0.35385009422586694
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.525556311543231,
+              "probabilities": {
+                "CORRECT": 0.525556311543231,
+                "INCORRECT": 0.12059359423090212,
+                "UNSUPPORTED": 0.35385009422586694
+              },
+              "probs": {
+                "CORRECT": 0.525556311543231,
+                "INCORRECT": 0.12059359423090212,
+                "UNSUPPORTED": 0.35385009422586694
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 1167
+        },
+        "latency_ms": 1571.51,
+        "usage": {
+          "input_tokens": 1167,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In snapshot_runner_lifecycle.go lines 240-310, recoverOrphanedSnapshots uses FOR UPDATE SKIP LOCKED and increments [auto-resume #N] up to repository.MaxOrphanAutoResumeAttempts (3) before transitioning poison-pill orphans to status = 'error'.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:240-310\n\terr := r.db.WithContext(ctx).Raw(`\n\t\tSELECT id, source_object_id, shadow_binding_id, trace_id, status, COALESCE(error_msg, '') AS error_msg\n\t\tFROM cdc_system.snapshot_progress\n\t\tWHERE (\n\t\t\tstatus = 'running'\n\t\t\tAND updated_at < NOW() - INTERVAL '45 seconds'\n\t\t) OR (\n\t\t\tstatus = 'paused'\n\t\t\tAND error_msg LIKE 'paused by worker shutdown%'\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t) OR (\n\t\t\tstatus IN ('paused', 'error')\n\t\t\tAND error_msg LIKE '%Heartbeat timeout:%'\n\t\t\tAND last_seen_id IS NOT NULL\n\t\t\tAND last_seen_id <> ''\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t)\n\t\tORDER BY id ASC\n\t\tLIMIT 10\n\t\tFOR UPDATE SKIP LOCKED\n\t`).Scan(&rows).Error\n\tif err != nil || len(rows) == 0 {\n\t\treturn\n\t}\n\n\tfor _, row := range rows {\n\t\tif ctx.Err() != nil || r.stopping.Load() {\n\t\t\treturn\n\t\t}\n\t\tif r.isProgressActiveInMemory(row.ID) {\n\t\t\tcontinue\n\t\t}\n\t\tattempts := repository.ParseAutoResumeCount(row.ErrorMsg)\n\t\tisUngracefulOrphan := row.Status == \"running\" || strings.Contains(row.ErrorMsg, \"Heartbeat timeout:\")\n\t\tif isUngracefulOrphan {\n\t\t\tif attempts >= repository.MaxOrphanAutoResumeAttempts {\n\t\t\t\tfailMsg := fmt.Sprintf(\"FAILED: max orphan auto-resume attempts (%d) exceeded\", repository.MaxOrphanAutoResumeAttempts)\n\t\t\t\tif r.logger != nil {\n\t\t\t\t\tr.logger.Error(\"snapshot.v2 skipping poison-pill orphaned snapshot after max auto-resume attempts\",\n\t\t\t\t\t\tzap.Int64(\"progress_id\", row.ID),\n\t\t\t\t\t\tzap.Int64(\"source_object_id\", row.SourceObjectID),\n\t\t\t\t\t\tzap.Int(\"attempts\", attempts))\n\t\t\t\t}\n\t\t\t\t_ = r.db.WithContext(ctx).Exec(`\n\t\t\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\t\t\tSET status = 'error',\n\t\t\t\t\t    error_msg = ?,\n\t\t\t\t\t    finished_at = COALESCE(finished_at, NOW()),\n\t\t\t\t\t    updated_at = NOW()\n\t\t\t\t\tWHERE id = ? AND status IN ('running', 'paused', 'error')\n\t\t\t\t`, failMsg, row.ID).Error\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tattempts++\n\t\t}\n\t\tvar resumeNote interface{}\n\t\tif attempts > 0 {\n\t\t\tresumeNote = fmt.Sprintf(\"[auto-resume #%d]\", attempts)\n\t\t}\n\t\tres := r.db.WithContext(ctx).Exec(`\n\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\tSET status = 'paused',\n\t\t\t    error_msg = ?,\n\t\t\t    finished_at = NULL,\n\t\t\t    updated_at = NOW()\n\t\t\tWHERE id = ?\n\t\t\t  AND (\n\t\t\t      (status = 'running' AND updated_at < NOW() - INTERVAL '45 seconds')\n\t\t\t      OR (status = 'paused' AND error_msg LIKE 'paused by worker shutdown%')",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4422030080636624,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.4422030080636624,
+            "probabilities": {
+              "CORRECT": 0.4422030080636624,
+              "INCORRECT": 0.21913151504434894,
+              "UNSUPPORTED": 0.3386654768919886
+            },
+            "probs": {
+              "CORRECT": 0.4422030080636624,
+              "INCORRECT": 0.21913151504434894,
+              "UNSUPPORTED": 0.3386654768919886
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": true,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.4422030080636624,
+              "probabilities": {
+                "CORRECT": 0.4422030080636624,
+                "INCORRECT": 0.21913151504434894,
+                "UNSUPPORTED": 0.3386654768919886
+              },
+              "probs": {
+                "CORRECT": 0.4422030080636624,
+                "INCORRECT": 0.21913151504434894,
+                "UNSUPPORTED": 0.3386654768919886
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": true,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 1148
+        },
+        "latency_ms": 2042.81,
+        "usage": {
+          "input_tokens": 1148,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:240-310\n\terr := r.db.WithContext(ctx).Raw(`\n\t\tSELECT id, source_object_id, shadow_binding_id, trace_id, status, COALESCE(error_msg, '') AS error_msg\n\t\tFROM cdc_system.snapshot_progress\n\t\tWHERE (\n\t\t\tstatus = 'running'\n\t\t\tAND updated_at < NOW() - INTERVAL '45 seconds'\n\t\t) OR (\n\t\t\tstatus = 'paused'\n\t\t\tAND error_msg LIKE 'paused by worker shutdown%'\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t) OR (\n\t\t\tstatus IN ('paused', 'error')\n\t\t\tAND error_msg LIKE '%Heartbeat timeout:%'\n\t\t\tAND last_seen_id IS NOT NULL\n\t\t\tAND last_seen_id <> ''\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t)\n\t\tORDER BY id ASC\n\t\tLIMIT 10\n\t\tFOR UPDATE SKIP LOCKED\n\t`).Scan(&rows).Error\n\tif err != nil || len(rows) == 0 {\n\t\treturn\n\t}\n\n\tfor _, row := range rows {\n\t\tif ctx.Err() != nil || r.stopping.Load() {\n\t\t\treturn\n\t\t}\n\t\tif r.isProgressActiveInMemory(row.ID) {\n\t\t\tcontinue\n\t\t}\n\t\tattempts := repository.ParseAutoResumeCount(row.ErrorMsg)\n\t\tisUngracefulOrphan := row.Status == \"running\" || strings.Contains(row.ErrorMsg, \"Heartbeat timeout:\")\n\t\tif isUngracefulOrphan {\n\t\t\tif attempts >= repository.MaxOrphanAutoResumeAttempts {\n\t\t\t\tfailMsg := fmt.Sprintf(\"FAILED: max orphan auto-resume attempts (%d) exceeded\", repository.MaxOrphanAutoResumeAttempts)\n\t\t\t\tif r.logger != nil {\n\t\t\t\t\tr.logger.Error(\"snapshot.v2 skipping poison-pill orphaned snapshot after max auto-resume attempts\",\n\t\t\t\t\t\tzap.Int64(\"progress_id\", row.ID),\n\t\t\t\t\t\tzap.Int64(\"source_object_id\", row.SourceObjectID),\n\t\t\t\t\t\tzap.Int(\"attempts\", attempts))\n\t\t\t\t}\n\t\t\t\t_ = r.db.WithContext(ctx).Exec(`\n\t\t\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\t\t\tSET status = 'error',\n\t\t\t\t\t    error_msg = ?,\n\t\t\t\t\t    finished_at = COALESCE(finished_at, NOW()),\n\t\t\t\t\t    updated_at = NOW()\n\t\t\t\t\tWHERE id = ? AND status IN ('running', 'paused', 'error')\n\t\t\t\t`, failMsg, row.ID).Error\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tattempts++\n\t\t}\n\t\tvar resumeNote interface{}\n\t\tif attempts > 0 {\n\t\t\tresumeNote = fmt.Sprintf(\"[auto-resume #%d]\", attempts)\n\t\t}\n\t\tres := r.db.WithContext(ctx).Exec(`\n\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\tSET status = 'paused',\n\t\t\t    error_msg = ?,\n\t\t\t    finished_at = NULL,\n\t\t\t    updated_at = NOW()\n\t\t\tWHERE id = ?\n\t\t\t  AND (\n\t\t\t      (status = 'running' AND updated_at < NOW() - INTERVAL '45 seconds')\n\t\t\t      OR (status = 'paused' AND error_msg LIKE 'paused by worker shutdown%')",
+          "claim": "In snapshot_runner_lifecycle.go lines 240-310, recoverOrphanedSnapshots uses FOR UPDATE SKIP LOCKED and increments [auto-resume #N] up to repository.MaxOrphanAutoResumeAttempts (3) before transitioning poison-pill orphans to status = 'error'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8220005143000603,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.8220005143000603,
+            "probabilities": {
+              "YES": 0.8220005143000603,
+              "NO": 0.1779994856999397
+            },
+            "probs": {
+              "YES": 0.8220005143000603,
+              "NO": 0.1779994856999397
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.8220005143000603,
+              "probabilities": {
+                "YES": 0.8220005143000603,
+                "NO": 0.1779994856999397
+              },
+              "probs": {
+                "YES": 0.8220005143000603,
+                "NO": 0.1779994856999397
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 1061
+        },
+        "latency_ms": 2478.99,
+        "usage": {
+          "input_tokens": 1061,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/orchestration/snapshot_runner_lifecycle.go:240-310\n\terr := r.db.WithContext(ctx).Raw(`\n\t\tSELECT id, source_object_id, shadow_binding_id, trace_id, status, COALESCE(error_msg, '') AS error_msg\n\t\tFROM cdc_system.snapshot_progress\n\t\tWHERE (\n\t\t\tstatus = 'running'\n\t\t\tAND updated_at < NOW() - INTERVAL '45 seconds'\n\t\t) OR (\n\t\t\tstatus = 'paused'\n\t\t\tAND error_msg LIKE 'paused by worker shutdown%'\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t) OR (\n\t\t\tstatus IN ('paused', 'error')\n\t\t\tAND error_msg LIKE '%Heartbeat timeout:%'\n\t\t\tAND last_seen_id IS NOT NULL\n\t\t\tAND last_seen_id <> ''\n\t\t\tAND (total_rows = 0 OR rows_processed < total_rows)\n\t\t\tAND updated_at > NOW() - INTERVAL '24 hours'\n\t\t)\n\t\tORDER BY id ASC\n\t\tLIMIT 10\n\t\tFOR UPDATE SKIP LOCKED\n\t`).Scan(&rows).Error\n\tif err != nil || len(rows) == 0 {\n\t\treturn\n\t}\n\n\tfor _, row := range rows {\n\t\tif ctx.Err() != nil || r.stopping.Load() {\n\t\t\treturn\n\t\t}\n\t\tif r.isProgressActiveInMemory(row.ID) {\n\t\t\tcontinue\n\t\t}\n\t\tattempts := repository.ParseAutoResumeCount(row.ErrorMsg)\n\t\tisUngracefulOrphan := row.Status == \"running\" || strings.Contains(row.ErrorMsg, \"Heartbeat timeout:\")\n\t\tif isUngracefulOrphan {\n\t\t\tif attempts >= repository.MaxOrphanAutoResumeAttempts {\n\t\t\t\tfailMsg := fmt.Sprintf(\"FAILED: max orphan auto-resume attempts (%d) exceeded\", repository.MaxOrphanAutoResumeAttempts)\n\t\t\t\tif r.logger != nil {\n\t\t\t\t\tr.logger.Error(\"snapshot.v2 skipping poison-pill orphaned snapshot after max auto-resume attempts\",\n\t\t\t\t\t\tzap.Int64(\"progress_id\", row.ID),\n\t\t\t\t\t\tzap.Int64(\"source_object_id\", row.SourceObjectID),\n\t\t\t\t\t\tzap.Int(\"attempts\", attempts))\n\t\t\t\t}\n\t\t\t\t_ = r.db.WithContext(ctx).Exec(`\n\t\t\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\t\t\tSET status = 'error',\n\t\t\t\t\t    error_msg = ?,\n\t\t\t\t\t    finished_at = COALESCE(finished_at, NOW()),\n\t\t\t\t\t    updated_at = NOW()\n\t\t\t\t\tWHERE id = ? AND status IN ('running', 'paused', 'error')\n\t\t\t\t`, failMsg, row.ID).Error\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tattempts++\n\t\t}\n\t\tvar resumeNote interface{}\n\t\tif attempts > 0 {\n\t\t\tresumeNote = fmt.Sprintf(\"[auto-resume #%d]\", attempts)\n\t\t}\n\t\tres := r.db.WithContext(ctx).Exec(`\n\t\t\tUPDATE cdc_system.snapshot_progress\n\t\t\tSET status = 'paused',\n\t\t\t    error_msg = ?,\n\t\t\t    finished_at = NULL,\n\t\t\t    updated_at = NOW()\n\t\t\tWHERE id = ?\n\t\t\t  AND (\n\t\t\t      (status = 'running' AND updated_at < NOW() - INTERVAL '45 seconds')\n\t\t\t      OR (status = 'paused' AND error_msg LIKE 'paused by worker shutdown%')",
+          "claim": "In snapshot_runner_lifecycle.go lines 240-310, recoverOrphanedSnapshots uses FOR UPDATE SKIP LOCKED and increments [auto-resume #N] up to repository.MaxOrphanAutoResumeAttempts (3) before transitioning poison-pill orphans to status = 'error'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-F4-CLICKHOUSE-STRING-JSONB-TF",
+    "kind": "claim",
+    "claim": "In update_column_metadata.go lines 94-97, isJSONOrJSONBType returns true for ClickHouse STRING (u == 'STRING') alongside JSON and JSONB so extjson_* and jsonb_passthrough transform_fn are preserved.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_column_metadata.go",
+    "lines": "94-97",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_column_metadata.go:94-97\nfunc isJSONOrJSONBType(dt string) bool {\n\tu := strings.ToUpper(strings.TrimSpace(dt))\n\treturn u == \"JSON\" || u == \"JSONB\" || u == \"STRING\" || strings.HasPrefix(u, \"JSON \") || strings.HasPrefix(u, \"JSONB \")\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.47996638542039993,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.47996638542039993,
+            "probabilities": {
+              "CORRECT": 0.3888263237593363,
+              "INCORRECT": 0.13120729082026392,
+              "UNSUPPORTED": 0.47996638542039993
+            },
+            "probs": {
+              "CORRECT": 0.3888263237593363,
+              "INCORRECT": 0.13120729082026392,
+              "UNSUPPORTED": 0.47996638542039993
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.47996638542039993,
+              "probabilities": {
+                "CORRECT": 0.3888263237593363,
+                "INCORRECT": 0.13120729082026392,
+                "UNSUPPORTED": 0.47996638542039993
+              },
+              "probs": {
+                "CORRECT": 0.3888263237593363,
+                "INCORRECT": 0.13120729082026392,
+                "UNSUPPORTED": 0.47996638542039993
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 347
+        },
+        "latency_ms": 2006.13,
+        "usage": {
+          "input_tokens": 347,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In update_column_metadata.go lines 94-97, isJSONOrJSONBType returns true for ClickHouse STRING (u == 'STRING') alongside JSON and JSONB so extjson_* and jsonb_passthrough transform_fn are preserved.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_column_metadata.go:94-97\nfunc isJSONOrJSONBType(dt string) bool {\n\tu := strings.ToUpper(strings.TrimSpace(dt))\n\treturn u == \"JSON\" || u == \"JSONB\" || u == \"STRING\" || strings.HasPrefix(u, \"JSON \") || strings.HasPrefix(u, \"JSONB \")\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.46895335081193323,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.46895335081193323,
+            "probabilities": {
+              "CORRECT": 0.36442359656851653,
+              "INCORRECT": 0.16662305261955032,
+              "UNSUPPORTED": 0.46895335081193323
+            },
+            "probs": {
+              "CORRECT": 0.36442359656851653,
+              "INCORRECT": 0.16662305261955032,
+              "UNSUPPORTED": 0.46895335081193323
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.46895335081193323,
+              "probabilities": {
+                "CORRECT": 0.36442359656851653,
+                "INCORRECT": 0.16662305261955032,
+                "UNSUPPORTED": 0.46895335081193323
+              },
+              "probs": {
+                "CORRECT": 0.36442359656851653,
+                "INCORRECT": 0.16662305261955032,
+                "UNSUPPORTED": 0.46895335081193323
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 328
+        },
+        "latency_ms": 1398.17,
+        "usage": {
+          "input_tokens": 328,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_column_metadata.go:94-97\nfunc isJSONOrJSONBType(dt string) bool {\n\tu := strings.ToUpper(strings.TrimSpace(dt))\n\treturn u == \"JSON\" || u == \"JSONB\" || u == \"STRING\" || strings.HasPrefix(u, \"JSON \") || strings.HasPrefix(u, \"JSONB \")\n}",
+          "claim": "In update_column_metadata.go lines 94-97, isJSONOrJSONBType returns true for ClickHouse STRING (u == 'STRING') alongside JSON and JSONB so extjson_* and jsonb_passthrough transform_fn are preserved."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8554280071563785,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.8554280071563785,
+            "probabilities": {
+              "YES": 0.8554280071563785,
+              "NO": 0.1445719928436215
+            },
+            "probs": {
+              "YES": 0.8554280071563785,
+              "NO": 0.1445719928436215
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.8554280071563785,
+              "probabilities": {
+                "YES": 0.8554280071563785,
+                "NO": 0.1445719928436215
+              },
+              "probs": {
+                "YES": 0.8554280071563785,
+                "NO": 0.1445719928436215
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 241
+        },
+        "latency_ms": 919.08,
+        "usage": {
+          "input_tokens": 241,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_column_metadata.go:94-97\nfunc isJSONOrJSONBType(dt string) bool {\n\tu := strings.ToUpper(strings.TrimSpace(dt))\n\treturn u == \"JSON\" || u == \"JSONB\" || u == \"STRING\" || strings.HasPrefix(u, \"JSON \") || strings.HasPrefix(u, \"JSONB \")\n}",
+          "claim": "In update_column_metadata.go lines 94-97, isJSONOrJSONBType returns true for ClickHouse STRING (u == 'STRING') alongside JSON and JSONB so extjson_* and jsonb_passthrough transform_fn are preserved."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In update_column_metadata.go lines 99-102, isJSONBTransformFn returns true when the trimmed function name starts with 'extjson_' or equals 'jsonb_passthrough'.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_column_metadata.go",
+    "lines": "94-102",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.6686047275734464,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.6686047275734464,
+            "probabilities": {
+              "CORRECT": 0.19105078618229307,
+              "INCORRECT": 0.1403444862442606,
+              "UNSUPPORTED": 0.6686047275734464
+            },
+            "probs": {
+              "CORRECT": 0.19105078618229307,
+              "INCORRECT": 0.1403444862442606,
+              "UNSUPPORTED": 0.6686047275734464
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": false,
+            "prediction_set": [
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.6686047275734464,
+              "probabilities": {
+                "CORRECT": 0.19105078618229307,
+                "INCORRECT": 0.1403444862442606,
+                "UNSUPPORTED": 0.6686047275734464
+              },
+              "probs": {
+                "CORRECT": 0.19105078618229307,
+                "INCORRECT": 0.1403444862442606,
+                "UNSUPPORTED": 0.6686047275734464
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": false,
+              "prediction_set": [
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 238
+        },
+        "latency_ms": 777.09,
+        "usage": {
+          "input_tokens": 238,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In update_column_metadata.go lines 99-102, isJSONBTransformFn returns true when the trimmed function name starts with 'extjson_' or equals 'jsonb_passthrough'.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.7382245430747332,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.7382245430747332,
+            "probabilities": {
+              "CORRECT": 0.13685436592736083,
+              "INCORRECT": 0.12492109099790591,
+              "UNSUPPORTED": 0.7382245430747332
+            },
+            "probs": {
+              "CORRECT": 0.13685436592736083,
+              "INCORRECT": 0.12492109099790591,
+              "UNSUPPORTED": 0.7382245430747332
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": false,
+            "prediction_set": [
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.7382245430747332,
+              "probabilities": {
+                "CORRECT": 0.13685436592736083,
+                "INCORRECT": 0.12492109099790591,
+                "UNSUPPORTED": 0.7382245430747332
+              },
+              "probs": {
+                "CORRECT": 0.13685436592736083,
+                "INCORRECT": 0.12492109099790591,
+                "UNSUPPORTED": 0.7382245430747332
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": false,
+              "prediction_set": [
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 219
+        },
+        "latency_ms": 693.8,
+        "usage": {
+          "input_tokens": 219,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In update_column_metadata.go lines 99-102, isJSONBTransformFn returns true when the trimmed function name starts with 'extjson_' or equals 'jsonb_passthrough'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7195050433756999,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.7195050433756999,
+            "probabilities": {
+              "YES": 0.7195050433756999,
+              "NO": 0.2804949566243002
+            },
+            "probs": {
+              "YES": 0.7195050433756999,
+              "NO": 0.2804949566243002
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES",
+              "NO"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.7195050433756999,
+              "probabilities": {
+                "YES": 0.7195050433756999,
+                "NO": 0.2804949566243002
+              },
+              "probs": {
+                "YES": 0.7195050433756999,
+                "NO": 0.2804949566243002
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES",
+                "NO"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 132
+        },
+        "latency_ms": 520.39,
+        "usage": {
+          "input_tokens": 132,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In update_column_metadata.go lines 99-102, isJSONBTransformFn returns true when the trimmed function name starts with 'extjson_' or equals 'jsonb_passthrough'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In recon_multi_shadow_b.go lines 190-217, shouldSkipMongoRowDiffRule always returns false when master.IsJSONSubsetRule(sourceField) is true.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/recon/recon_multi_shadow_b.go",
+    "lines": "190-217",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.49788254825556716,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.49788254825556716,
+            "probabilities": {
+              "CORRECT": 0.2290477625242278,
+              "INCORRECT": 0.2730696892202049,
+              "UNSUPPORTED": 0.49788254825556716
+            },
+            "probs": {
+              "CORRECT": 0.2290477625242278,
+              "INCORRECT": 0.2730696892202049,
+              "UNSUPPORTED": 0.49788254825556716
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "INCORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.49788254825556716,
+              "probabilities": {
+                "CORRECT": 0.2290477625242278,
+                "INCORRECT": 0.2730696892202049,
+                "UNSUPPORTED": 0.49788254825556716
+              },
+              "probs": {
+                "CORRECT": 0.2290477625242278,
+                "INCORRECT": 0.2730696892202049,
+                "UNSUPPORTED": 0.49788254825556716
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "INCORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 234
+        },
+        "latency_ms": 436.33,
+        "usage": {
+          "input_tokens": 234,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In recon_multi_shadow_b.go lines 190-217, shouldSkipMongoRowDiffRule always returns false when master.IsJSONSubsetRule(sourceField) is true.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.5815165419193885,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.5815165419193885,
+            "probabilities": {
+              "CORRECT": 0.1971786754817735,
+              "INCORRECT": 0.22130478259883787,
+              "UNSUPPORTED": 0.5815165419193885
+            },
+            "probs": {
+              "CORRECT": 0.1971786754817735,
+              "INCORRECT": 0.22130478259883787,
+              "UNSUPPORTED": 0.5815165419193885
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.5815165419193885,
+              "probabilities": {
+                "CORRECT": 0.1971786754817735,
+                "INCORRECT": 0.22130478259883787,
+                "UNSUPPORTED": 0.5815165419193885
+              },
+              "probs": {
+                "CORRECT": 0.1971786754817735,
+                "INCORRECT": 0.22130478259883787,
+                "UNSUPPORTED": 0.5815165419193885
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 215
+        },
+        "latency_ms": 420.88,
+        "usage": {
+          "input_tokens": 215,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In recon_multi_shadow_b.go lines 190-217, shouldSkipMongoRowDiffRule always returns false when master.IsJSONSubsetRule(sourceField) is true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7188241561911347,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.7188241561911347,
+            "probabilities": {
+              "YES": 0.7188241561911347,
+              "NO": 0.2811758438088653
+            },
+            "probs": {
+              "YES": 0.7188241561911347,
+              "NO": 0.2811758438088653
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": false,
+            "prediction_set": [
+              "YES",
+              "NO"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.7188241561911347,
+              "probabilities": {
+                "YES": 0.7188241561911347,
+                "NO": 0.2811758438088653
+              },
+              "probs": {
+                "YES": 0.7188241561911347,
+                "NO": 0.2811758438088653
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": false,
+              "prediction_set": [
+                "YES",
+                "NO"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 128
+        },
+        "latency_ms": 529.27,
+        "usage": {
+          "input_tokens": 128,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In recon_multi_shadow_b.go lines 190-217, shouldSkipMongoRowDiffRule always returns false when master.IsJSONSubsetRule(sourceField) is true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In update_column_metadata.go lines 94-97, isJSONOrJSONBType returns true only when dt is INTEGER or BIGINT.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_column_metadata.go",
+    "lines": "94-98",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.6065106656066482,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.6065106656066482,
+            "probabilities": {
+              "CORRECT": 0.20668182767524035,
+              "INCORRECT": 0.1868075067181114,
+              "UNSUPPORTED": 0.6065106656066482
+            },
+            "probs": {
+              "CORRECT": 0.20668182767524035,
+              "INCORRECT": 0.1868075067181114,
+              "UNSUPPORTED": 0.6065106656066482
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": false,
+            "prediction_set": [
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.6065106656066482,
+              "probabilities": {
+                "CORRECT": 0.20668182767524035,
+                "INCORRECT": 0.1868075067181114,
+                "UNSUPPORTED": 0.6065106656066482
+              },
+              "probs": {
+                "CORRECT": 0.20668182767524035,
+                "INCORRECT": 0.1868075067181114,
+                "UNSUPPORTED": 0.6065106656066482
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": false,
+              "prediction_set": [
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 227
+        },
+        "latency_ms": 572.2,
+        "usage": {
+          "input_tokens": 227,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In update_column_metadata.go lines 94-97, isJSONOrJSONBType returns true only when dt is INTEGER or BIGINT.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.7274667097499348,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.7274667097499348,
+            "probabilities": {
+              "CORRECT": 0.146729042120214,
+              "INCORRECT": 0.12580424812985125,
+              "UNSUPPORTED": 0.7274667097499348
+            },
+            "probs": {
+              "CORRECT": 0.146729042120214,
+              "INCORRECT": 0.12580424812985125,
+              "UNSUPPORTED": 0.7274667097499348
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": false,
+            "prediction_set": [
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.7274667097499348,
+              "probabilities": {
+                "CORRECT": 0.146729042120214,
+                "INCORRECT": 0.12580424812985125,
+                "UNSUPPORTED": 0.7274667097499348
+              },
+              "probs": {
+                "CORRECT": 0.146729042120214,
+                "INCORRECT": 0.12580424812985125,
+                "UNSUPPORTED": 0.7274667097499348
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": false,
+              "prediction_set": [
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 208
+        },
+        "latency_ms": 599.66,
+        "usage": {
+          "input_tokens": 208,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In update_column_metadata.go lines 94-97, isJSONOrJSONBType returns true only when dt is INTEGER or BIGINT."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6103449363152127,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.6103449363152127,
+            "probabilities": {
+              "YES": 0.6103449363152127,
+              "NO": 0.3896550636847874
+            },
+            "probs": {
+              "YES": 0.6103449363152127,
+              "NO": 0.3896550636847874
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES",
+              "NO"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.6103449363152127,
+              "probabilities": {
+                "YES": 0.6103449363152127,
+                "NO": 0.3896550636847874
+              },
+              "probs": {
+                "YES": 0.6103449363152127,
+                "NO": 0.3896550636847874
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES",
+                "NO"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 121
+        },
+        "latency_ms": 506.07,
+        "usage": {
+          "input_tokens": 121,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In update_column_metadata.go lines 94-97, isJSONOrJSONBType returns true only when dt is INTEGER or BIGINT."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

@@ -1,0 +1,314 @@
+{
+  "mode": "claim",
+  "stage": "dg3",
+  "workspace": "review-export-GP2-4633",
+  "ts": "20261118T101555",
+  "engine_url": "http://127.0.0.1:8222/v1/predict",
+  "engine_mode": "auto",
+  "trusted_rounds": [
+    "r3"
+  ],
+  "raw_file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/review-export-GP2-4633/06_laya_raw_dg3_20261118T101555.json",
+  "claims": [
+    {
+      "id": "R2-F1-LINT-ARROW-PARENS",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "buildFilter filters statuses with the arrow function `(s) => s === STATUS_SUCCESS`, whose parenthesised single argument violates the repo rule arrow-parens: as-needed (eslint reports 38:59 error).",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4543
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3875
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8725
+        }
+      }
+    },
+    {
+      "id": "R2-D1-MODELS-HARDCODED-BYPASS-SOURCE-HELPER",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "PartnerUserReserveExport.getRequiredModelName returns the literal array ['TransHisModel', 'MerchantModel'], whereas the canonical sibling adapter InternalTransferExport returns transHisModelNames() so that the required model follows TRANS_HIS_EXPORT_SOURCE.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4236
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4149
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.833
+        }
+      }
+    },
+    {
+      "id": "R2-D2-FACTORY-REGISTERS-OUTSIDE-SOURCE-SWITCH",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "QueryHandlerFactory registers GetAllPartnerUserReserveExportQuery to the Mongo handler unconditionally, on the line before and outside the getTransHisExportSource() === 'postgres' branch that switches the other trans-his export handlers.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4362
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4004
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8468
+        }
+      }
+    },
+    {
+      "id": "R2-D3-QUERY-DROPS-SELECT-PARAM",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "GetAllPartnerUserReserveExportQuery has only filter and sort, while the canonical GetAllTransHisExportQuery also carries a select projection parameter, so the new handler hardcodes its projection in the handler (SELECT_FIELDS) instead of receiving it from the query like the canonical export pure does.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.379
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4653
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.718
+        }
+      }
+    },
+    {
+      "id": "R2-D4-DATE-VALIDATOR-COPY-PASTE",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "The params file declares its own private ExceedDateRangeValidator class, a copy of the same class already declared in other params files of the repo, instead of reusing one shared validator.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4082
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3787
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7247
+        }
+      }
+    },
+    {
+      "id": "R2-D5-PARAMS-NOT-EXTENDING-BASE",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "PartnerUserReserveExportParams is a new standalone class that re-declares dateFr, dateTo, status, sortBy, sortType, instead of extending TransHisExportParams as the canonical InternalTransferExportParams does.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.4426
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4992
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8999
+        }
+      }
+    },
+    {
+      "id": "R2-L1-SKIP-OFFSET-NO-TIEBREAK",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "GetAllPartnerUserReserveExportHandler pages with find(filter).sort(sort).select().limit(limit) and skip(cursor) over a sort that has no _id tie-breaker (default sort is only createdAt: -1), so rows inserted during the export or ties on createdAt can duplicate or drop rows between chunks.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4345
+        },
+        "r2": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.406
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7446
+        }
+      }
+    },
+    {
+      "id": "R2-L2-STATUS-SPLIT-NO-TRIM",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "buildFilter splits params.status with String(params.status).split(',') without trimming, while statusAfter on the next lines is trimmed with .map((s) => s.trim()).",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4084
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3832
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7848
+        }
+      }
+    },
+    {
+      "id": "R2-L3-DATE-RANGE-ALLOWS-NEGATIVE",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "ExceedDateRangeValidator only checks dateDiff <= MAX_DAYS_EXPORT and therefore accepts a dateTo earlier than dateFr (negative dateDiff).",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4489
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4301
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.752
+        }
+      }
+    },
+    {
+      "id": "R2-L4-FILENAME-NO-UTCOFFSET",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "getConfig builds fileName with moment().format('DD-MM-YYYY') without .utcOffset(7), whereas transformRow formats createdAt with moment(item.createdAt).utcOffset(7).",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.416
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3948
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7798
+        }
+      }
+    },
+    {
+      "id": "R2-L5-FLOAT-BALANCE-AFTER",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "reserveBalance computes the balance after as `before - amount` or `before + amount` on JavaScript numbers produced by Number(raw).",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.546
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.4136
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.8572
+        }
+      }
+    },
+    {
+      "id": "R2-OK-SAFETEXT-FORMULA",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "safeText prefixes a single quote to any text starting with =, +, -, @, tab or CR, and transformRow wraps user-controlled text cells (customerId, partnerUserId, phone, fullName, merchantCode, noted) with safeText.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "CORRECT",
+          "confidence": 0.4973
+        },
+        "r2": {
+          "choice": "CORRECT",
+          "confidence": 0.3658
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.9126
+        }
+      }
+    },
+    {
+      "id": "R2-OK-WIRING-REGISTERED",
+      "kind": "claim",
+      "basis": "code",
+      "claim": "PartnerUserReserveExport is exported in the object at the end of logics/index.ts, which ExportLogic iterates (Object.keys(AllProcessors)) to build processorMap, so the exportType lookup finds it without editing export.logic.ts.",
+      "decision": "ACCEPT",
+      "resolved": null,
+      "evidence_error": "",
+      "rounds": {
+        "r1": {
+          "choice": "UNSUPPORTED",
+          "confidence": 0.3653
+        },
+        "r2": {
+          "choice": "INCORRECT",
+          "confidence": 0.4339
+        },
+        "r3": {
+          "choice": "YES",
+          "confidence": 0.7582
+        }
+      }
+    }
+  ],
+  "gate": "PASS"
+}

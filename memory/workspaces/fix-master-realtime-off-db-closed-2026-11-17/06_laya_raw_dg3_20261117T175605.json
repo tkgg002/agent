@@ -1,0 +1,1376 @@
+[
+  {
+    "id": "A-F1-GATE",
+    "kind": "claim",
+    "claim": "In transmute_realtime_gate.go lines 14-97, isRealtimePostIngestTrigger matches batch-buffer, sinkworker, snapshot, kafka-consumer-hook, and snapshot-hook, filterRealtimeMasterTargets collects non-zero target IDs and filters via FilterPostIngestEnabledIDs, and shouldSkipDisabledRealtimeBatch checks IsPostIngestExplicitlyDisabled.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_realtime_gate.go",
+    "lines": "14-97",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_realtime_gate.go:14-97\nfunc isRealtimePostIngestTrigger(triggeredBy string) bool {\n\tswitch strings.TrimSpace(triggeredBy) {\n\tcase \"batch-buffer\", \"sinkworker\", \"snapshot\", \"kafka-consumer-hook\", \"snapshot-hook\":\n\t\treturn true\n\tdefault:\n\t\treturn false\n\t}\n}\n\nfunc (h *TransmuteHandler) resolveMasterTargets(\n\tctx context.Context,\n\tshadowTable, shadowSchema, shadowConnectionKey, shadowBindingCode string,\n) ([]repomaster.MasterTargetIdentity, error) {\n\tif h.masterBindingRepo == nil {\n\t\treturn nil, nil\n\t}\n\tif shadowBindingCode != \"\" || shadowSchema != \"\" || shadowConnectionKey != \"\" {\n\t\ttargets, err := h.masterBindingRepo.ListMasterTargetsByShadowIdentity(\n\t\t\tctx,\n\t\t\tshadowTable,\n\t\t\tshadowSchema,\n\t\t\tshadowConnectionKey,\n\t\t\tshadowBindingCode,\n\t\t)\n\t\tif err != nil {\n\t\t\tobservability.Ctx(ctx, h.logger).Warn(\"transmute-shadow: identity-aware master lookup failed\",\n\t\t\t\tzap.String(\"shadow\", shadowTable),\n\t\t\t\tzap.String(\"shadow_schema\", shadowSchema),\n\t\t\t\tzap.String(\"shadow_connection_key\", shadowConnectionKey),\n\t\t\t\tzap.Error(err))\n\t\t\treturn nil, err\n\t\t}\n\t\treturn targets, nil\n\t}\n\ttargets, err := h.masterBindingRepo.ListMasterTargetsByShadowTable(ctx, shadowTable)\n\tif err != nil {\n\t\tobservability.Ctx(ctx, h.logger).Warn(\"transmute-shadow: master lookup failed\",\n\t\t\tzap.String(\"shadow\", shadowTable), zap.Error(err))\n\t\treturn nil, err\n\t}\n\treturn targets, nil\n}\n\nfunc (h *TransmuteHandler) filterRealtimeMasterTargets(\n\tctx context.Context,\n\ttargets []repomaster.MasterTargetIdentity,\n) ([]repomaster.MasterTargetIdentity, error) {\n\tif len(targets) == 0 || h.masterBindingRepo == nil {\n\t\treturn targets, nil\n\t}\n\tids := make([]int64, 0, len(targets))\n\tfor _, t := range targets {\n\t\tif t.ID != 0 {\n\t\t\tids = append(ids, t.ID)\n\t\t}\n\t}\n\tif len(ids) == 0 {\n\t\treturn targets, nil\n\t}\n\tenabledMap, err := h.masterBindingRepo.FilterPostIngestEnabledIDs(ctx, ids)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tfiltered := make([]repomaster.MasterTargetIdentity, 0, len(targets))\n\tfor _, t := range targets {\n\t\tif enabledMap[t.ID] {\n\t\t\tfiltered = append(filtered, t)\n\t\t}\n\t}\n\treturn filtered, nil\n}\n\nfunc (h *TransmuteHandler) shouldSkipDisabledRealtimeBatch(ctx context.Context, masterBindingID int64, triggeredBy string) bool {\n\tif masterBindingID == 0 || h.masterBindingRepo == nil {\n\t\treturn false\n\t}\n\tif triggeredBy != \"kafka-consumer-hook\" && triggeredBy != \"snapshot-hook\" {\n\t\treturn false\n\t}\n\tcheckCtx, cancel := context.WithTimeout(ctx, 2*time.Second)\n\tdefer cancel()\n\tdisabled, err := h.masterBindingRepo.IsPostIngestExplicitlyDisabled(checkCtx, masterBindingID)\n\treturn err == nil && disabled\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.369,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7358,
+                "INCORRECT": 0.2222,
+                "UNSUPPORTED": 0.042
+              },
+              "confidence": 0.369,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmute_realtime_gate.go lines 14-97, isRealtimePostIngestTrigger matches batch-buffer, sinkworker, snapshot, kafka-consumer-hook, and snapshot-hook, filterRealtimeMasterTargets collects non-zero target IDs and filters via FilterPostIngestEnabledIDs, and shouldSkipDisabledRealtimeBatch checks IsPostIngestExplicitlyDisabled.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_realtime_gate.go:14-97\nfunc isRealtimePostIngestTrigger(triggeredBy string) bool {\n\tswitch strings.TrimSpace(triggeredBy) {\n\tcase \"batch-buffer\", \"sinkworker\", \"snapshot\", \"kafka-consumer-hook\", \"snapshot-hook\":\n\t\treturn true\n\tdefault:\n\t\treturn false\n\t}\n}\n\nfunc (h *TransmuteHandler) resolveMasterTargets(\n\tctx context.Context,\n\tshadowTable, shadowSchema, shadowConnectionKey, shadowBindingCode string,\n) ([]repomaster.MasterTargetIdentity, error) {\n\tif h.masterBindingRepo == nil {\n\t\treturn nil, nil\n\t}\n\tif shadowBindingCode != \"\" || shadowSchema != \"\" || shadowConnectionKey != \"\" {\n\t\ttargets, err := h.masterBindingRepo.ListMasterTargetsByShadowIdentity(\n\t\t\tctx,\n\t\t\tshadowTable,\n\t\t\tshadowSchema,\n\t\t\tshadowConnectionKey,\n\t\t\tshadowBindingCode,\n\t\t)\n\t\tif err != nil {\n\t\t\tobservability.Ctx(ctx, h.logger).Warn(\"transmute-shadow: identity-aware master lookup failed\",\n\t\t\t\tzap.String(\"shadow\", shadowTable),\n\t\t\t\tzap.String(\"shadow_schema\", shadowSchema),\n\t\t\t\tzap.String(\"shadow_connection_key\", shadowConnectionKey),\n\t\t\t\tzap.Error(err))\n\t\t\treturn nil, err\n\t\t}\n\t\treturn targets, nil\n\t}\n\ttargets, err := h.masterBindingRepo.ListMasterTargetsByShadowTable(ctx, shadowTable)\n\tif err != nil {\n\t\tobservability.Ctx(ctx, h.logger).Warn(\"transmute-shadow: master lookup failed\",\n\t\t\tzap.String(\"shadow\", shadowTable), zap.Error(err))\n\t\treturn nil, err\n\t}\n\treturn targets, nil\n}\n\nfunc (h *TransmuteHandler) filterRealtimeMasterTargets(\n\tctx context.Context,\n\ttargets []repomaster.MasterTargetIdentity,\n) ([]repomaster.MasterTargetIdentity, error) {\n\tif len(targets) == 0 || h.masterBindingRepo == nil {\n\t\treturn targets, nil\n\t}\n\tids := make([]int64, 0, len(targets))\n\tfor _, t := range targets {\n\t\tif t.ID != 0 {\n\t\t\tids = append(ids, t.ID)\n\t\t}\n\t}\n\tif len(ids) == 0 {\n\t\treturn targets, nil\n\t}\n\tenabledMap, err := h.masterBindingRepo.FilterPostIngestEnabledIDs(ctx, ids)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tfiltered := make([]repomaster.MasterTargetIdentity, 0, len(targets))\n\tfor _, t := range targets {\n\t\tif enabledMap[t.ID] {\n\t\t\tfiltered = append(filtered, t)\n\t\t}\n\t}\n\treturn filtered, nil\n}\n\nfunc (h *TransmuteHandler) shouldSkipDisabledRealtimeBatch(ctx context.Context, masterBindingID int64, triggeredBy string) bool {\n\tif masterBindingID == 0 || h.masterBindingRepo == nil {\n\t\treturn false\n\t}\n\tif triggeredBy != \"kafka-consumer-hook\" && triggeredBy != \"snapshot-hook\" {\n\t\treturn false\n\t}\n\tcheckCtx, cancel := context.WithTimeout(ctx, 2*time.Second)\n\tdefer cancel()\n\tdisabled, err := h.masterBindingRepo.IsPostIngestExplicitlyDisabled(checkCtx, masterBindingID)\n\treturn err == nil && disabled\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.1499,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5866,
+                "INCORRECT": 0.2852,
+                "UNSUPPORTED": 0.1281
+              },
+              "confidence": 0.1499,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_realtime_gate.go:14-97\nfunc isRealtimePostIngestTrigger(triggeredBy string) bool {\n\tswitch strings.TrimSpace(triggeredBy) {\n\tcase \"batch-buffer\", \"sinkworker\", \"snapshot\", \"kafka-consumer-hook\", \"snapshot-hook\":\n\t\treturn true\n\tdefault:\n\t\treturn false\n\t}\n}\n\nfunc (h *TransmuteHandler) resolveMasterTargets(\n\tctx context.Context,\n\tshadowTable, shadowSchema, shadowConnectionKey, shadowBindingCode string,\n) ([]repomaster.MasterTargetIdentity, error) {\n\tif h.masterBindingRepo == nil {\n\t\treturn nil, nil\n\t}\n\tif shadowBindingCode != \"\" || shadowSchema != \"\" || shadowConnectionKey != \"\" {\n\t\ttargets, err := h.masterBindingRepo.ListMasterTargetsByShadowIdentity(\n\t\t\tctx,\n\t\t\tshadowTable,\n\t\t\tshadowSchema,\n\t\t\tshadowConnectionKey,\n\t\t\tshadowBindingCode,\n\t\t)\n\t\tif err != nil {\n\t\t\tobservability.Ctx(ctx, h.logger).Warn(\"transmute-shadow: identity-aware master lookup failed\",\n\t\t\t\tzap.String(\"shadow\", shadowTable),\n\t\t\t\tzap.String(\"shadow_schema\", shadowSchema),\n\t\t\t\tzap.String(\"shadow_connection_key\", shadowConnectionKey),\n\t\t\t\tzap.Error(err))\n\t\t\treturn nil, err\n\t\t}\n\t\treturn targets, nil\n\t}\n\ttargets, err := h.masterBindingRepo.ListMasterTargetsByShadowTable(ctx, shadowTable)\n\tif err != nil {\n\t\tobservability.Ctx(ctx, h.logger).Warn(\"transmute-shadow: master lookup failed\",\n\t\t\tzap.String(\"shadow\", shadowTable), zap.Error(err))\n\t\treturn nil, err\n\t}\n\treturn targets, nil\n}\n\nfunc (h *TransmuteHandler) filterRealtimeMasterTargets(\n\tctx context.Context,\n\ttargets []repomaster.MasterTargetIdentity,\n) ([]repomaster.MasterTargetIdentity, error) {\n\tif len(targets) == 0 || h.masterBindingRepo == nil {\n\t\treturn targets, nil\n\t}\n\tids := make([]int64, 0, len(targets))\n\tfor _, t := range targets {\n\t\tif t.ID != 0 {\n\t\t\tids = append(ids, t.ID)\n\t\t}\n\t}\n\tif len(ids) == 0 {\n\t\treturn targets, nil\n\t}\n\tenabledMap, err := h.masterBindingRepo.FilterPostIngestEnabledIDs(ctx, ids)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tfiltered := make([]repomaster.MasterTargetIdentity, 0, len(targets))\n\tfor _, t := range targets {\n\t\tif enabledMap[t.ID] {\n\t\t\tfiltered = append(filtered, t)\n\t\t}\n\t}\n\treturn filtered, nil\n}\n\nfunc (h *TransmuteHandler) shouldSkipDisabledRealtimeBatch(ctx context.Context, masterBindingID int64, triggeredBy string) bool {\n\tif masterBindingID == 0 || h.masterBindingRepo == nil {\n\t\treturn false\n\t}\n\tif triggeredBy != \"kafka-consumer-hook\" && triggeredBy != \"snapshot-hook\" {\n\t\treturn false\n\t}\n\tcheckCtx, cancel := context.WithTimeout(ctx, 2*time.Second)\n\tdefer cancel()\n\tdisabled, err := h.masterBindingRepo.IsPostIngestExplicitlyDisabled(checkCtx, masterBindingID)\n\treturn err == nil && disabled\n}",
+          "claim": "In transmute_realtime_gate.go lines 14-97, isRealtimePostIngestTrigger matches batch-buffer, sinkworker, snapshot, kafka-consumer-hook, and snapshot-hook, filterRealtimeMasterTargets collects non-zero target IDs and filters via FilterPostIngestEnabledIDs, and shouldSkipDisabledRealtimeBatch checks IsPostIngestExplicitlyDisabled."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6868,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9436,
+                "NO": 0.0564
+              },
+              "confidence": 0.6868,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_realtime_gate.go:14-97\nfunc isRealtimePostIngestTrigger(triggeredBy string) bool {\n\tswitch strings.TrimSpace(triggeredBy) {\n\tcase \"batch-buffer\", \"sinkworker\", \"snapshot\", \"kafka-consumer-hook\", \"snapshot-hook\":\n\t\treturn true\n\tdefault:\n\t\treturn false\n\t}\n}\n\nfunc (h *TransmuteHandler) resolveMasterTargets(\n\tctx context.Context,\n\tshadowTable, shadowSchema, shadowConnectionKey, shadowBindingCode string,\n) ([]repomaster.MasterTargetIdentity, error) {\n\tif h.masterBindingRepo == nil {\n\t\treturn nil, nil\n\t}\n\tif shadowBindingCode != \"\" || shadowSchema != \"\" || shadowConnectionKey != \"\" {\n\t\ttargets, err := h.masterBindingRepo.ListMasterTargetsByShadowIdentity(\n\t\t\tctx,\n\t\t\tshadowTable,\n\t\t\tshadowSchema,\n\t\t\tshadowConnectionKey,\n\t\t\tshadowBindingCode,\n\t\t)\n\t\tif err != nil {\n\t\t\tobservability.Ctx(ctx, h.logger).Warn(\"transmute-shadow: identity-aware master lookup failed\",\n\t\t\t\tzap.String(\"shadow\", shadowTable),\n\t\t\t\tzap.String(\"shadow_schema\", shadowSchema),\n\t\t\t\tzap.String(\"shadow_connection_key\", shadowConnectionKey),\n\t\t\t\tzap.Error(err))\n\t\t\treturn nil, err\n\t\t}\n\t\treturn targets, nil\n\t}\n\ttargets, err := h.masterBindingRepo.ListMasterTargetsByShadowTable(ctx, shadowTable)\n\tif err != nil {\n\t\tobservability.Ctx(ctx, h.logger).Warn(\"transmute-shadow: master lookup failed\",\n\t\t\tzap.String(\"shadow\", shadowTable), zap.Error(err))\n\t\treturn nil, err\n\t}\n\treturn targets, nil\n}\n\nfunc (h *TransmuteHandler) filterRealtimeMasterTargets(\n\tctx context.Context,\n\ttargets []repomaster.MasterTargetIdentity,\n) ([]repomaster.MasterTargetIdentity, error) {\n\tif len(targets) == 0 || h.masterBindingRepo == nil {\n\t\treturn targets, nil\n\t}\n\tids := make([]int64, 0, len(targets))\n\tfor _, t := range targets {\n\t\tif t.ID != 0 {\n\t\t\tids = append(ids, t.ID)\n\t\t}\n\t}\n\tif len(ids) == 0 {\n\t\treturn targets, nil\n\t}\n\tenabledMap, err := h.masterBindingRepo.FilterPostIngestEnabledIDs(ctx, ids)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tfiltered := make([]repomaster.MasterTargetIdentity, 0, len(targets))\n\tfor _, t := range targets {\n\t\tif enabledMap[t.ID] {\n\t\t\tfiltered = append(filtered, t)\n\t\t}\n\t}\n\treturn filtered, nil\n}\n\nfunc (h *TransmuteHandler) shouldSkipDisabledRealtimeBatch(ctx context.Context, masterBindingID int64, triggeredBy string) bool {\n\tif masterBindingID == 0 || h.masterBindingRepo == nil {\n\t\treturn false\n\t}\n\tif triggeredBy != \"kafka-consumer-hook\" && triggeredBy != \"snapshot-hook\" {\n\t\treturn false\n\t}\n\tcheckCtx, cancel := context.WithTimeout(ctx, 2*time.Second)\n\tdefer cancel()\n\tdisabled, err := h.masterBindingRepo.IsPostIngestExplicitlyDisabled(checkCtx, masterBindingID)\n\treturn err == nil && disabled\n}",
+          "claim": "In transmute_realtime_gate.go lines 14-97, isRealtimePostIngestTrigger matches batch-buffer, sinkworker, snapshot, kafka-consumer-hook, and snapshot-hook, filterRealtimeMasterTargets collects non-zero target IDs and filters via FilterPostIngestEnabledIDs, and shouldSkipDisabledRealtimeBatch checks IsPostIngestExplicitlyDisabled."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-F1-HANDLER",
+    "kind": "claim",
+    "claim": "In transmute_handler.go lines 176-198, handleTransmuteShadowWithOutcome filters masterTargets when isRealtimePostIngestTrigger is true, returns nil when masterTargets is empty, and preserves snapshot-hook, bridge-oplog, batch-transform, and heal trigger labels.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go",
+    "lines": "176-198",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:176-198\n\tif isRealtimePostIngestTrigger(req.TriggeredBy) {\n\t\tmasterTargets, err = h.filterRealtimeMasterTargets(lookupCtx, masterTargets)\n\t\tif err != nil {\n\t\t\treturn fmt.Errorf(\"transmute-shadow post_ingest filter failed for %s: %w\", req.ShadowTable, err)\n\t\t}\n\t}\n\n\tif len(masterTargets) == 0 {\n\t\treturn nil\n\t}\n\thookTrigger := \"kafka-consumer-hook\"\n\tswitch req.TriggeredBy {\n\tcase \"snapshot\", \"snapshot-hook\":\n\t\thookTrigger = \"snapshot-hook\"\n\tcase \"bridge-oplog\":\n\t\thookTrigger = \"bridge-oplog\"\n\tcase \"batch-transform\":\n\t\thookTrigger = \"batch-transform\"\n\tcase \"heal\", \"recon-heal\", \"execute-heal\":\n\t\thookTrigger = req.TriggeredBy\n\t}\n\n\tif trackJetStreamAck {",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3005,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6791,
+                "INCORRECT": 0.2697,
+                "UNSUPPORTED": 0.0512
+              },
+              "confidence": 0.3005,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 493,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmute_handler.go lines 176-198, handleTransmuteShadowWithOutcome filters masterTargets when isRealtimePostIngestTrigger is true, returns nil when masterTargets is empty, and preserves snapshot-hook, bridge-oplog, batch-transform, and heal trigger labels.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:176-198\n\tif isRealtimePostIngestTrigger(req.TriggeredBy) {\n\t\tmasterTargets, err = h.filterRealtimeMasterTargets(lookupCtx, masterTargets)\n\t\tif err != nil {\n\t\t\treturn fmt.Errorf(\"transmute-shadow post_ingest filter failed for %s: %w\", req.ShadowTable, err)\n\t\t}\n\t}\n\n\tif len(masterTargets) == 0 {\n\t\treturn nil\n\t}\n\thookTrigger := \"kafka-consumer-hook\"\n\tswitch req.TriggeredBy {\n\tcase \"snapshot\", \"snapshot-hook\":\n\t\thookTrigger = \"snapshot-hook\"\n\tcase \"bridge-oplog\":\n\t\thookTrigger = \"bridge-oplog\"\n\tcase \"batch-transform\":\n\t\thookTrigger = \"batch-transform\"\n\tcase \"heal\", \"recon-heal\", \"execute-heal\":\n\t\thookTrigger = req.TriggeredBy\n\t}\n\n\tif trackJetStreamAck {",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4208,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7994,
+                "INCORRECT": 0.12,
+                "UNSUPPORTED": 0.0806
+              },
+              "confidence": 0.4208,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 499,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:176-198\n\tif isRealtimePostIngestTrigger(req.TriggeredBy) {\n\t\tmasterTargets, err = h.filterRealtimeMasterTargets(lookupCtx, masterTargets)\n\t\tif err != nil {\n\t\t\treturn fmt.Errorf(\"transmute-shadow post_ingest filter failed for %s: %w\", req.ShadowTable, err)\n\t\t}\n\t}\n\n\tif len(masterTargets) == 0 {\n\t\treturn nil\n\t}\n\thookTrigger := \"kafka-consumer-hook\"\n\tswitch req.TriggeredBy {\n\tcase \"snapshot\", \"snapshot-hook\":\n\t\thookTrigger = \"snapshot-hook\"\n\tcase \"bridge-oplog\":\n\t\thookTrigger = \"bridge-oplog\"\n\tcase \"batch-transform\":\n\t\thookTrigger = \"batch-transform\"\n\tcase \"heal\", \"recon-heal\", \"execute-heal\":\n\t\thookTrigger = req.TriggeredBy\n\t}\n\n\tif trackJetStreamAck {",
+          "claim": "In transmute_handler.go lines 176-198, handleTransmuteShadowWithOutcome filters masterTargets when isRealtimePostIngestTrigger is true, returns nil when masterTargets is empty, and preserves snapshot-hook, bridge-oplog, batch-transform, and heal trigger labels."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.659,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9366,
+                "NO": 0.0634
+              },
+              "confidence": 0.659,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 432,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_handler.go:176-198\n\tif isRealtimePostIngestTrigger(req.TriggeredBy) {\n\t\tmasterTargets, err = h.filterRealtimeMasterTargets(lookupCtx, masterTargets)\n\t\tif err != nil {\n\t\t\treturn fmt.Errorf(\"transmute-shadow post_ingest filter failed for %s: %w\", req.ShadowTable, err)\n\t\t}\n\t}\n\n\tif len(masterTargets) == 0 {\n\t\treturn nil\n\t}\n\thookTrigger := \"kafka-consumer-hook\"\n\tswitch req.TriggeredBy {\n\tcase \"snapshot\", \"snapshot-hook\":\n\t\thookTrigger = \"snapshot-hook\"\n\tcase \"bridge-oplog\":\n\t\thookTrigger = \"bridge-oplog\"\n\tcase \"batch-transform\":\n\t\thookTrigger = \"batch-transform\"\n\tcase \"heal\", \"recon-heal\", \"execute-heal\":\n\t\thookTrigger = req.TriggeredBy\n\t}\n\n\tif trackJetStreamAck {",
+          "claim": "In transmute_handler.go lines 176-198, handleTransmuteShadowWithOutcome filters masterTargets when isRealtimePostIngestTrigger is true, returns nil when masterTargets is empty, and preserves snapshot-hook, bridge-oplog, batch-transform, and heal trigger labels."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-F2-F4-CACHE",
+    "kind": "claim",
+    "claim": "In batch_buffer_lifecycle.go lines 44-80, FlushPostIngestCache deletes all entries from bb.piCache, InvalidateConnectionAdapter deletes 'master:'+connKey and 'shadow:'+connKey from bb.adapters, and FlushSchemaCache invokes FlushPostIngestCache.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go",
+    "lines": "44-80",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go:44-80\n// FlushPostIngestCache evicts all cached post_ingest schedule lookup entries\n// so turning off/on Realtime Sync takes effect immediately across all buffers.\nfunc (bb *BatchBuffer) FlushPostIngestCache() {\n\tbb.piCache.Range(func(k, _ any) bool {\n\t\tbb.piCache.Delete(k)\n\t\treturn true\n\t})\n}\n\n// InvalidateConnectionAdapter removes per-connection SchemaAdapter instances\n// bound to a retired connection pool so closed *gorm.DB handles are never reused.\nfunc (bb *BatchBuffer) InvalidateConnectionAdapter(connKey string) {\n\tconnKey = strings.TrimSpace(connKey)\n\tif connKey == \"\" {\n\t\treturn\n\t}\n\tfor _, prefix := range []string{\"master:\", \"shadow:\"} {\n\t\tif v, ok := bb.adapters.LoadAndDelete(prefix + connKey); ok {\n\t\t\tif adapter, ok := v.(*serviceshadow.SchemaAdapter); ok && adapter != nil {\n\t\t\t\tadapter.FlushAll()\n\t\t\t}\n\t\t}\n\t}\n}\n\n// FlushSchemaCache evicts all cached table schemas from every per-connection\n// SchemaAdapter held in bb.adapters, plus the default bb.schemaAdapter.\n// Call this whenever a schema.config.reload event fires so newly-added columns\n// are picked up on the next upsert without a process restart.\nfunc (bb *BatchBuffer) FlushSchemaCache() {\n\tbb.adapters.Range(func(_, v any) bool {\n\t\tv.(*serviceshadow.SchemaAdapter).FlushAll()\n\t\treturn true\n\t})\n\tbb.schemaAdapter.FlushAll()\n\tbb.FlushPostIngestCache()\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6941,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9153,
+                "INCORRECT": 0.065,
+                "UNSUPPORTED": 0.0197
+              },
+              "confidence": 0.6941,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 668,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In batch_buffer_lifecycle.go lines 44-80, FlushPostIngestCache deletes all entries from bb.piCache, InvalidateConnectionAdapter deletes 'master:'+connKey and 'shadow:'+connKey from bb.adapters, and FlushSchemaCache invokes FlushPostIngestCache.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go:44-80\n// FlushPostIngestCache evicts all cached post_ingest schedule lookup entries\n// so turning off/on Realtime Sync takes effect immediately across all buffers.\nfunc (bb *BatchBuffer) FlushPostIngestCache() {\n\tbb.piCache.Range(func(k, _ any) bool {\n\t\tbb.piCache.Delete(k)\n\t\treturn true\n\t})\n}\n\n// InvalidateConnectionAdapter removes per-connection SchemaAdapter instances\n// bound to a retired connection pool so closed *gorm.DB handles are never reused.\nfunc (bb *BatchBuffer) InvalidateConnectionAdapter(connKey string) {\n\tconnKey = strings.TrimSpace(connKey)\n\tif connKey == \"\" {\n\t\treturn\n\t}\n\tfor _, prefix := range []string{\"master:\", \"shadow:\"} {\n\t\tif v, ok := bb.adapters.LoadAndDelete(prefix + connKey); ok {\n\t\t\tif adapter, ok := v.(*serviceshadow.SchemaAdapter); ok && adapter != nil {\n\t\t\t\tadapter.FlushAll()\n\t\t\t}\n\t\t}\n\t}\n}\n\n// FlushSchemaCache evicts all cached table schemas from every per-connection\n// SchemaAdapter held in bb.adapters, plus the default bb.schemaAdapter.\n// Call this whenever a schema.config.reload event fires so newly-added columns\n// are picked up on the next upsert without a process restart.\nfunc (bb *BatchBuffer) FlushSchemaCache() {\n\tbb.adapters.Range(func(_, v any) bool {\n\t\tv.(*serviceshadow.SchemaAdapter).FlushAll()\n\t\treturn true\n\t})\n\tbb.schemaAdapter.FlushAll()\n\tbb.FlushPostIngestCache()\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4925,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8352,
+                "INCORRECT": 0.1007,
+                "UNSUPPORTED": 0.0641
+              },
+              "confidence": 0.4925,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 674,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go:44-80\n// FlushPostIngestCache evicts all cached post_ingest schedule lookup entries\n// so turning off/on Realtime Sync takes effect immediately across all buffers.\nfunc (bb *BatchBuffer) FlushPostIngestCache() {\n\tbb.piCache.Range(func(k, _ any) bool {\n\t\tbb.piCache.Delete(k)\n\t\treturn true\n\t})\n}\n\n// InvalidateConnectionAdapter removes per-connection SchemaAdapter instances\n// bound to a retired connection pool so closed *gorm.DB handles are never reused.\nfunc (bb *BatchBuffer) InvalidateConnectionAdapter(connKey string) {\n\tconnKey = strings.TrimSpace(connKey)\n\tif connKey == \"\" {\n\t\treturn\n\t}\n\tfor _, prefix := range []string{\"master:\", \"shadow:\"} {\n\t\tif v, ok := bb.adapters.LoadAndDelete(prefix + connKey); ok {\n\t\t\tif adapter, ok := v.(*serviceshadow.SchemaAdapter); ok && adapter != nil {\n\t\t\t\tadapter.FlushAll()\n\t\t\t}\n\t\t}\n\t}\n}\n\n// FlushSchemaCache evicts all cached table schemas from every per-connection\n// SchemaAdapter held in bb.adapters, plus the default bb.schemaAdapter.\n// Call this whenever a schema.config.reload event fires so newly-added columns\n// are picked up on the next upsert without a process restart.\nfunc (bb *BatchBuffer) FlushSchemaCache() {\n\tbb.adapters.Range(func(_, v any) bool {\n\t\tv.(*serviceshadow.SchemaAdapter).FlushAll()\n\t\treturn true\n\t})\n\tbb.schemaAdapter.FlushAll()\n\tbb.FlushPostIngestCache()\n}",
+          "claim": "In batch_buffer_lifecycle.go lines 44-80, FlushPostIngestCache deletes all entries from bb.piCache, InvalidateConnectionAdapter deletes 'master:'+connKey and 'shadow:'+connKey from bb.adapters, and FlushSchemaCache invokes FlushPostIngestCache."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.69,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9443,
+                "NO": 0.0557
+              },
+              "confidence": 0.69,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 607,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go:44-80\n// FlushPostIngestCache evicts all cached post_ingest schedule lookup entries\n// so turning off/on Realtime Sync takes effect immediately across all buffers.\nfunc (bb *BatchBuffer) FlushPostIngestCache() {\n\tbb.piCache.Range(func(k, _ any) bool {\n\t\tbb.piCache.Delete(k)\n\t\treturn true\n\t})\n}\n\n// InvalidateConnectionAdapter removes per-connection SchemaAdapter instances\n// bound to a retired connection pool so closed *gorm.DB handles are never reused.\nfunc (bb *BatchBuffer) InvalidateConnectionAdapter(connKey string) {\n\tconnKey = strings.TrimSpace(connKey)\n\tif connKey == \"\" {\n\t\treturn\n\t}\n\tfor _, prefix := range []string{\"master:\", \"shadow:\"} {\n\t\tif v, ok := bb.adapters.LoadAndDelete(prefix + connKey); ok {\n\t\t\tif adapter, ok := v.(*serviceshadow.SchemaAdapter); ok && adapter != nil {\n\t\t\t\tadapter.FlushAll()\n\t\t\t}\n\t\t}\n\t}\n}\n\n// FlushSchemaCache evicts all cached table schemas from every per-connection\n// SchemaAdapter held in bb.adapters, plus the default bb.schemaAdapter.\n// Call this whenever a schema.config.reload event fires so newly-added columns\n// are picked up on the next upsert without a process restart.\nfunc (bb *BatchBuffer) FlushSchemaCache() {\n\tbb.adapters.Range(func(_, v any) bool {\n\t\tv.(*serviceshadow.SchemaAdapter).FlushAll()\n\t\treturn true\n\t})\n\tbb.schemaAdapter.FlushAll()\n\tbb.FlushPostIngestCache()\n}",
+          "claim": "In batch_buffer_lifecycle.go lines 44-80, FlushPostIngestCache deletes all entries from bb.piCache, InvalidateConnectionAdapter deletes 'master:'+connKey and 'shadow:'+connKey from bb.adapters, and FlushSchemaCache invokes FlushPostIngestCache."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-F2-RELOAD",
+    "kind": "claim",
+    "claim": "In server_config_reload.go lines 32-58, registerConfigReloadSubscribers subscribes to transmute.schedule.changed to flush post_ingest caches and calls invalidateBatchBufferConnectionAdapters on connection.config.changed.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_config_reload.go",
+    "lines": "32-58",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_config_reload.go:32-58\n\tnatsConn.Subscribe(\"schema.config.reload\", func(_ *nats.Msg) {\n\t\tregistrySvc.ReloadAll(context.Background())\n\t\tredisCache.DeletePattern(context.Background(), \"schema:*\")\n\t\tflushBatchBufferSchemaCaches(cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)\n\t})\n\n\tnatsConn.Subscribe(\"transmute.schedule.changed\", func(_ *nats.Msg) {\n\t\tflushBatchBufferPostIngestCaches(cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)\n\t})\n\n\tnatsConn.Subscribe(\"connection.config.changed\", func(msg *nats.Msg) {\n\t\tconnKey := strings.TrimSpace(string(msg.Data))\n\t\tif connKey == \"\" {\n\t\t\treturn\n\t\t}\n\t\tconnectionManager.InvalidatePool(connKey)\n\t\tif reconCore != nil {\n\t\t\treconCore.InvalidateMasterAgent(connKey)\n\t\t}\n\t\tif chunkEngine != nil {\n\t\t\tchunkEngine.InvalidateMasterAgent(connKey)\n\t\t}\n\t\tinvalidateBatchBufferConnectionAdapters(connKey, cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)\n\t\tflushBatchBufferSchemaCaches(cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)\n\t\tif logger != nil {\n\t\t\tlogger.Info(\"connection pool invalidated via NATS signal\",\n\t\t\t\tzap.String(\"connection_code\", connKey))",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.0604,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4293,
+                "INCORRECT": 0.3988,
+                "UNSUPPORTED": 0.1718
+              },
+              "confidence": 0.0604,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 604,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In server_config_reload.go lines 32-58, registerConfigReloadSubscribers subscribes to transmute.schedule.changed to flush post_ingest caches and calls invalidateBatchBufferConnectionAdapters on connection.config.changed.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_config_reload.go:32-58\n\tnatsConn.Subscribe(\"schema.config.reload\", func(_ *nats.Msg) {\n\t\tregistrySvc.ReloadAll(context.Background())\n\t\tredisCache.DeletePattern(context.Background(), \"schema:*\")\n\t\tflushBatchBufferSchemaCaches(cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)\n\t})\n\n\tnatsConn.Subscribe(\"transmute.schedule.changed\", func(_ *nats.Msg) {\n\t\tflushBatchBufferPostIngestCaches(cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)\n\t})\n\n\tnatsConn.Subscribe(\"connection.config.changed\", func(msg *nats.Msg) {\n\t\tconnKey := strings.TrimSpace(string(msg.Data))\n\t\tif connKey == \"\" {\n\t\t\treturn\n\t\t}\n\t\tconnectionManager.InvalidatePool(connKey)\n\t\tif reconCore != nil {\n\t\t\treconCore.InvalidateMasterAgent(connKey)\n\t\t}\n\t\tif chunkEngine != nil {\n\t\t\tchunkEngine.InvalidateMasterAgent(connKey)\n\t\t}\n\t\tinvalidateBatchBufferConnectionAdapters(connKey, cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)\n\t\tflushBatchBufferSchemaCaches(cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)\n\t\tif logger != nil {\n\t\t\tlogger.Info(\"connection pool invalidated via NATS signal\",\n\t\t\t\tzap.String(\"connection_code\", connKey))",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0523,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4892,
+                "INCORRECT": 0.2939,
+                "UNSUPPORTED": 0.2168
+              },
+              "confidence": 0.0523,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 610,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_config_reload.go:32-58\n\tnatsConn.Subscribe(\"schema.config.reload\", func(_ *nats.Msg) {\n\t\tregistrySvc.ReloadAll(context.Background())\n\t\tredisCache.DeletePattern(context.Background(), \"schema:*\")\n\t\tflushBatchBufferSchemaCaches(cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)\n\t})\n\n\tnatsConn.Subscribe(\"transmute.schedule.changed\", func(_ *nats.Msg) {\n\t\tflushBatchBufferPostIngestCaches(cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)\n\t})\n\n\tnatsConn.Subscribe(\"connection.config.changed\", func(msg *nats.Msg) {\n\t\tconnKey := strings.TrimSpace(string(msg.Data))\n\t\tif connKey == \"\" {\n\t\t\treturn\n\t\t}\n\t\tconnectionManager.InvalidatePool(connKey)\n\t\tif reconCore != nil {\n\t\t\treconCore.InvalidateMasterAgent(connKey)\n\t\t}\n\t\tif chunkEngine != nil {\n\t\t\tchunkEngine.InvalidateMasterAgent(connKey)\n\t\t}\n\t\tinvalidateBatchBufferConnectionAdapters(connKey, cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)\n\t\tflushBatchBufferSchemaCaches(cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)\n\t\tif logger != nil {\n\t\t\tlogger.Info(\"connection pool invalidated via NATS signal\",\n\t\t\t\tzap.String(\"connection_code\", connKey))",
+          "claim": "In server_config_reload.go lines 32-58, registerConfigReloadSubscribers subscribes to transmute.schedule.changed to flush post_ingest caches and calls invalidateBatchBufferConnectionAdapters on connection.config.changed."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5423,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9035,
+                "NO": 0.0965
+              },
+              "confidence": 0.5423,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 543,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_config_reload.go:32-58\n\tnatsConn.Subscribe(\"schema.config.reload\", func(_ *nats.Msg) {\n\t\tregistrySvc.ReloadAll(context.Background())\n\t\tredisCache.DeletePattern(context.Background(), \"schema:*\")\n\t\tflushBatchBufferSchemaCaches(cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)\n\t})\n\n\tnatsConn.Subscribe(\"transmute.schedule.changed\", func(_ *nats.Msg) {\n\t\tflushBatchBufferPostIngestCaches(cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)\n\t})\n\n\tnatsConn.Subscribe(\"connection.config.changed\", func(msg *nats.Msg) {\n\t\tconnKey := strings.TrimSpace(string(msg.Data))\n\t\tif connKey == \"\" {\n\t\t\treturn\n\t\t}\n\t\tconnectionManager.InvalidatePool(connKey)\n\t\tif reconCore != nil {\n\t\t\treconCore.InvalidateMasterAgent(connKey)\n\t\t}\n\t\tif chunkEngine != nil {\n\t\t\tchunkEngine.InvalidateMasterAgent(connKey)\n\t\t}\n\t\tinvalidateBatchBufferConnectionAdapters(connKey, cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)\n\t\tflushBatchBufferSchemaCaches(cdcBatchBuffer, snapshotBatchBuffer, healBatchBuffer)\n\t\tif logger != nil {\n\t\t\tlogger.Info(\"connection pool invalidated via NATS signal\",\n\t\t\t\tzap.String(\"connection_code\", connKey))",
+          "claim": "In server_config_reload.go lines 32-58, registerConfigReloadSubscribers subscribes to transmute.schedule.changed to flush post_ingest caches and calls invalidateBatchBufferConnectionAdapters on connection.config.changed."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-F3-CMS",
+    "kind": "claim",
+    "claim": "In transmute_schedule_handler.go lines 94-99, Create skips schedNameRe validation on both masterSchema and masterTable when req.MasterBindingID > 0.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go",
+    "lines": "94-99",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go:94-99\n\tif req.MasterBindingID <= 0 && masterSchema != \"\" && !schedNameRe.MatchString(masterSchema) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_schema\"})\n\t}\n\tif req.MasterBindingID <= 0 && !schedNameRe.MatchString(masterTable) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_table\"})\n\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.0431,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4791,
+                "INCORRECT": 0.2838,
+                "UNSUPPORTED": 0.2371
+              },
+              "confidence": 0.0431,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 328,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmute_schedule_handler.go lines 94-99, Create skips schedNameRe validation on both masterSchema and masterTable when req.MasterBindingID > 0.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go:94-99\n\tif req.MasterBindingID <= 0 && masterSchema != \"\" && !schedNameRe.MatchString(masterSchema) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_schema\"})\n\t}\n\tif req.MasterBindingID <= 0 && !schedNameRe.MatchString(masterTable) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_table\"})\n\t}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.452,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8057,
+                "INCORRECT": 0.1453,
+                "UNSUPPORTED": 0.049
+              },
+              "confidence": 0.452,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 334,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go:94-99\n\tif req.MasterBindingID <= 0 && masterSchema != \"\" && !schedNameRe.MatchString(masterSchema) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_schema\"})\n\t}\n\tif req.MasterBindingID <= 0 && !schedNameRe.MatchString(masterTable) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_table\"})\n\t}",
+          "claim": "In transmute_schedule_handler.go lines 94-99, Create skips schedNameRe validation on both masterSchema and masterTable when req.MasterBindingID > 0."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7203,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9516,
+                "NO": 0.0484
+              },
+              "confidence": 0.7203,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 267,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go:94-99\n\tif req.MasterBindingID <= 0 && masterSchema != \"\" && !schedNameRe.MatchString(masterSchema) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_schema\"})\n\t}\n\tif req.MasterBindingID <= 0 && !schedNameRe.MatchString(masterTable) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_table\"})\n\t}",
+          "claim": "In transmute_schedule_handler.go lines 94-99, Create skips schedNameRe validation on both masterSchema and masterTable when req.MasterBindingID > 0."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "A-F3-WEB",
+    "kind": "claim",
+    "claim": "In masterScheduleUtils.ts lines 11-30, matchScheduleForMasterBinding filters schedules by s.master_binding_id === bindingId when bindingId > 0 and falls back to normalized master_schema and master_table matching.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/master/masterScheduleUtils.ts",
+    "lines": "11-30",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/master/masterScheduleUtils.ts:11-30\nexport function matchScheduleForMasterBinding<T extends MasterScheduleMatchCandidate>(\n  schedules: T[] | undefined | null,\n  bindingId: number | undefined | null,\n  masterName: string,\n  masterSchema?: string | null,\n): T[] {\n  const list = schedules || [];\n  if (bindingId && bindingId > 0) {\n    const byId = list.filter((s) => s.master_binding_id === bindingId);\n    if (byId.length > 0 || list.some((s) => !!s.master_binding_id)) {\n      return byId;\n    }\n  }\n  const normSchema = (masterSchema || '').trim() || 'public';\n  return list.filter((s) => {\n    if (s.master_table !== masterName) return false;\n    const sSchema = (s.master_schema || '').trim() || 'public';\n    return !masterSchema || sSchema === normSchema;\n  });\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2104,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.474,
+                "INCORRECT": 0.4712,
+                "UNSUPPORTED": 0.0548
+              },
+              "confidence": 0.2104,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 463,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In masterScheduleUtils.ts lines 11-30, matchScheduleForMasterBinding filters schedules by s.master_binding_id === bindingId when bindingId > 0 and falls back to normalized master_schema and master_table matching.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/master/masterScheduleUtils.ts:11-30\nexport function matchScheduleForMasterBinding<T extends MasterScheduleMatchCandidate>(\n  schedules: T[] | undefined | null,\n  bindingId: number | undefined | null,\n  masterName: string,\n  masterSchema?: string | null,\n): T[] {\n  const list = schedules || [];\n  if (bindingId && bindingId > 0) {\n    const byId = list.filter((s) => s.master_binding_id === bindingId);\n    if (byId.length > 0 || list.some((s) => !!s.master_binding_id)) {\n      return byId;\n    }\n  }\n  const normSchema = (masterSchema || '').trim() || 'public';\n  return list.filter((s) => {\n    if (s.master_table !== masterName) return false;\n    const sSchema = (s.master_schema || '').trim() || 'public';\n    return !masterSchema || sSchema === normSchema;\n  });\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2596,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6921,
+                "INCORRECT": 0.2052,
+                "UNSUPPORTED": 0.1027
+              },
+              "confidence": 0.2596,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 469,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/master/masterScheduleUtils.ts:11-30\nexport function matchScheduleForMasterBinding<T extends MasterScheduleMatchCandidate>(\n  schedules: T[] | undefined | null,\n  bindingId: number | undefined | null,\n  masterName: string,\n  masterSchema?: string | null,\n): T[] {\n  const list = schedules || [];\n  if (bindingId && bindingId > 0) {\n    const byId = list.filter((s) => s.master_binding_id === bindingId);\n    if (byId.length > 0 || list.some((s) => !!s.master_binding_id)) {\n      return byId;\n    }\n  }\n  const normSchema = (masterSchema || '').trim() || 'public';\n  return list.filter((s) => {\n    if (s.master_table !== masterName) return false;\n    const sSchema = (s.master_schema || '').trim() || 'public';\n    return !masterSchema || sSchema === normSchema;\n  });\n}",
+          "claim": "In masterScheduleUtils.ts lines 11-30, matchScheduleForMasterBinding filters schedules by s.master_binding_id === bindingId when bindingId > 0 and falls back to normalized master_schema and master_table matching."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6536,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9351,
+                "NO": 0.0649
+              },
+              "confidence": 0.6536,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 402,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/master/masterScheduleUtils.ts:11-30\nexport function matchScheduleForMasterBinding<T extends MasterScheduleMatchCandidate>(\n  schedules: T[] | undefined | null,\n  bindingId: number | undefined | null,\n  masterName: string,\n  masterSchema?: string | null,\n): T[] {\n  const list = schedules || [];\n  if (bindingId && bindingId > 0) {\n    const byId = list.filter((s) => s.master_binding_id === bindingId);\n    if (byId.length > 0 || list.some((s) => !!s.master_binding_id)) {\n      return byId;\n    }\n  }\n  const normSchema = (masterSchema || '').trim() || 'public';\n  return list.filter((s) => {\n    if (s.master_table !== masterName) return false;\n    const sSchema = (s.master_schema || '').trim() || 'public';\n    return !masterSchema || sSchema === normSchema;\n  });\n}",
+          "claim": "In masterScheduleUtils.ts lines 11-30, matchScheduleForMasterBinding filters schedules by s.master_binding_id === bindingId when bindingId > 0 and falls back to normalized master_schema and master_table matching."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In master_binding_repo.go lines 178-218, FilterPostIngestEnabledIDs selects ts.master_binding_id from cdc_system.transmute_schedule joined with master_binding where mode is 'post_ingest' and is_enabled is true.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go",
+    "lines": "178-218",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1795,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5323,
+                "INCORRECT": 0.3899,
+                "UNSUPPORTED": 0.0777
+              },
+              "confidence": 0.1795,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 185,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In master_binding_repo.go lines 178-218, FilterPostIngestEnabledIDs selects ts.master_binding_id from cdc_system.transmute_schedule joined with master_binding where mode is 'post_ingest' and is_enabled is true.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.017,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3194,
+                "INCORRECT": 0.4186,
+                "UNSUPPORTED": 0.2619
+              },
+              "confidence": 0.017,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 191,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In master_binding_repo.go lines 178-218, FilterPostIngestEnabledIDs selects ts.master_binding_id from cdc_system.transmute_schedule joined with master_binding where mode is 'post_ingest' and is_enabled is true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8835,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9843,
+                "NO": 0.0157
+              },
+              "confidence": 0.8835,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 124,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In master_binding_repo.go lines 178-218, FilterPostIngestEnabledIDs selects ts.master_binding_id from cdc_system.transmute_schedule joined with master_binding where mode is 'post_ingest' and is_enabled is true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In transmute_realtime_gate.go lines 14-21, isRealtimePostIngestTrigger returns true for bridge-oplog and heal triggers.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_realtime_gate.go",
+    "lines": "14-21",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.1688,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3172,
+                "INCORRECT": 0.5805,
+                "UNSUPPORTED": 0.1023
+              },
+              "confidence": 0.1688,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 156,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmute_realtime_gate.go lines 14-21, isRealtimePostIngestTrigger returns true for bridge-oplog and heal triggers.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.3735,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.1147,
+                "INCORRECT": 0.1099,
+                "UNSUPPORTED": 0.7754
+              },
+              "confidence": 0.3735,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 162,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In transmute_realtime_gate.go lines 14-21, isRealtimePostIngestTrigger returns true for bridge-oplog and heal triggers."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.194,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.2467,
+                "NO": 0.7533
+              },
+              "confidence": 0.194,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 95,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In transmute_realtime_gate.go lines 14-21, isRealtimePostIngestTrigger returns true for bridge-oplog and heal triggers."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In batch_buffer_lifecycle.go lines 53-67, InvalidateConnectionAdapter closes bb.db directly via sqlDB.Close().",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go",
+    "lines": "53-67",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1896,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5283,
+                "INCORRECT": 0.4013,
+                "UNSUPPORTED": 0.0704
+              },
+              "confidence": 0.1896,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 154,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In batch_buffer_lifecycle.go lines 53-67, InvalidateConnectionAdapter closes bb.db directly via sqlDB.Close().",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.1182,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2793,
+                "INCORRECT": 0.5647,
+                "UNSUPPORTED": 0.156
+              },
+              "confidence": 0.1182,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 160,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In batch_buffer_lifecycle.go lines 53-67, InvalidateConnectionAdapter closes bb.db directly via sqlDB.Close()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6067,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9225,
+                "NO": 0.0775
+              },
+              "confidence": 0.6067,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 93,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In batch_buffer_lifecycle.go lines 53-67, InvalidateConnectionAdapter closes bb.db directly via sqlDB.Close()."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

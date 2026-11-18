@@ -1,0 +1,1376 @@
+[
+  {
+    "id": "F-A1-ATOMIC-EVICT",
+    "kind": "claim",
+    "claim": "In connection_manager_lifecycle.go lines 29-43 and 61-112, InvalidatePool calls m.reg.EvictRole('master:'+key) inside m.masterPoolMu.Lock() for atomic dual-cache eviction, and retireGormPoolGracefully sets SetMaxIdleConns(0), SetConnMaxIdleTime(1ms), and waits on a 2s grace timer before draining InUse > 0.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager_lifecycle.go",
+    "lines": "25-115",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager_lifecycle.go:25-115\n\t\tsharedDestDB = m.reg.PeekDB(database.RoleDestination)\n\t}\n\n\t// Evict both cache layers atomically under m.masterPoolMu.Lock() (lock order\n\t// m.masterPoolMu -> r.mu matches GetMasterDB; zero network I/O under lock).\n\tm.masterPoolMu.Lock()\n\tdb, hasDB := m.masterDBPool[key]\n\tdelete(m.masterDBPool, key)\n\n\tvar regDB *gorm.DB\n\tif m.reg != nil {\n\t\tregDB = m.reg.EvictRole(\"master:\" + key)\n\t}\n\n\tmc, hasMongo := m.masterMongoPool[key]\n\tdelete(m.masterMongoPool, key)\n\tdelete(m.masterMongoDBs, key)\n\tdelete(m.masterEngines, key)\n\tm.masterPoolMu.Unlock()\n\n\tif !hasDB || db == nil {\n\t\tdb = regDB\n\t}\n\n\tif db != nil && db != sharedDestDB {\n\t\tm.retireGormPoolGracefully(key, db)\n\t}\n\tif hasMongo && mc != nil {\n\t\t_ = mc.Disconnect(context.Background())\n\t\tif m.logger != nil {\n\t\t\tm.logger.Info(\"invalidated master mongo connection pool\",\n\t\t\t\tzap.String(\"key\", key))\n\t\t}\n\t}\n}\n\nfunc (m *ConnectionManager) retireGormPoolGracefully(key string, db *gorm.DB) {\n\tsqlDB, err := db.DB()\n\tif err != nil || sqlDB == nil {\n\t\treturn\n\t}\n\t// Release idle TCP connections immediately without synchronously closing sqlDB at t=0,\n\t// because a caller that just received *gorm.DB from GetMasterDB may be between sequential\n\t// SQL statements (e.g. SELECT EXISTS -> UPSERT batch) where InUse is momentarily 0.\n\tsqlDB.SetMaxIdleConns(0)\n\tsqlDB.SetConnMaxIdleTime(time.Millisecond)\n\n\tm.mu.Lock()\n\tif m.closed {\n\t\tm.mu.Unlock()\n\t\t_ = sqlDB.Close()\n\t\treturn\n\t}\n\tm.wg.Add(1)\n\tm.mu.Unlock()\n\n\tgo func() {\n\t\tdefer m.wg.Done()\n\t\tgrace := time.NewTimer(2 * time.Second)\n\t\tdefer grace.Stop()\n\t\tselect {\n\t\tcase <-m.stopCh:\n\t\t\t_ = sqlDB.Close()\n\t\t\treturn\n\t\tcase <-grace.C:\n\t\t}\n\t\tticker := time.NewTicker(200 * time.Millisecond)\n\t\tdefer ticker.Stop()\n\t\ttimer := time.NewTimer(15 * time.Second)\n\t\tdefer timer.Stop()\n\t\tfor sqlDB.Stats().InUse > 0 {\n\t\t\tselect {\n\t\t\tcase <-m.stopCh:\n\t\t\t\t_ = sqlDB.Close()\n\t\t\t\treturn\n\t\t\tcase <-timer.C:\n\t\t\t\t_ = sqlDB.Close()\n\t\t\t\treturn\n\t\t\tcase <-ticker.C:\n\t\t\t}\n\t\t}\n\t\t_ = sqlDB.Close()\n\t\tif m.logger != nil {\n\t\t\tm.logger.Info(\"invalidated master connection pool after draining in-flight queries\",\n\t\t\t\tzap.String(\"key\", key))\n\t\t}\n\t}()\n}\n\n// Close stops all background pool-retire goroutines, waits via WaitGroup, and closes\n// all dynamically opened master SQL and MongoDB pools (leaving static plane roles intact).",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4856,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8181,
+                "INCORRECT": 0.1456,
+                "UNSUPPORTED": 0.0363
+              },
+              "confidence": 0.4856,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In connection_manager_lifecycle.go lines 29-43 and 61-112, InvalidatePool calls m.reg.EvictRole('master:'+key) inside m.masterPoolMu.Lock() for atomic dual-cache eviction, and retireGormPoolGracefully sets SetMaxIdleConns(0), SetConnMaxIdleTime(1ms), and waits on a 2s grace timer before draining InUse > 0.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager_lifecycle.go:25-115\n\t\tsharedDestDB = m.reg.PeekDB(database.RoleDestination)\n\t}\n\n\t// Evict both cache layers atomically under m.masterPoolMu.Lock() (lock order\n\t// m.masterPoolMu -> r.mu matches GetMasterDB; zero network I/O under lock).\n\tm.masterPoolMu.Lock()\n\tdb, hasDB := m.masterDBPool[key]\n\tdelete(m.masterDBPool, key)\n\n\tvar regDB *gorm.DB\n\tif m.reg != nil {\n\t\tregDB = m.reg.EvictRole(\"master:\" + key)\n\t}\n\n\tmc, hasMongo := m.masterMongoPool[key]\n\tdelete(m.masterMongoPool, key)\n\tdelete(m.masterMongoDBs, key)\n\tdelete(m.masterEngines, key)\n\tm.masterPoolMu.Unlock()\n\n\tif !hasDB || db == nil {\n\t\tdb = regDB\n\t}\n\n\tif db != nil && db != sharedDestDB {\n\t\tm.retireGormPoolGracefully(key, db)\n\t}\n\tif hasMongo && mc != nil {\n\t\t_ = mc.Disconnect(context.Background())\n\t\tif m.logger != nil {\n\t\t\tm.logger.Info(\"invalidated master mongo connection pool\",\n\t\t\t\tzap.String(\"key\", key))\n\t\t}\n\t}\n}\n\nfunc (m *ConnectionManager) retireGormPoolGracefully(key string, db *gorm.DB) {\n\tsqlDB, err := db.DB()\n\tif err != nil || sqlDB == nil {\n\t\treturn\n\t}\n\t// Release idle TCP connections immediately without synchronously closing sqlDB at t=0,\n\t// because a caller that just received *gorm.DB from GetMasterDB may be between sequential\n\t// SQL statements (e.g. SELECT EXISTS -> UPSERT batch) where InUse is momentarily 0.\n\tsqlDB.SetMaxIdleConns(0)\n\tsqlDB.SetConnMaxIdleTime(time.Millisecond)\n\n\tm.mu.Lock()\n\tif m.closed {\n\t\tm.mu.Unlock()\n\t\t_ = sqlDB.Close()\n\t\treturn\n\t}\n\tm.wg.Add(1)\n\tm.mu.Unlock()\n\n\tgo func() {\n\t\tdefer m.wg.Done()\n\t\tgrace := time.NewTimer(2 * time.Second)\n\t\tdefer grace.Stop()\n\t\tselect {\n\t\tcase <-m.stopCh:\n\t\t\t_ = sqlDB.Close()\n\t\t\treturn\n\t\tcase <-grace.C:\n\t\t}\n\t\tticker := time.NewTicker(200 * time.Millisecond)\n\t\tdefer ticker.Stop()\n\t\ttimer := time.NewTimer(15 * time.Second)\n\t\tdefer timer.Stop()\n\t\tfor sqlDB.Stats().InUse > 0 {\n\t\t\tselect {\n\t\t\tcase <-m.stopCh:\n\t\t\t\t_ = sqlDB.Close()\n\t\t\t\treturn\n\t\t\tcase <-timer.C:\n\t\t\t\t_ = sqlDB.Close()\n\t\t\t\treturn\n\t\t\tcase <-ticker.C:\n\t\t\t}\n\t\t}\n\t\t_ = sqlDB.Close()\n\t\tif m.logger != nil {\n\t\t\tm.logger.Info(\"invalidated master connection pool after draining in-flight queries\",\n\t\t\t\tzap.String(\"key\", key))\n\t\t}\n\t}()\n}\n\n// Close stops all background pool-retire goroutines, waits via WaitGroup, and closes\n// all dynamically opened master SQL and MongoDB pools (leaving static plane roles intact).",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0961,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5069,
+                "INCORRECT": 0.3465,
+                "UNSUPPORTED": 0.1465
+              },
+              "confidence": 0.0961,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager_lifecycle.go:25-115\n\t\tsharedDestDB = m.reg.PeekDB(database.RoleDestination)\n\t}\n\n\t// Evict both cache layers atomically under m.masterPoolMu.Lock() (lock order\n\t// m.masterPoolMu -> r.mu matches GetMasterDB; zero network I/O under lock).\n\tm.masterPoolMu.Lock()\n\tdb, hasDB := m.masterDBPool[key]\n\tdelete(m.masterDBPool, key)\n\n\tvar regDB *gorm.DB\n\tif m.reg != nil {\n\t\tregDB = m.reg.EvictRole(\"master:\" + key)\n\t}\n\n\tmc, hasMongo := m.masterMongoPool[key]\n\tdelete(m.masterMongoPool, key)\n\tdelete(m.masterMongoDBs, key)\n\tdelete(m.masterEngines, key)\n\tm.masterPoolMu.Unlock()\n\n\tif !hasDB || db == nil {\n\t\tdb = regDB\n\t}\n\n\tif db != nil && db != sharedDestDB {\n\t\tm.retireGormPoolGracefully(key, db)\n\t}\n\tif hasMongo && mc != nil {\n\t\t_ = mc.Disconnect(context.Background())\n\t\tif m.logger != nil {\n\t\t\tm.logger.Info(\"invalidated master mongo connection pool\",\n\t\t\t\tzap.String(\"key\", key))\n\t\t}\n\t}\n}\n\nfunc (m *ConnectionManager) retireGormPoolGracefully(key string, db *gorm.DB) {\n\tsqlDB, err := db.DB()\n\tif err != nil || sqlDB == nil {\n\t\treturn\n\t}\n\t// Release idle TCP connections immediately without synchronously closing sqlDB at t=0,\n\t// because a caller that just received *gorm.DB from GetMasterDB may be between sequential\n\t// SQL statements (e.g. SELECT EXISTS -> UPSERT batch) where InUse is momentarily 0.\n\tsqlDB.SetMaxIdleConns(0)\n\tsqlDB.SetConnMaxIdleTime(time.Millisecond)\n\n\tm.mu.Lock()\n\tif m.closed {\n\t\tm.mu.Unlock()\n\t\t_ = sqlDB.Close()\n\t\treturn\n\t}\n\tm.wg.Add(1)\n\tm.mu.Unlock()\n\n\tgo func() {\n\t\tdefer m.wg.Done()\n\t\tgrace := time.NewTimer(2 * time.Second)\n\t\tdefer grace.Stop()\n\t\tselect {\n\t\tcase <-m.stopCh:\n\t\t\t_ = sqlDB.Close()\n\t\t\treturn\n\t\tcase <-grace.C:\n\t\t}\n\t\tticker := time.NewTicker(200 * time.Millisecond)\n\t\tdefer ticker.Stop()\n\t\ttimer := time.NewTimer(15 * time.Second)\n\t\tdefer timer.Stop()\n\t\tfor sqlDB.Stats().InUse > 0 {\n\t\t\tselect {\n\t\t\tcase <-m.stopCh:\n\t\t\t\t_ = sqlDB.Close()\n\t\t\t\treturn\n\t\t\tcase <-timer.C:\n\t\t\t\t_ = sqlDB.Close()\n\t\t\t\treturn\n\t\t\tcase <-ticker.C:\n\t\t\t}\n\t\t}\n\t\t_ = sqlDB.Close()\n\t\tif m.logger != nil {\n\t\t\tm.logger.Info(\"invalidated master connection pool after draining in-flight queries\",\n\t\t\t\tzap.String(\"key\", key))\n\t\t}\n\t}()\n}\n\n// Close stops all background pool-retire goroutines, waits via WaitGroup, and closes\n// all dynamically opened master SQL and MongoDB pools (leaving static plane roles intact).",
+          "claim": "In connection_manager_lifecycle.go lines 29-43 and 61-112, InvalidatePool calls m.reg.EvictRole('master:'+key) inside m.masterPoolMu.Lock() for atomic dual-cache eviction, and retireGormPoolGracefully sets SetMaxIdleConns(0), SetConnMaxIdleTime(1ms), and waits on a 2s grace timer before draining InUse > 0."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6604,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9369,
+                "NO": 0.0631
+              },
+              "confidence": 0.6604,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager_lifecycle.go:25-115\n\t\tsharedDestDB = m.reg.PeekDB(database.RoleDestination)\n\t}\n\n\t// Evict both cache layers atomically under m.masterPoolMu.Lock() (lock order\n\t// m.masterPoolMu -> r.mu matches GetMasterDB; zero network I/O under lock).\n\tm.masterPoolMu.Lock()\n\tdb, hasDB := m.masterDBPool[key]\n\tdelete(m.masterDBPool, key)\n\n\tvar regDB *gorm.DB\n\tif m.reg != nil {\n\t\tregDB = m.reg.EvictRole(\"master:\" + key)\n\t}\n\n\tmc, hasMongo := m.masterMongoPool[key]\n\tdelete(m.masterMongoPool, key)\n\tdelete(m.masterMongoDBs, key)\n\tdelete(m.masterEngines, key)\n\tm.masterPoolMu.Unlock()\n\n\tif !hasDB || db == nil {\n\t\tdb = regDB\n\t}\n\n\tif db != nil && db != sharedDestDB {\n\t\tm.retireGormPoolGracefully(key, db)\n\t}\n\tif hasMongo && mc != nil {\n\t\t_ = mc.Disconnect(context.Background())\n\t\tif m.logger != nil {\n\t\t\tm.logger.Info(\"invalidated master mongo connection pool\",\n\t\t\t\tzap.String(\"key\", key))\n\t\t}\n\t}\n}\n\nfunc (m *ConnectionManager) retireGormPoolGracefully(key string, db *gorm.DB) {\n\tsqlDB, err := db.DB()\n\tif err != nil || sqlDB == nil {\n\t\treturn\n\t}\n\t// Release idle TCP connections immediately without synchronously closing sqlDB at t=0,\n\t// because a caller that just received *gorm.DB from GetMasterDB may be between sequential\n\t// SQL statements (e.g. SELECT EXISTS -> UPSERT batch) where InUse is momentarily 0.\n\tsqlDB.SetMaxIdleConns(0)\n\tsqlDB.SetConnMaxIdleTime(time.Millisecond)\n\n\tm.mu.Lock()\n\tif m.closed {\n\t\tm.mu.Unlock()\n\t\t_ = sqlDB.Close()\n\t\treturn\n\t}\n\tm.wg.Add(1)\n\tm.mu.Unlock()\n\n\tgo func() {\n\t\tdefer m.wg.Done()\n\t\tgrace := time.NewTimer(2 * time.Second)\n\t\tdefer grace.Stop()\n\t\tselect {\n\t\tcase <-m.stopCh:\n\t\t\t_ = sqlDB.Close()\n\t\t\treturn\n\t\tcase <-grace.C:\n\t\t}\n\t\tticker := time.NewTicker(200 * time.Millisecond)\n\t\tdefer ticker.Stop()\n\t\ttimer := time.NewTimer(15 * time.Second)\n\t\tdefer timer.Stop()\n\t\tfor sqlDB.Stats().InUse > 0 {\n\t\t\tselect {\n\t\t\tcase <-m.stopCh:\n\t\t\t\t_ = sqlDB.Close()\n\t\t\t\treturn\n\t\t\tcase <-timer.C:\n\t\t\t\t_ = sqlDB.Close()\n\t\t\t\treturn\n\t\t\tcase <-ticker.C:\n\t\t\t}\n\t\t}\n\t\t_ = sqlDB.Close()\n\t\tif m.logger != nil {\n\t\t\tm.logger.Info(\"invalidated master connection pool after draining in-flight queries\",\n\t\t\t\tzap.String(\"key\", key))\n\t\t}\n\t}()\n}\n\n// Close stops all background pool-retire goroutines, waits via WaitGroup, and closes\n// all dynamically opened master SQL and MongoDB pools (leaving static plane roles intact).",
+          "claim": "In connection_manager_lifecycle.go lines 29-43 and 61-112, InvalidatePool calls m.reg.EvictRole('master:'+key) inside m.masterPoolMu.Lock() for atomic dual-cache eviction, and retireGormPoolGracefully sets SetMaxIdleConns(0), SetConnMaxIdleTime(1ms), and waits on a 2s grace timer before draining InUse > 0."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "F-A2-SERVER-RELOAD",
+    "kind": "claim",
+    "claim": "In server_setup.go lines 147-149 and 496-507, connectionManager.Close() is registered via ws.RegisterOnStop at LIFO index 0 and registerConfigReloadSubscribers is called after chunkEngine is constructed.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go",
+    "lines": "146-151",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:146-151\n\n\tconnectionManager := servicesource.NewConnectionManagerWithRegistry(cfg, logger, registry)\n\tws.RegisterOnStop(func() { connectionManager.Close() })\n\tschemaInspector := governance.NewSchemaInspector(pendingRepo, redisCache, natsClient, logger)\n\tschemaInspector.SetMaskingService(maskingSvc)\n\tschemaInspector.SetMetadataRegistry(registrySvc)",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.1014,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3801,
+                "INCORRECT": 0.4863,
+                "UNSUPPORTED": 0.1337
+              },
+              "confidence": 0.1014,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 314,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In server_setup.go lines 147-149 and 496-507, connectionManager.Close() is registered via ws.RegisterOnStop at LIFO index 0 and registerConfigReloadSubscribers is called after chunkEngine is constructed.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:146-151\n\n\tconnectionManager := servicesource.NewConnectionManagerWithRegistry(cfg, logger, registry)\n\tws.RegisterOnStop(func() { connectionManager.Close() })\n\tschemaInspector := governance.NewSchemaInspector(pendingRepo, redisCache, natsClient, logger)\n\tschemaInspector.SetMaskingService(maskingSvc)\n\tschemaInspector.SetMetadataRegistry(registrySvc)",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.0907,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3419,
+                "INCORRECT": 0.5052,
+                "UNSUPPORTED": 0.1528
+              },
+              "confidence": 0.0907,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 320,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:146-151\n\n\tconnectionManager := servicesource.NewConnectionManagerWithRegistry(cfg, logger, registry)\n\tws.RegisterOnStop(func() { connectionManager.Close() })\n\tschemaInspector := governance.NewSchemaInspector(pendingRepo, redisCache, natsClient, logger)\n\tschemaInspector.SetMaskingService(maskingSvc)\n\tschemaInspector.SetMetadataRegistry(registrySvc)",
+          "claim": "In server_setup.go lines 147-149 and 496-507, connectionManager.Close() is registered via ws.RegisterOnStop at LIFO index 0 and registerConfigReloadSubscribers is called after chunkEngine is constructed."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.3173,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8188,
+                "NO": 0.1812
+              },
+              "confidence": 0.3173,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 253,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/server/server_setup.go:146-151\n\n\tconnectionManager := servicesource.NewConnectionManagerWithRegistry(cfg, logger, registry)\n\tws.RegisterOnStop(func() { connectionManager.Close() })\n\tschemaInspector := governance.NewSchemaInspector(pendingRepo, redisCache, natsClient, logger)\n\tschemaInspector.SetMaskingService(maskingSvc)\n\tschemaInspector.SetMetadataRegistry(registrySvc)",
+          "claim": "In server_setup.go lines 147-149 and 496-507, connectionManager.Close() is registered via ws.RegisterOnStop at LIFO index 0 and registerConfigReloadSubscribers is called after chunkEngine is constructed."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "F-A4-CMS-HEXAGONAL",
+    "kind": "claim",
+    "claim": "In update_master_connection.go lines 34-50 and 159-225, UpdateMasterConnectionCommand marks Password with json:'-' so secrets never serialize, inherits SSLMode and credentials via ExtractMasterOptionsCredentials and GetMasterConnectionDSN, updates the repository, and publishes connection.config.changed.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_master_connection.go",
+    "lines": "32-52",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_master_connection.go:32-52\n// Password carries json:\"-\" so it is never serialized into job/audit logs.\ntype UpdateMasterConnectionCommand struct {\n\tports.SyncCommandMixin\n\tID              int64  `json:\"id\"`\n\tDisplayName     string `json:\"display_name,omitempty\"`\n\tEngineType      string `json:\"engine_type,omitempty\"`\n\tHost            string `json:\"host,omitempty\"`\n\tPort            int    `json:\"port,omitempty\"`\n\tDefaultDatabase string `json:\"default_database,omitempty\"`\n\tDefaultSchema   string `json:\"default_schema,omitempty\"`\n\tUsername        string `json:\"username,omitempty\"`\n\tPassword        string `json:\"-\"`\n\tSSLMode         string `json:\"sslmode,omitempty\"`\n\tAuthSource      string `json:\"auth_source,omitempty\"`\n\tReplicaSet      string `json:\"replica_set,omitempty\"`\n}\n\nfunc (UpdateMasterConnectionCommand) Type() string { return \"master-connection.update\" }\n\nfunc (c UpdateMasterConnectionCommand) Validate() error {\n\tif c.ID <= 0 {",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1566,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.531,
+                "INCORRECT": 0.3747,
+                "UNSUPPORTED": 0.0943
+              },
+              "confidence": 0.1566,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 601,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In update_master_connection.go lines 34-50 and 159-225, UpdateMasterConnectionCommand marks Password with json:'-' so secrets never serialize, inherits SSLMode and credentials via ExtractMasterOptionsCredentials and GetMasterConnectionDSN, updates the repository, and publishes connection.config.changed.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_master_connection.go:32-52\n// Password carries json:\"-\" so it is never serialized into job/audit logs.\ntype UpdateMasterConnectionCommand struct {\n\tports.SyncCommandMixin\n\tID              int64  `json:\"id\"`\n\tDisplayName     string `json:\"display_name,omitempty\"`\n\tEngineType      string `json:\"engine_type,omitempty\"`\n\tHost            string `json:\"host,omitempty\"`\n\tPort            int    `json:\"port,omitempty\"`\n\tDefaultDatabase string `json:\"default_database,omitempty\"`\n\tDefaultSchema   string `json:\"default_schema,omitempty\"`\n\tUsername        string `json:\"username,omitempty\"`\n\tPassword        string `json:\"-\"`\n\tSSLMode         string `json:\"sslmode,omitempty\"`\n\tAuthSource      string `json:\"auth_source,omitempty\"`\n\tReplicaSet      string `json:\"replica_set,omitempty\"`\n}\n\nfunc (UpdateMasterConnectionCommand) Type() string { return \"master-connection.update\" }\n\nfunc (c UpdateMasterConnectionCommand) Validate() error {\n\tif c.ID <= 0 {",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.191,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.617,
+                "INCORRECT": 0.2797,
+                "UNSUPPORTED": 0.1033
+              },
+              "confidence": 0.191,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 607,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_master_connection.go:32-52\n// Password carries json:\"-\" so it is never serialized into job/audit logs.\ntype UpdateMasterConnectionCommand struct {\n\tports.SyncCommandMixin\n\tID              int64  `json:\"id\"`\n\tDisplayName     string `json:\"display_name,omitempty\"`\n\tEngineType      string `json:\"engine_type,omitempty\"`\n\tHost            string `json:\"host,omitempty\"`\n\tPort            int    `json:\"port,omitempty\"`\n\tDefaultDatabase string `json:\"default_database,omitempty\"`\n\tDefaultSchema   string `json:\"default_schema,omitempty\"`\n\tUsername        string `json:\"username,omitempty\"`\n\tPassword        string `json:\"-\"`\n\tSSLMode         string `json:\"sslmode,omitempty\"`\n\tAuthSource      string `json:\"auth_source,omitempty\"`\n\tReplicaSet      string `json:\"replica_set,omitempty\"`\n}\n\nfunc (UpdateMasterConnectionCommand) Type() string { return \"master-connection.update\" }\n\nfunc (c UpdateMasterConnectionCommand) Validate() error {\n\tif c.ID <= 0 {",
+          "claim": "In update_master_connection.go lines 34-50 and 159-225, UpdateMasterConnectionCommand marks Password with json:'-' so secrets never serialize, inherits SSLMode and credentials via ExtractMasterOptionsCredentials and GetMasterConnectionDSN, updates the repository, and publishes connection.config.changed."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.9031,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9875,
+                "NO": 0.0125
+              },
+              "confidence": 0.9031,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 540,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_master_connection.go:32-52\n// Password carries json:\"-\" so it is never serialized into job/audit logs.\ntype UpdateMasterConnectionCommand struct {\n\tports.SyncCommandMixin\n\tID              int64  `json:\"id\"`\n\tDisplayName     string `json:\"display_name,omitempty\"`\n\tEngineType      string `json:\"engine_type,omitempty\"`\n\tHost            string `json:\"host,omitempty\"`\n\tPort            int    `json:\"port,omitempty\"`\n\tDefaultDatabase string `json:\"default_database,omitempty\"`\n\tDefaultSchema   string `json:\"default_schema,omitempty\"`\n\tUsername        string `json:\"username,omitempty\"`\n\tPassword        string `json:\"-\"`\n\tSSLMode         string `json:\"sslmode,omitempty\"`\n\tAuthSource      string `json:\"auth_source,omitempty\"`\n\tReplicaSet      string `json:\"replica_set,omitempty\"`\n}\n\nfunc (UpdateMasterConnectionCommand) Type() string { return \"master-connection.update\" }\n\nfunc (c UpdateMasterConnectionCommand) Validate() error {\n\tif c.ID <= 0 {",
+          "claim": "In update_master_connection.go lines 34-50 and 159-225, UpdateMasterConnectionCommand marks Password with json:'-' so secrets never serialize, inherits SSLMode and credentials via ExtractMasterOptionsCredentials and GetMasterConnectionDSN, updates the repository, and publishes connection.config.changed."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "F-A4-CMS-TX",
+    "kind": "claim",
+    "claim": "In master_connection_options_sync.go lines 147-194, execUpdateConnectionAndSyncBindingsTx wraps both the connection_registry UPDATE and syncMasterBindingsDatabaseTx inside r.db.WithContext(ctx).Transaction, preserving master_schema and physical_table_fqn for postgresql.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_connection_options_sync.go",
+    "lines": "145-195",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_connection_options_sync.go:145-195\n\t}\n\treturn \"\", false, nil\n}\n\nfunc (r *masterRepoGorm) execUpdateConnectionAndSyncBindingsTx(\n\tctx context.Context,\n\texecConnUpdate func(tx *gorm.DB) error,\n\tconnID int64,\n\tengineType string,\n\tdefaultDatabase *string,\n) error {\n\treturn r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {\n\t\tif err := execConnUpdate(tx); err != nil {\n\t\t\treturn err\n\t\t}\n\t\treturn syncMasterBindingsDatabaseTx(tx, connID, engineType, defaultDatabase)\n\t})\n}\n\nfunc syncMasterBindingsDatabaseTx(tx *gorm.DB, connID int64, engineType string, defaultDatabase *string) error {\n\tif defaultDatabase == nil {\n\t\treturn nil\n\t}\n\tdbName := strings.TrimSpace(*defaultDatabase)\n\tif dbName == \"\" {\n\t\treturn nil\n\t}\n\tmbTable := dbMasterBinding{}.TableName()\n\tvar err error\n\tif master.IsDatabaseScopedMasterEngine(engineType) {\n\t\terr = tx.Exec(\n\t\t\t`UPDATE `+mbTable+`\n\t\t\t    SET master_database = ?,\n\t\t\t        master_schema = ?,\n\t\t\t        physical_table_fqn = ? || '.' || master_table,\n\t\t\t        updated_at = CURRENT_TIMESTAMP\n\t\t\t  WHERE master_connection_id = ?`,\n\t\t\tdbName, dbName, dbName, connID,\n\t\t).Error\n\t} else {\n\t\t// PostgreSQL: preserve master_schema (e.g. 'public') & physical_table_fqn ('public.<table>'),\n\t\t// only synchronize master_database so it never retains a stale database name after connection edit.\n\t\terr = tx.Exec(\n\t\t\t`UPDATE `+mbTable+`\n\t\t\t    SET master_database = ?,\n\t\t\t        updated_at = CURRENT_TIMESTAMP\n\t\t\t  WHERE master_connection_id = ?`,\n\t\t\tdbName, connID,\n\t\t).Error\n\t}\n\tif err != nil && os.Getenv(\"GO_ENV\") == \"test\" && strings.Contains(strings.ToLower(err.Error()), \"no such table\") {",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5467,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8534,
+                "INCORRECT": 0.1111,
+                "UNSUPPORTED": 0.0355
+              },
+              "confidence": 0.5467,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 898,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In master_connection_options_sync.go lines 147-194, execUpdateConnectionAndSyncBindingsTx wraps both the connection_registry UPDATE and syncMasterBindingsDatabaseTx inside r.db.WithContext(ctx).Transaction, preserving master_schema and physical_table_fqn for postgresql.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_connection_options_sync.go:145-195\n\t}\n\treturn \"\", false, nil\n}\n\nfunc (r *masterRepoGorm) execUpdateConnectionAndSyncBindingsTx(\n\tctx context.Context,\n\texecConnUpdate func(tx *gorm.DB) error,\n\tconnID int64,\n\tengineType string,\n\tdefaultDatabase *string,\n) error {\n\treturn r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {\n\t\tif err := execConnUpdate(tx); err != nil {\n\t\t\treturn err\n\t\t}\n\t\treturn syncMasterBindingsDatabaseTx(tx, connID, engineType, defaultDatabase)\n\t})\n}\n\nfunc syncMasterBindingsDatabaseTx(tx *gorm.DB, connID int64, engineType string, defaultDatabase *string) error {\n\tif defaultDatabase == nil {\n\t\treturn nil\n\t}\n\tdbName := strings.TrimSpace(*defaultDatabase)\n\tif dbName == \"\" {\n\t\treturn nil\n\t}\n\tmbTable := dbMasterBinding{}.TableName()\n\tvar err error\n\tif master.IsDatabaseScopedMasterEngine(engineType) {\n\t\terr = tx.Exec(\n\t\t\t`UPDATE `+mbTable+`\n\t\t\t    SET master_database = ?,\n\t\t\t        master_schema = ?,\n\t\t\t        physical_table_fqn = ? || '.' || master_table,\n\t\t\t        updated_at = CURRENT_TIMESTAMP\n\t\t\t  WHERE master_connection_id = ?`,\n\t\t\tdbName, dbName, dbName, connID,\n\t\t).Error\n\t} else {\n\t\t// PostgreSQL: preserve master_schema (e.g. 'public') & physical_table_fqn ('public.<table>'),\n\t\t// only synchronize master_database so it never retains a stale database name after connection edit.\n\t\terr = tx.Exec(\n\t\t\t`UPDATE `+mbTable+`\n\t\t\t    SET master_database = ?,\n\t\t\t        updated_at = CURRENT_TIMESTAMP\n\t\t\t  WHERE master_connection_id = ?`,\n\t\t\tdbName, connID,\n\t\t).Error\n\t}\n\tif err != nil && os.Getenv(\"GO_ENV\") == \"test\" && strings.Contains(strings.ToLower(err.Error()), \"no such table\") {",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0875,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.535,
+                "INCORRECT": 0.2818,
+                "UNSUPPORTED": 0.1831
+              },
+              "confidence": 0.0875,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 904,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_connection_options_sync.go:145-195\n\t}\n\treturn \"\", false, nil\n}\n\nfunc (r *masterRepoGorm) execUpdateConnectionAndSyncBindingsTx(\n\tctx context.Context,\n\texecConnUpdate func(tx *gorm.DB) error,\n\tconnID int64,\n\tengineType string,\n\tdefaultDatabase *string,\n) error {\n\treturn r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {\n\t\tif err := execConnUpdate(tx); err != nil {\n\t\t\treturn err\n\t\t}\n\t\treturn syncMasterBindingsDatabaseTx(tx, connID, engineType, defaultDatabase)\n\t})\n}\n\nfunc syncMasterBindingsDatabaseTx(tx *gorm.DB, connID int64, engineType string, defaultDatabase *string) error {\n\tif defaultDatabase == nil {\n\t\treturn nil\n\t}\n\tdbName := strings.TrimSpace(*defaultDatabase)\n\tif dbName == \"\" {\n\t\treturn nil\n\t}\n\tmbTable := dbMasterBinding{}.TableName()\n\tvar err error\n\tif master.IsDatabaseScopedMasterEngine(engineType) {\n\t\terr = tx.Exec(\n\t\t\t`UPDATE `+mbTable+`\n\t\t\t    SET master_database = ?,\n\t\t\t        master_schema = ?,\n\t\t\t        physical_table_fqn = ? || '.' || master_table,\n\t\t\t        updated_at = CURRENT_TIMESTAMP\n\t\t\t  WHERE master_connection_id = ?`,\n\t\t\tdbName, dbName, dbName, connID,\n\t\t).Error\n\t} else {\n\t\t// PostgreSQL: preserve master_schema (e.g. 'public') & physical_table_fqn ('public.<table>'),\n\t\t// only synchronize master_database so it never retains a stale database name after connection edit.\n\t\terr = tx.Exec(\n\t\t\t`UPDATE `+mbTable+`\n\t\t\t    SET master_database = ?,\n\t\t\t        updated_at = CURRENT_TIMESTAMP\n\t\t\t  WHERE master_connection_id = ?`,\n\t\t\tdbName, connID,\n\t\t).Error\n\t}\n\tif err != nil && os.Getenv(\"GO_ENV\") == \"test\" && strings.Contains(strings.ToLower(err.Error()), \"no such table\") {",
+          "claim": "In master_connection_options_sync.go lines 147-194, execUpdateConnectionAndSyncBindingsTx wraps both the connection_registry UPDATE and syncMasterBindingsDatabaseTx inside r.db.WithContext(ctx).Transaction, preserving master_schema and physical_table_fqn for postgresql."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5372,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.902,
+                "NO": 0.098
+              },
+              "confidence": 0.5372,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 837,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/infra/persistence/master/master_connection_options_sync.go:145-195\n\t}\n\treturn \"\", false, nil\n}\n\nfunc (r *masterRepoGorm) execUpdateConnectionAndSyncBindingsTx(\n\tctx context.Context,\n\texecConnUpdate func(tx *gorm.DB) error,\n\tconnID int64,\n\tengineType string,\n\tdefaultDatabase *string,\n) error {\n\treturn r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {\n\t\tif err := execConnUpdate(tx); err != nil {\n\t\t\treturn err\n\t\t}\n\t\treturn syncMasterBindingsDatabaseTx(tx, connID, engineType, defaultDatabase)\n\t})\n}\n\nfunc syncMasterBindingsDatabaseTx(tx *gorm.DB, connID int64, engineType string, defaultDatabase *string) error {\n\tif defaultDatabase == nil {\n\t\treturn nil\n\t}\n\tdbName := strings.TrimSpace(*defaultDatabase)\n\tif dbName == \"\" {\n\t\treturn nil\n\t}\n\tmbTable := dbMasterBinding{}.TableName()\n\tvar err error\n\tif master.IsDatabaseScopedMasterEngine(engineType) {\n\t\terr = tx.Exec(\n\t\t\t`UPDATE `+mbTable+`\n\t\t\t    SET master_database = ?,\n\t\t\t        master_schema = ?,\n\t\t\t        physical_table_fqn = ? || '.' || master_table,\n\t\t\t        updated_at = CURRENT_TIMESTAMP\n\t\t\t  WHERE master_connection_id = ?`,\n\t\t\tdbName, dbName, dbName, connID,\n\t\t).Error\n\t} else {\n\t\t// PostgreSQL: preserve master_schema (e.g. 'public') & physical_table_fqn ('public.<table>'),\n\t\t// only synchronize master_database so it never retains a stale database name after connection edit.\n\t\terr = tx.Exec(\n\t\t\t`UPDATE `+mbTable+`\n\t\t\t    SET master_database = ?,\n\t\t\t        updated_at = CURRENT_TIMESTAMP\n\t\t\t  WHERE master_connection_id = ?`,\n\t\t\tdbName, connID,\n\t\t).Error\n\t}\n\tif err != nil && os.Getenv(\"GO_ENV\") == \"test\" && strings.Contains(strings.ToLower(err.Error()), \"no such table\") {",
+          "claim": "In master_connection_options_sync.go lines 147-194, execUpdateConnectionAndSyncBindingsTx wraps both the connection_registry UPDATE and syncMasterBindingsDatabaseTx inside r.db.WithContext(ctx).Transaction, preserving master_schema and physical_table_fqn for postgresql."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "F-A5-DOMAIN-DSN",
+    "kind": "claim",
+    "claim": "In connection_dsn.go lines 238-275, ExtractMasterOptionsCredentials reads fallback username and password from structured options_json while ignoring masked '***' and '__KEEP__' values.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/domain/master/connection_dsn.go",
+    "lines": "238-276",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/domain/master/connection_dsn.go:238-276\n\t\trest := trimmed[idxScheme+3:]\n\t\tif slash := strings.IndexAny(rest, \"/?\"); slash >= 0 {\n\t\t\trest = rest[:slash]\n\t\t}\n\t\tif at := strings.LastIndex(rest, \"@\"); at >= 0 {\n\t\t\tuserInfo := rest[:at]\n\t\t\trawUser := userInfo\n\t\t\trawPass := \"\"\n\t\t\tif colon := strings.Index(userInfo, \":\"); colon >= 0 {\n\t\t\t\trawUser = userInfo[:colon]\n\t\t\t\trawPass = userInfo[colon+1:]\n\t\t\t}\n\t\t\tif decUser, err := url.QueryUnescape(rawUser); err == nil {\n\t\t\t\trawUser = decUser\n\t\t\t}\n\t\t\tif decPass, err := url.QueryUnescape(rawPass); err == nil {\n\t\t\t\trawPass = decPass\n\t\t\t}\n\t\t\treturn rawUser, rawPass\n\t\t}\n\t}\n\treturn \"\", \"\"\n}\n\n// ExtractMasterOptionsCredentials extracts stored (username, password) from options_json,\n// supporting both structured keys (\"username\"/\"user\", \"password\") and DSN keys (\"dsn\"/\"uri\"/\"url\"),\n// while ignoring masked placeholders (\"***\", \"__KEEP__\").\nfunc ExtractMasterOptionsCredentials(optionsJSON string) (username, password string) {\n\tif strings.TrimSpace(optionsJSON) == \"\" || strings.TrimSpace(optionsJSON) == \"{}\" {\n\t\treturn \"\", \"\"\n\t}\n\tvar opts map[string]interface{}\n\tif err := json.Unmarshal([]byte(optionsJSON), &opts); err != nil {\n\t\treturn \"\", \"\"\n\t}\n\tfor _, uKey := range []string{\"username\", \"user\"} {\n\t\tif v, ok := opts[uKey].(string); ok && strings.TrimSpace(v) != \"\" {\n\t\t\tusername = strings.TrimSpace(v)\n\t\t\tbreak",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4171,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7934,
+                "INCORRECT": 0.1385,
+                "UNSUPPORTED": 0.0681
+              },
+              "confidence": 0.4171,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 779,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In connection_dsn.go lines 238-275, ExtractMasterOptionsCredentials reads fallback username and password from structured options_json while ignoring masked '***' and '__KEEP__' values.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/domain/master/connection_dsn.go:238-276\n\t\trest := trimmed[idxScheme+3:]\n\t\tif slash := strings.IndexAny(rest, \"/?\"); slash >= 0 {\n\t\t\trest = rest[:slash]\n\t\t}\n\t\tif at := strings.LastIndex(rest, \"@\"); at >= 0 {\n\t\t\tuserInfo := rest[:at]\n\t\t\trawUser := userInfo\n\t\t\trawPass := \"\"\n\t\t\tif colon := strings.Index(userInfo, \":\"); colon >= 0 {\n\t\t\t\trawUser = userInfo[:colon]\n\t\t\t\trawPass = userInfo[colon+1:]\n\t\t\t}\n\t\t\tif decUser, err := url.QueryUnescape(rawUser); err == nil {\n\t\t\t\trawUser = decUser\n\t\t\t}\n\t\t\tif decPass, err := url.QueryUnescape(rawPass); err == nil {\n\t\t\t\trawPass = decPass\n\t\t\t}\n\t\t\treturn rawUser, rawPass\n\t\t}\n\t}\n\treturn \"\", \"\"\n}\n\n// ExtractMasterOptionsCredentials extracts stored (username, password) from options_json,\n// supporting both structured keys (\"username\"/\"user\", \"password\") and DSN keys (\"dsn\"/\"uri\"/\"url\"),\n// while ignoring masked placeholders (\"***\", \"__KEEP__\").\nfunc ExtractMasterOptionsCredentials(optionsJSON string) (username, password string) {\n\tif strings.TrimSpace(optionsJSON) == \"\" || strings.TrimSpace(optionsJSON) == \"{}\" {\n\t\treturn \"\", \"\"\n\t}\n\tvar opts map[string]interface{}\n\tif err := json.Unmarshal([]byte(optionsJSON), &opts); err != nil {\n\t\treturn \"\", \"\"\n\t}\n\tfor _, uKey := range []string{\"username\", \"user\"} {\n\t\tif v, ok := opts[uKey].(string); ok && strings.TrimSpace(v) != \"\" {\n\t\t\tusername = strings.TrimSpace(v)\n\t\t\tbreak",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.1183,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3142,
+                "INCORRECT": 0.5464,
+                "UNSUPPORTED": 0.1394
+              },
+              "confidence": 0.1183,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 785,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/domain/master/connection_dsn.go:238-276\n\t\trest := trimmed[idxScheme+3:]\n\t\tif slash := strings.IndexAny(rest, \"/?\"); slash >= 0 {\n\t\t\trest = rest[:slash]\n\t\t}\n\t\tif at := strings.LastIndex(rest, \"@\"); at >= 0 {\n\t\t\tuserInfo := rest[:at]\n\t\t\trawUser := userInfo\n\t\t\trawPass := \"\"\n\t\t\tif colon := strings.Index(userInfo, \":\"); colon >= 0 {\n\t\t\t\trawUser = userInfo[:colon]\n\t\t\t\trawPass = userInfo[colon+1:]\n\t\t\t}\n\t\t\tif decUser, err := url.QueryUnescape(rawUser); err == nil {\n\t\t\t\trawUser = decUser\n\t\t\t}\n\t\t\tif decPass, err := url.QueryUnescape(rawPass); err == nil {\n\t\t\t\trawPass = decPass\n\t\t\t}\n\t\t\treturn rawUser, rawPass\n\t\t}\n\t}\n\treturn \"\", \"\"\n}\n\n// ExtractMasterOptionsCredentials extracts stored (username, password) from options_json,\n// supporting both structured keys (\"username\"/\"user\", \"password\") and DSN keys (\"dsn\"/\"uri\"/\"url\"),\n// while ignoring masked placeholders (\"***\", \"__KEEP__\").\nfunc ExtractMasterOptionsCredentials(optionsJSON string) (username, password string) {\n\tif strings.TrimSpace(optionsJSON) == \"\" || strings.TrimSpace(optionsJSON) == \"{}\" {\n\t\treturn \"\", \"\"\n\t}\n\tvar opts map[string]interface{}\n\tif err := json.Unmarshal([]byte(optionsJSON), &opts); err != nil {\n\t\treturn \"\", \"\"\n\t}\n\tfor _, uKey := range []string{\"username\", \"user\"} {\n\t\tif v, ok := opts[uKey].(string); ok && strings.TrimSpace(v) != \"\" {\n\t\t\tusername = strings.TrimSpace(v)\n\t\t\tbreak",
+          "claim": "In connection_dsn.go lines 238-275, ExtractMasterOptionsCredentials reads fallback username and password from structured options_json while ignoring masked '***' and '__KEEP__' values."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6889,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9441,
+                "NO": 0.0559
+              },
+              "confidence": 0.6889,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 718,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/domain/master/connection_dsn.go:238-276\n\t\trest := trimmed[idxScheme+3:]\n\t\tif slash := strings.IndexAny(rest, \"/?\"); slash >= 0 {\n\t\t\trest = rest[:slash]\n\t\t}\n\t\tif at := strings.LastIndex(rest, \"@\"); at >= 0 {\n\t\t\tuserInfo := rest[:at]\n\t\t\trawUser := userInfo\n\t\t\trawPass := \"\"\n\t\t\tif colon := strings.Index(userInfo, \":\"); colon >= 0 {\n\t\t\t\trawUser = userInfo[:colon]\n\t\t\t\trawPass = userInfo[colon+1:]\n\t\t\t}\n\t\t\tif decUser, err := url.QueryUnescape(rawUser); err == nil {\n\t\t\t\trawUser = decUser\n\t\t\t}\n\t\t\tif decPass, err := url.QueryUnescape(rawPass); err == nil {\n\t\t\t\trawPass = decPass\n\t\t\t}\n\t\t\treturn rawUser, rawPass\n\t\t}\n\t}\n\treturn \"\", \"\"\n}\n\n// ExtractMasterOptionsCredentials extracts stored (username, password) from options_json,\n// supporting both structured keys (\"username\"/\"user\", \"password\") and DSN keys (\"dsn\"/\"uri\"/\"url\"),\n// while ignoring masked placeholders (\"***\", \"__KEEP__\").\nfunc ExtractMasterOptionsCredentials(optionsJSON string) (username, password string) {\n\tif strings.TrimSpace(optionsJSON) == \"\" || strings.TrimSpace(optionsJSON) == \"{}\" {\n\t\treturn \"\", \"\"\n\t}\n\tvar opts map[string]interface{}\n\tif err := json.Unmarshal([]byte(optionsJSON), &opts); err != nil {\n\t\treturn \"\", \"\"\n\t}\n\tfor _, uKey := range []string{\"username\", \"user\"} {\n\t\tif v, ok := opts[uKey].(string); ok && strings.TrimSpace(v) != \"\" {\n\t\t\tusername = strings.TrimSpace(v)\n\t\t\tbreak",
+          "claim": "In connection_dsn.go lines 238-275, ExtractMasterOptionsCredentials reads fallback username and password from structured options_json while ignoring masked '***' and '__KEEP__' values."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "F-A6-TRANSIENT-DDL",
+    "kind": "claim",
+    "claim": "In transmute_poison_pill_split.go lines 272-278, isTransientError matches 'database is closed', 'failed to verify master table existence', and 'does not exist on target database'.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_poison_pill_split.go",
+    "lines": "269-280",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_poison_pill_split.go:269-280\n\tmsg := strings.ToLower(err.Error())\n\treturn strings.Contains(msg, \"connection refused\") ||\n\t\tstrings.Contains(msg, \"connection reset\") ||\n\t\tstrings.Contains(msg, \"connection closed\") ||\n\t\tstrings.Contains(msg, \"conn closed\") ||\n\t\tstrings.Contains(msg, \"database is closed\") ||\n\t\tstrings.Contains(msg, \"failed to verify master table existence\") ||\n\t\tstrings.Contains(msg, \"does not exist on target database\") ||\n\t\tstrings.Contains(msg, \"driver: bad connection\") ||\n\t\tstrings.Contains(msg, \"unexpected eof\") ||\n\t\tstrings.Contains(msg, \"connection pool\") ||\n\t\tstrings.Contains(msg, \"dial tcp\") ||",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1368,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.5922,
+                "INCORRECT": 0.2499,
+                "UNSUPPORTED": 0.158
+              },
+              "confidence": 0.1368,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 441,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In transmute_poison_pill_split.go lines 272-278, isTransientError matches 'database is closed', 'failed to verify master table existence', and 'does not exist on target database'.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_poison_pill_split.go:269-280\n\tmsg := strings.ToLower(err.Error())\n\treturn strings.Contains(msg, \"connection refused\") ||\n\t\tstrings.Contains(msg, \"connection reset\") ||\n\t\tstrings.Contains(msg, \"connection closed\") ||\n\t\tstrings.Contains(msg, \"conn closed\") ||\n\t\tstrings.Contains(msg, \"database is closed\") ||\n\t\tstrings.Contains(msg, \"failed to verify master table existence\") ||\n\t\tstrings.Contains(msg, \"does not exist on target database\") ||\n\t\tstrings.Contains(msg, \"driver: bad connection\") ||\n\t\tstrings.Contains(msg, \"unexpected eof\") ||\n\t\tstrings.Contains(msg, \"connection pool\") ||\n\t\tstrings.Contains(msg, \"dial tcp\") ||",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0115,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.3791,
+                "INCORRECT": 0.3603,
+                "UNSUPPORTED": 0.2606
+              },
+              "confidence": 0.0115,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 446,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_poison_pill_split.go:269-280\n\tmsg := strings.ToLower(err.Error())\n\treturn strings.Contains(msg, \"connection refused\") ||\n\t\tstrings.Contains(msg, \"connection reset\") ||\n\t\tstrings.Contains(msg, \"connection closed\") ||\n\t\tstrings.Contains(msg, \"conn closed\") ||\n\t\tstrings.Contains(msg, \"database is closed\") ||\n\t\tstrings.Contains(msg, \"failed to verify master table existence\") ||\n\t\tstrings.Contains(msg, \"does not exist on target database\") ||\n\t\tstrings.Contains(msg, \"driver: bad connection\") ||\n\t\tstrings.Contains(msg, \"unexpected eof\") ||\n\t\tstrings.Contains(msg, \"connection pool\") ||\n\t\tstrings.Contains(msg, \"dial tcp\") ||",
+          "claim": "In transmute_poison_pill_split.go lines 272-278, isTransientError matches 'database is closed', 'failed to verify master table existence', and 'does not exist on target database'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6282,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9284,
+                "NO": 0.0716
+              },
+              "confidence": 0.6282,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 379,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_poison_pill_split.go:269-280\n\tmsg := strings.ToLower(err.Error())\n\treturn strings.Contains(msg, \"connection refused\") ||\n\t\tstrings.Contains(msg, \"connection reset\") ||\n\t\tstrings.Contains(msg, \"connection closed\") ||\n\t\tstrings.Contains(msg, \"conn closed\") ||\n\t\tstrings.Contains(msg, \"database is closed\") ||\n\t\tstrings.Contains(msg, \"failed to verify master table existence\") ||\n\t\tstrings.Contains(msg, \"does not exist on target database\") ||\n\t\tstrings.Contains(msg, \"driver: bad connection\") ||\n\t\tstrings.Contains(msg, \"unexpected eof\") ||\n\t\tstrings.Contains(msg, \"connection pool\") ||\n\t\tstrings.Contains(msg, \"dial tcp\") ||",
+          "claim": "In transmute_poison_pill_split.go lines 272-278, isTransientError matches 'database is closed', 'failed to verify master table existence', and 'does not exist on target database'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In MasterRegistry.tsx lines 268-272, MasterConnectionItem is re-exported from ../components/master/masterConnectionForm so existing component imports remain backward-compatible.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx",
+    "lines": "266-273",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.1044,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3523,
+                "INCORRECT": 0.5101,
+                "UNSUPPORTED": 0.1376
+              },
+              "confidence": 0.1044,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 162,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In MasterRegistry.tsx lines 268-272, MasterConnectionItem is re-exported from ../components/master/masterConnectionForm so existing component imports remain backward-compatible.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.0523,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4976,
+                "INCORRECT": 0.244,
+                "UNSUPPORTED": 0.2585
+              },
+              "confidence": 0.0523,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 168,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In MasterRegistry.tsx lines 268-272, MasterConnectionItem is re-exported from ../components/master/masterConnectionForm so existing component imports remain backward-compatible."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.292,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8068,
+                "NO": 0.1932
+              },
+              "confidence": 0.292,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 101,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In MasterRegistry.tsx lines 268-272, MasterConnectionItem is re-exported from ../components/master/masterConnectionForm so existing component imports remain backward-compatible."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In connection_manager_lifecycle.go lines 29-43, InvalidatePool unlocks m.masterPoolMu before calling m.reg.EvictRole('master:'+key).",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/connection_manager_lifecycle.go",
+    "lines": "28-44",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.0931,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3722,
+                "INCORRECT": 0.4853,
+                "UNSUPPORTED": 0.1425
+              },
+              "confidence": 0.0931,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 163,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In connection_manager_lifecycle.go lines 29-43, InvalidatePool unlocks m.masterPoolMu before calling m.reg.EvictRole('master:'+key).",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.3004,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0754,
+                "INCORRECT": 0.2148,
+                "UNSUPPORTED": 0.7098
+              },
+              "confidence": 0.3004,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 168,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In connection_manager_lifecycle.go lines 29-43, InvalidatePool unlocks m.masterPoolMu before calling m.reg.EvictRole('master:'+key)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8132,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9715,
+                "NO": 0.0285
+              },
+              "confidence": 0.8132,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 101,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In connection_manager_lifecycle.go lines 29-43, InvalidatePool unlocks m.masterPoolMu before calling m.reg.EvictRole('master:'+key)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In update_master_connection.go lines 34-50, UpdateMasterConnectionCommand exports Password as json:'password' in serialized JSON.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/app/commands/master/update_master_connection.go",
+    "lines": "32-50",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.1106,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.4733,
+                "INCORRECT": 0.4044,
+                "UNSUPPORTED": 0.1223
+              },
+              "confidence": 0.1106,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 153,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In update_master_connection.go lines 34-50, UpdateMasterConnectionCommand exports Password as json:'password' in serialized JSON.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.1804,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.1364,
+                "INCORRECT": 0.6321,
+                "UNSUPPORTED": 0.2316
+              },
+              "confidence": 0.1804,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 159,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In update_master_connection.go lines 34-50, UpdateMasterConnectionCommand exports Password as json:'password' in serialized JSON."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.1678,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.7364,
+                "NO": 0.2636
+              },
+              "confidence": 0.1678,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 92,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In update_master_connection.go lines 34-50, UpdateMasterConnectionCommand exports Password as json:'password' in serialized JSON."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

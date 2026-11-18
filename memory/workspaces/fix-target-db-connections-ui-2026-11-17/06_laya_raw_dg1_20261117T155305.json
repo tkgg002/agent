@@ -1,0 +1,1529 @@
+[
+  {
+    "id": "S-RC",
+    "kind": "solution",
+    "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 6-24, the current Drawer table in MasterRegistry.tsx renders 7 separate columns while MasterRegistry.tsx is listed in forbidden_ifelse_files, requiring extraction into src/components/master/TargetConnectionsDrawer.tsx.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md",
+    "lines": "6-25",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:6-25\n- **`F1` — Cấu trúc 7 cột rời hiện tại gây chật chiều ngang Drawer (`VERIFIED`):**\n  - Tại `cdc-cms-web/src/pages/MasterRegistry.tsx:1553-1683`, Drawer `Quản Lý Kết Nối Đích (Target Database Connections)` (`width={840}`) đang render `<Table<MasterConnectionItem>>` gồm **7 cột riêng biệt**:\n    1. `Mã kết nối` (`lines 1586-1595`): `<Tag color={code === 'default' || code === 'default_master' ? 'purple' : 'blue'}>{code}</Tag>`.\n    2. `Engine` (`lines 1596-1608`): `<Tag color={meta.tagColor}>{meta.shortLabel}</Tag>`.\n    3. `Tên hiển thị` (`lines 1609-1613`): `dataIndex: 'display_name'`.\n    4. `Host : Port` (`lines 1614-1621`): `<Text code>{r.host ? `${r.host}:${r.port || defaultPort}` : '(mặc định hệ thống)'}</Text>`.\n    5. `Database / Schema` (`lines 1622-1631`).\n    6. `Trạng thái` (`lines 1632-1641`).\n    7. `Thao tác` (`lines 1642-1680`): `Test`, `Edit`, `Popconfirm` vô hiệu hoá.\n- **`F2` — Hệ thống đã có sẵn `MasterEngineIcon` và bảng màu ngữ nghĩa chuẩn (`VERIFIED`):**\n  - Tại `cdc-cms-web/src/components/master/MasterGroupedCollapse.tsx:75-110`, component `MasterEngineIcon` đã hỗ trợ đầy đủ SVG icon từ `meta.deviconSlug` cho cả 4 engine đích (`postgresql`, `mongodb`, `mysql`, `clickhouse` khai báo tại `masterEngineConfig.ts:22-95`), kèm fallback tự động sang `ThunderboltOutlined` / `DatabaseOutlined` theo `meta.brandColor` khi mạng nội bộ không tải được CDN.\n  - Tại `cdc-cms-web/src/index.css:48-51`, class `.top-aligned-table .ant-table-cell` đã có sẵn để căn đỉnh (`vertical-align: top !important`) cho các ô bảng nhiều dòng.\n- **`F3` — Edge-case dữ liệu `display_name` và `host:port` (`VERIFIED` qua `DG0` — `06_laya_summary_dg0_20261117T154926.json`):**\n  - **Edge-case 1 (`display_name` trùng `connection_code`):** Tại `cdc-cms-service/internal/api/master/master_registry_handler_connections.go:105-108`, khi tạo kết nối mới mà bỏ trống `DisplayName`, backend gán `displayName = connCode`. Do đó ở Hàng 2 của cột gộp `Mã & Tên hiển thị`, phải luôn hiển thị `(r.display_name || '').trim() || '—'` (không ẩn khi trùng `connection_code`) để đảm bảo đúng cấu trúc 2 hàng (`hàng 1: mã kết nối`, `hàng 2: tên hiển thị`).\n  - **Edge-case 2 (Multi-host hoặc `host` đã kèm `:port`):** Tại `cdc-cms-service/internal/domain/master/connection_dsn.go:67-85`, MongoDB cho phép chuỗi `host` nhiều node phân tách bởi dấu phẩy hoặc đã có `:port` (`node1:27017,node2:27017`). Biểu thức cũ `${r.host}:${r.port || defaultPort}` tại `MasterRegistry.tsx:1619` sẽ nối thừa `:port` thành `node1:27017,node2:27017:27017`. Hàm thuần `formatMasterConnectionHostPort` cần kiểm tra từng phân đoạn dấu phẩy: nếu đã kết thúc bằng `:<số>` thì giữ nguyên, ngược lại nối `:${resolvedPort}`; nếu `host` rỗng thì trả về `'(mặc định hệ thống)'`.\n- **`F4` — Ràng buộc kiến trúc `forbidden_ifelse_files` & `noUnusedLocals` (`VERIFIED`):**\n  - Tại `cdc-cms-web/.agent-project.json:9,23`, `god_file_loc` là `600` và `src/pages/MasterRegistry.tsx` (hiện `1,895` dòng) nằm trong `forbidden_ifelse_files`. Theo `INV-4` (`review_profile.md:16`), bắt buộc tách Drawer bảng kết nối đích ra component riêng `src/components/master/TargetConnectionsDrawer.tsx` để **không thêm bất kỳ `if/else` nào vào `MasterRegistry.tsx`** và giảm kích thước `MasterRegistry.tsx` xuống `~1,774` dòng (`NOW < HEAD`).\n  - Tại `cdc-cms-web/tsconfig.app.json:19-21`, `\"verbatimModuleSyntax\": true` và `\"noUnusedLocals\": true` đang bật cứng; khi chuyển Drawer sang `TargetConnectionsDrawer.tsx`, bắt buộc gỡ bỏ các import không còn dùng trong `MasterRegistry.tsx` (`Drawer`, `Popconfirm` tại dòng `4`; `DeleteOutlined` tại dòng `10`) theo bài học `L095`.\n\n---",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.6406,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8821,
+                "INCORRECT": 0.1087,
+                "UNSUPPORTED": 0.0091
+              },
+              "confidence": 0.6406,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 6-24, the current Drawer table in MasterRegistry.tsx renders 7 separate columns while MasterRegistry.tsx is listed in forbidden_ifelse_files, requiring extraction into src/components/master/TargetConnectionsDrawer.tsx.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:6-25\n- **`F1` — Cấu trúc 7 cột rời hiện tại gây chật chiều ngang Drawer (`VERIFIED`):**\n  - Tại `cdc-cms-web/src/pages/MasterRegistry.tsx:1553-1683`, Drawer `Quản Lý Kết Nối Đích (Target Database Connections)` (`width={840}`) đang render `<Table<MasterConnectionItem>>` gồm **7 cột riêng biệt**:\n    1. `Mã kết nối` (`lines 1586-1595`): `<Tag color={code === 'default' || code === 'default_master' ? 'purple' : 'blue'}>{code}</Tag>`.\n    2. `Engine` (`lines 1596-1608`): `<Tag color={meta.tagColor}>{meta.shortLabel}</Tag>`.\n    3. `Tên hiển thị` (`lines 1609-1613`): `dataIndex: 'display_name'`.\n    4. `Host : Port` (`lines 1614-1621`): `<Text code>{r.host ? `${r.host}:${r.port || defaultPort}` : '(mặc định hệ thống)'}</Text>`.\n    5. `Database / Schema` (`lines 1622-1631`).\n    6. `Trạng thái` (`lines 1632-1641`).\n    7. `Thao tác` (`lines 1642-1680`): `Test`, `Edit`, `Popconfirm` vô hiệu hoá.\n- **`F2` — Hệ thống đã có sẵn `MasterEngineIcon` và bảng màu ngữ nghĩa chuẩn (`VERIFIED`):**\n  - Tại `cdc-cms-web/src/components/master/MasterGroupedCollapse.tsx:75-110`, component `MasterEngineIcon` đã hỗ trợ đầy đủ SVG icon từ `meta.deviconSlug` cho cả 4 engine đích (`postgresql`, `mongodb`, `mysql`, `clickhouse` khai báo tại `masterEngineConfig.ts:22-95`), kèm fallback tự động sang `ThunderboltOutlined` / `DatabaseOutlined` theo `meta.brandColor` khi mạng nội bộ không tải được CDN.\n  - Tại `cdc-cms-web/src/index.css:48-51`, class `.top-aligned-table .ant-table-cell` đã có sẵn để căn đỉnh (`vertical-align: top !important`) cho các ô bảng nhiều dòng.\n- **`F3` — Edge-case dữ liệu `display_name` và `host:port` (`VERIFIED` qua `DG0` — `06_laya_summary_dg0_20261117T154926.json`):**\n  - **Edge-case 1 (`display_name` trùng `connection_code`):** Tại `cdc-cms-service/internal/api/master/master_registry_handler_connections.go:105-108`, khi tạo kết nối mới mà bỏ trống `DisplayName`, backend gán `displayName = connCode`. Do đó ở Hàng 2 của cột gộp `Mã & Tên hiển thị`, phải luôn hiển thị `(r.display_name || '').trim() || '—'` (không ẩn khi trùng `connection_code`) để đảm bảo đúng cấu trúc 2 hàng (`hàng 1: mã kết nối`, `hàng 2: tên hiển thị`).\n  - **Edge-case 2 (Multi-host hoặc `host` đã kèm `:port`):** Tại `cdc-cms-service/internal/domain/master/connection_dsn.go:67-85`, MongoDB cho phép chuỗi `host` nhiều node phân tách bởi dấu phẩy hoặc đã có `:port` (`node1:27017,node2:27017`). Biểu thức cũ `${r.host}:${r.port || defaultPort}` tại `MasterRegistry.tsx:1619` sẽ nối thừa `:port` thành `node1:27017,node2:27017:27017`. Hàm thuần `formatMasterConnectionHostPort` cần kiểm tra từng phân đoạn dấu phẩy: nếu đã kết thúc bằng `:<số>` thì giữ nguyên, ngược lại nối `:${resolvedPort}`; nếu `host` rỗng thì trả về `'(mặc định hệ thống)'`.\n- **`F4` — Ràng buộc kiến trúc `forbidden_ifelse_files` & `noUnusedLocals` (`VERIFIED`):**\n  - Tại `cdc-cms-web/.agent-project.json:9,23`, `god_file_loc` là `600` và `src/pages/MasterRegistry.tsx` (hiện `1,895` dòng) nằm trong `forbidden_ifelse_files`. Theo `INV-4` (`review_profile.md:16`), bắt buộc tách Drawer bảng kết nối đích ra component riêng `src/components/master/TargetConnectionsDrawer.tsx` để **không thêm bất kỳ `if/else` nào vào `MasterRegistry.tsx`** và giảm kích thước `MasterRegistry.tsx` xuống `~1,774` dòng (`NOW < HEAD`).\n  - Tại `cdc-cms-web/tsconfig.app.json:19-21`, `\"verbatimModuleSyntax\": true` và `\"noUnusedLocals\": true` đang bật cứng; khi chuyển Drawer sang `TargetConnectionsDrawer.tsx`, bắt buộc gỡ bỏ các import không còn dùng trong `MasterRegistry.tsx` (`Drawer`, `Popconfirm` tại dòng `4`; `DeleteOutlined` tại dòng `10`) theo bài học `L095`.\n\n---",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.2885,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6778,
+                "INCORRECT": 0.2633,
+                "UNSUPPORTED": 0.0588
+              },
+              "confidence": 0.2885,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:6-25\n- **`F1` — Cấu trúc 7 cột rời hiện tại gây chật chiều ngang Drawer (`VERIFIED`):**\n  - Tại `cdc-cms-web/src/pages/MasterRegistry.tsx:1553-1683`, Drawer `Quản Lý Kết Nối Đích (Target Database Connections)` (`width={840}`) đang render `<Table<MasterConnectionItem>>` gồm **7 cột riêng biệt**:\n    1. `Mã kết nối` (`lines 1586-1595`): `<Tag color={code === 'default' || code === 'default_master' ? 'purple' : 'blue'}>{code}</Tag>`.\n    2. `Engine` (`lines 1596-1608`): `<Tag color={meta.tagColor}>{meta.shortLabel}</Tag>`.\n    3. `Tên hiển thị` (`lines 1609-1613`): `dataIndex: 'display_name'`.\n    4. `Host : Port` (`lines 1614-1621`): `<Text code>{r.host ? `${r.host}:${r.port || defaultPort}` : '(mặc định hệ thống)'}</Text>`.\n    5. `Database / Schema` (`lines 1622-1631`).\n    6. `Trạng thái` (`lines 1632-1641`).\n    7. `Thao tác` (`lines 1642-1680`): `Test`, `Edit`, `Popconfirm` vô hiệu hoá.\n- **`F2` — Hệ thống đã có sẵn `MasterEngineIcon` và bảng màu ngữ nghĩa chuẩn (`VERIFIED`):**\n  - Tại `cdc-cms-web/src/components/master/MasterGroupedCollapse.tsx:75-110`, component `MasterEngineIcon` đã hỗ trợ đầy đủ SVG icon từ `meta.deviconSlug` cho cả 4 engine đích (`postgresql`, `mongodb`, `mysql`, `clickhouse` khai báo tại `masterEngineConfig.ts:22-95`), kèm fallback tự động sang `ThunderboltOutlined` / `DatabaseOutlined` theo `meta.brandColor` khi mạng nội bộ không tải được CDN.\n  - Tại `cdc-cms-web/src/index.css:48-51`, class `.top-aligned-table .ant-table-cell` đã có sẵn để căn đỉnh (`vertical-align: top !important`) cho các ô bảng nhiều dòng.\n- **`F3` — Edge-case dữ liệu `display_name` và `host:port` (`VERIFIED` qua `DG0` — `06_laya_summary_dg0_20261117T154926.json`):**\n  - **Edge-case 1 (`display_name` trùng `connection_code`):** Tại `cdc-cms-service/internal/api/master/master_registry_handler_connections.go:105-108`, khi tạo kết nối mới mà bỏ trống `DisplayName`, backend gán `displayName = connCode`. Do đó ở Hàng 2 của cột gộp `Mã & Tên hiển thị`, phải luôn hiển thị `(r.display_name || '').trim() || '—'` (không ẩn khi trùng `connection_code`) để đảm bảo đúng cấu trúc 2 hàng (`hàng 1: mã kết nối`, `hàng 2: tên hiển thị`).\n  - **Edge-case 2 (Multi-host hoặc `host` đã kèm `:port`):** Tại `cdc-cms-service/internal/domain/master/connection_dsn.go:67-85`, MongoDB cho phép chuỗi `host` nhiều node phân tách bởi dấu phẩy hoặc đã có `:port` (`node1:27017,node2:27017`). Biểu thức cũ `${r.host}:${r.port || defaultPort}` tại `MasterRegistry.tsx:1619` sẽ nối thừa `:port` thành `node1:27017,node2:27017:27017`. Hàm thuần `formatMasterConnectionHostPort` cần kiểm tra từng phân đoạn dấu phẩy: nếu đã kết thúc bằng `:<số>` thì giữ nguyên, ngược lại nối `:${resolvedPort}`; nếu `host` rỗng thì trả về `'(mặc định hệ thống)'`.\n- **`F4` — Ràng buộc kiến trúc `forbidden_ifelse_files` & `noUnusedLocals` (`VERIFIED`):**\n  - Tại `cdc-cms-web/.agent-project.json:9,23`, `god_file_loc` là `600` và `src/pages/MasterRegistry.tsx` (hiện `1,895` dòng) nằm trong `forbidden_ifelse_files`. Theo `INV-4` (`review_profile.md:16`), bắt buộc tách Drawer bảng kết nối đích ra component riêng `src/components/master/TargetConnectionsDrawer.tsx` để **không thêm bất kỳ `if/else` nào vào `MasterRegistry.tsx`** và giảm kích thước `MasterRegistry.tsx` xuống `~1,774` dòng (`NOW < HEAD`).\n  - Tại `cdc-cms-web/tsconfig.app.json:19-21`, `\"verbatimModuleSyntax\": true` và `\"noUnusedLocals\": true` đang bật cứng; khi chuyển Drawer sang `TargetConnectionsDrawer.tsx`, bắt buộc gỡ bỏ các import không còn dùng trong `MasterRegistry.tsx` (`Drawer`, `Popconfirm` tại dòng `4`; `DeleteOutlined` tại dòng `10`) theo bài học `L095`.\n\n---",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 6-24, the current Drawer table in MasterRegistry.tsx renders 7 separate columns while MasterRegistry.tsx is listed in forbidden_ifelse_files, requiring extraction into src/components/master/TargetConnectionsDrawer.tsx."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5466,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9049,
+                "NO": 0.0951
+              },
+              "confidence": 0.5466,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:6-25\n- **`F1` — Cấu trúc 7 cột rời hiện tại gây chật chiều ngang Drawer (`VERIFIED`):**\n  - Tại `cdc-cms-web/src/pages/MasterRegistry.tsx:1553-1683`, Drawer `Quản Lý Kết Nối Đích (Target Database Connections)` (`width={840}`) đang render `<Table<MasterConnectionItem>>` gồm **7 cột riêng biệt**:\n    1. `Mã kết nối` (`lines 1586-1595`): `<Tag color={code === 'default' || code === 'default_master' ? 'purple' : 'blue'}>{code}</Tag>`.\n    2. `Engine` (`lines 1596-1608`): `<Tag color={meta.tagColor}>{meta.shortLabel}</Tag>`.\n    3. `Tên hiển thị` (`lines 1609-1613`): `dataIndex: 'display_name'`.\n    4. `Host : Port` (`lines 1614-1621`): `<Text code>{r.host ? `${r.host}:${r.port || defaultPort}` : '(mặc định hệ thống)'}</Text>`.\n    5. `Database / Schema` (`lines 1622-1631`).\n    6. `Trạng thái` (`lines 1632-1641`).\n    7. `Thao tác` (`lines 1642-1680`): `Test`, `Edit`, `Popconfirm` vô hiệu hoá.\n- **`F2` — Hệ thống đã có sẵn `MasterEngineIcon` và bảng màu ngữ nghĩa chuẩn (`VERIFIED`):**\n  - Tại `cdc-cms-web/src/components/master/MasterGroupedCollapse.tsx:75-110`, component `MasterEngineIcon` đã hỗ trợ đầy đủ SVG icon từ `meta.deviconSlug` cho cả 4 engine đích (`postgresql`, `mongodb`, `mysql`, `clickhouse` khai báo tại `masterEngineConfig.ts:22-95`), kèm fallback tự động sang `ThunderboltOutlined` / `DatabaseOutlined` theo `meta.brandColor` khi mạng nội bộ không tải được CDN.\n  - Tại `cdc-cms-web/src/index.css:48-51`, class `.top-aligned-table .ant-table-cell` đã có sẵn để căn đỉnh (`vertical-align: top !important`) cho các ô bảng nhiều dòng.\n- **`F3` — Edge-case dữ liệu `display_name` và `host:port` (`VERIFIED` qua `DG0` — `06_laya_summary_dg0_20261117T154926.json`):**\n  - **Edge-case 1 (`display_name` trùng `connection_code`):** Tại `cdc-cms-service/internal/api/master/master_registry_handler_connections.go:105-108`, khi tạo kết nối mới mà bỏ trống `DisplayName`, backend gán `displayName = connCode`. Do đó ở Hàng 2 của cột gộp `Mã & Tên hiển thị`, phải luôn hiển thị `(r.display_name || '').trim() || '—'` (không ẩn khi trùng `connection_code`) để đảm bảo đúng cấu trúc 2 hàng (`hàng 1: mã kết nối`, `hàng 2: tên hiển thị`).\n  - **Edge-case 2 (Multi-host hoặc `host` đã kèm `:port`):** Tại `cdc-cms-service/internal/domain/master/connection_dsn.go:67-85`, MongoDB cho phép chuỗi `host` nhiều node phân tách bởi dấu phẩy hoặc đã có `:port` (`node1:27017,node2:27017`). Biểu thức cũ `${r.host}:${r.port || defaultPort}` tại `MasterRegistry.tsx:1619` sẽ nối thừa `:port` thành `node1:27017,node2:27017:27017`. Hàm thuần `formatMasterConnectionHostPort` cần kiểm tra từng phân đoạn dấu phẩy: nếu đã kết thúc bằng `:<số>` thì giữ nguyên, ngược lại nối `:${resolvedPort}`; nếu `host` rỗng thì trả về `'(mặc định hệ thống)'`.\n- **`F4` — Ràng buộc kiến trúc `forbidden_ifelse_files` & `noUnusedLocals` (`VERIFIED`):**\n  - Tại `cdc-cms-web/.agent-project.json:9,23`, `god_file_loc` là `600` và `src/pages/MasterRegistry.tsx` (hiện `1,895` dòng) nằm trong `forbidden_ifelse_files`. Theo `INV-4` (`review_profile.md:16`), bắt buộc tách Drawer bảng kết nối đích ra component riêng `src/components/master/TargetConnectionsDrawer.tsx` để **không thêm bất kỳ `if/else` nào vào `MasterRegistry.tsx`** và giảm kích thước `MasterRegistry.tsx` xuống `~1,774` dòng (`NOW < HEAD`).\n  - Tại `cdc-cms-web/tsconfig.app.json:19-21`, `\"verbatimModuleSyntax\": true` và `\"noUnusedLocals\": true` đang bật cứng; khi chuyển Drawer sang `TargetConnectionsDrawer.tsx`, bắt buộc gỡ bỏ các import không còn dùng trong `MasterRegistry.tsx` (`Drawer`, `Popconfirm` tại dòng `4`; `DeleteOutlined` tại dòng `10`) theo bài học `L095`.\n\n---",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 6-24, the current Drawer table in MasterRegistry.tsx renders 7 separate columns while MasterRegistry.tsx is listed in forbidden_ifelse_files, requiring extraction into src/components/master/TargetConnectionsDrawer.tsx."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "S-FIX",
+    "kind": "solution",
+    "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 128-167, TargetConnectionsDrawer removes the standalone Engine and Display Name columns, merging connection_code (row 1) with display_name (row 2) and MasterEngineIcon + meta.shortLabel (row 1) with formatMasterConnectionHostPort (row 2).",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md",
+    "lines": "128-168",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:128-168\n  const columns = useMemo<ColumnsType<MasterConnectionItem>>(\n    () => [\n      {\n        title: 'Mã & Tên hiển thị',\n        key: 'connection_identity',\n        render: (_: unknown, r: MasterConnectionItem) => {\n          const isDefault = r.connection_code === 'default' || r.connection_code === 'default_master';\n          const displayName = (r.display_name || '').trim() || '—';\n          return (\n            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>\n              <Tag color={isDefault ? 'purple' : 'blue'} style={{ marginInlineEnd: 0, fontWeight: 600 }}>\n                {r.connection_code}\n              </Tag>\n              <Text type=\"secondary\" style={{ fontSize: 12, wordBreak: 'break-word' }}>\n                {displayName}\n              </Text>\n            </div>\n          );\n        },\n      },\n      {\n        title: 'Engine & Host : Port',\n        key: 'engine_host_port',\n        render: (_: unknown, r: MasterConnectionItem) => {\n          const meta = getMasterEngineMeta(r.engine_type);\n          return (\n            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>\n              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>\n                <MasterEngineIcon engine={r.engine_type} size={16} />\n                <Tag color={meta.tagColor} style={{ marginInlineEnd: 0, fontWeight: 600 }}>\n                  {meta.shortLabel}\n                </Tag>\n              </div>\n              <Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>\n                {formatMasterConnectionHostPort(r)}\n              </Text>\n            </div>\n          );\n        },\n      },\n      {",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.5952,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8702,
+                "INCORRECT": 0.1081,
+                "UNSUPPORTED": 0.0217
+              },
+              "confidence": 0.5952,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 128-167, TargetConnectionsDrawer removes the standalone Engine and Display Name columns, merging connection_code (row 1) with display_name (row 2) and MasterEngineIcon + meta.shortLabel (row 1) with formatMasterConnectionHostPort (row 2).",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:128-168\n  const columns = useMemo<ColumnsType<MasterConnectionItem>>(\n    () => [\n      {\n        title: 'Mã & Tên hiển thị',\n        key: 'connection_identity',\n        render: (_: unknown, r: MasterConnectionItem) => {\n          const isDefault = r.connection_code === 'default' || r.connection_code === 'default_master';\n          const displayName = (r.display_name || '').trim() || '—';\n          return (\n            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>\n              <Tag color={isDefault ? 'purple' : 'blue'} style={{ marginInlineEnd: 0, fontWeight: 600 }}>\n                {r.connection_code}\n              </Tag>\n              <Text type=\"secondary\" style={{ fontSize: 12, wordBreak: 'break-word' }}>\n                {displayName}\n              </Text>\n            </div>\n          );\n        },\n      },\n      {\n        title: 'Engine & Host : Port',\n        key: 'engine_host_port',\n        render: (_: unknown, r: MasterConnectionItem) => {\n          const meta = getMasterEngineMeta(r.engine_type);\n          return (\n            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>\n              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>\n                <MasterEngineIcon engine={r.engine_type} size={16} />\n                <Tag color={meta.tagColor} style={{ marginInlineEnd: 0, fontWeight: 600 }}>\n                  {meta.shortLabel}\n                </Tag>\n              </div>\n              <Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>\n                {formatMasterConnectionHostPort(r)}\n              </Text>\n            </div>\n          );\n        },\n      },\n      {",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4521,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7966,
+                "INCORRECT": 0.1661,
+                "UNSUPPORTED": 0.0373
+              },
+              "confidence": 0.4521,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:128-168\n  const columns = useMemo<ColumnsType<MasterConnectionItem>>(\n    () => [\n      {\n        title: 'Mã & Tên hiển thị',\n        key: 'connection_identity',\n        render: (_: unknown, r: MasterConnectionItem) => {\n          const isDefault = r.connection_code === 'default' || r.connection_code === 'default_master';\n          const displayName = (r.display_name || '').trim() || '—';\n          return (\n            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>\n              <Tag color={isDefault ? 'purple' : 'blue'} style={{ marginInlineEnd: 0, fontWeight: 600 }}>\n                {r.connection_code}\n              </Tag>\n              <Text type=\"secondary\" style={{ fontSize: 12, wordBreak: 'break-word' }}>\n                {displayName}\n              </Text>\n            </div>\n          );\n        },\n      },\n      {\n        title: 'Engine & Host : Port',\n        key: 'engine_host_port',\n        render: (_: unknown, r: MasterConnectionItem) => {\n          const meta = getMasterEngineMeta(r.engine_type);\n          return (\n            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>\n              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>\n                <MasterEngineIcon engine={r.engine_type} size={16} />\n                <Tag color={meta.tagColor} style={{ marginInlineEnd: 0, fontWeight: 600 }}>\n                  {meta.shortLabel}\n                </Tag>\n              </div>\n              <Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>\n                {formatMasterConnectionHostPort(r)}\n              </Text>\n            </div>\n          );\n        },\n      },\n      {",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 128-167, TargetConnectionsDrawer removes the standalone Engine and Display Name columns, merging connection_code (row 1) with display_name (row 2) and MasterEngineIcon + meta.shortLabel (row 1) with formatMasterConnectionHostPort (row 2)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.564,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9102,
+                "NO": 0.0898
+              },
+              "confidence": 0.564,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:128-168\n  const columns = useMemo<ColumnsType<MasterConnectionItem>>(\n    () => [\n      {\n        title: 'Mã & Tên hiển thị',\n        key: 'connection_identity',\n        render: (_: unknown, r: MasterConnectionItem) => {\n          const isDefault = r.connection_code === 'default' || r.connection_code === 'default_master';\n          const displayName = (r.display_name || '').trim() || '—';\n          return (\n            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>\n              <Tag color={isDefault ? 'purple' : 'blue'} style={{ marginInlineEnd: 0, fontWeight: 600 }}>\n                {r.connection_code}\n              </Tag>\n              <Text type=\"secondary\" style={{ fontSize: 12, wordBreak: 'break-word' }}>\n                {displayName}\n              </Text>\n            </div>\n          );\n        },\n      },\n      {\n        title: 'Engine & Host : Port',\n        key: 'engine_host_port',\n        render: (_: unknown, r: MasterConnectionItem) => {\n          const meta = getMasterEngineMeta(r.engine_type);\n          return (\n            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>\n              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>\n                <MasterEngineIcon engine={r.engine_type} size={16} />\n                <Tag color={meta.tagColor} style={{ marginInlineEnd: 0, fontWeight: 600 }}>\n                  {meta.shortLabel}\n                </Tag>\n              </div>\n              <Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>\n                {formatMasterConnectionHostPort(r)}\n              </Text>\n            </div>\n          );\n        },\n      },\n      {",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 128-167, TargetConnectionsDrawer removes the standalone Engine and Display Name columns, merging connection_code (row 1) with display_name (row 2) and MasterEngineIcon + meta.shortLabel (row 1) with formatMasterConnectionHostPort (row 2)."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "S-IMPACT",
+    "kind": "solution",
+    "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 268-300, replacing the inline Drawer block in MasterRegistry.tsx with TargetConnectionsDrawer removes unused imports Drawer, Popconfirm, and DeleteOutlined and adds zero if/else branches to MasterRegistry.tsx.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md",
+    "lines": "268-300",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:268-300\n### 3.3. Kết nối vào `src/pages/MasterRegistry.tsx` & Dọn Unused Imports (`NOW <= HEAD`, `0` `if/else`)\n- Tại `src/pages/MasterRegistry.tsx:2-11` và `1552-1683`:\n\n```tsx\n// File: cdc-cms-web/src/pages/MasterRegistry.tsx (Before -> After)\n// [1] Imports (lines 2-11 & 30): gỡ Drawer, Popconfirm, DeleteOutlined không còn dùng tại file này; import TargetConnectionsDrawer\nimport {\n  Table, Card, Typography, Space, Button, Tag, Modal, Input, Select, message, Alert,\n  Switch, Tooltip, Badge, Progress,\n} from 'antd';\nimport type { ShadowBindingRow } from '../types';\nimport {\n  ReloadOutlined, PlusOutlined, CheckCircleOutlined, CloseCircleOutlined,\n  DatabaseOutlined, SettingOutlined, SyncOutlined, InfoCircleOutlined, EditOutlined,\n  LoadingOutlined, StopOutlined, CopyOutlined,\n} from '@ant-design/icons';\n// ...\nimport { TargetConnectionsDrawer } from '../components/master/TargetConnectionsDrawer';\n\n// [2] Thay khối <Drawer> (lines 1552-1683, 132 dòng) bằng component đơn trách nhiệm:\n      {/* Target Database Connection Management Drawer */}\n      <TargetConnectionsDrawer\n        open={connectionDrawerOpen}\n        connections={targetMasterConnections}\n        testingRowId={testingRowId}\n        onClose={() => setConnectionDrawerOpen(false)}\n        onOpenCreate={() => openCreateConnection()}\n        onOpenEdit={openEditConnection}\n        onTestRow={handleTestRowConnection}\n        onDeleteRow={handleDeleteConnection}\n      />\n```",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.7827,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9459,
+                "INCORRECT": 0.0423,
+                "UNSUPPORTED": 0.0118
+              },
+              "confidence": 0.7827,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 733,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 268-300, replacing the inline Drawer block in MasterRegistry.tsx with TargetConnectionsDrawer removes unused imports Drawer, Popconfirm, and DeleteOutlined and adds zero if/else branches to MasterRegistry.tsx.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:268-300\n### 3.3. Kết nối vào `src/pages/MasterRegistry.tsx` & Dọn Unused Imports (`NOW <= HEAD`, `0` `if/else`)\n- Tại `src/pages/MasterRegistry.tsx:2-11` và `1552-1683`:\n\n```tsx\n// File: cdc-cms-web/src/pages/MasterRegistry.tsx (Before -> After)\n// [1] Imports (lines 2-11 & 30): gỡ Drawer, Popconfirm, DeleteOutlined không còn dùng tại file này; import TargetConnectionsDrawer\nimport {\n  Table, Card, Typography, Space, Button, Tag, Modal, Input, Select, message, Alert,\n  Switch, Tooltip, Badge, Progress,\n} from 'antd';\nimport type { ShadowBindingRow } from '../types';\nimport {\n  ReloadOutlined, PlusOutlined, CheckCircleOutlined, CloseCircleOutlined,\n  DatabaseOutlined, SettingOutlined, SyncOutlined, InfoCircleOutlined, EditOutlined,\n  LoadingOutlined, StopOutlined, CopyOutlined,\n} from '@ant-design/icons';\n// ...\nimport { TargetConnectionsDrawer } from '../components/master/TargetConnectionsDrawer';\n\n// [2] Thay khối <Drawer> (lines 1552-1683, 132 dòng) bằng component đơn trách nhiệm:\n      {/* Target Database Connection Management Drawer */}\n      <TargetConnectionsDrawer\n        open={connectionDrawerOpen}\n        connections={targetMasterConnections}\n        testingRowId={testingRowId}\n        onClose={() => setConnectionDrawerOpen(false)}\n        onOpenCreate={() => openCreateConnection()}\n        onOpenEdit={openEditConnection}\n        onTestRow={handleTestRowConnection}\n        onDeleteRow={handleDeleteConnection}\n      />\n```",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.8991,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.9802,
+                "INCORRECT": 0.0117,
+                "UNSUPPORTED": 0.0082
+              },
+              "confidence": 0.8991,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 739,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:268-300\n### 3.3. Kết nối vào `src/pages/MasterRegistry.tsx` & Dọn Unused Imports (`NOW <= HEAD`, `0` `if/else`)\n- Tại `src/pages/MasterRegistry.tsx:2-11` và `1552-1683`:\n\n```tsx\n// File: cdc-cms-web/src/pages/MasterRegistry.tsx (Before -> After)\n// [1] Imports (lines 2-11 & 30): gỡ Drawer, Popconfirm, DeleteOutlined không còn dùng tại file này; import TargetConnectionsDrawer\nimport {\n  Table, Card, Typography, Space, Button, Tag, Modal, Input, Select, message, Alert,\n  Switch, Tooltip, Badge, Progress,\n} from 'antd';\nimport type { ShadowBindingRow } from '../types';\nimport {\n  ReloadOutlined, PlusOutlined, CheckCircleOutlined, CloseCircleOutlined,\n  DatabaseOutlined, SettingOutlined, SyncOutlined, InfoCircleOutlined, EditOutlined,\n  LoadingOutlined, StopOutlined, CopyOutlined,\n} from '@ant-design/icons';\n// ...\nimport { TargetConnectionsDrawer } from '../components/master/TargetConnectionsDrawer';\n\n// [2] Thay khối <Drawer> (lines 1552-1683, 132 dòng) bằng component đơn trách nhiệm:\n      {/* Target Database Connection Management Drawer */}\n      <TargetConnectionsDrawer\n        open={connectionDrawerOpen}\n        connections={targetMasterConnections}\n        testingRowId={testingRowId}\n        onClose={() => setConnectionDrawerOpen(false)}\n        onOpenCreate={() => openCreateConnection()}\n        onOpenEdit={openEditConnection}\n        onTestRow={handleTestRowConnection}\n        onDeleteRow={handleDeleteConnection}\n      />\n```",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 268-300, replacing the inline Drawer block in MasterRegistry.tsx with TargetConnectionsDrawer removes unused imports Drawer, Popconfirm, and DeleteOutlined and adds zero if/else branches to MasterRegistry.tsx."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.9104,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9886,
+                "NO": 0.0114
+              },
+              "confidence": 0.9104,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 672,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:268-300\n### 3.3. Kết nối vào `src/pages/MasterRegistry.tsx` & Dọn Unused Imports (`NOW <= HEAD`, `0` `if/else`)\n- Tại `src/pages/MasterRegistry.tsx:2-11` và `1552-1683`:\n\n```tsx\n// File: cdc-cms-web/src/pages/MasterRegistry.tsx (Before -> After)\n// [1] Imports (lines 2-11 & 30): gỡ Drawer, Popconfirm, DeleteOutlined không còn dùng tại file này; import TargetConnectionsDrawer\nimport {\n  Table, Card, Typography, Space, Button, Tag, Modal, Input, Select, message, Alert,\n  Switch, Tooltip, Badge, Progress,\n} from 'antd';\nimport type { ShadowBindingRow } from '../types';\nimport {\n  ReloadOutlined, PlusOutlined, CheckCircleOutlined, CloseCircleOutlined,\n  DatabaseOutlined, SettingOutlined, SyncOutlined, InfoCircleOutlined, EditOutlined,\n  LoadingOutlined, StopOutlined, CopyOutlined,\n} from '@ant-design/icons';\n// ...\nimport { TargetConnectionsDrawer } from '../components/master/TargetConnectionsDrawer';\n\n// [2] Thay khối <Drawer> (lines 1552-1683, 132 dòng) bằng component đơn trách nhiệm:\n      {/* Target Database Connection Management Drawer */}\n      <TargetConnectionsDrawer\n        open={connectionDrawerOpen}\n        connections={targetMasterConnections}\n        testingRowId={testingRowId}\n        onClose={() => setConnectionDrawerOpen(false)}\n        onOpenCreate={() => openCreateConnection()}\n        onOpenEdit={openEditConnection}\n        onTestRow={handleTestRowConnection}\n        onDeleteRow={handleDeleteConnection}\n      />\n```",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 268-300, replacing the inline Drawer block in MasterRegistry.tsx with TargetConnectionsDrawer removes unused imports Drawer, Popconfirm, and DeleteOutlined and adds zero if/else branches to MasterRegistry.tsx."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "S-PATTERN",
+    "kind": "solution",
+    "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 86-129, TargetConnectionsDrawer declares useMemo unconditionally at the top level of the function component and reuses MasterEngineIcon and getMasterEngineMeta.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md",
+    "lines": "86-130",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:86-130\n```tsx\n// File: cdc-cms-web/src/components/master/TargetConnectionsDrawer.tsx\nimport React, { useMemo } from 'react';\nimport { Alert, Button, Drawer, Popconfirm, Space, Table, Tag, Tooltip, Typography } from 'antd';\nimport type { ColumnsType } from 'antd/es/table';\nimport {\n  DatabaseOutlined,\n  DeleteOutlined,\n  EditOutlined,\n  PlusOutlined,\n  SyncOutlined,\n} from '@ant-design/icons';\nimport { getMasterEngineMeta } from './masterEngineConfig';\nimport {\n  formatMasterConnectionHostPort,\n  type MasterConnectionItem,\n} from './masterConnectionForm';\nimport { MasterEngineIcon } from './MasterGroupedCollapse';\n\nconst { Text } = Typography;\n\nexport interface TargetConnectionsDrawerProps {\n  open: boolean;\n  connections: MasterConnectionItem[];\n  testingRowId: number | null;\n  onClose: () => void;\n  onOpenCreate: () => void;\n  onOpenEdit: (item: MasterConnectionItem) => void;\n  onTestRow: (item: MasterConnectionItem) => void;\n  onDeleteRow: (id: number, connectionCode: string) => void;\n}\n\nexport const TargetConnectionsDrawer: React.FC<TargetConnectionsDrawerProps> = ({\n  open,\n  connections,\n  testingRowId,\n  onClose,\n  onOpenCreate,\n  onOpenEdit,\n  onTestRow,\n  onDeleteRow,\n}) => {\n  const columns = useMemo<ColumnsType<MasterConnectionItem>>(\n    () => [\n      {",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4454,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7567,
+                "INCORRECT": 0.2289,
+                "UNSUPPORTED": 0.0143
+              },
+              "confidence": 0.4454,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 634,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 86-129, TargetConnectionsDrawer declares useMemo unconditionally at the top level of the function component and reuses MasterEngineIcon and getMasterEngineMeta.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:86-130\n```tsx\n// File: cdc-cms-web/src/components/master/TargetConnectionsDrawer.tsx\nimport React, { useMemo } from 'react';\nimport { Alert, Button, Drawer, Popconfirm, Space, Table, Tag, Tooltip, Typography } from 'antd';\nimport type { ColumnsType } from 'antd/es/table';\nimport {\n  DatabaseOutlined,\n  DeleteOutlined,\n  EditOutlined,\n  PlusOutlined,\n  SyncOutlined,\n} from '@ant-design/icons';\nimport { getMasterEngineMeta } from './masterEngineConfig';\nimport {\n  formatMasterConnectionHostPort,\n  type MasterConnectionItem,\n} from './masterConnectionForm';\nimport { MasterEngineIcon } from './MasterGroupedCollapse';\n\nconst { Text } = Typography;\n\nexport interface TargetConnectionsDrawerProps {\n  open: boolean;\n  connections: MasterConnectionItem[];\n  testingRowId: number | null;\n  onClose: () => void;\n  onOpenCreate: () => void;\n  onOpenEdit: (item: MasterConnectionItem) => void;\n  onTestRow: (item: MasterConnectionItem) => void;\n  onDeleteRow: (id: number, connectionCode: string) => void;\n}\n\nexport const TargetConnectionsDrawer: React.FC<TargetConnectionsDrawerProps> = ({\n  open,\n  connections,\n  testingRowId,\n  onClose,\n  onOpenCreate,\n  onOpenEdit,\n  onTestRow,\n  onDeleteRow,\n}) => {\n  const columns = useMemo<ColumnsType<MasterConnectionItem>>(\n    () => [\n      {",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.0152,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.2508,
+                "INCORRECT": 0.3588,
+                "UNSUPPORTED": 0.3904
+              },
+              "confidence": 0.0152,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 640,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:86-130\n```tsx\n// File: cdc-cms-web/src/components/master/TargetConnectionsDrawer.tsx\nimport React, { useMemo } from 'react';\nimport { Alert, Button, Drawer, Popconfirm, Space, Table, Tag, Tooltip, Typography } from 'antd';\nimport type { ColumnsType } from 'antd/es/table';\nimport {\n  DatabaseOutlined,\n  DeleteOutlined,\n  EditOutlined,\n  PlusOutlined,\n  SyncOutlined,\n} from '@ant-design/icons';\nimport { getMasterEngineMeta } from './masterEngineConfig';\nimport {\n  formatMasterConnectionHostPort,\n  type MasterConnectionItem,\n} from './masterConnectionForm';\nimport { MasterEngineIcon } from './MasterGroupedCollapse';\n\nconst { Text } = Typography;\n\nexport interface TargetConnectionsDrawerProps {\n  open: boolean;\n  connections: MasterConnectionItem[];\n  testingRowId: number | null;\n  onClose: () => void;\n  onOpenCreate: () => void;\n  onOpenEdit: (item: MasterConnectionItem) => void;\n  onTestRow: (item: MasterConnectionItem) => void;\n  onDeleteRow: (id: number, connectionCode: string) => void;\n}\n\nexport const TargetConnectionsDrawer: React.FC<TargetConnectionsDrawerProps> = ({\n  open,\n  connections,\n  testingRowId,\n  onClose,\n  onOpenCreate,\n  onOpenEdit,\n  onTestRow,\n  onDeleteRow,\n}) => {\n  const columns = useMemo<ColumnsType<MasterConnectionItem>>(\n    () => [\n      {",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 86-129, TargetConnectionsDrawer declares useMemo unconditionally at the top level of the function component and reuses MasterEngineIcon and getMasterEngineMeta."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.4136,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8592,
+                "NO": 0.1408
+              },
+              "confidence": 0.4136,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 573,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:86-130\n```tsx\n// File: cdc-cms-web/src/components/master/TargetConnectionsDrawer.tsx\nimport React, { useMemo } from 'react';\nimport { Alert, Button, Drawer, Popconfirm, Space, Table, Tag, Tooltip, Typography } from 'antd';\nimport type { ColumnsType } from 'antd/es/table';\nimport {\n  DatabaseOutlined,\n  DeleteOutlined,\n  EditOutlined,\n  PlusOutlined,\n  SyncOutlined,\n} from '@ant-design/icons';\nimport { getMasterEngineMeta } from './masterEngineConfig';\nimport {\n  formatMasterConnectionHostPort,\n  type MasterConnectionItem,\n} from './masterConnectionForm';\nimport { MasterEngineIcon } from './MasterGroupedCollapse';\n\nconst { Text } = Typography;\n\nexport interface TargetConnectionsDrawerProps {\n  open: boolean;\n  connections: MasterConnectionItem[];\n  testingRowId: number | null;\n  onClose: () => void;\n  onOpenCreate: () => void;\n  onOpenEdit: (item: MasterConnectionItem) => void;\n  onTestRow: (item: MasterConnectionItem) => void;\n  onDeleteRow: (id: number, connectionCode: string) => void;\n}\n\nexport const TargetConnectionsDrawer: React.FC<TargetConnectionsDrawerProps> = ({\n  open,\n  connections,\n  testingRowId,\n  onClose,\n  onOpenCreate,\n  onOpenEdit,\n  onTestRow,\n  onDeleteRow,\n}) => {\n  const columns = useMemo<ColumnsType<MasterConnectionItem>>(\n    () => [\n      {",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 86-129, TargetConnectionsDrawer declares useMemo unconditionally at the top level of the function component and reuses MasterEngineIcon and getMasterEngineMeta."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "D-BEHAV",
+    "kind": "demo",
+    "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 168-229, TargetConnectionsDrawer preserves the Database / Schema, Status, and Actions columns including Test, Edit, and Popconfirm deactivation hidden for default and default_master.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md",
+    "lines": "168-230",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:168-230\n      {\n        title: 'Database / Schema',\n        key: 'db_schema',\n        render: (_: unknown, r: MasterConnectionItem) => (\n          <span>\n            {r.default_database || '-'}{' '}\n            {r.default_schema && <Text type=\"secondary\">({r.default_schema})</Text>}\n          </span>\n        ),\n      },\n      {\n        title: 'Trạng thái',\n        dataIndex: 'status',\n        key: 'status',\n        render: (status: string) => (\n          <Tag color={status === 'active' ? 'success' : 'default'}>\n            {status}\n          </Tag>\n        ),\n      },\n      {\n        title: 'Thao tác',\n        key: 'actions',\n        render: (_: unknown, r: MasterConnectionItem) => (\n          <Space size={4}>\n            <Tooltip title=\"Kiểm tra ping kết nối\">\n              <Button\n                size=\"small\"\n                icon={<SyncOutlined spin={testingRowId === r.id} />}\n                loading={testingRowId === r.id}\n                onClick={() => onTestRow(r)}\n              >\n                Test\n              </Button>\n            </Tooltip>\n            <Tooltip title=\"Chỉnh sửa thông số\">\n              <Button\n                size=\"small\"\n                icon={<EditOutlined />}\n                onClick={() => onOpenEdit(r)}\n              />\n            </Tooltip>\n            {r.connection_code !== 'default' && r.connection_code !== 'default_master' && (\n              <Popconfirm\n                title=\"Vô hiệu hoá kết nối này?\"\n                description=\"Hệ thống sẽ kiểm tra xem có bảng Master active nào đang sử dụng không trước khi vô hiệu hoá.\"\n                okText=\"Vô hiệu hoá\"\n                cancelText=\"Hủy\"\n                okButtonProps={{ danger: true }}\n                onConfirm={() => onDeleteRow(r.id, r.connection_code)}\n              >\n                <Tooltip title=\"Vô hiệu hoá kết nối\">\n                  <Button size=\"small\" danger icon={<DeleteOutlined />} />\n                </Tooltip>\n              </Popconfirm>\n            )}\n          </Space>\n        ),\n      },\n    ],\n    [testingRowId, onTestRow, onOpenEdit, onDeleteRow],\n  );",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.2522,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.6377,
+                "INCORRECT": 0.2997,
+                "UNSUPPORTED": 0.0626
+              },
+              "confidence": 0.2522,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 168-229, TargetConnectionsDrawer preserves the Database / Schema, Status, and Actions columns including Test, Edit, and Popconfirm deactivation hidden for default and default_master.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:168-230\n      {\n        title: 'Database / Schema',\n        key: 'db_schema',\n        render: (_: unknown, r: MasterConnectionItem) => (\n          <span>\n            {r.default_database || '-'}{' '}\n            {r.default_schema && <Text type=\"secondary\">({r.default_schema})</Text>}\n          </span>\n        ),\n      },\n      {\n        title: 'Trạng thái',\n        dataIndex: 'status',\n        key: 'status',\n        render: (status: string) => (\n          <Tag color={status === 'active' ? 'success' : 'default'}>\n            {status}\n          </Tag>\n        ),\n      },\n      {\n        title: 'Thao tác',\n        key: 'actions',\n        render: (_: unknown, r: MasterConnectionItem) => (\n          <Space size={4}>\n            <Tooltip title=\"Kiểm tra ping kết nối\">\n              <Button\n                size=\"small\"\n                icon={<SyncOutlined spin={testingRowId === r.id} />}\n                loading={testingRowId === r.id}\n                onClick={() => onTestRow(r)}\n              >\n                Test\n              </Button>\n            </Tooltip>\n            <Tooltip title=\"Chỉnh sửa thông số\">\n              <Button\n                size=\"small\"\n                icon={<EditOutlined />}\n                onClick={() => onOpenEdit(r)}\n              />\n            </Tooltip>\n            {r.connection_code !== 'default' && r.connection_code !== 'default_master' && (\n              <Popconfirm\n                title=\"Vô hiệu hoá kết nối này?\"\n                description=\"Hệ thống sẽ kiểm tra xem có bảng Master active nào đang sử dụng không trước khi vô hiệu hoá.\"\n                okText=\"Vô hiệu hoá\"\n                cancelText=\"Hủy\"\n                okButtonProps={{ danger: true }}\n                onConfirm={() => onDeleteRow(r.id, r.connection_code)}\n              >\n                <Tooltip title=\"Vô hiệu hoá kết nối\">\n                  <Button size=\"small\" danger icon={<DeleteOutlined />} />\n                </Tooltip>\n              </Popconfirm>\n            )}\n          </Space>\n        ),\n      },\n    ],\n    [testingRowId, onTestRow, onOpenEdit, onDeleteRow],\n  );",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.3058,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7088,
+                "INCORRECT": 0.2222,
+                "UNSUPPORTED": 0.069
+              },
+              "confidence": 0.3058,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:168-230\n      {\n        title: 'Database / Schema',\n        key: 'db_schema',\n        render: (_: unknown, r: MasterConnectionItem) => (\n          <span>\n            {r.default_database || '-'}{' '}\n            {r.default_schema && <Text type=\"secondary\">({r.default_schema})</Text>}\n          </span>\n        ),\n      },\n      {\n        title: 'Trạng thái',\n        dataIndex: 'status',\n        key: 'status',\n        render: (status: string) => (\n          <Tag color={status === 'active' ? 'success' : 'default'}>\n            {status}\n          </Tag>\n        ),\n      },\n      {\n        title: 'Thao tác',\n        key: 'actions',\n        render: (_: unknown, r: MasterConnectionItem) => (\n          <Space size={4}>\n            <Tooltip title=\"Kiểm tra ping kết nối\">\n              <Button\n                size=\"small\"\n                icon={<SyncOutlined spin={testingRowId === r.id} />}\n                loading={testingRowId === r.id}\n                onClick={() => onTestRow(r)}\n              >\n                Test\n              </Button>\n            </Tooltip>\n            <Tooltip title=\"Chỉnh sửa thông số\">\n              <Button\n                size=\"small\"\n                icon={<EditOutlined />}\n                onClick={() => onOpenEdit(r)}\n              />\n            </Tooltip>\n            {r.connection_code !== 'default' && r.connection_code !== 'default_master' && (\n              <Popconfirm\n                title=\"Vô hiệu hoá kết nối này?\"\n                description=\"Hệ thống sẽ kiểm tra xem có bảng Master active nào đang sử dụng không trước khi vô hiệu hoá.\"\n                okText=\"Vô hiệu hoá\"\n                cancelText=\"Hủy\"\n                okButtonProps={{ danger: true }}\n                onConfirm={() => onDeleteRow(r.id, r.connection_code)}\n              >\n                <Tooltip title=\"Vô hiệu hoá kết nối\">\n                  <Button size=\"small\" danger icon={<DeleteOutlined />} />\n                </Tooltip>\n              </Popconfirm>\n            )}\n          </Space>\n        ),\n      },\n    ],\n    [testingRowId, onTestRow, onOpenEdit, onDeleteRow],\n  );",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 168-229, TargetConnectionsDrawer preserves the Database / Schema, Status, and Actions columns including Test, Edit, and Popconfirm deactivation hidden for default and default_master."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6281,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9284,
+                "NO": 0.0716
+              },
+              "confidence": 0.6281,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 1024,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:168-230\n      {\n        title: 'Database / Schema',\n        key: 'db_schema',\n        render: (_: unknown, r: MasterConnectionItem) => (\n          <span>\n            {r.default_database || '-'}{' '}\n            {r.default_schema && <Text type=\"secondary\">({r.default_schema})</Text>}\n          </span>\n        ),\n      },\n      {\n        title: 'Trạng thái',\n        dataIndex: 'status',\n        key: 'status',\n        render: (status: string) => (\n          <Tag color={status === 'active' ? 'success' : 'default'}>\n            {status}\n          </Tag>\n        ),\n      },\n      {\n        title: 'Thao tác',\n        key: 'actions',\n        render: (_: unknown, r: MasterConnectionItem) => (\n          <Space size={4}>\n            <Tooltip title=\"Kiểm tra ping kết nối\">\n              <Button\n                size=\"small\"\n                icon={<SyncOutlined spin={testingRowId === r.id} />}\n                loading={testingRowId === r.id}\n                onClick={() => onTestRow(r)}\n              >\n                Test\n              </Button>\n            </Tooltip>\n            <Tooltip title=\"Chỉnh sửa thông số\">\n              <Button\n                size=\"small\"\n                icon={<EditOutlined />}\n                onClick={() => onOpenEdit(r)}\n              />\n            </Tooltip>\n            {r.connection_code !== 'default' && r.connection_code !== 'default_master' && (\n              <Popconfirm\n                title=\"Vô hiệu hoá kết nối này?\"\n                description=\"Hệ thống sẽ kiểm tra xem có bảng Master active nào đang sử dụng không trước khi vô hiệu hoá.\"\n                okText=\"Vô hiệu hoá\"\n                cancelText=\"Hủy\"\n                okButtonProps={{ danger: true }}\n                onConfirm={() => onDeleteRow(r.id, r.connection_code)}\n              >\n                <Tooltip title=\"Vô hiệu hoá kết nối\">\n                  <Button size=\"small\" danger icon={<DeleteOutlined />} />\n                </Tooltip>\n              </Popconfirm>\n            )}\n          </Space>\n        ),\n      },\n    ],\n    [testingRowId, onTestRow, onOpenEdit, onDeleteRow],\n  );",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 168-229, TargetConnectionsDrawer preserves the Database / Schema, Status, and Actions columns including Test, Edit, and Popconfirm deactivation hidden for default and default_master."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "D-EDGE",
+    "kind": "demo",
+    "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 63-81, formatMasterConnectionHostPort returns '(mặc định hệ thống)' when host is empty and preserves comma-separated segments that already end with :<digits> without duplicating the port.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md",
+    "lines": "63-82",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:63-82\n```ts\n// File: cdc-cms-web/src/components/master/masterConnectionForm.ts\nexport function formatMasterConnectionHostPort(\n  item: Pick<MasterConnectionItem, 'host' | 'port' | 'engine_type'>,\n): string {\n  const rawHost = (item.host || '').trim();\n  if (!rawHost) {\n    return '(mặc định hệ thống)';\n  }\n  const defaultPort = getMasterEngineMeta(item.engine_type).defaultPort;\n  const resolvedPort = item.port && item.port > 0 ? item.port : defaultPort;\n  const segments = rawHost\n    .split(',')\n    .map((seg) => seg.trim())\n    .filter(Boolean)\n    .map((seg) => (/:\\d+$/.test(seg) ? seg : `${seg}:${resolvedPort}`));\n  return segments.length > 0 ? segments.join(',') : '(mặc định hệ thống)';\n}\n```",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.3569,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.7287,
+                "INCORRECT": 0.2263,
+                "UNSUPPORTED": 0.045
+              },
+              "confidence": 0.3569,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 495,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 63-81, formatMasterConnectionHostPort returns '(mặc định hệ thống)' when host is empty and preserves comma-separated segments that already end with :<digits> without duplicating the port.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:63-82\n```ts\n// File: cdc-cms-web/src/components/master/masterConnectionForm.ts\nexport function formatMasterConnectionHostPort(\n  item: Pick<MasterConnectionItem, 'host' | 'port' | 'engine_type'>,\n): string {\n  const rawHost = (item.host || '').trim();\n  if (!rawHost) {\n    return '(mặc định hệ thống)';\n  }\n  const defaultPort = getMasterEngineMeta(item.engine_type).defaultPort;\n  const resolvedPort = item.port && item.port > 0 ? item.port : defaultPort;\n  const segments = rawHost\n    .split(',')\n    .map((seg) => seg.trim())\n    .filter(Boolean)\n    .map((seg) => (/:\\d+$/.test(seg) ? seg : `${seg}:${resolvedPort}`));\n  return segments.length > 0 ? segments.join(',') : '(mặc định hệ thống)';\n}\n```",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4608,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "probabilities": {
+                "CORRECT": 0.8187,
+                "INCORRECT": 0.1152,
+                "UNSUPPORTED": 0.0661
+              },
+              "confidence": 0.4608,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 501,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:63-82\n```ts\n// File: cdc-cms-web/src/components/master/masterConnectionForm.ts\nexport function formatMasterConnectionHostPort(\n  item: Pick<MasterConnectionItem, 'host' | 'port' | 'engine_type'>,\n): string {\n  const rawHost = (item.host || '').trim();\n  if (!rawHost) {\n    return '(mặc định hệ thống)';\n  }\n  const defaultPort = getMasterEngineMeta(item.engine_type).defaultPort;\n  const resolvedPort = item.port && item.port > 0 ? item.port : defaultPort;\n  const segments = rawHost\n    .split(',')\n    .map((seg) => seg.trim())\n    .filter(Boolean)\n    .map((seg) => (/:\\d+$/.test(seg) ? seg : `${seg}:${resolvedPort}`));\n  return segments.length > 0 ? segments.join(',') : '(mặc định hệ thống)';\n}\n```",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 63-81, formatMasterConnectionHostPort returns '(mặc định hệ thống)' when host is empty and preserves comma-separated segments that already end with :<digits> without duplicating the port."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6594,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9367,
+                "NO": 0.0633
+              },
+              "confidence": 0.6594,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 434,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:63-82\n```ts\n// File: cdc-cms-web/src/components/master/masterConnectionForm.ts\nexport function formatMasterConnectionHostPort(\n  item: Pick<MasterConnectionItem, 'host' | 'port' | 'engine_type'>,\n): string {\n  const rawHost = (item.host || '').trim();\n  if (!rawHost) {\n    return '(mặc định hệ thống)';\n  }\n  const defaultPort = getMasterEngineMeta(item.engine_type).defaultPort;\n  const resolvedPort = item.port && item.port > 0 ? item.port : defaultPort;\n  const segments = rawHost\n    .split(',')\n    .map((seg) => seg.trim())\n    .filter(Boolean)\n    .map((seg) => (/:\\d+$/.test(seg) ? seg : `${seg}:${resolvedPort}`));\n  return segments.length > 0 ? segments.join(',') : '(mặc định hệ thống)';\n}\n```",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 63-81, formatMasterConnectionHostPort returns '(mặc định hệ thống)' when host is empty and preserves comma-separated segments that already end with :<digits> without duplicating the port."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "D-API",
+    "kind": "demo",
+    "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 107-117, TargetConnectionsDrawerProps accepts MasterConnectionItem[] without mutating API request/response contracts.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md",
+    "lines": "107-118",
+    "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:107-118\nexport interface TargetConnectionsDrawerProps {\n  open: boolean;\n  connections: MasterConnectionItem[];\n  testingRowId: number | null;\n  onClose: () => void;\n  onOpenCreate: () => void;\n  onOpenEdit: (item: MasterConnectionItem) => void;\n  onTestRow: (item: MasterConnectionItem) => void;\n  onDeleteRow: (id: number, connectionCode: string) => void;\n}\n\nexport const TargetConnectionsDrawer: React.FC<TargetConnectionsDrawerProps> = ({",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.0917,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2692,
+                "INCORRECT": 0.544,
+                "UNSUPPORTED": 0.1868
+              },
+              "confidence": 0.0917,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 359,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 107-117, TargetConnectionsDrawerProps accepts MasterConnectionItem[] without mutating API request/response contracts.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:107-118\nexport interface TargetConnectionsDrawerProps {\n  open: boolean;\n  connections: MasterConnectionItem[];\n  testingRowId: number | null;\n  onClose: () => void;\n  onOpenCreate: () => void;\n  onOpenEdit: (item: MasterConnectionItem) => void;\n  onTestRow: (item: MasterConnectionItem) => void;\n  onDeleteRow: (id: number, connectionCode: string) => void;\n}\n\nexport const TargetConnectionsDrawer: React.FC<TargetConnectionsDrawerProps> = ({",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.016,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3451,
+                "INCORRECT": 0.4023,
+                "UNSUPPORTED": 0.2526
+              },
+              "confidence": 0.016,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 365,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:107-118\nexport interface TargetConnectionsDrawerProps {\n  open: boolean;\n  connections: MasterConnectionItem[];\n  testingRowId: number | null;\n  onClose: () => void;\n  onOpenCreate: () => void;\n  onOpenEdit: (item: MasterConnectionItem) => void;\n  onTestRow: (item: MasterConnectionItem) => void;\n  onDeleteRow: (id: number, connectionCode: string) => void;\n}\n\nexport const TargetConnectionsDrawer: React.FC<TargetConnectionsDrawerProps> = ({",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 107-117, TargetConnectionsDrawerProps accepts MasterConnectionItem[] without mutating API request/response contracts."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5238,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.8977,
+                "NO": 0.1023
+              },
+              "confidence": 0.5238,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 298,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md:107-118\nexport interface TargetConnectionsDrawerProps {\n  open: boolean;\n  connections: MasterConnectionItem[];\n  testingRowId: number | null;\n  onClose: () => void;\n  onOpenCreate: () => void;\n  onOpenEdit: (item: MasterConnectionItem) => void;\n  onTestRow: (item: MasterConnectionItem) => void;\n  onDeleteRow: (id: number, connectionCode: string) => void;\n}\n\nexport const TargetConnectionsDrawer: React.FC<TargetConnectionsDrawerProps> = ({",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 107-117, TargetConnectionsDrawerProps accepts MasterConnectionItem[] without mutating API request/response contracts."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In masterEngineConfig.ts lines 22-95, MASTER_ENGINE_CONFIGS defines postgresql, mongodb, mysql, and clickhouse with shortLabel, tagColor, brandColor, deviconSlug, and defaultPort.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/components/master/masterEngineConfig.ts",
+    "lines": "22-96",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.3012,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.3052,
+                "INCORRECT": 0.655,
+                "UNSUPPORTED": 0.0398
+              },
+              "confidence": 0.3012,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 171,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In masterEngineConfig.ts lines 22-95, MASTER_ENGINE_CONFIGS defines postgresql, mongodb, mysql, and clickhouse with shortLabel, tagColor, brandColor, deviconSlug, and defaultPort.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.4059,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.0246,
+                "INCORRECT": 0.234,
+                "UNSUPPORTED": 0.7414
+              },
+              "confidence": 0.4059,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 177,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In masterEngineConfig.ts lines 22-95, MASTER_ENGINE_CONFIGS defines postgresql, mongodb, mysql, and clickhouse with shortLabel, tagColor, brandColor, deviconSlug, and defaultPort."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8814,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.984,
+                "NO": 0.016
+              },
+              "confidence": 0.8814,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 110,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In masterEngineConfig.ts lines 22-95, MASTER_ENGINE_CONFIGS defines postgresql, mongodb, mysql, and clickhouse with shortLabel, tagColor, brandColor, deviconSlug, and defaultPort."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 128-167, TargetConnectionsDrawer keeps the standalone Engine and Display Name columns and deletes the Actions column.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md",
+    "lines": "128-168",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.2017,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.322,
+                "INCORRECT": 0.5967,
+                "UNSUPPORTED": 0.0813
+              },
+              "confidence": 0.2017,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 167,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 128-167, TargetConnectionsDrawer keeps the standalone Engine and Display Name columns and deletes the Actions column.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "INCORRECT",
+      "confidence": 0.0822,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.2738,
+                "INCORRECT": 0.5324,
+                "UNSUPPORTED": 0.1938
+              },
+              "confidence": 0.0822,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 173,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 128-167, TargetConnectionsDrawer keeps the standalone Engine and Display Name columns and deletes the Actions column."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "NO",
+      "confidence": 0.4346,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "NO",
+              "probabilities": {
+                "YES": 0.1329,
+                "NO": 0.8671
+              },
+              "confidence": 0.4346,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 106,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 128-167, TargetConnectionsDrawer keeps the standalone Engine and Display Name columns and deletes the Actions column."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 63-81, formatMasterConnectionHostPort throws an error whenever item.host is empty or undefined.",
+    "file": "/Users/trainguyen/Documents/work/agent/memory/workspaces/fix-target-db-connections-ui-2026-11-17/09_tasks_solution_target_db_connections_ui.md",
+    "lines": "63-82",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "INCORRECT",
+      "confidence": 0.1469,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "INCORRECT",
+              "probabilities": {
+                "CORRECT": 0.4172,
+                "INCORRECT": 0.4886,
+                "UNSUPPORTED": 0.0942
+              },
+              "confidence": 0.1469,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 165,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 63-81, formatMasterConnectionHostPort throws an error whenever item.host is empty or undefined.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.0732,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "probabilities": {
+                "CORRECT": 0.2026,
+                "INCORRECT": 0.2757,
+                "UNSUPPORTED": 0.5217
+              },
+              "confidence": 0.0732,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 171,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 63-81, formatMasterConnectionHostPort throws an error whenever item.host is empty or undefined."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7228,
+      "raw": {
+        "status": "success",
+        "result": {
+          "model": "laya-rl-agent",
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "probabilities": {
+                "YES": 0.9522,
+                "NO": 0.0478
+              },
+              "confidence": 0.7228,
+              "action": {
+                "act_probability": 1.0
+              }
+            }
+          },
+          "usage": {
+            "input_tokens": 104,
+            "output_tokens": 0
+          }
+        },
+        "latency_note": "sub-35ms"
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In 09_tasks_solution_target_db_connections_ui.md lines 63-81, formatMasterConnectionHostPort throws an error whenever item.host is empty or undefined."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

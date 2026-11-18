@@ -1,0 +1,2305 @@
+[
+  {
+    "id": "C-REQ-1",
+    "kind": "claim",
+    "claim": "In master_binding_repo.go lines 78-139, ListMasterTargetsByShadowTable and ListMasterTargetsByShadowIdentity filter by mb.is_active = true and mb.schema_status = 'approved' without checking cdc_system.transmute_schedule mode = 'post_ingest' and is_enabled = true.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go",
+    "lines": "78-139",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go:78-139\nfunc (r *MasterBindingRepo) ListMasterTargetsByShadowTable(ctx context.Context, shadowTable string) ([]MasterTargetIdentity, error) {\n\tvar result []MasterTargetIdentity\n\terr := r.db.WithContext(ctx).Raw(\n\t\t`SELECT DISTINCT mb.id,\n\t\t        COALESCE(NULLIF(mb.master_schema, ''), 'public') || '.' || mb.master_table AS master_fqn,\n\t\t        COALESCE(cr.connection_code, '') AS master_connection_key\n\t\t   FROM cdc_system.master_binding mb\n\t\t   JOIN cdc_system.shadow_binding sb ON (\n\t\t     sb.id = mb.shadow_binding_id\n\t\t     OR EXISTS (\n\t\t       SELECT 1 FROM jsonb_array_elements(\n\t\t         CASE WHEN jsonb_typeof(mb.transform_spec->'shadow_sources') = 'array' THEN mb.transform_spec->'shadow_sources' ELSE '[]'::jsonb END\n\t\t       ) elem\n\t\t        WHERE (CASE WHEN (elem->>'shadow_binding_id') ~ '^[0-9]+$' THEN (elem->>'shadow_binding_id')::bigint END) = sb.id\n\t\t           OR elem->>'shadow_table' = sb.shadow_table\n\t\t     )\n\t\t   )\n\t\t   LEFT JOIN cdc_system.connection_registry cr ON cr.id = mb.master_connection_id\n\t\t  WHERE sb.shadow_table = ? AND mb.is_active = true AND mb.schema_status = 'approved'`,\n\t\tshadowTable,\n\t).Scan(&result).Error\n\treturn result, err\n}\n\nfunc (r *MasterBindingRepo) ListMasterTargetsByShadowIdentity(ctx context.Context, shadowTable, shadowSchema, shadowConnectionKey, shadowBindingCode string) ([]MasterTargetIdentity, error) {\n\tvar result []MasterTargetIdentity\n\terr := r.db.WithContext(ctx).Raw(\n\t\t`SELECT DISTINCT mb.id,\n\t\t        COALESCE(NULLIF(mb.master_schema, ''), 'public') || '.' || mb.master_table AS master_fqn,\n\t\t        COALESCE(mcr.connection_code, '') AS master_connection_key\n\t\t   FROM cdc_system.master_binding mb\n\t\t   JOIN cdc_system.shadow_binding sb ON (\n\t\t     sb.id = mb.shadow_binding_id\n\t\t     OR EXISTS (\n\t\t       SELECT 1 FROM jsonb_array_elements(\n\t\t         CASE WHEN jsonb_typeof(mb.transform_spec->'shadow_sources') = 'array' THEN mb.transform_spec->'shadow_sources' ELSE '[]'::jsonb END\n\t\t       ) elem\n\t\t        WHERE (CASE WHEN (elem->>'shadow_binding_id') ~ '^[0-9]+$' THEN (elem->>'shadow_binding_id')::bigint END) = sb.id\n\t\t           OR (elem->>'shadow_table' = sb.shadow_table\n\t\t               AND COALESCE(NULLIF(elem->>'shadow_schema', ''), sb.shadow_schema) = sb.shadow_schema)\n\t\t     )\n\t\t   )\n\t\t   LEFT JOIN cdc_system.connection_registry mcr ON mcr.id = mb.master_connection_id\n\t\t   LEFT JOIN cdc_system.connection_registry scr ON scr.id = sb.shadow_connection_id\n\t\t  WHERE mb.is_active = true\n\t\t    AND mb.schema_status = 'approved'\n\t\t    AND (\n\t\t      (@binding_code <> '' AND sb.binding_code = @binding_code)\n\t\t      OR\n\t\t      (@binding_code = '' AND sb.shadow_table = @shadow_table \n\t\t        AND COALESCE(sb.shadow_schema, '') = COALESCE(NULLIF(@shadow_schema, ''), COALESCE(sb.shadow_schema, '')) \n\t\t        AND (@shadow_connection_key = '' OR scr.connection_code = @shadow_connection_key))\n\t\t    )`,\n\t\tmap[string]interface{}{\n\t\t\t\"binding_code\":          shadowBindingCode,\n\t\t\t\"shadow_table\":          shadowTable,\n\t\t\t\"shadow_schema\":         shadowSchema,\n\t\t\t\"shadow_connection_key\": shadowConnectionKey,\n\t\t},\n\t).Scan(&result).Error\n\treturn result, err\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.485600558778641,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.485600558778641,
+            "probabilities": {
+              "CORRECT": 0.485600558778641,
+              "INCORRECT": 0.14302875983597188,
+              "UNSUPPORTED": 0.3713706813853871
+            },
+            "probs": {
+              "CORRECT": 0.485600558778641,
+              "INCORRECT": 0.14302875983597188,
+              "UNSUPPORTED": 0.3713706813853871
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.485600558778641,
+              "probabilities": {
+                "CORRECT": 0.485600558778641,
+                "INCORRECT": 0.14302875983597188,
+                "UNSUPPORTED": 0.3713706813853871
+              },
+              "probs": {
+                "CORRECT": 0.485600558778641,
+                "INCORRECT": 0.14302875983597188,
+                "UNSUPPORTED": 0.3713706813853871
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 1193
+        },
+        "latency_ms": 50540.54,
+        "usage": {
+          "input_tokens": 1193,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In master_binding_repo.go lines 78-139, ListMasterTargetsByShadowTable and ListMasterTargetsByShadowIdentity filter by mb.is_active = true and mb.schema_status = 'approved' without checking cdc_system.transmute_schedule mode = 'post_ingest' and is_enabled = true.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go:78-139\nfunc (r *MasterBindingRepo) ListMasterTargetsByShadowTable(ctx context.Context, shadowTable string) ([]MasterTargetIdentity, error) {\n\tvar result []MasterTargetIdentity\n\terr := r.db.WithContext(ctx).Raw(\n\t\t`SELECT DISTINCT mb.id,\n\t\t        COALESCE(NULLIF(mb.master_schema, ''), 'public') || '.' || mb.master_table AS master_fqn,\n\t\t        COALESCE(cr.connection_code, '') AS master_connection_key\n\t\t   FROM cdc_system.master_binding mb\n\t\t   JOIN cdc_system.shadow_binding sb ON (\n\t\t     sb.id = mb.shadow_binding_id\n\t\t     OR EXISTS (\n\t\t       SELECT 1 FROM jsonb_array_elements(\n\t\t         CASE WHEN jsonb_typeof(mb.transform_spec->'shadow_sources') = 'array' THEN mb.transform_spec->'shadow_sources' ELSE '[]'::jsonb END\n\t\t       ) elem\n\t\t        WHERE (CASE WHEN (elem->>'shadow_binding_id') ~ '^[0-9]+$' THEN (elem->>'shadow_binding_id')::bigint END) = sb.id\n\t\t           OR elem->>'shadow_table' = sb.shadow_table\n\t\t     )\n\t\t   )\n\t\t   LEFT JOIN cdc_system.connection_registry cr ON cr.id = mb.master_connection_id\n\t\t  WHERE sb.shadow_table = ? AND mb.is_active = true AND mb.schema_status = 'approved'`,\n\t\tshadowTable,\n\t).Scan(&result).Error\n\treturn result, err\n}\n\nfunc (r *MasterBindingRepo) ListMasterTargetsByShadowIdentity(ctx context.Context, shadowTable, shadowSchema, shadowConnectionKey, shadowBindingCode string) ([]MasterTargetIdentity, error) {\n\tvar result []MasterTargetIdentity\n\terr := r.db.WithContext(ctx).Raw(\n\t\t`SELECT DISTINCT mb.id,\n\t\t        COALESCE(NULLIF(mb.master_schema, ''), 'public') || '.' || mb.master_table AS master_fqn,\n\t\t        COALESCE(mcr.connection_code, '') AS master_connection_key\n\t\t   FROM cdc_system.master_binding mb\n\t\t   JOIN cdc_system.shadow_binding sb ON (\n\t\t     sb.id = mb.shadow_binding_id\n\t\t     OR EXISTS (\n\t\t       SELECT 1 FROM jsonb_array_elements(\n\t\t         CASE WHEN jsonb_typeof(mb.transform_spec->'shadow_sources') = 'array' THEN mb.transform_spec->'shadow_sources' ELSE '[]'::jsonb END\n\t\t       ) elem\n\t\t        WHERE (CASE WHEN (elem->>'shadow_binding_id') ~ '^[0-9]+$' THEN (elem->>'shadow_binding_id')::bigint END) = sb.id\n\t\t           OR (elem->>'shadow_table' = sb.shadow_table\n\t\t               AND COALESCE(NULLIF(elem->>'shadow_schema', ''), sb.shadow_schema) = sb.shadow_schema)\n\t\t     )\n\t\t   )\n\t\t   LEFT JOIN cdc_system.connection_registry mcr ON mcr.id = mb.master_connection_id\n\t\t   LEFT JOIN cdc_system.connection_registry scr ON scr.id = sb.shadow_connection_id\n\t\t  WHERE mb.is_active = true\n\t\t    AND mb.schema_status = 'approved'\n\t\t    AND (\n\t\t      (@binding_code <> '' AND sb.binding_code = @binding_code)\n\t\t      OR\n\t\t      (@binding_code = '' AND sb.shadow_table = @shadow_table \n\t\t        AND COALESCE(sb.shadow_schema, '') = COALESCE(NULLIF(@shadow_schema, ''), COALESCE(sb.shadow_schema, '')) \n\t\t        AND (@shadow_connection_key = '' OR scr.connection_code = @shadow_connection_key))\n\t\t    )`,\n\t\tmap[string]interface{}{\n\t\t\t\"binding_code\":          shadowBindingCode,\n\t\t\t\"shadow_table\":          shadowTable,\n\t\t\t\"shadow_schema\":         shadowSchema,\n\t\t\t\"shadow_connection_key\": shadowConnectionKey,\n\t\t},\n\t).Scan(&result).Error\n\treturn result, err\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.49405991224470464,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.49405991224470464,
+            "probabilities": {
+              "CORRECT": 0.49405991224470464,
+              "INCORRECT": 0.23866387902729944,
+              "UNSUPPORTED": 0.2672762087279959
+            },
+            "probs": {
+              "CORRECT": 0.49405991224470464,
+              "INCORRECT": 0.23866387902729944,
+              "UNSUPPORTED": 0.2672762087279959
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.49405991224470464,
+              "probabilities": {
+                "CORRECT": 0.49405991224470464,
+                "INCORRECT": 0.23866387902729944,
+                "UNSUPPORTED": 0.2672762087279959
+              },
+              "probs": {
+                "CORRECT": 0.49405991224470464,
+                "INCORRECT": 0.23866387902729944,
+                "UNSUPPORTED": 0.2672762087279959
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 1174
+        },
+        "latency_ms": 56210.08,
+        "usage": {
+          "input_tokens": 1174,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go:78-139\nfunc (r *MasterBindingRepo) ListMasterTargetsByShadowTable(ctx context.Context, shadowTable string) ([]MasterTargetIdentity, error) {\n\tvar result []MasterTargetIdentity\n\terr := r.db.WithContext(ctx).Raw(\n\t\t`SELECT DISTINCT mb.id,\n\t\t        COALESCE(NULLIF(mb.master_schema, ''), 'public') || '.' || mb.master_table AS master_fqn,\n\t\t        COALESCE(cr.connection_code, '') AS master_connection_key\n\t\t   FROM cdc_system.master_binding mb\n\t\t   JOIN cdc_system.shadow_binding sb ON (\n\t\t     sb.id = mb.shadow_binding_id\n\t\t     OR EXISTS (\n\t\t       SELECT 1 FROM jsonb_array_elements(\n\t\t         CASE WHEN jsonb_typeof(mb.transform_spec->'shadow_sources') = 'array' THEN mb.transform_spec->'shadow_sources' ELSE '[]'::jsonb END\n\t\t       ) elem\n\t\t        WHERE (CASE WHEN (elem->>'shadow_binding_id') ~ '^[0-9]+$' THEN (elem->>'shadow_binding_id')::bigint END) = sb.id\n\t\t           OR elem->>'shadow_table' = sb.shadow_table\n\t\t     )\n\t\t   )\n\t\t   LEFT JOIN cdc_system.connection_registry cr ON cr.id = mb.master_connection_id\n\t\t  WHERE sb.shadow_table = ? AND mb.is_active = true AND mb.schema_status = 'approved'`,\n\t\tshadowTable,\n\t).Scan(&result).Error\n\treturn result, err\n}\n\nfunc (r *MasterBindingRepo) ListMasterTargetsByShadowIdentity(ctx context.Context, shadowTable, shadowSchema, shadowConnectionKey, shadowBindingCode string) ([]MasterTargetIdentity, error) {\n\tvar result []MasterTargetIdentity\n\terr := r.db.WithContext(ctx).Raw(\n\t\t`SELECT DISTINCT mb.id,\n\t\t        COALESCE(NULLIF(mb.master_schema, ''), 'public') || '.' || mb.master_table AS master_fqn,\n\t\t        COALESCE(mcr.connection_code, '') AS master_connection_key\n\t\t   FROM cdc_system.master_binding mb\n\t\t   JOIN cdc_system.shadow_binding sb ON (\n\t\t     sb.id = mb.shadow_binding_id\n\t\t     OR EXISTS (\n\t\t       SELECT 1 FROM jsonb_array_elements(\n\t\t         CASE WHEN jsonb_typeof(mb.transform_spec->'shadow_sources') = 'array' THEN mb.transform_spec->'shadow_sources' ELSE '[]'::jsonb END\n\t\t       ) elem\n\t\t        WHERE (CASE WHEN (elem->>'shadow_binding_id') ~ '^[0-9]+$' THEN (elem->>'shadow_binding_id')::bigint END) = sb.id\n\t\t           OR (elem->>'shadow_table' = sb.shadow_table\n\t\t               AND COALESCE(NULLIF(elem->>'shadow_schema', ''), sb.shadow_schema) = sb.shadow_schema)\n\t\t     )\n\t\t   )\n\t\t   LEFT JOIN cdc_system.connection_registry mcr ON mcr.id = mb.master_connection_id\n\t\t   LEFT JOIN cdc_system.connection_registry scr ON scr.id = sb.shadow_connection_id\n\t\t  WHERE mb.is_active = true\n\t\t    AND mb.schema_status = 'approved'\n\t\t    AND (\n\t\t      (@binding_code <> '' AND sb.binding_code = @binding_code)\n\t\t      OR\n\t\t      (@binding_code = '' AND sb.shadow_table = @shadow_table \n\t\t        AND COALESCE(sb.shadow_schema, '') = COALESCE(NULLIF(@shadow_schema, ''), COALESCE(sb.shadow_schema, '')) \n\t\t        AND (@shadow_connection_key = '' OR scr.connection_code = @shadow_connection_key))\n\t\t    )`,\n\t\tmap[string]interface{}{\n\t\t\t\"binding_code\":          shadowBindingCode,\n\t\t\t\"shadow_table\":          shadowTable,\n\t\t\t\"shadow_schema\":         shadowSchema,\n\t\t\t\"shadow_connection_key\": shadowConnectionKey,\n\t\t},\n\t).Scan(&result).Error\n\treturn result, err\n}",
+          "claim": "In master_binding_repo.go lines 78-139, ListMasterTargetsByShadowTable and ListMasterTargetsByShadowIdentity filter by mb.is_active = true and mb.schema_status = 'approved' without checking cdc_system.transmute_schedule mode = 'post_ingest' and is_enabled = true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7346495841190235,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.7346495841190235,
+            "probabilities": {
+              "YES": 0.7346495841190235,
+              "NO": 0.2653504158809766
+            },
+            "probs": {
+              "YES": 0.7346495841190235,
+              "NO": 0.2653504158809766
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES",
+              "NO"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.7346495841190235,
+              "probabilities": {
+                "YES": 0.7346495841190235,
+                "NO": 0.2653504158809766
+              },
+              "probs": {
+                "YES": 0.7346495841190235,
+                "NO": 0.2653504158809766
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES",
+                "NO"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 1087
+        },
+        "latency_ms": 56838.89,
+        "usage": {
+          "input_tokens": 1087,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go:78-139\nfunc (r *MasterBindingRepo) ListMasterTargetsByShadowTable(ctx context.Context, shadowTable string) ([]MasterTargetIdentity, error) {\n\tvar result []MasterTargetIdentity\n\terr := r.db.WithContext(ctx).Raw(\n\t\t`SELECT DISTINCT mb.id,\n\t\t        COALESCE(NULLIF(mb.master_schema, ''), 'public') || '.' || mb.master_table AS master_fqn,\n\t\t        COALESCE(cr.connection_code, '') AS master_connection_key\n\t\t   FROM cdc_system.master_binding mb\n\t\t   JOIN cdc_system.shadow_binding sb ON (\n\t\t     sb.id = mb.shadow_binding_id\n\t\t     OR EXISTS (\n\t\t       SELECT 1 FROM jsonb_array_elements(\n\t\t         CASE WHEN jsonb_typeof(mb.transform_spec->'shadow_sources') = 'array' THEN mb.transform_spec->'shadow_sources' ELSE '[]'::jsonb END\n\t\t       ) elem\n\t\t        WHERE (CASE WHEN (elem->>'shadow_binding_id') ~ '^[0-9]+$' THEN (elem->>'shadow_binding_id')::bigint END) = sb.id\n\t\t           OR elem->>'shadow_table' = sb.shadow_table\n\t\t     )\n\t\t   )\n\t\t   LEFT JOIN cdc_system.connection_registry cr ON cr.id = mb.master_connection_id\n\t\t  WHERE sb.shadow_table = ? AND mb.is_active = true AND mb.schema_status = 'approved'`,\n\t\tshadowTable,\n\t).Scan(&result).Error\n\treturn result, err\n}\n\nfunc (r *MasterBindingRepo) ListMasterTargetsByShadowIdentity(ctx context.Context, shadowTable, shadowSchema, shadowConnectionKey, shadowBindingCode string) ([]MasterTargetIdentity, error) {\n\tvar result []MasterTargetIdentity\n\terr := r.db.WithContext(ctx).Raw(\n\t\t`SELECT DISTINCT mb.id,\n\t\t        COALESCE(NULLIF(mb.master_schema, ''), 'public') || '.' || mb.master_table AS master_fqn,\n\t\t        COALESCE(mcr.connection_code, '') AS master_connection_key\n\t\t   FROM cdc_system.master_binding mb\n\t\t   JOIN cdc_system.shadow_binding sb ON (\n\t\t     sb.id = mb.shadow_binding_id\n\t\t     OR EXISTS (\n\t\t       SELECT 1 FROM jsonb_array_elements(\n\t\t         CASE WHEN jsonb_typeof(mb.transform_spec->'shadow_sources') = 'array' THEN mb.transform_spec->'shadow_sources' ELSE '[]'::jsonb END\n\t\t       ) elem\n\t\t        WHERE (CASE WHEN (elem->>'shadow_binding_id') ~ '^[0-9]+$' THEN (elem->>'shadow_binding_id')::bigint END) = sb.id\n\t\t           OR (elem->>'shadow_table' = sb.shadow_table\n\t\t               AND COALESCE(NULLIF(elem->>'shadow_schema', ''), sb.shadow_schema) = sb.shadow_schema)\n\t\t     )\n\t\t   )\n\t\t   LEFT JOIN cdc_system.connection_registry mcr ON mcr.id = mb.master_connection_id\n\t\t   LEFT JOIN cdc_system.connection_registry scr ON scr.id = sb.shadow_connection_id\n\t\t  WHERE mb.is_active = true\n\t\t    AND mb.schema_status = 'approved'\n\t\t    AND (\n\t\t      (@binding_code <> '' AND sb.binding_code = @binding_code)\n\t\t      OR\n\t\t      (@binding_code = '' AND sb.shadow_table = @shadow_table \n\t\t        AND COALESCE(sb.shadow_schema, '') = COALESCE(NULLIF(@shadow_schema, ''), COALESCE(sb.shadow_schema, '')) \n\t\t        AND (@shadow_connection_key = '' OR scr.connection_code = @shadow_connection_key))\n\t\t    )`,\n\t\tmap[string]interface{}{\n\t\t\t\"binding_code\":          shadowBindingCode,\n\t\t\t\"shadow_table\":          shadowTable,\n\t\t\t\"shadow_schema\":         shadowSchema,\n\t\t\t\"shadow_connection_key\": shadowConnectionKey,\n\t\t},\n\t).Scan(&result).Error\n\treturn result, err\n}",
+          "claim": "In master_binding_repo.go lines 78-139, ListMasterTargetsByShadowTable and ListMasterTargetsByShadowIdentity filter by mb.is_active = true and mb.schema_status = 'approved' without checking cdc_system.transmute_schedule mode = 'post_ingest' and is_enabled = true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "C-REQ-2",
+    "kind": "claim",
+    "claim": "In batch_buffer_lifecycle.go lines 47-53, FlushSchemaCache flushes bb.adapters and bb.schemaAdapter without clearing bb.piCache.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go",
+    "lines": "47-53",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go:47-53\nfunc (bb *BatchBuffer) FlushSchemaCache() {\n\tbb.adapters.Range(func(_, v any) bool {\n\t\tv.(*serviceshadow.SchemaAdapter).FlushAll()\n\t\treturn true\n\t})\n\tbb.schemaAdapter.FlushAll()\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.4908469069179068,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.4908469069179068,
+            "probabilities": {
+              "CORRECT": 0.36427408062387945,
+              "INCORRECT": 0.1448790124582138,
+              "UNSUPPORTED": 0.4908469069179068
+            },
+            "probs": {
+              "CORRECT": 0.36427408062387945,
+              "INCORRECT": 0.1448790124582138,
+              "UNSUPPORTED": 0.4908469069179068
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.4908469069179068,
+              "probabilities": {
+                "CORRECT": 0.36427408062387945,
+                "INCORRECT": 0.1448790124582138,
+                "UNSUPPORTED": 0.4908469069179068
+              },
+              "probs": {
+                "CORRECT": 0.36427408062387945,
+                "INCORRECT": 0.1448790124582138,
+                "UNSUPPORTED": 0.4908469069179068
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 321
+        },
+        "latency_ms": 6501.29,
+        "usage": {
+          "input_tokens": 321,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In batch_buffer_lifecycle.go lines 47-53, FlushSchemaCache flushes bb.adapters and bb.schemaAdapter without clearing bb.piCache.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go:47-53\nfunc (bb *BatchBuffer) FlushSchemaCache() {\n\tbb.adapters.Range(func(_, v any) bool {\n\t\tv.(*serviceshadow.SchemaAdapter).FlushAll()\n\t\treturn true\n\t})\n\tbb.schemaAdapter.FlushAll()\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.46946869768132976,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.46946869768132976,
+            "probabilities": {
+              "CORRECT": 0.46946869768132976,
+              "INCORRECT": 0.25236006682122897,
+              "UNSUPPORTED": 0.27817123549744116
+            },
+            "probs": {
+              "CORRECT": 0.46946869768132976,
+              "INCORRECT": 0.25236006682122897,
+              "UNSUPPORTED": 0.27817123549744116
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.46946869768132976,
+              "probabilities": {
+                "CORRECT": 0.46946869768132976,
+                "INCORRECT": 0.25236006682122897,
+                "UNSUPPORTED": 0.27817123549744116
+              },
+              "probs": {
+                "CORRECT": 0.46946869768132976,
+                "INCORRECT": 0.25236006682122897,
+                "UNSUPPORTED": 0.27817123549744116
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 302
+        },
+        "latency_ms": 1089.13,
+        "usage": {
+          "input_tokens": 302,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go:47-53\nfunc (bb *BatchBuffer) FlushSchemaCache() {\n\tbb.adapters.Range(func(_, v any) bool {\n\t\tv.(*serviceshadow.SchemaAdapter).FlushAll()\n\t\treturn true\n\t})\n\tbb.schemaAdapter.FlushAll()\n}",
+          "claim": "In batch_buffer_lifecycle.go lines 47-53, FlushSchemaCache flushes bb.adapters and bb.schemaAdapter without clearing bb.piCache."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7788052552793258,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.7788052552793258,
+            "probabilities": {
+              "YES": 0.7788052552793258,
+              "NO": 0.22119474472067427
+            },
+            "probs": {
+              "YES": 0.7788052552793258,
+              "NO": 0.22119474472067427
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.7788052552793258,
+              "probabilities": {
+                "YES": 0.7788052552793258,
+                "NO": 0.22119474472067427
+              },
+              "probs": {
+                "YES": 0.7788052552793258,
+                "NO": 0.22119474472067427
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 215
+        },
+        "latency_ms": 631.04,
+        "usage": {
+          "input_tokens": 215,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go:47-53\nfunc (bb *BatchBuffer) FlushSchemaCache() {\n\tbb.adapters.Range(func(_, v any) bool {\n\t\tv.(*serviceshadow.SchemaAdapter).FlushAll()\n\t\treturn true\n\t})\n\tbb.schemaAdapter.FlushAll()\n}",
+          "claim": "In batch_buffer_lifecycle.go lines 47-53, FlushSchemaCache flushes bb.adapters and bb.schemaAdapter without clearing bb.piCache."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "C-REALITY-1",
+    "kind": "claim",
+    "claim": "In MasterRegistry.tsx lines 879-896, the Sync modal useEffect filters /api/v1/schedules by s.master_table === syncRow.master_name and s.master_schema === syncRow.master_schema without matching s.master_binding_id === syncRow.id.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx",
+    "lines": "879-896",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:879-896\n  useEffect(() => {\n    if (!syncRow) return;\n    (async () => {\n      try {\n        const list = await cmsApi.get<{ data: { mode: string; master_table: string; master_schema?: string; is_enabled: boolean; cron_expr: string }[] }>('/api/v1/schedules');\n        const rows = (list.data.data || []).filter(\n          (s) => s.master_table === syncRow.master_name && (!syncRow.master_schema || s.master_schema === syncRow.master_schema),\n        );\n        const pi = rows.find((s) => s.mode === 'post_ingest');\n        const cr = rows.find((s) => s.mode === 'cron');\n        setSyncState({\n          realtimeOn: !!pi?.is_enabled,\n          cronOn: !!cr?.is_enabled,\n          cronExpr: cr?.cron_expr || '0 */6 * * *',\n        });\n      } catch { /* giữ default nếu lỗi */ }\n    })();\n  }, [syncRow]);",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.43555213307697765,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.43555213307697765,
+            "probabilities": {
+              "CORRECT": 0.41182089503537894,
+              "INCORRECT": 0.15262697188764346,
+              "UNSUPPORTED": 0.43555213307697765
+            },
+            "probs": {
+              "CORRECT": 0.41182089503537894,
+              "INCORRECT": 0.15262697188764346,
+              "UNSUPPORTED": 0.43555213307697765
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.43555213307697765,
+              "probabilities": {
+                "CORRECT": 0.41182089503537894,
+                "INCORRECT": 0.15262697188764346,
+                "UNSUPPORTED": 0.43555213307697765
+              },
+              "probs": {
+                "CORRECT": 0.41182089503537894,
+                "INCORRECT": 0.15262697188764346,
+                "UNSUPPORTED": 0.43555213307697765
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 521
+        },
+        "latency_ms": 758.72,
+        "usage": {
+          "input_tokens": 521,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In MasterRegistry.tsx lines 879-896, the Sync modal useEffect filters /api/v1/schedules by s.master_table === syncRow.master_name and s.master_schema === syncRow.master_schema without matching s.master_binding_id === syncRow.id.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:879-896\n  useEffect(() => {\n    if (!syncRow) return;\n    (async () => {\n      try {\n        const list = await cmsApi.get<{ data: { mode: string; master_table: string; master_schema?: string; is_enabled: boolean; cron_expr: string }[] }>('/api/v1/schedules');\n        const rows = (list.data.data || []).filter(\n          (s) => s.master_table === syncRow.master_name && (!syncRow.master_schema || s.master_schema === syncRow.master_schema),\n        );\n        const pi = rows.find((s) => s.mode === 'post_ingest');\n        const cr = rows.find((s) => s.mode === 'cron');\n        setSyncState({\n          realtimeOn: !!pi?.is_enabled,\n          cronOn: !!cr?.is_enabled,\n          cronExpr: cr?.cron_expr || '0 */6 * * *',\n        });\n      } catch { /* giữ default nếu lỗi */ }\n    })();\n  }, [syncRow]);",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.4575532067362358,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.4575532067362358,
+            "probabilities": {
+              "CORRECT": 0.4575532067362358,
+              "INCORRECT": 0.2646573217193632,
+              "UNSUPPORTED": 0.27778947154440103
+            },
+            "probs": {
+              "CORRECT": 0.4575532067362358,
+              "INCORRECT": 0.2646573217193632,
+              "UNSUPPORTED": 0.27778947154440103
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "INCORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.4575532067362358,
+              "probabilities": {
+                "CORRECT": 0.4575532067362358,
+                "INCORRECT": 0.2646573217193632,
+                "UNSUPPORTED": 0.27778947154440103
+              },
+              "probs": {
+                "CORRECT": 0.4575532067362358,
+                "INCORRECT": 0.2646573217193632,
+                "UNSUPPORTED": 0.27778947154440103
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "INCORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 502
+        },
+        "latency_ms": 863.14,
+        "usage": {
+          "input_tokens": 502,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:879-896\n  useEffect(() => {\n    if (!syncRow) return;\n    (async () => {\n      try {\n        const list = await cmsApi.get<{ data: { mode: string; master_table: string; master_schema?: string; is_enabled: boolean; cron_expr: string }[] }>('/api/v1/schedules');\n        const rows = (list.data.data || []).filter(\n          (s) => s.master_table === syncRow.master_name && (!syncRow.master_schema || s.master_schema === syncRow.master_schema),\n        );\n        const pi = rows.find((s) => s.mode === 'post_ingest');\n        const cr = rows.find((s) => s.mode === 'cron');\n        setSyncState({\n          realtimeOn: !!pi?.is_enabled,\n          cronOn: !!cr?.is_enabled,\n          cronExpr: cr?.cron_expr || '0 */6 * * *',\n        });\n      } catch { /* giữ default nếu lỗi */ }\n    })();\n  }, [syncRow]);",
+          "claim": "In MasterRegistry.tsx lines 879-896, the Sync modal useEffect filters /api/v1/schedules by s.master_table === syncRow.master_name and s.master_schema === syncRow.master_schema without matching s.master_binding_id === syncRow.id."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.7587579032947408,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.7587579032947408,
+            "probabilities": {
+              "YES": 0.7587579032947408,
+              "NO": 0.24124209670525923
+            },
+            "probs": {
+              "YES": 0.7587579032947408,
+              "NO": 0.24124209670525923
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.7587579032947408,
+              "probabilities": {
+                "YES": 0.7587579032947408,
+                "NO": 0.24124209670525923
+              },
+              "probs": {
+                "YES": 0.7587579032947408,
+                "NO": 0.24124209670525923
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 415
+        },
+        "latency_ms": 962.72,
+        "usage": {
+          "input_tokens": 415,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-web/src/pages/MasterRegistry.tsx:879-896\n  useEffect(() => {\n    if (!syncRow) return;\n    (async () => {\n      try {\n        const list = await cmsApi.get<{ data: { mode: string; master_table: string; master_schema?: string; is_enabled: boolean; cron_expr: string }[] }>('/api/v1/schedules');\n        const rows = (list.data.data || []).filter(\n          (s) => s.master_table === syncRow.master_name && (!syncRow.master_schema || s.master_schema === syncRow.master_schema),\n        );\n        const pi = rows.find((s) => s.mode === 'post_ingest');\n        const cr = rows.find((s) => s.mode === 'cron');\n        setSyncState({\n          realtimeOn: !!pi?.is_enabled,\n          cronOn: !!cr?.is_enabled,\n          cronExpr: cr?.cron_expr || '0 */6 * * *',\n        });\n      } catch { /* giữ default nếu lỗi */ }\n    })();\n  }, [syncRow]);",
+          "claim": "In MasterRegistry.tsx lines 879-896, the Sync modal useEffect filters /api/v1/schedules by s.master_table === syncRow.master_name and s.master_schema === syncRow.master_schema without matching s.master_binding_id === syncRow.id."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "C-REALITY-2",
+    "kind": "claim",
+    "claim": "In transmute_schedule_handler.go lines 94-99, Create validates masterSchema against schedNameRe unconditionally even when req.MasterBindingID > 0, whereas masterTable validation is skipped when req.MasterBindingID > 0.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go",
+    "lines": "94-99",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go:94-99\n\tif masterSchema != \"\" && !schedNameRe.MatchString(masterSchema) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_schema\"})\n\t}\n\tif req.MasterBindingID <= 0 && !schedNameRe.MatchString(masterTable) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_table\"})\n\t}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4999892359133942,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.4999892359133942,
+            "probabilities": {
+              "CORRECT": 0.4999892359133942,
+              "INCORRECT": 0.15095695121359845,
+              "UNSUPPORTED": 0.34905381287300746
+            },
+            "probs": {
+              "CORRECT": 0.4999892359133942,
+              "INCORRECT": 0.15095695121359845,
+              "UNSUPPORTED": 0.34905381287300746
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.4999892359133942,
+              "probabilities": {
+                "CORRECT": 0.4999892359133942,
+                "INCORRECT": 0.15095695121359845,
+                "UNSUPPORTED": 0.34905381287300746
+              },
+              "probs": {
+                "CORRECT": 0.4999892359133942,
+                "INCORRECT": 0.15095695121359845,
+                "UNSUPPORTED": 0.34905381287300746
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 375
+        },
+        "latency_ms": 816.1,
+        "usage": {
+          "input_tokens": 375,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In transmute_schedule_handler.go lines 94-99, Create validates masterSchema against schedNameRe unconditionally even when req.MasterBindingID > 0, whereas masterTable validation is skipped when req.MasterBindingID > 0.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go:94-99\n\tif masterSchema != \"\" && !schedNameRe.MatchString(masterSchema) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_schema\"})\n\t}\n\tif req.MasterBindingID <= 0 && !schedNameRe.MatchString(masterTable) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_table\"})\n\t}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.515071335760175,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.515071335760175,
+            "probabilities": {
+              "CORRECT": 0.515071335760175,
+              "INCORRECT": 0.1956434830696336,
+              "UNSUPPORTED": 0.2892851811701913
+            },
+            "probs": {
+              "CORRECT": 0.515071335760175,
+              "INCORRECT": 0.1956434830696336,
+              "UNSUPPORTED": 0.2892851811701913
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.515071335760175,
+              "probabilities": {
+                "CORRECT": 0.515071335760175,
+                "INCORRECT": 0.1956434830696336,
+                "UNSUPPORTED": 0.2892851811701913
+              },
+              "probs": {
+                "CORRECT": 0.515071335760175,
+                "INCORRECT": 0.1956434830696336,
+                "UNSUPPORTED": 0.2892851811701913
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 356
+        },
+        "latency_ms": 744.86,
+        "usage": {
+          "input_tokens": 356,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go:94-99\n\tif masterSchema != \"\" && !schedNameRe.MatchString(masterSchema) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_schema\"})\n\t}\n\tif req.MasterBindingID <= 0 && !schedNameRe.MatchString(masterTable) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_table\"})\n\t}",
+          "claim": "In transmute_schedule_handler.go lines 94-99, Create validates masterSchema against schedNameRe unconditionally even when req.MasterBindingID > 0, whereas masterTable validation is skipped when req.MasterBindingID > 0."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8653202699479337,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.8653202699479337,
+            "probabilities": {
+              "YES": 0.8653202699479337,
+              "NO": 0.13467973005206638
+            },
+            "probs": {
+              "YES": 0.8653202699479337,
+              "NO": 0.13467973005206638
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.8653202699479337,
+              "probabilities": {
+                "YES": 0.8653202699479337,
+                "NO": 0.13467973005206638
+              },
+              "probs": {
+                "YES": 0.8653202699479337,
+                "NO": 0.13467973005206638
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 269
+        },
+        "latency_ms": 656.27,
+        "usage": {
+          "input_tokens": 269,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/cdc-cms-service/internal/api/scheduler/transmute_schedule_handler.go:94-99\n\tif masterSchema != \"\" && !schedNameRe.MatchString(masterSchema) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_schema\"})\n\t}\n\tif req.MasterBindingID <= 0 && !schedNameRe.MatchString(masterTable) {\n\t\treturn c.Status(400).JSON(fiber.Map{\"error\": \"invalid_master_table\"})\n\t}",
+          "claim": "In transmute_schedule_handler.go lines 94-99, Create validates masterSchema against schedNameRe unconditionally even when req.MasterBindingID > 0, whereas masterTable validation is skipped when req.MasterBindingID > 0."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "C-REALITY-3",
+    "kind": "claim",
+    "claim": "In batch_buffer_utils.go lines 52-77, resolveDB calls GetMasterDB when role is 'master' and resolveSchemaAdapter caches NewSchemaAdapter(db, bb.logger) in bb.adapters under 'master:'+key.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go",
+    "lines": "52-77",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go:52-77\n\tif role == \"master\" && key != \"\" {\n\t\tif db, err := bb.connMgr.GetMasterDB(context.Background(), key); err == nil {\n\t\t\treturn db\n\t\t}\n\t}\n\treturn bb.db\n}\n\nfunc (bb *BatchBuffer) resolveSchemaAdapter(record *shadow.UpsertRecord, db *gorm.DB) *serviceshadow.SchemaAdapter {\n\tif db == nil {\n\t\treturn bb.schemaAdapter\n\t}\n\tcacheKey := \"legacy\"\n\tif record != nil {\n\t\tcacheKey = strings.TrimSpace(record.ConnectionRole) + \":\" + strings.TrimSpace(record.ConnectionKey)\n\t\tif cacheKey == \":\" || cacheKey == \"\" {\n\t\t\tcacheKey = \"legacy\"\n\t\t}\n\t}\n\tif cached, ok := bb.adapters.Load(cacheKey); ok {\n\t\treturn cached.(*serviceshadow.SchemaAdapter)\n\t}\n\tadapter := serviceshadow.NewSchemaAdapter(db, bb.logger)\n\tbb.adapters.Store(cacheKey, adapter)\n\treturn adapter\n}",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.4519935823360177,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.4519935823360177,
+            "probabilities": {
+              "CORRECT": 0.4519935823360177,
+              "INCORRECT": 0.1291998853844528,
+              "UNSUPPORTED": 0.4188065322795295
+            },
+            "probs": {
+              "CORRECT": 0.4519935823360177,
+              "INCORRECT": 0.1291998853844528,
+              "UNSUPPORTED": 0.4188065322795295
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.4519935823360177,
+              "probabilities": {
+                "CORRECT": 0.4519935823360177,
+                "INCORRECT": 0.1291998853844528,
+                "UNSUPPORTED": 0.4188065322795295
+              },
+              "probs": {
+                "CORRECT": 0.4519935823360177,
+                "INCORRECT": 0.1291998853844528,
+                "UNSUPPORTED": 0.4188065322795295
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 517
+        },
+        "latency_ms": 723.65,
+        "usage": {
+          "input_tokens": 517,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In batch_buffer_utils.go lines 52-77, resolveDB calls GetMasterDB when role is 'master' and resolveSchemaAdapter caches NewSchemaAdapter(db, bb.logger) in bb.adapters under 'master:'+key.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go:52-77\n\tif role == \"master\" && key != \"\" {\n\t\tif db, err := bb.connMgr.GetMasterDB(context.Background(), key); err == nil {\n\t\t\treturn db\n\t\t}\n\t}\n\treturn bb.db\n}\n\nfunc (bb *BatchBuffer) resolveSchemaAdapter(record *shadow.UpsertRecord, db *gorm.DB) *serviceshadow.SchemaAdapter {\n\tif db == nil {\n\t\treturn bb.schemaAdapter\n\t}\n\tcacheKey := \"legacy\"\n\tif record != nil {\n\t\tcacheKey = strings.TrimSpace(record.ConnectionRole) + \":\" + strings.TrimSpace(record.ConnectionKey)\n\t\tif cacheKey == \":\" || cacheKey == \"\" {\n\t\t\tcacheKey = \"legacy\"\n\t\t}\n\t}\n\tif cached, ok := bb.adapters.Load(cacheKey); ok {\n\t\treturn cached.(*serviceshadow.SchemaAdapter)\n\t}\n\tadapter := serviceshadow.NewSchemaAdapter(db, bb.logger)\n\tbb.adapters.Store(cacheKey, adapter)\n\treturn adapter\n}",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.5241742512151223,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.5241742512151223,
+            "probabilities": {
+              "CORRECT": 0.5241742512151223,
+              "INCORRECT": 0.16697037091454267,
+              "UNSUPPORTED": 0.30885537787033496
+            },
+            "probs": {
+              "CORRECT": 0.5241742512151223,
+              "INCORRECT": 0.16697037091454267,
+              "UNSUPPORTED": 0.30885537787033496
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.5241742512151223,
+              "probabilities": {
+                "CORRECT": 0.5241742512151223,
+                "INCORRECT": 0.16697037091454267,
+                "UNSUPPORTED": 0.30885537787033496
+              },
+              "probs": {
+                "CORRECT": 0.5241742512151223,
+                "INCORRECT": 0.16697037091454267,
+                "UNSUPPORTED": 0.30885537787033496
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 498
+        },
+        "latency_ms": 811.45,
+        "usage": {
+          "input_tokens": 498,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go:52-77\n\tif role == \"master\" && key != \"\" {\n\t\tif db, err := bb.connMgr.GetMasterDB(context.Background(), key); err == nil {\n\t\t\treturn db\n\t\t}\n\t}\n\treturn bb.db\n}\n\nfunc (bb *BatchBuffer) resolveSchemaAdapter(record *shadow.UpsertRecord, db *gorm.DB) *serviceshadow.SchemaAdapter {\n\tif db == nil {\n\t\treturn bb.schemaAdapter\n\t}\n\tcacheKey := \"legacy\"\n\tif record != nil {\n\t\tcacheKey = strings.TrimSpace(record.ConnectionRole) + \":\" + strings.TrimSpace(record.ConnectionKey)\n\t\tif cacheKey == \":\" || cacheKey == \"\" {\n\t\t\tcacheKey = \"legacy\"\n\t\t}\n\t}\n\tif cached, ok := bb.adapters.Load(cacheKey); ok {\n\t\treturn cached.(*serviceshadow.SchemaAdapter)\n\t}\n\tadapter := serviceshadow.NewSchemaAdapter(db, bb.logger)\n\tbb.adapters.Store(cacheKey, adapter)\n\treturn adapter\n}",
+          "claim": "In batch_buffer_utils.go lines 52-77, resolveDB calls GetMasterDB when role is 'master' and resolveSchemaAdapter caches NewSchemaAdapter(db, bb.logger) in bb.adapters under 'master:'+key."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8185954090073182,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.8185954090073182,
+            "probabilities": {
+              "YES": 0.8185954090073182,
+              "NO": 0.1814045909926818
+            },
+            "probs": {
+              "YES": 0.8185954090073182,
+              "NO": 0.1814045909926818
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.8185954090073182,
+              "probabilities": {
+                "YES": 0.8185954090073182,
+                "NO": 0.1814045909926818
+              },
+              "probs": {
+                "YES": 0.8185954090073182,
+                "NO": 0.1814045909926818
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 411
+        },
+        "latency_ms": 906.71,
+        "usage": {
+          "input_tokens": 411,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_utils.go:52-77\n\tif role == \"master\" && key != \"\" {\n\t\tif db, err := bb.connMgr.GetMasterDB(context.Background(), key); err == nil {\n\t\t\treturn db\n\t\t}\n\t}\n\treturn bb.db\n}\n\nfunc (bb *BatchBuffer) resolveSchemaAdapter(record *shadow.UpsertRecord, db *gorm.DB) *serviceshadow.SchemaAdapter {\n\tif db == nil {\n\t\treturn bb.schemaAdapter\n\t}\n\tcacheKey := \"legacy\"\n\tif record != nil {\n\t\tcacheKey = strings.TrimSpace(record.ConnectionRole) + \":\" + strings.TrimSpace(record.ConnectionKey)\n\t\tif cacheKey == \":\" || cacheKey == \"\" {\n\t\t\tcacheKey = \"legacy\"\n\t\t}\n\t}\n\tif cached, ok := bb.adapters.Load(cacheKey); ok {\n\t\treturn cached.(*serviceshadow.SchemaAdapter)\n\t}\n\tadapter := serviceshadow.NewSchemaAdapter(db, bb.logger)\n\tbb.adapters.Store(cacheKey, adapter)\n\treturn adapter\n}",
+          "claim": "In batch_buffer_utils.go lines 52-77, resolveDB calls GetMasterDB when role is 'master' and resolveSchemaAdapter caches NewSchemaAdapter(db, bb.logger) in bb.adapters under 'master:'+key."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "C-CONTRA-1",
+    "kind": "claim",
+    "claim": "In transmute_poison_pill_split.go lines 265-280, isTransientError already returns true when err.Error() contains 'database is closed' or 'failed to verify master table existence'.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_poison_pill_split.go",
+    "lines": "265-280",
+    "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_poison_pill_split.go:265-280\nfunc isTransientError(err error) bool {\n\tif err == nil {\n\t\treturn false\n\t}\n\tmsg := strings.ToLower(err.Error())\n\treturn strings.Contains(msg, \"connection refused\") ||\n\t\tstrings.Contains(msg, \"connection reset\") ||\n\t\tstrings.Contains(msg, \"connection closed\") ||\n\t\tstrings.Contains(msg, \"conn closed\") ||\n\t\tstrings.Contains(msg, \"database is closed\") ||\n\t\tstrings.Contains(msg, \"failed to verify master table existence\") ||\n\t\tstrings.Contains(msg, \"does not exist on target database\") ||\n\t\tstrings.Contains(msg, \"driver: bad connection\") ||\n\t\tstrings.Contains(msg, \"unexpected eof\") ||\n\t\tstrings.Contains(msg, \"connection pool\") ||\n\t\tstrings.Contains(msg, \"dial tcp\") ||",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "CORRECT",
+      "confidence": 0.45001747351354204,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.45001747351354204,
+            "probabilities": {
+              "CORRECT": 0.45001747351354204,
+              "INCORRECT": 0.12081262740428027,
+              "UNSUPPORTED": 0.42916989908217773
+            },
+            "probs": {
+              "CORRECT": 0.45001747351354204,
+              "INCORRECT": 0.12081262740428027,
+              "UNSUPPORTED": 0.42916989908217773
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.45001747351354204,
+              "probabilities": {
+                "CORRECT": 0.45001747351354204,
+                "INCORRECT": 0.12081262740428027,
+                "UNSUPPORTED": 0.42916989908217773
+              },
+              "probs": {
+                "CORRECT": 0.45001747351354204,
+                "INCORRECT": 0.12081262740428027,
+                "UNSUPPORTED": 0.42916989908217773
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 470
+        },
+        "latency_ms": 915.33,
+        "usage": {
+          "input_tokens": 470,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In transmute_poison_pill_split.go lines 265-280, isTransientError already returns true when err.Error() contains 'database is closed' or 'failed to verify master table existence'.",
+          "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_poison_pill_split.go:265-280\nfunc isTransientError(err error) bool {\n\tif err == nil {\n\t\treturn false\n\t}\n\tmsg := strings.ToLower(err.Error())\n\treturn strings.Contains(msg, \"connection refused\") ||\n\t\tstrings.Contains(msg, \"connection reset\") ||\n\t\tstrings.Contains(msg, \"connection closed\") ||\n\t\tstrings.Contains(msg, \"conn closed\") ||\n\t\tstrings.Contains(msg, \"database is closed\") ||\n\t\tstrings.Contains(msg, \"failed to verify master table existence\") ||\n\t\tstrings.Contains(msg, \"does not exist on target database\") ||\n\t\tstrings.Contains(msg, \"driver: bad connection\") ||\n\t\tstrings.Contains(msg, \"unexpected eof\") ||\n\t\tstrings.Contains(msg, \"connection pool\") ||\n\t\tstrings.Contains(msg, \"dial tcp\") ||",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "CORRECT",
+      "confidence": 0.48330153695549133,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "CORRECT",
+            "confidence": 0.48330153695549133,
+            "probabilities": {
+              "CORRECT": 0.48330153695549133,
+              "INCORRECT": 0.22259454725131586,
+              "UNSUPPORTED": 0.29410391579319295
+            },
+            "probs": {
+              "CORRECT": 0.48330153695549133,
+              "INCORRECT": 0.22259454725131586,
+              "UNSUPPORTED": 0.29410391579319295
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "CORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "CORRECT",
+              "confidence": 0.48330153695549133,
+              "probabilities": {
+                "CORRECT": 0.48330153695549133,
+                "INCORRECT": 0.22259454725131586,
+                "UNSUPPORTED": 0.29410391579319295
+              },
+              "probs": {
+                "CORRECT": 0.48330153695549133,
+                "INCORRECT": 0.22259454725131586,
+                "UNSUPPORTED": 0.29410391579319295
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "CORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 451
+        },
+        "latency_ms": 867.12,
+        "usage": {
+          "input_tokens": 451,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_poison_pill_split.go:265-280\nfunc isTransientError(err error) bool {\n\tif err == nil {\n\t\treturn false\n\t}\n\tmsg := strings.ToLower(err.Error())\n\treturn strings.Contains(msg, \"connection refused\") ||\n\t\tstrings.Contains(msg, \"connection reset\") ||\n\t\tstrings.Contains(msg, \"connection closed\") ||\n\t\tstrings.Contains(msg, \"conn closed\") ||\n\t\tstrings.Contains(msg, \"database is closed\") ||\n\t\tstrings.Contains(msg, \"failed to verify master table existence\") ||\n\t\tstrings.Contains(msg, \"does not exist on target database\") ||\n\t\tstrings.Contains(msg, \"driver: bad connection\") ||\n\t\tstrings.Contains(msg, \"unexpected eof\") ||\n\t\tstrings.Contains(msg, \"connection pool\") ||\n\t\tstrings.Contains(msg, \"dial tcp\") ||",
+          "claim": "In transmute_poison_pill_split.go lines 265-280, isTransientError already returns true when err.Error() contains 'database is closed' or 'failed to verify master table existence'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.8051602007603927,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.8051602007603927,
+            "probabilities": {
+              "YES": 0.8051602007603927,
+              "NO": 0.19483979923960726
+            },
+            "probs": {
+              "YES": 0.8051602007603927,
+              "NO": 0.19483979923960726
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.8051602007603927,
+              "probabilities": {
+                "YES": 0.8051602007603927,
+                "NO": 0.19483979923960726
+              },
+              "probs": {
+                "YES": 0.8051602007603927,
+                "NO": 0.19483979923960726
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 364
+        },
+        "latency_ms": 836.39,
+        "usage": {
+          "input_tokens": 364,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/master/transmute_poison_pill_split.go:265-280\nfunc isTransientError(err error) bool {\n\tif err == nil {\n\t\treturn false\n\t}\n\tmsg := strings.ToLower(err.Error())\n\treturn strings.Contains(msg, \"connection refused\") ||\n\t\tstrings.Contains(msg, \"connection reset\") ||\n\t\tstrings.Contains(msg, \"connection closed\") ||\n\t\tstrings.Contains(msg, \"conn closed\") ||\n\t\tstrings.Contains(msg, \"database is closed\") ||\n\t\tstrings.Contains(msg, \"failed to verify master table existence\") ||\n\t\tstrings.Contains(msg, \"does not exist on target database\") ||\n\t\tstrings.Contains(msg, \"driver: bad connection\") ||\n\t\tstrings.Contains(msg, \"unexpected eof\") ||\n\t\tstrings.Contains(msg, \"connection pool\") ||\n\t\tstrings.Contains(msg, \"dial tcp\") ||",
+          "claim": "In transmute_poison_pill_split.go lines 265-280, isTransientError already returns true when err.Error() contains 'database is closed' or 'failed to verify master table existence'."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    },
+    "decision": "UNVALIDATED"
+  },
+  {
+    "id": "CTRL-TRUE-1",
+    "kind": "control_true",
+    "claim": "In batch_buffer_fanout.go lines 212-235, resolvePostIngestSchedule queries cdc_system.transmute_schedule joined with master_binding and shadow_binding where ts.mode = 'post_ingest' and ts.is_enabled = true.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_fanout.go",
+    "lines": "212-235",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.5271002860724865,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.5271002860724865,
+            "probabilities": {
+              "CORRECT": 0.21356938048500299,
+              "INCORRECT": 0.25933033344251044,
+              "UNSUPPORTED": 0.5271002860724865
+            },
+            "probs": {
+              "CORRECT": 0.21356938048500299,
+              "INCORRECT": 0.25933033344251044,
+              "UNSUPPORTED": 0.5271002860724865
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "INCORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.5271002860724865,
+              "probabilities": {
+                "CORRECT": 0.21356938048500299,
+                "INCORRECT": 0.25933033344251044,
+                "UNSUPPORTED": 0.5271002860724865
+              },
+              "probs": {
+                "CORRECT": 0.21356938048500299,
+                "INCORRECT": 0.25933033344251044,
+                "UNSUPPORTED": 0.5271002860724865
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "INCORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 249
+        },
+        "latency_ms": 674.97,
+        "usage": {
+          "input_tokens": 249,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In batch_buffer_fanout.go lines 212-235, resolvePostIngestSchedule queries cdc_system.transmute_schedule joined with master_binding and shadow_binding where ts.mode = 'post_ingest' and ts.is_enabled = true.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.6210540819664108,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.6210540819664108,
+            "probabilities": {
+              "CORRECT": 0.15255220183667925,
+              "INCORRECT": 0.22639371619691004,
+              "UNSUPPORTED": 0.6210540819664108
+            },
+            "probs": {
+              "CORRECT": 0.15255220183667925,
+              "INCORRECT": 0.22639371619691004,
+              "UNSUPPORTED": 0.6210540819664108
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": false,
+            "prediction_set": [
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.6210540819664108,
+              "probabilities": {
+                "CORRECT": 0.15255220183667925,
+                "INCORRECT": 0.22639371619691004,
+                "UNSUPPORTED": 0.6210540819664108
+              },
+              "probs": {
+                "CORRECT": 0.15255220183667925,
+                "INCORRECT": 0.22639371619691004,
+                "UNSUPPORTED": 0.6210540819664108
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": false,
+              "prediction_set": [
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 230
+        },
+        "latency_ms": 561.98,
+        "usage": {
+          "input_tokens": 230,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In batch_buffer_fanout.go lines 212-235, resolvePostIngestSchedule queries cdc_system.transmute_schedule joined with master_binding and shadow_binding where ts.mode = 'post_ingest' and ts.is_enabled = true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6557690141119854,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.6557690141119854,
+            "probabilities": {
+              "YES": 0.6557690141119854,
+              "NO": 0.34423098588801465
+            },
+            "probs": {
+              "YES": 0.6557690141119854,
+              "NO": 0.34423098588801465
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES",
+              "NO"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.6557690141119854,
+              "probabilities": {
+                "YES": 0.6557690141119854,
+                "NO": 0.34423098588801465
+              },
+              "probs": {
+                "YES": 0.6557690141119854,
+                "NO": 0.34423098588801465
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES",
+                "NO"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 143
+        },
+        "latency_ms": 429.75,
+        "usage": {
+          "input_tokens": 143,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In batch_buffer_fanout.go lines 212-235, resolvePostIngestSchedule queries cdc_system.transmute_schedule joined with master_binding and shadow_binding where ts.mode = 'post_ingest' and ts.is_enabled = true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-1",
+    "kind": "control_false",
+    "claim": "In master_binding_repo.go lines 102-139, ListMasterTargetsByShadowIdentity joins cdc_system.transmute_schedule and filters for ts.mode = 'post_ingest' and ts.is_enabled = true.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/repository/master/master_binding_repo.go",
+    "lines": "102-139",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.5726467039435835,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.5726467039435835,
+            "probabilities": {
+              "CORRECT": 0.19754809755276193,
+              "INCORRECT": 0.2298051985036546,
+              "UNSUPPORTED": 0.5726467039435835
+            },
+            "probs": {
+              "CORRECT": 0.19754809755276193,
+              "INCORRECT": 0.2298051985036546,
+              "UNSUPPORTED": 0.5726467039435835
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.5726467039435835,
+              "probabilities": {
+                "CORRECT": 0.19754809755276193,
+                "INCORRECT": 0.2298051985036546,
+                "UNSUPPORTED": 0.5726467039435835
+              },
+              "probs": {
+                "CORRECT": 0.19754809755276193,
+                "INCORRECT": 0.2298051985036546,
+                "UNSUPPORTED": 0.5726467039435835
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 243
+        },
+        "latency_ms": 419.96,
+        "usage": {
+          "input_tokens": 243,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In master_binding_repo.go lines 102-139, ListMasterTargetsByShadowIdentity joins cdc_system.transmute_schedule and filters for ts.mode = 'post_ingest' and ts.is_enabled = true.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.5937277130117731,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.5937277130117731,
+            "probabilities": {
+              "CORRECT": 0.20414773203467712,
+              "INCORRECT": 0.20212455495354975,
+              "UNSUPPORTED": 0.5937277130117731
+            },
+            "probs": {
+              "CORRECT": 0.20414773203467712,
+              "INCORRECT": 0.20212455495354975,
+              "UNSUPPORTED": 0.5937277130117731
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.5937277130117731,
+              "probabilities": {
+                "CORRECT": 0.20414773203467712,
+                "INCORRECT": 0.20212455495354975,
+                "UNSUPPORTED": 0.5937277130117731
+              },
+              "probs": {
+                "CORRECT": 0.20414773203467712,
+                "INCORRECT": 0.20212455495354975,
+                "UNSUPPORTED": 0.5937277130117731
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 224
+        },
+        "latency_ms": 399.06,
+        "usage": {
+          "input_tokens": 224,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In master_binding_repo.go lines 102-139, ListMasterTargetsByShadowIdentity joins cdc_system.transmute_schedule and filters for ts.mode = 'post_ingest' and ts.is_enabled = true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.6657877375450898,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.6657877375450898,
+            "probabilities": {
+              "YES": 0.6657877375450898,
+              "NO": 0.3342122624549102
+            },
+            "probs": {
+              "YES": 0.6657877375450898,
+              "NO": 0.3342122624549102
+            },
+            "readout": "engine",
+            "abstain": false,
+            "unbound": true,
+            "prediction_set": [
+              "YES",
+              "NO"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.6657877375450898,
+              "probabilities": {
+                "YES": 0.6657877375450898,
+                "NO": 0.3342122624549102
+              },
+              "probs": {
+                "YES": 0.6657877375450898,
+                "NO": 0.3342122624549102
+              },
+              "readout": "engine",
+              "abstain": false,
+              "unbound": true,
+              "prediction_set": [
+                "YES",
+                "NO"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 137
+        },
+        "latency_ms": 385.6,
+        "usage": {
+          "input_tokens": 137,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In master_binding_repo.go lines 102-139, ListMasterTargetsByShadowIdentity joins cdc_system.transmute_schedule and filters for ts.mode = 'post_ingest' and ts.is_enabled = true."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "CTRL-FALSE-2",
+    "kind": "control_false",
+    "claim": "In batch_buffer_lifecycle.go lines 47-53, FlushSchemaCache deletes all entries from bb.piCache.",
+    "file": "/Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/shadow/batch_buffer_lifecycle.go",
+    "lines": "47-53",
+    "evidence": "",
+    "evidence_ok": true,
+    "evidence_error": "",
+    "r1": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.4001586165778956,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.4001586165778956,
+            "probabilities": {
+              "CORRECT": 0.2214008266848381,
+              "INCORRECT": 0.37844055673726634,
+              "UNSUPPORTED": 0.4001586165778956
+            },
+            "probs": {
+              "CORRECT": 0.2214008266848381,
+              "INCORRECT": 0.37844055673726634,
+              "UNSUPPORTED": 0.4001586165778956
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "INCORRECT",
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.4001586165778956,
+              "probabilities": {
+                "CORRECT": 0.2214008266848381,
+                "INCORRECT": 0.37844055673726634,
+                "UNSUPPORTED": 0.4001586165778956
+              },
+              "probs": {
+                "CORRECT": 0.2214008266848381,
+                "INCORRECT": 0.37844055673726634,
+                "UNSUPPORTED": 0.4001586165778956
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "INCORRECT",
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 222
+        },
+        "latency_ms": 394.68,
+        "usage": {
+          "input_tokens": 222,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "claim": "In batch_buffer_lifecycle.go lines 47-53, FlushSchemaCache deletes all entries from bb.piCache.",
+          "evidence": "",
+          "flow": ""
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "You are a strict code auditor. Compare the claim against the exact code evidence. Choose CORRECT only if the evidence directly proves the claim, INCORRECT if the evidence contradicts the claim, or UNSUPPORTED if the evidence is insufficient.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "choice": "UNSUPPORTED",
+      "confidence": 0.5906964955605596,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "UNSUPPORTED",
+            "confidence": 0.5906964955605596,
+            "probabilities": {
+              "CORRECT": 0.1880748065902391,
+              "INCORRECT": 0.22122869784920135,
+              "UNSUPPORTED": 0.5906964955605596
+            },
+            "probs": {
+              "CORRECT": 0.1880748065902391,
+              "INCORRECT": 0.22122869784920135,
+              "UNSUPPORTED": 0.5906964955605596
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": false,
+            "prediction_set": [
+              "UNSUPPORTED"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "UNSUPPORTED",
+              "confidence": 0.5906964955605596,
+              "probabilities": {
+                "CORRECT": 0.1880748065902391,
+                "INCORRECT": 0.22122869784920135,
+                "UNSUPPORTED": 0.5906964955605596
+              },
+              "probs": {
+                "CORRECT": 0.1880748065902391,
+                "INCORRECT": 0.22122869784920135,
+                "UNSUPPORTED": 0.5906964955605596
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": false,
+              "prediction_set": [
+                "UNSUPPORTED"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 203
+        },
+        "latency_ms": 400.33,
+        "usage": {
+          "input_tokens": 203,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "feature_objective": "Kiểm định kỹ thuật theo chuẩn Master Workflow",
+          "function_workflow": "",
+          "diff_lines": "",
+          "claim": "In batch_buffer_lifecycle.go lines 47-53, FlushSchemaCache deletes all entries from bb.piCache."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Read the feature_objective, function_workflow, and diff_lines carefully. Evaluate whether the claim is CORRECT, INCORRECT, or UNSUPPORTED.",
+            "criteria": {
+              "CORRECT": "The claim is directly and accurately supported by the provided code excerpt and flow.",
+              "INCORRECT": "The claim contradicts the provided code excerpt or states something false about it.",
+              "UNSUPPORTED": "The provided code excerpt does not contain enough information to verify the claim."
+            }
+          }
+        }
+      }
+    },
+    "r3": {
+      "choice": "YES",
+      "confidence": 0.5531027445787605,
+      "raw": {
+        "status": "success",
+        "model": "vegaml-0.8b",
+        "mode": "auto",
+        "answers": {
+          "verdict": {
+            "type": "choice",
+            "choice": "YES",
+            "confidence": 0.5531027445787605,
+            "probabilities": {
+              "YES": 0.5531027445787605,
+              "NO": 0.4468972554212395
+            },
+            "probs": {
+              "YES": 0.5531027445787605,
+              "NO": 0.4468972554212395
+            },
+            "readout": "engine",
+            "abstain": true,
+            "unbound": true,
+            "prediction_set": [
+              "YES",
+              "NO"
+            ]
+          }
+        },
+        "result": {
+          "answers": {
+            "verdict": {
+              "type": "choice",
+              "choice": "YES",
+              "confidence": 0.5531027445787605,
+              "probabilities": {
+                "YES": 0.5531027445787605,
+                "NO": 0.4468972554212395
+              },
+              "probs": {
+                "YES": 0.5531027445787605,
+                "NO": 0.4468972554212395
+              },
+              "readout": "engine",
+              "abstain": true,
+              "unbound": true,
+              "prediction_set": [
+                "YES",
+                "NO"
+              ]
+            }
+          },
+          "mode": "auto",
+          "n_tokens": 116
+        },
+        "latency_ms": 386.64,
+        "usage": {
+          "input_tokens": 116,
+          "output_tokens": 0
+        }
+      },
+      "request": {
+        "state": {
+          "code_excerpt": "",
+          "claim": "In batch_buffer_lifecycle.go lines 47-53, FlushSchemaCache deletes all entries from bb.piCache."
+        },
+        "questions": {
+          "verdict": {
+            "type": "choice",
+            "instructions": "Answer strictly YES or NO based solely on the code_excerpt.",
+            "criteria": {
+              "YES": "The claim is true for the code_excerpt shown.",
+              "NO": "The claim is false or not shown in the code_excerpt."
+            }
+          }
+        }
+      }
+    }
+  }
+]

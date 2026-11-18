@@ -16,6 +16,7 @@ Bản đồ điều phối 10 Core Skills chuẩn hóa của hệ thống `/agen
 | `workspace-docs` | Brain / Muscle | `S1–S6` | Chuẩn hóa Mandatory Doc Registry (`00`–`14`) theo Tier `T0–T3`, bảo vệ các file append-only (`05_progress`, `04_decisions`, `lessons.md`). |
 | `context-manager` | Context Manager | `S0, S6` | Ghi bài học chuẩn 5 phần vào `memory/global/lessons.md` và tái tạo chỉ mục 2 tầng (`tooling/build_lessons_index.py`). |
 | `session-wrapup` | Brain / Muscle | `S6` | Đóng phiên: hoàn tất `11_report_*.md`, chạy `tooling/verify_governance.py --workspace <ws>`, đối soát bài học. |
+| `diff-review` | QA / Brain | `S5` hoặc Audit độc lập | Review `git diff` theo 4 lens (Security, Logic, Design, Contract) với luật 3 lớp (`rules/review/base` → `packs/<pack>` → `review_profile.md` theo `.agent-project.json.review`), R0 scope 0-token (`tooling/diff_review/scope.py`), Propose-Only, xuất `review_report_<suffix>.md` + verdict `BLOCK/REQUEST_CHANGES/APPROVE`, kiểm qua `laya_gate.py review` + `dg3`. |
 | `reverse-engineer-anything` | Investigator (REA) | `S2` | Chỉ khi đích là artifact không có source (native binary, APK, Electron/JS bundle, firmware, website đã ship): REA trả bằng chứng cho từng rule của `Clean-Room Approved Spec`. Repo có source → dùng `view_file`/`grep`, không dùng REA. |
 
 ## 2. Hạ tầng Kiểm soát Tự động (Hooks & Tooling)

@@ -1,0 +1,41 @@
+[
+ {
+  "id": "A-F1",
+  "kind": "audit",
+  "basis": "code",
+  "claim": "MergeSampleDocs không ghi đè giá trị đã có bằng nil; chỉ gán nil khi key chưa từng xuất hiện.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/mongo_introspection.go:127-141\nfunc MergeSampleDocs(docs []bson.M) map[string]interface{} {\n\tout := make(map[string]interface{})\n\tfor _, d := range docs {\n\t\tfor k, v := range d {\n\t\t\tif v == nil {\n\t\t\t\tif _, seen := out[k]; !seen {\n\t\t\t\t\tout[k] = nil\n\t\t\t\t}\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tout[k] = v\n\t\t}\n\t}\n\treturn out\n}"
+ },
+ {
+  "id": "A-F2",
+  "kind": "audit",
+  "basis": "code",
+  "claim": "scanFieldsMongoSource marshal từng doc trong diag.Samples thành một row riêng.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_mongo.go:65-70\n\trows := make([]string, 0, len(diag.Samples))\n\tfor _, d := range diag.Samples {\n\t\tif b, err := json.Marshal(d); err == nil {\n\t\t\trows = append(rows, string(b))\n\t\t}\n\t}"
+ },
+ {
+  "id": "A-R1",
+  "kind": "audit",
+  "basis": "code",
+  "claim": "inferDiscoveredFieldTypes bỏ qua giá trị nil khi thêm kiểu vào set nhưng vẫn tạo entry cho field.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_utils.go:90-99\n\t\t\tif !ok {\n\t\t\t\tset = map[string]struct{}{}\n\t\t\t\tperField[k] = set\n\t\t\t}\n\t\t\t// null không bỏ phiếu TEXT: field vẫn được ghi nhận, nhưng kiểu\n\t\t\t// lấy từ các giá trị thật; field toàn null -> set rỗng -> TEXT.\n\t\t\tif v == nil {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tset[servicesource.InferTypeFromRawData(v)] = struct{}{}"
+ },
+ {
+  "id": "K1",
+  "kind": "control_false",
+  "claim": "MergeSampleDocs luôn ghi đè out[k] = nil khi gặp giá trị nil.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/service/source/mongo_introspection.go:127-141\nfunc MergeSampleDocs(docs []bson.M) map[string]interface{} {\n\tout := make(map[string]interface{})\n\tfor _, d := range docs {\n\t\tfor k, v := range d {\n\t\t\tif v == nil {\n\t\t\t\tif _, seen := out[k]; !seen {\n\t\t\t\t\tout[k] = nil\n\t\t\t\t}\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tout[k] = v\n\t\t}\n\t}\n\treturn out\n}"
+ },
+ {
+  "id": "K2",
+  "kind": "control_false",
+  "claim": "scanFieldsMongoSource chỉ marshal fieldMap thành một row duy nhất và không dùng diag.Samples.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_mongo.go:65-70\n\trows := make([]string, 0, len(diag.Samples))\n\tfor _, d := range diag.Samples {\n\t\tif b, err := json.Marshal(d); err == nil {\n\t\t\trows = append(rows, string(b))\n\t\t}\n\t}"
+ },
+ {
+  "id": "K3",
+  "kind": "control_true",
+  "claim": "inferDiscoveredFieldTypes gọi servicesource.InferTypeFromRawData(v) cho giá trị khác nil.",
+  "evidence": "REF: /Users/trainguyen/Documents/work/data-hub/centralized-data-service/internal/handler/source/discover_handler_utils.go:90-99\n\t\t\tif !ok {\n\t\t\t\tset = map[string]struct{}{}\n\t\t\t\tperField[k] = set\n\t\t\t}\n\t\t\t// null không bỏ phiếu TEXT: field vẫn được ghi nhận, nhưng kiểu\n\t\t\t// lấy từ các giá trị thật; field toàn null -> set rỗng -> TEXT.\n\t\t\tif v == nil {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tset[servicesource.InferTypeFromRawData(v)] = struct{}{}"
+ }
+]

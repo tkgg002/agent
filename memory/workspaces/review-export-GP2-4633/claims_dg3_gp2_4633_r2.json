@@ -1,0 +1,117 @@
+{
+  "objective": "diff-review (4-lens, run r2 from scratch) GP2-4633 PartnerUserReserveExport on centralized-export-service origin/develop(3eef807)..origin/feat/GP2-4633(7d9bcf1); Design lens compared with canonical internal-transfer.export.ts and GetAllTransHisExportHandler.ts; each REF verified against head worktree 7d9bcf1.",
+  "claims": [
+    {
+      "id": "R2-F1-LINT-ARROW-PARENS",
+      "kind": "claim",
+      "claim": "buildFilter filters statuses with the arrow function `(s) => s === STATUS_SUCCESS`, whose parenthesised single argument violates the repo rule arrow-parens: as-needed (eslint reports 38:59 error).",
+      "file": "/Users/trainguyen/.gemini/antigravity/brain/e65b1bd5-416c-443f-be0e-bd229e4ecba0/scratch/wt_gp2_4633/logics/export/trans-his/partner-user-reserve-export.pure.ts",
+      "lines": "38-38"
+    },
+    {
+      "id": "R2-D1-MODELS-HARDCODED-BYPASS-SOURCE-HELPER",
+      "kind": "claim",
+      "claim": "PartnerUserReserveExport.getRequiredModelName returns the literal array ['TransHisModel', 'MerchantModel'], whereas the canonical sibling adapter InternalTransferExport returns transHisModelNames() so that the required model follows TRANS_HIS_EXPORT_SOURCE.",
+      "file": "/Users/trainguyen/.gemini/antigravity/brain/e65b1bd5-416c-443f-be0e-bd229e4ecba0/scratch/wt_gp2_4633/logics/export/trans-his/partner-user-reserve.export.ts",
+      "lines": "22-24"
+    },
+    {
+      "id": "R2-D2-FACTORY-REGISTERS-OUTSIDE-SOURCE-SWITCH",
+      "kind": "claim",
+      "claim": "QueryHandlerFactory registers GetAllPartnerUserReserveExportQuery to the Mongo handler unconditionally, on the line before and outside the getTransHisExportSource() === 'postgres' branch that switches the other trans-his export handlers.",
+      "file": "/Users/trainguyen/.gemini/antigravity/brain/e65b1bd5-416c-443f-be0e-bd229e4ecba0/scratch/wt_gp2_4633/domain/QueryHandlerFactory.ts",
+      "lines": "154-160"
+    },
+    {
+      "id": "R2-D3-QUERY-DROPS-SELECT-PARAM",
+      "kind": "claim",
+      "claim": "GetAllPartnerUserReserveExportQuery has only filter and sort, while the canonical GetAllTransHisExportQuery also carries a select projection parameter, so the new handler hardcodes its projection in the handler (SELECT_FIELDS) instead of receiving it from the query like the canonical export pure does.",
+      "file": "/Users/trainguyen/.gemini/antigravity/brain/e65b1bd5-416c-443f-be0e-bd229e4ecba0/scratch/wt_gp2_4633/domain/queries/trans-his/GetAllPartnerUserReserveExportQuery.ts",
+      "lines": "3-11"
+    },
+    {
+      "id": "R2-D4-DATE-VALIDATOR-COPY-PASTE",
+      "kind": "claim",
+      "claim": "The params file declares its own private ExceedDateRangeValidator class, a copy of the same class already declared in other params files of the repo, instead of reusing one shared validator.",
+      "file": "/Users/trainguyen/.gemini/antigravity/brain/e65b1bd5-416c-443f-be0e-bd229e4ecba0/scratch/wt_gp2_4633/data-transfers/params/trans-his/partner-user-reserve-export.params.ts",
+      "lines": "15-24"
+    },
+    {
+      "id": "R2-D5-PARAMS-NOT-EXTENDING-BASE",
+      "kind": "claim",
+      "claim": "PartnerUserReserveExportParams is a new standalone class that re-declares dateFr, dateTo, status, sortBy, sortType, instead of extending TransHisExportParams as the canonical InternalTransferExportParams does.",
+      "file": "/Users/trainguyen/.gemini/antigravity/brain/e65b1bd5-416c-443f-be0e-bd229e4ecba0/scratch/wt_gp2_4633/data-transfers/params/trans-his/partner-user-reserve-export.params.ts",
+      "lines": "32-53"
+    },
+    {
+      "id": "R2-L1-SKIP-OFFSET-NO-TIEBREAK",
+      "kind": "claim",
+      "claim": "GetAllPartnerUserReserveExportHandler pages with find(filter).sort(sort).select().limit(limit) and skip(cursor) over a sort that has no _id tie-breaker (default sort is only createdAt: -1), so rows inserted during the export or ties on createdAt can duplicate or drop rows between chunks.",
+      "file": "/Users/trainguyen/.gemini/antigravity/brain/e65b1bd5-416c-443f-be0e-bd229e4ecba0/scratch/wt_gp2_4633/domain/handlers/trans-his/GetAllPartnerUserReserveExportHandler.ts",
+      "lines": "31-34"
+    },
+    {
+      "id": "R2-L2-STATUS-SPLIT-NO-TRIM",
+      "kind": "claim",
+      "claim": "buildFilter splits params.status with String(params.status).split(',') without trimming, while statusAfter on the next lines is trimmed with .map((s) => s.trim()).",
+      "file": "/Users/trainguyen/.gemini/antigravity/brain/e65b1bd5-416c-443f-be0e-bd229e4ecba0/scratch/wt_gp2_4633/logics/export/trans-his/partner-user-reserve-export.pure.ts",
+      "lines": "34-36"
+    },
+    {
+      "id": "R2-L3-DATE-RANGE-ALLOWS-NEGATIVE",
+      "kind": "claim",
+      "claim": "ExceedDateRangeValidator only checks dateDiff <= MAX_DAYS_EXPORT and therefore accepts a dateTo earlier than dateFr (negative dateDiff).",
+      "file": "/Users/trainguyen/.gemini/antigravity/brain/e65b1bd5-416c-443f-be0e-bd229e4ecba0/scratch/wt_gp2_4633/data-transfers/params/trans-his/partner-user-reserve-export.params.ts",
+      "lines": "22-23"
+    },
+    {
+      "id": "R2-L4-FILENAME-NO-UTCOFFSET",
+      "kind": "claim",
+      "claim": "getConfig builds fileName with moment().format('DD-MM-YYYY') without .utcOffset(7), whereas transformRow formats createdAt with moment(item.createdAt).utcOffset(7).",
+      "file": "/Users/trainguyen/.gemini/antigravity/brain/e65b1bd5-416c-443f-be0e-bd229e4ecba0/scratch/wt_gp2_4633/logics/export/trans-his/partner-user-reserve-export.pure.ts",
+      "lines": "113-117"
+    },
+    {
+      "id": "R2-L5-FLOAT-BALANCE-AFTER",
+      "kind": "claim",
+      "claim": "reserveBalance computes the balance after as `before - amount` or `before + amount` on JavaScript numbers produced by Number(raw).",
+      "file": "/Users/trainguyen/.gemini/antigravity/brain/e65b1bd5-416c-443f-be0e-bd229e4ecba0/scratch/wt_gp2_4633/logics/export/trans-his/partner-user-reserve-export.pure.ts",
+      "lines": "79-87"
+    },
+    {
+      "id": "R2-OK-SAFETEXT-FORMULA",
+      "kind": "claim",
+      "claim": "safeText prefixes a single quote to any text starting with =, +, -, @, tab or CR, and transformRow wraps user-controlled text cells (customerId, partnerUserId, phone, fullName, merchantCode, noted) with safeText.",
+      "file": "/Users/trainguyen/.gemini/antigravity/brain/e65b1bd5-416c-443f-be0e-bd229e4ecba0/scratch/wt_gp2_4633/logics/export/trans-his/partner-user-reserve-export.pure.ts",
+      "lines": "61-64"
+    },
+    {
+      "id": "R2-OK-WIRING-REGISTERED",
+      "kind": "claim",
+      "claim": "PartnerUserReserveExport is exported in the object at the end of logics/index.ts, which ExportLogic iterates (Object.keys(AllProcessors)) to build processorMap, so the exportType lookup finds it without editing export.logic.ts.",
+      "file": "/Users/trainguyen/.gemini/antigravity/brain/e65b1bd5-416c-443f-be0e-bd229e4ecba0/scratch/wt_gp2_4633/logics/index.ts",
+      "lines": "126-130"
+    },
+    {
+      "id": "CTRL-TRUE-1",
+      "kind": "control_true",
+      "claim": "The merchant lookup in GetAllPartnerUserReserveExportHandler is wrapped in try/catch and on failure only logs a warning via mainProcess.logger?.warn.",
+      "file": "/Users/trainguyen/.gemini/antigravity/brain/e65b1bd5-416c-443f-be0e-bd229e4ecba0/scratch/wt_gp2_4633/domain/handlers/trans-his/GetAllPartnerUserReserveExportHandler.ts",
+      "lines": "47-60"
+    },
+    {
+      "id": "CTRL-FALSE-1",
+      "kind": "control_false",
+      "claim": "buildSort treats the strings 'ASC' and 'ascend' as ascending sort directions.",
+      "file": "/Users/trainguyen/.gemini/antigravity/brain/e65b1bd5-416c-443f-be0e-bd229e4ecba0/scratch/wt_gp2_4633/logics/export/trans-his/partner-user-reserve-export.pure.ts",
+      "lines": "51-58"
+    },
+    {
+      "id": "CTRL-FALSE-2",
+      "kind": "control_false",
+      "claim": "GetAllPartnerUserReserveExportHandler calls TransHis.countDocuments(filter) on every page, including when cursor is greater than zero.",
+      "file": "/Users/trainguyen/.gemini/antigravity/brain/e65b1bd5-416c-443f-be0e-bd229e4ecba0/scratch/wt_gp2_4633/domain/handlers/trans-his/GetAllPartnerUserReserveExportHandler.ts",
+      "lines": "36-39"
+    }
+  ]
+}
